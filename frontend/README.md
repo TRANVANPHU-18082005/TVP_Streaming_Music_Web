@@ -1,89 +1,93 @@
-# React + TypeScript + Vite
+# 🎨 TVP Music - Frontend & User Experience
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Đây là giao diện người dùng của nền tảng TVP Music, được xây dựng với mục tiêu mang lại trải nghiệm nghe nhạc mượt mà, tốc độ phản hồi cực nhanh và giao diện chuẩn Premium với hiệu ứng Glassmorphism.
 
-Currently, two official plugins are available:
+[Image of a modern music player interface with a sleek dark theme, glassmorphism sidebar, and dynamic album art colors]
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## ⚡ Tech Stack & Core Libraries
 
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
+- **Framework:** React 18 + Vite (TypeScript)
+- **State Management:** - **Redux Toolkit:** Quản lý hàng chờ phát nhạc (Queue), trạng thái Player và xác thực.
+  - **TanStack Query (React Query):** Quản lý server-state, caching dữ liệu API và xử lý Infinite Scrolling.
+- **Styling:** - **Tailwind CSS:** Thiết kế giao diện responsive linh hoạt.
+  - **Shadcn/UI:** Hệ thống component chuẩn mực (Table, Modal, Dropdown, Tabs).
+- **Animations:** **Framer Motion** cho các hiệu ứng chuyển trang, staggered list và micro-interactions.
+- **Streaming Logic:** **Hls.js** tích hợp để giải mã các phân đoạn âm thanh (.ts) từ máy chủ.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## ✨ Tính năng nổi bật trên giao diện
 
-```js
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
+### 🎵 Smart Music Player
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- **HLS Streaming:** Phát nhạc thông qua luồng Adaptive Bitrate, tự động điều chỉnh chất lượng theo tốc độ mạng.
+- **Queue Management:** Hỗ trợ kéo thả, thêm bài hát vào hàng chờ, chế độ phát ngẫu nhiên (Shuffle) và lặp lại (Repeat).
+- **Visualizer:** Hiệu ứng sóng nhạc động (Music Bars) phản hồi theo trạng thái bài hát đang phát.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+### 📊 Realtime Charts & Discovery
+
+- **Live Leaderboard:** Hiển thị Top 100 bài hát thịnh hành với dữ liệu cập nhật liên tục từ Redis.
+- **Interactive Graphs:** Sử dụng biểu đồ đường (Line Chart) để minh họa biến động thứ hạng bài hát theo từng giờ.
+
+### 🛡️ Professional Admin Dashboard
+
+- **Hierarchy Tree:** Quản lý thể loại nhạc theo cấu trúc cha-con trực quan.
+- **Batch Actions:** Chọn nhiều bài hát/người dùng để xử lý hàng loạt (Delete, Block, Change Status).
+- **Monitoring:** Giao diện theo dõi tiến độ xử lý nhạc (Transcoding) của hệ thống Worker.
+
+### 👤 Premium User Profile
+
+- **Personalization:** Trang cá nhân với ảnh bìa rộng, hiển thị lịch sử hoạt động (Activity Feed) và playlist đã tạo.
+- **Optimistic UI:** Phản hồi tức thì khi người dùng nhấn Like bài hát hoặc Follow nghệ sĩ trước khi server phản hồi.
+
+---
+
+## 🏗️ Cấu trúc thư mục (Architecture)
+
+Dự án tuân thủ cấu trúc **Feature-based**, giúp dễ dàng mở rộng và bảo trì:
+
+```text
+src/
+├── features/           # Các tính năng lớn (track, artist, genre, player, user)
+│   ├── hooks/          # Query & Mutation hooks riêng cho từng feature
+│   ├── components/     # UI components đặc thù cho feature
+│   └── types/          # Định nghĩa TypeScript cho feature đó
+├── store/              # Cấu hình Redux Toolkit & Slices
+├── components/         # Shared UI components (Button, Table, Input...)
+├── lib/                # Cấu hình Axios, Utils (cn, formatters)
+└── layouts/            # Main Layout, Admin Layout, Auth Layout
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Cài đặt & Khởi chạy
+Yêu cầu
+Node.js 18+
 
-```js
-// eslint.config.js
-import reactX from "eslint-plugin-react-x";
-import reactDom from "eslint-plugin-react-dom";
+Backend API (đang chạy)
 
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs["recommended-typescript"],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
-```
+Các bước thiết lập
+Clone dự án & Cài đặt:
 
-Tuyệt vời. Để đạt chuẩn "Production/Enterprise" (Doanh nghiệp), phong cách comment code cần tuân thủ các nguyên tắc sau:
+Bash
+git clone [https://github.com/username/tvp-music-frontend.git](https://github.com/username/tvp-music-frontend.git)
+cd tvp-music-frontend
+npm install
+Cấu hình môi trường (.env):
+Tạo file .env.local:
 
-JSDoc (/\*_ ... _/) cho các khối chính: Dùng cho Config, Function, Type xuất ra ngoài (export). Giúp IDE (VSCode) hiển thị gợi ý (Intellisense) khi rê chuột vào.
+Đoạn mã
+VITE_API_URL=http://localhost:5000/api/v1
+VITE_CDN_URL=[https://music-cdn.yourdomain.com](https://music-cdn.yourdomain.com)
+Khởi chạy:
 
-Section Dividers (// ====== ...): Phân chia code thành các vùng logic rõ ràng, giúp mắt dễ quét (scan) khi file dài.
+Bash
+npm run dev
+📱 Khả năng thích ứng (Responsiveness)
+Giao diện được tối ưu hóa cho 3 cấp độ màn hình:
 
-"Why" over "What": Comment giải thích TẠI SAO làm thế (Logic nghiệp vụ/Bảo mật), thay vì giải thích code làm gì (vì code đã tự nói lên điều đó).
+Mobile: Ẩn các cột phụ trong bảng nhạc, chuyển menu sang Bottom Navigation.
 
-English/Vietnamese Consistent: Ở đây tôi sẽ viết comment bằng Tiếng Việt chuẩn kỹ thuật để team của bạn dễ hiểu nhất, nhưng giữ văn phong chuyên nghiệp.
-Loại Hook,Quy tắc đặt tên,Ví dụ thực tế,Ý nghĩa ngầm định
-Data Fetching,use[Resource]Query use[Resource]List,useAlbumsQuery useTracksList,"Tự động fetch, cache data, trả về loading/data."
-Data Single,use[Resource]Detail,useAlbumDetail,"Lấy 1 item, thường dựa trên ID/Slug."
-Data Mutation,use[Resource]Mutation use[Action][Resource],useDeleteAlbum useAlbumMutations,Trả về hàm trigger. Không tự chạy.
-UI Logic,use[Context]Params,useTableParams,Quản lý URL search params.
-Utility,use[Tech],"useDebounce, useClickOutside",Helper thuần túy.
+Tablet: Thu gọn Sidebar, hiển thị Grid 2-3 cột cho Album/Artist.
+
+Desktop: Trải nghiệm đầy đủ với Sidebar mở rộng, bảng nhạc chi tiết và Player thanh mảnh phía dưới.

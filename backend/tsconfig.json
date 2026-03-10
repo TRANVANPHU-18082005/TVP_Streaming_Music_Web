@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "es2020" /* Chuẩn JS đầu ra hiện đại */,
+    "module": "commonjs" /* Node.js dùng CommonJS */,
+    "outDir": "./dist" /* Code sau khi build sẽ vào folder dist */,
+    "rootDir": "./src" /* Code nguồn nằm trong folder src */,
+    "strict": true /* Bật chế độ kiểm tra lỗi nghiêm ngặt */,
+    "esModuleInterop": true /* Tương thích giữa các module */,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}

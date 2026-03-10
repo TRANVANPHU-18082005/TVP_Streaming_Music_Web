@@ -1,0 +1,121 @@
+import { v2 as cloudinary } from "cloudinary";
+import { S3Client } from "@aws-sdk/client-s3";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import multerS3 from "multer-s3";
+import path from "path";
+import slugify from "slugify";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// ========================================================================
+// 1. KHỞI TẠO CLIENT
+// ========================================================================
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const s3 = new S3Client({
+  endpoint: process.env.B2_ENDPOINT,
+  region: process.env.B2_REGION || "us-west-004",
+  credentials: {
+    accessKeyId: process.env.B2_KEY_ID as string,
+    secretAccessKey: process.env.B2_APP_KEY as string,
+  },
+  forcePathStyle: false,
+});
+
+// ========================================================================
+// 2. HELPER: FIX ENCODING & SLUG GENERATOR
+// ========================================================================
+
+/**
+ * Fix lỗi font tiếng Việt: Multer mặc định đọc originalname theo Latin1.
+ * Cần chuyển về UTF-8 trước khi đưa vào slugify.
+ */
+const getSafeSlug = (text: string) => {
+  if (!text) return `file-${Date.now()}`;
+
+  // Bước 1: Decode Latin1 to UTF-8 để tránh lỗi "chaong ta"
+  const decodedText = Buffer.from(text, "latin1").toString("utf8");
+
+  // Bước 2: Slugify với locale tiếng Việt
+  return slugify(decodedText, {
+    lower: true,
+    strict: true,
+    locale: "vi",
+    trim: true,
+  });
+};
+
+// ========================================================================
+// 3. STORAGE ENGINES
+// ========================================================================
+
+const cloudinaryStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    let folderName = "music-app/images";
+    let transformation: any[] = [{ width: 1000, crop: "limit" }];
+
+    if (file.fieldname === "avatar") {
+      folderName = "music-app/avatars";
+      transformation = [
+        { width: 500, height: 500, crop: "fill", gravity: "face" },
+      ];
+    } else if (file.fieldname === "coverImage") {
+      folderName = "music-app/covers";
+    }
+
+    const publicId = `${getSafeSlug(path.parse(file.originalname).name)}-${Date.now()}`;
+
+    return {
+      folder: folderName,
+      resource_type: "image",
+      allowed_formats: ["jpg", "png", "jpeg", "webp"],
+      public_id: publicId,
+      transformation: transformation,
+    };
+  },
+});
+
+const b2Storage = multerS3({
+  s3: s3,
+  bucket: process.env.B2_BUCKET_NAME as string,
+  contentType: multerS3.AUTO_CONTENT_TYPE,
+  acl: "public-read",
+  metadata: (req, file, cb) => {
+    cb(null, { fieldName: file.fieldname });
+  },
+  key: (req: any, file, cb) => {
+    // 1. Xử lý tên file và title an toàn
+    const fileNameDecoded = Buffer.from(file.originalname, "latin1").toString(
+      "utf8",
+    );
+    const rawTitle = req.body.title || path.parse(fileNameDecoded).name;
+
+    // Tạo slug chung cho cả bài hát
+    const trackSlug = getSafeSlug(rawTitle);
+
+    // 2. Đảm bảo Folder vật lý là duy nhất cho mỗi request upload
+    if (!req.uniqueTrackFolder) {
+      req.uniqueTrackFolder = `${trackSlug}-${Date.now()}`;
+    }
+
+    const isAudio = file.mimetype.startsWith("audio");
+    const typeFolder = isAudio ? "audio" : "covers";
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    // 3. Đặt tên file theo slug (tránh ký tự lạ, dấu cách)
+    // Audio: tracks/slug-timestamp/audio/slug.mp3
+    // Cover: tracks/slug-timestamp/covers/slug.jpeg
+    const finalPath = `tracks/${req.uniqueTrackFolder}/${typeFolder}/${trackSlug}${ext}`;
+
+    cb(null, finalPath);
+  },
+});
+
+export { s3, cloudinary, cloudinaryStorage, b2Storage };
