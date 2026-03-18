@@ -1,22 +1,14 @@
 /**
  * @file QueueList.tsx
- * @description Danh sách chờ - Spotify Style Redesign
+ * @description Play Queue — Refined UI/UX with smooth animations
  */
 import { useEffect, useRef, memo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Play,
-  Pause,
-  MoreHorizontal,
-  ListMusic,
-  GripVertical,
-  Clock,
-} from "lucide-react";
+import { Play, MoreHorizontal, ListMusic, GripVertical, X } from "lucide-react";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { cn } from "@/lib/utils";
-import { Track } from "@/features/track/types";
 import {
   selectPlayer,
   setQueue,
@@ -24,21 +16,42 @@ import {
 } from "@/features/player/slice/playerSlice";
 import { Button } from "@/components/ui/button";
 import { formatTime } from "@/utils/format";
+import { ITrack } from "@/features/track";
 
-// --- 1. SÓNG NHẠC (Visualizer) ---
-// Sử dụng animation từ index.css của bạn
-const PlayingVisualizer = () => (
-  <div className="flex items-end gap-[2px] h-3.5 mb-0.5">
-    <span className="w-[3px] bg-primary rounded-sm animate-music-bar-1" />
-    <span className="w-[3px] bg-primary rounded-sm animate-music-bar-2" />
-    <span className="w-[3px] bg-primary rounded-sm animate-music-bar-3" />
-    <span className="w-[3px] bg-primary rounded-sm animate-music-bar-4" />
+// ── 1. PLAYING VISUALIZER ──────────────────────────────────────────────────
+const PlayingVisualizer = ({ paused = false }: { paused?: boolean }) => (
+  <div className="flex items-end gap-[2.5px] h-3.5">
+    {[1, 2, 3, 4].map((i) => (
+      <motion.span
+        key={i}
+        className="w-[3px] bg-primary rounded-[2px] origin-bottom"
+        animate={
+          paused
+            ? { scaleY: 0.3 }
+            : {
+                scaleY: [0.4, 1, 0.5, 0.9, 0.3, 1],
+              }
+        }
+        transition={
+          paused
+            ? { duration: 0.2 }
+            : {
+                duration: 0.9 + i * 0.15,
+                repeat: Infinity,
+                repeatType: "mirror",
+                ease: "easeInOut",
+                delay: i * 0.12,
+              }
+        }
+        style={{ height: 14 }}
+      />
+    ))}
   </div>
 );
 
-// --- 2. QUEUE ITEM ---
+// ── 2. QUEUE ITEM ──────────────────────────────────────────────────────────
 interface QueueItemProps {
-  track: Track;
+  track: ITrack;
   index: number;
   isCurrent: boolean;
   isPlaying: boolean;
@@ -49,125 +62,179 @@ const QueueItem = memo(
   ({ track, index, isCurrent, isPlaying, onPlay }: QueueItemProps) => {
     return (
       <motion.div
-        layout
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
+        layout="position"
+        initial={{ opacity: 0, x: -8 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 8, transition: { duration: 0.15 } }}
+        transition={{ type: "spring", stiffness: 360, damping: 28 }}
         className={cn(
-          "group flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 border border-transparent",
-          // Active State: Sáng hơn chút + Border mờ
+          "group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer",
+          "transition-colors duration-150",
           isCurrent
-            ? "bg-white/10 border-white/5 shadow-sm"
-            : "hover:bg-white/5 hover:border-white/5"
+            ? "bg-primary/8 dark:bg-primary/10"
+            : "hover:bg-white/5 dark:hover:bg-white/5",
         )}
         onClick={onPlay}
+        data-active={isCurrent}
       >
-        {/* --- COL 1: INDEX / PLAY STATUS --- */}
-        <div className="w-8 flex justify-center items-center shrink-0">
-          {isCurrent && isPlaying ? (
-            <PlayingVisualizer />
-          ) : (
-            <>
-              {/* Số thứ tự hiện mặc định */}
-              <span
-                className={cn(
-                  "text-xs font-medium font-mono group-hover:hidden",
-                  isCurrent ? "text-primary" : "text-muted-foreground"
-                )}
+        {/* Active left accent */}
+        {isCurrent && (
+          <motion.div
+            layoutId="active-accent"
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full"
+            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+          />
+        )}
+
+        {/* COL 1: Index / Visualizer */}
+        <div className="w-7 flex justify-center items-center shrink-0">
+          <AnimatePresence mode="wait" initial={false}>
+            {isCurrent ? (
+              <motion.div
+                key="viz"
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{ duration: 0.15 }}
               >
-                {index + 1}
-              </span>
-              {/* Nút Play hiện khi Hover */}
-              <Play
-                className={cn(
-                  "size-3.5 fill-current hidden group-hover:block",
-                  isCurrent ? "text-primary" : "text-white"
-                )}
-              />
-            </>
-          )}
+                <PlayingVisualizer paused={!isPlaying} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="index"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="relative w-full flex justify-center"
+              >
+                <span className="text-xs font-mono text-muted-foreground group-hover:invisible">
+                  {index + 1}
+                </span>
+                <motion.div
+                  className="absolute inset-0 flex justify-center items-center invisible group-hover:visible"
+                  whileHover={{ scale: 1.15 }}
+                >
+                  <Play className="size-3.5 fill-current text-white" />
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* --- COL 2: ARTWORK --- */}
-        <div className="relative size-10 shrink-0 rounded-[4px] overflow-hidden bg-muted/20">
+        {/* COL 2: Artwork */}
+        <div className="relative size-9 shrink-0 rounded-md overflow-hidden bg-muted/30 shadow-sm">
           <ImageWithFallback
             src={track.coverImage}
             alt={track.title}
             className={cn(
-              "size-full object-cover transition-opacity",
-              isCurrent && isPlaying
-                ? "opacity-100"
-                : "opacity-80 group-hover:opacity-100"
+              "size-full object-cover transition-all duration-300",
+              isCurrent
+                ? "opacity-100 scale-105"
+                : "opacity-75 group-hover:opacity-95 group-hover:scale-105",
             )}
           />
-          {isCurrent && (
-            <div className="absolute inset-0 bg-black/20" /> // Dim nhẹ ảnh khi đang phát để text dễ đọc
-          )}
         </div>
 
-        {/* --- COL 3: INFO --- */}
+        {/* COL 3: Info */}
         <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-          <h4
+          <span
             className={cn(
-              "text-sm font-medium truncate leading-none transition-colors",
+              "text-[13px] font-medium truncate leading-tight transition-colors",
               isCurrent
                 ? "text-primary"
-                : "text-foreground group-hover:text-white"
+                : "text-foreground/90 group-hover:text-white",
             )}
           >
             {track.title}
-          </h4>
-          <p className="text-[11px] text-muted-foreground truncate hover:text-white/70 transition-colors">
+          </span>
+          <span className="text-[11px] text-muted-foreground truncate leading-tight">
             {track.artist?.name}
-          </p>
+          </span>
         </div>
 
-        {/* --- COL 4: ACTIONS (Hidden on mobile mostly) --- */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Duration (Chỉ hiện ở màn hình lớn hơn một chút hoặc khi không hover) */}
-          <span className="text-[10px] text-muted-foreground font-mono hidden sm:block group-hover:hidden">
+        {/* COL 4: Duration + Actions */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {/* Duration — fades out on hover */}
+          <span
+            className={cn(
+              "text-[10px] text-muted-foreground font-mono mr-1 transition-opacity duration-150 hidden sm:block",
+              "group-hover:opacity-0",
+            )}
+          >
             {formatTime(track.duration || 0)}
           </span>
 
-          {/* Drag Handle (Giả lập UX chuyên nghiệp) */}
-          <div className="hidden group-hover:flex items-center text-muted-foreground hover:text-white cursor-grab active:cursor-grabbing px-1">
-            <GripVertical className="size-4" />
-          </div>
-
-          {/* Option Menu */}
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 rounded-full text-muted-foreground hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              // Context menu logic
-            }}
+          {/* Drag handle */}
+          <motion.div
+            className="hidden group-hover:flex items-center text-muted-foreground/60 hover:text-muted-foreground cursor-grab active:cursor-grabbing"
+            whileHover={{ scale: 1.1 }}
           >
-            <MoreHorizontal className="size-4" />
-          </Button>
+            <GripVertical className="size-3.5" />
+          </motion.div>
+
+          {/* More options */}
+          <motion.div
+            initial={false}
+            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 rounded-full text-muted-foreground hover:text-white hover:bg-white/10"
+            >
+              <MoreHorizontal className="size-3.5" />
+            </Button>
+          </motion.div>
         </div>
       </motion.div>
     );
-  }
+  },
 );
 
 QueueItem.displayName = "QueueItem";
 
-// --- 3. MAIN COMPONENT ---
+// ── 3. EMPTY STATE ─────────────────────────────────────────────────────────
+const EmptyQueue = () => (
+  <motion.div
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: 0.1 }}
+    className="flex flex-col items-center justify-center h-full gap-3 pb-8 text-center px-6"
+  >
+    <div className="size-14 rounded-2xl bg-white/5 border border-white/8 flex items-center justify-center">
+      <ListMusic className="size-6 text-muted-foreground/50" />
+    </div>
+    <div>
+      <p className="text-sm font-medium text-foreground/50">Queue is empty</p>
+      <p className="text-xs text-muted-foreground/40 mt-0.5">
+        Add songs to get started
+      </p>
+    </div>
+  </motion.div>
+);
+
+// ── 4. MAIN COMPONENT ──────────────────────────────────────────────────────
 export const QueueList = () => {
   const dispatch = useDispatch();
   const { activeQueue, currentTrack, isPlaying } = useSelector(selectPlayer);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll tới bài hát đang phát
+  // Current index for context
+  const currentIndex = activeQueue.findIndex(
+    (t) => t._id === currentTrack?._id,
+  );
+  const upNext =
+    currentIndex >= 0 ? activeQueue.slice(currentIndex + 1) : activeQueue;
+  const history = currentIndex > 0 ? activeQueue.slice(0, currentIndex) : [];
+
+  // Auto-scroll to current track
   useEffect(() => {
-    if (scrollRef.current && currentTrack) {
-      const activeEl = scrollRef.current.querySelector('[data-active="true"]');
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }
+    if (!scrollRef.current || !currentTrack) return;
+    const el = scrollRef.current.querySelector('[data-active="true"]');
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [currentTrack?._id]);
 
   const handleTrackClick = useCallback(
@@ -178,54 +245,155 @@ export const QueueList = () => {
         dispatch(setQueue({ tracks: activeQueue, startIndex: index }));
       }
     },
-    [activeQueue, currentTrack, isPlaying, dispatch]
+    [activeQueue, currentTrack, isPlaying, dispatch],
   );
+
+  const hasQueue = activeQueue.length > 0;
 
   return (
-    <div className="flex flex-col w-full h-full bg-background/60 backdrop-blur-3xl rounded-3xl border border-white/5 overflow-hidden shadow-2xl">
-      {/* --- HEADER --- */}
-      <div className="shrink-0 h-14 flex items-center justify-between px-5 border-b border-white/5 bg-white/[0.02]">
-        <div className="flex items-center gap-2.5">
-          <ListMusic className="size-4 text-primary" />
-          <span className="text-sm font-bold text-foreground">Play Queue</span>
-          <span className="text-xs text-muted-foreground bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
-            {activeQueue.length}
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col w-full h-full bg-background/60 dark:bg-black/40 backdrop-blur-3xl rounded-2xl border border-white/8 overflow-hidden"
+    >
+      {/* ── HEADER ── */}
+      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/6">
+        <div className="flex items-center gap-2">
+          <ListMusic className="size-3.5 text-primary" />
+          <span className="text-xs font-semibold text-foreground tracking-wide uppercase">
+            Queue
           </span>
+          {hasQueue && (
+            <motion.span
+              key={activeQueue.length}
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="text-[10px] text-muted-foreground bg-white/6 border border-white/8 px-1.5 py-0.5 rounded-full font-mono"
+            >
+              {activeQueue.length}
+            </motion.span>
+          )}
         </div>
-        <Button
-          variant="ghost"
-          className="h-7 text-[10px] uppercase font-bold tracking-wider text-muted-foreground hover:text-white hover:bg-white/5 rounded-full px-3"
-        >
-          Clear
-        </Button>
+
+        {hasQueue && (
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground/60 hover:text-muted-foreground hover:bg-white/5 rounded-full px-2.5 gap-1"
+            >
+              <X className="size-2.5" />
+              Clear
+            </Button>
+          </motion.div>
+        )}
       </div>
 
-      {/* --- SCROLLABLE LIST --- */}
+      {/* ── LIST ── */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar"
+        className="flex-1 overflow-y-auto overscroll-contain"
+        style={{
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}
       >
-        <AnimatePresence mode="popLayout" initial={false}>
-          {activeQueue.map((track, index) => {
-            const isCurrent = currentTrack?._id === track._id;
+        {!hasQueue ? (
+          <EmptyQueue />
+        ) : (
+          <div className="p-2 space-y-0">
+            {/* NOW PLAYING section */}
+            {currentTrack && (
+              <>
+                <SectionLabel label="Now Playing" />
+                <AnimatePresence mode="popLayout">
+                  {activeQueue
+                    .filter((t) => t._id === currentTrack._id)
+                    .map((track) => (
+                      <QueueItem
+                        key={track._id}
+                        track={track}
+                        index={currentIndex}
+                        isCurrent={true}
+                        isPlaying={isPlaying}
+                        onPlay={() => handleTrackClick(currentIndex, track._id)}
+                      />
+                    ))}
+                </AnimatePresence>
+              </>
+            )}
 
-            return (
-              <div key={`${track._id}-${index}`} data-active={isCurrent}>
-                <QueueItem
-                  track={track}
-                  index={index}
-                  isCurrent={isCurrent}
-                  isPlaying={isPlaying}
-                  onPlay={() => handleTrackClick(index, track._id)}
-                />
-              </div>
-            );
-          })}
-        </AnimatePresence>
+            {/* NEXT UP section */}
+            {upNext.length > 0 && (
+              <>
+                <SectionLabel label="Next Up" className="mt-3" />
+                <AnimatePresence mode="popLayout" initial={false}>
+                  {upNext.map((track, i) => {
+                    const realIndex = currentIndex + 1 + i;
+                    return (
+                      <QueueItem
+                        key={`${track._id}-${realIndex}`}
+                        track={track}
+                        index={realIndex}
+                        isCurrent={false}
+                        isPlaying={isPlaying}
+                        onPlay={() => handleTrackClick(realIndex, track._id)}
+                      />
+                    );
+                  })}
+                </AnimatePresence>
+              </>
+            )}
 
-        {/* Padding bottom để không bị che bởi các thành phần khác nếu có */}
-        <div className="h-16" />
+            {/* HISTORY section (collapsed) */}
+            {history.length > 0 && (
+              <>
+                <SectionLabel label="History" className="mt-3" dim />
+                <div className="opacity-40">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    {history.map((track, i) => (
+                      <QueueItem
+                        key={`${track._id}-h-${i}`}
+                        track={track}
+                        index={i}
+                        isCurrent={false}
+                        isPlaying={false}
+                        onPlay={() => handleTrackClick(i, track._id)}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </>
+            )}
+
+            <div className="h-4" />
+          </div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 };
+
+// ── Section label helper ───────────────────────────────────────────────────
+const SectionLabel = ({
+  label,
+  className,
+  dim,
+}: {
+  label: string;
+  className?: string;
+  dim?: boolean;
+}) => (
+  <div className={cn("px-3 pt-1 pb-1.5", className)}>
+    <span
+      className={cn(
+        "text-[9px] uppercase tracking-[0.12em] font-semibold",
+        dim ? "text-muted-foreground/35" : "text-muted-foreground/60",
+      )}
+    >
+      {label}
+    </span>
+  </div>
+);
+
+export default QueueList;

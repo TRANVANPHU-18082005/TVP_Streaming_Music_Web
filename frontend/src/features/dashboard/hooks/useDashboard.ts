@@ -1,6 +1,6 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboardApi";
-import { DashboardRange } from "../types";
+import { DashboardRange } from "@/features/dashboard/schemas/dashboard.schema";
 
 // Keys để quản lý cache
 export const dashboardKeys = {

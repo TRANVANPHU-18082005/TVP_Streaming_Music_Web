@@ -11,6 +11,7 @@ import artistRoutes from "./artist.route";
 import dashboardRoutes from "./dashboard.route";
 import verificationRoutes from "./verification.route";
 import analyticRoutes from "./analytics.routes";
+import notifyRoutes from "./notify.route";
 
 const router = express.Router();
 
@@ -25,7 +26,7 @@ router.use("/interactions", interactionRoutes);
 router.use("/search", searchRoutes);
 router.use("/verification", verificationRoutes);
 router.use("/analytics", analyticRoutes);
-
+router.use("/notifications", notifyRoutes);
 router.use("/genres", genreRoutes);
 
 export default router;

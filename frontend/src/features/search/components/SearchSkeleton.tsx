@@ -71,3 +71,4 @@ export const SearchSkeleton = () => {
     </div>
   );
 };
+export default SearchSkeleton;

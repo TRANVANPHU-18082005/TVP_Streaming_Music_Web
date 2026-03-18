@@ -334,3 +334,4 @@ export const PublicAlbumFilters: React.FC<PublicAlbumFiltersProps> = ({
     </div>
   );
 };
+export default PublicAlbumFilters;

@@ -102,3 +102,4 @@ export function GenreCard({ genre, className, size = "md" }: GenreCardProps) {
     </Link>
   );
 }
+export default GenreCard;

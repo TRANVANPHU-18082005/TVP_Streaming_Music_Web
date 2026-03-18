@@ -29,21 +29,21 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDuration, STATUS_CONFIG } from "@/utils/track-helper";
 import { toast } from "sonner";
-import { ITrack, Track } from "@/features/track/types";
+import { ITrack } from "@/features/track/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "react-router-dom";
 
 interface TrackTableRowProps {
-  track: Track;
+  track: ITrack;
   index: number;
   isActive: boolean;
   isPlaying: boolean;
   isSelected: boolean;
   onSelect: (id: string, checked: boolean) => void;
   onPlay: () => void;
-  onEdit: (track: Track) => void;
-  onDelete: (track: Track) => void;
-  onRetry: (Track: ITrack) => Promise<void>;
+  onEdit: (track: ITrack) => void;
+  onDelete: (track: ITrack) => void;
+  onRetry: (track: ITrack) => Promise<void>;
 }
 
 export const TrackTableRow = memo(
@@ -279,5 +279,5 @@ export const TrackTableRow = memo(
     );
   },
 );
-
+export default TrackTableRow;
 TrackTableRow.displayName = "TrackTableRow";

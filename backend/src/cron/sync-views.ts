@@ -68,9 +68,9 @@ async function processBatch(keys: string[]) {
   if (keys.length === 0) return;
 
   try {
-    const values = await cacheRedis.mget(keys); // 🔥 FIX 1
+    const values = await cacheRedis.mget(keys);
     const mongoOps = [];
-    const redisPipeline = cacheRedis.pipeline(); // 🔥 FIX 1
+    const redisPipeline = cacheRedis.pipeline();
 
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
@@ -78,32 +78,43 @@ async function processBatch(keys: string[]) {
       const views = parseInt(viewStr || "0", 10);
 
       if (views > 0) {
-        // track:views:ID -> lấy ID
         const trackId = key.split(":")[2];
 
-        // 🔥 FIX 2: Bọc bảo vệ, check chuẩn MongoID trước khi đẩy vào BulkWrite
         if (trackId && /^[0-9a-fA-F]{24}$/.test(trackId)) {
-          // Chuẩn bị update Mongo
           mongoOps.push({
             updateOne: {
               filter: { _id: trackId },
-              // Cộng đồng bộ cả playCount và totalPlays để không bị lệch Data
+              // Sử dụng $inc là chuẩn nhất để tránh Race Condition ở tầng DB
               update: { $inc: { playCount: views, totalPlays: views } },
             },
           });
 
-          // Trừ view Redis (Chống Race Condition hoàn hảo)
+          // 🔥 CẢI TIẾN: Thay vì trừ, ta dùng DECRBY chính xác số lượng đã đọc
+          // Điều này an toàn hơn DEL vì tránh xóa nhầm các view mới phát sinh trong lúc đang sync
           redisPipeline.decrby(key, views);
         }
       }
     }
 
+    // Trong hàm processBatch
     if (mongoOps.length > 0) {
-      // Chạy Mongo xong rồi mới chạy Redis để lỡ Mongo sập, view vẫn còn nguyên trên Redis
-      await Track.bulkWrite(mongoOps);
-      await redisPipeline.exec();
+      try {
+        // 1. Ghi vào MongoDB
+        await Track.bulkWrite(mongoOps, { ordered: false });
+
+        // 2. Chỉ thực thi pipeline Redis khi Mongo THÀNH CÔNG
+        await redisPipeline.exec();
+      } catch (dbError) {
+        // Nếu Mongo lỗi, KHÔNG chạy redisPipeline.exec()
+        // để view vẫn còn ở Redis cho lần sync sau
+        console.error(
+          "❌ [SyncView] DB Write failed, views preserved in Redis:",
+          dbError,
+        );
+      }
     }
   } catch (error) {
-    console.error(`❌ [SyncView] Batch failed (Redis keys kept safe):`, error);
+    // Nếu lỗi xảy ra, view vẫn nằm nguyên trong Redis (vì chưa exec pipeline)
+    console.error(`❌ [SyncView] Batch failed:`, error);
   }
 }

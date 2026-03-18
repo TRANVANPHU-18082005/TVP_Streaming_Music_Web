@@ -4,54 +4,55 @@ import { selectPlayer } from "@/features/player/slice/playerSlice";
 import { RootState } from "@/store/store";
 import { useSocket } from "@/hooks/useSocket";
 
+/**
+ * Hook tự động gửi Heartbeat về server mỗi 10 giây.
+ * Sử dụng Refs để tránh việc khởi tạo lại Interval khi State thay đổi.
+ */
 export const useTrackAnalytics = () => {
   const { socket, isConnected } = useSocket();
-
   const { currentTrack, isPlaying } = useSelector(selectPlayer);
   const { user } = useSelector((state: RootState) => state.auth);
 
-  // Refs
-  const userRef = useRef(user);
-  const trackRef = useRef(currentTrack);
-  const isPlayingRef = useRef(isPlaying);
+  // Refs để lưu giá trị mới nhất mà không gây chạy lại useEffect
+  const stateRef = useRef({
+    user,
+    currentTrack,
+    isPlaying,
+  });
 
+  // Cập nhật Ref mỗi khi State từ Redux thay đổi
   useEffect(() => {
-    userRef.current = user;
-    trackRef.current = currentTrack;
-    isPlayingRef.current = isPlaying;
+    stateRef.current = { user, currentTrack, isPlaying };
   }, [user, currentTrack, isPlaying]);
 
-  // --- HEARTBEAT ---
   useEffect(() => {
     if (!socket || !isConnected) return;
 
-    const interval = setInterval(() => {
-      const u = userRef.current;
-      const t = trackRef.current;
-      const p = isPlayingRef.current;
+    const sendHeartbeat = () => {
+      // 🛡️ Kiểm tra nếu Tab đang ẩn thì không gửi để tiết kiệm tài nguyên
+      if (document.visibilityState !== "visible") return;
 
-      // 🔥 FIX QUAN TRỌNG:
-      // Log của bạn cho thấy user có thuộc tính 'id', không phải '_id'.
-      // Ta sẽ lấy ưu tiên 'id', nếu không có mới tìm '_id'.
+      const { user: u, currentTrack: t, isPlaying: p } = stateRef.current;
+
+      // Chuẩn hóa UserId (Hỗ trợ cả id và _id từ Backend)
       const realUserId = u?.id || u?._id;
-
-      // Nếu không có user thật thì dùng ID khách
       const finalUserId = realUserId || `guest_${socket.id}`;
 
-      console.log("💓 ...", {
-        u: u,
-        t: t,
-        p: p,
-        userId: finalUserId,
-        track: t?._id, // Track thì thường vẫn là _id, nếu lỗi thì check lại log track
-      });
-
+      // Emit tín hiệu về Server
       socket.emit("client_heartbeat", {
         userId: finalUserId,
-        trackId: p && t ? t._id : "",
+        trackId: p && t ? t._id : "", // Nếu đang phát nhạc thì gửi ID bài hát, không thì gửi chuỗi rỗng
       });
-    }, 10000);
+    };
 
-    return () => clearInterval(interval);
+    // Gửi phát đầu tiên ngay khi kết nối
+    sendHeartbeat();
+
+    // Thiết lập chu kỳ 10 giây
+    const interval = setInterval(sendHeartbeat, 10000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, [socket, isConnected]);
 };

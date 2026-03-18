@@ -7,5 +7,8 @@ export const ArtistManagementPage = lazy(
 );
 export const GenreManagementPage = lazy(() => import("./GenreManagementPage"));
 export const AlbumManagementPage = lazy(() => import("./AlbumManagementPage"));
+export const PlaylistManagementPage = lazy(
+  () => import("./PlaylistManagementPage"),
+);
 export const AnalyticPage = lazy(() => import("./AnalyticPage"));
 export const SettingPage = lazy(() => import("./SettingPage"));

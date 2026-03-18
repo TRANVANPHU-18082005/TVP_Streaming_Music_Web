@@ -319,3 +319,4 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
     </div>
   );
 };
+export default GenreSelector;

@@ -153,3 +153,4 @@ export const TrackList = memo(
 );
 
 TrackList.displayName = "TrackList";
+export default TrackList;

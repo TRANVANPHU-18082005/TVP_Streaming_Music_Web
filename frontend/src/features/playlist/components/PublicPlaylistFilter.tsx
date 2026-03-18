@@ -163,3 +163,4 @@ export const PublicPlaylistFilter: React.FC<PublicPlaylistFilterProps> = ({
     </div>
   );
 };
+export default PublicPlaylistFilter;

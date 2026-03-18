@@ -311,3 +311,4 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
     </div>
   );
 };
+export default UserSelector;

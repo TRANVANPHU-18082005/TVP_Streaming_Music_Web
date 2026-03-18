@@ -429,3 +429,4 @@ export const TrackFilters: React.FC<TrackFiltersProps> = ({
     </div>
   );
 };
+export default TrackFilters;

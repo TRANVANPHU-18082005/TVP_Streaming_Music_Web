@@ -1,6 +1,6 @@
 import { Music2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { toast } from "sonner"; // Hoặc thư viện toast dự án đang dùng
+import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,61 +9,64 @@ import { Playlist } from "@/features/playlist/types";
 import { SectionHeader } from "@/pages/client/home/SectionHeader";
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 
-// Hooks & API
 import { useFeaturedPlaylists } from "@/features/playlist/hooks/usePlaylistsQuery";
 import playlistApi from "@/features/playlist/api/playlistApi";
 import { playlistKeys } from "@/features/playlist/utils/playlistKeys";
 import { useAppDispatch } from "@/store/hooks";
 import { setIsPlaying, setQueue } from "@/features";
 
-// Redux (Mở comment khi bạn đã sẵn sàng nối vào Player)
-// import { useAppDispatch } from "@/store/hooks";
-// import { setQueue, setIsPlaying } from "@/features/player/playerSlice";
+// ─── Animation Variants ──────────────────────────────────────────────────────
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.07, delayChildren: 0.1 },
+  },
+};
 
+const cardVariants = {
+  hidden: { opacity: 0, y: 24, scale: 0.97 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+  },
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
 export function FeaturedPlaylists() {
-  const { data: playlists, isLoading } = useFeaturedPlaylists(6); // Sửa thành 6 để chẵn Grid Desktop
+  const { data: playlists, isLoading, isError } = useFeaturedPlaylists(6);
   const queryClient = useQueryClient();
-  // const dispatch = useAppDispatch();
-  const dispatch = useAppDispatch(); // Bật comment khi đã sẵn sàng nối vào Player
+  const dispatch = useAppDispatch();
 
-  // 🔥 LOGIC PHÁT NHẠC (Sẽ được truyền xuống PublicPlaylistCard)
   const handlePlayPlaylist = async (playlistId: string) => {
     try {
-      // 1. Fetch chi tiết Playlist để lấy mảng tracks (Sử dụng Cache để tối ưu)
       const res = await queryClient.fetchQuery({
         queryKey: playlistKeys.detail(playlistId),
         queryFn: () => playlistApi.getById(playlistId),
-        staleTime: 1000 * 60 * 5, // Cache 5 phút
+        staleTime: 1000 * 60 * 5,
       });
 
-      const tracks = res.data?.tracks; // Tùy thuộc vào cấu trúc trả về của API
+      const tracks = res.data?.tracks;
 
-      // 2. Chặn nếu Playlist rỗng
       if (!tracks || tracks.length === 0) {
-        toast.error("Danh sách phát này hiện chưa có bài hát nào!");
+        toast.error("Playlist này chưa có bài hát nào.");
         return;
       }
 
-      // 3. Đưa vào Queue và Phát (Redux)
       dispatch(setQueue({ tracks, startIndex: 0 }));
       dispatch(setIsPlaying(true));
-
-      // Giả lập độ trễ mạng xíu để UI kịp hiện vòng Loading (có thể bỏ đi khi lên Prod)
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      toast.success(`Đang phát ${tracks.length} bài hát của Danh sách phát.`);
-    } catch (error) {
-      toast.error("Lỗi tải nhạc. Vui lòng thử lại sau.");
-      // Ném lỗi ra để PublicPlaylistCard biết đường tắt vòng xoay Loading
-      throw error;
+      toast.success(`Đang phát ${tracks.length} bài từ playlist`);
+    } catch {
+      toast.error("Không thể tải playlist. Vui lòng thử lại.");
+      throw new Error("Failed to load playlist");
     }
   };
 
   return (
-    // 🔥 bg-muted/20 xen kẽ để tạo nhịp điệu (Rhythm) cho trang
-    <section className="py-16 lg:py-24 bg-muted/20 border-b border-border/40 relative">
-      <div className="container mx-auto px-4 sm:px-6">
-        <div className="mb-8 md:mb-12">
+    <section className="section-block bg-muted/20">
+      <div className="section-container">
+        <div className="section-header-wrap">
           <SectionHeader
             icon={<Music2 className="w-4 h-4" />}
             label="Curated"
@@ -75,41 +78,51 @@ export function FeaturedPlaylists() {
 
         {isLoading ? (
           <SkeletonGrid count={6} />
+        ) : isError ? (
+          <ErrorState message="Không thể tải playlists." />
+        ) : !playlists?.length ? (
+          <EmptyState message="Chưa có playlist nổi bật." />
         ) : (
           <div className="relative">
-            {/* ================= MOBILE HORIZONTAL SCROLL ================= */}
-            <div className="lg:hidden -mx-4 px-4">
+            {/* Mobile Horizontal Scroll */}
+            <div className="lg:hidden scroll-overflow-mask -mx-4 px-4">
               <HorizontalScroll>
-                {playlists?.map((pl: Playlist) => (
-                  <div
+                {playlists.map((pl: Playlist, i: number) => (
+                  <motion.div
                     key={pl._id}
-                    className="snap-start shrink-0 w-[260px] sm:w-[300px] first:pl-0 last:pr-4"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{
+                      delay: i * 0.06,
+                      duration: 0.4,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                    className="snap-start shrink-0 w-[200px] sm:w-[220px] first:pl-0 last:pr-4"
                   >
                     <PublicPlaylistCard
                       playlist={pl}
-                      // 🔥 TRUYỀN HÀM PLAY XUỐNG ĐÂY
                       onPlay={() => handlePlayPlaylist(pl._id)}
                     />
-                  </div>
+                  </motion.div>
                 ))}
               </HorizontalScroll>
             </div>
 
-            {/* ================= DESKTOP GRID ================= */}
+            {/* Desktop Grid */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.5 }}
-              className="hidden lg:grid grid-cols-5 xl:grid-cols-6 gap-6 xl:gap-8"
+              variants={containerVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-60px" }}
+              className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
             >
-              {playlists?.map((pl: Playlist) => (
-                <PublicPlaylistCard
-                  key={pl._id}
-                  playlist={pl}
-                  // 🔥 TRUYỀN HÀM PLAY XUỐNG ĐÂY
-                  onPlay={() => handlePlayPlaylist(pl._id)}
-                />
+              {playlists.map((pl: Playlist) => (
+                <motion.div key={pl._id} variants={cardVariants}>
+                  <PublicPlaylistCard
+                    playlist={pl}
+                    onPlay={() => handlePlayPlaylist(pl._id)}
+                  />
+                </motion.div>
               ))}
             </motion.div>
           </div>
@@ -119,27 +132,46 @@ export function FeaturedPlaylists() {
   );
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
 function SkeletonGrid({ count }: { count: number }) {
   return (
     <>
+      {/* Mobile */}
       <div className="flex gap-4 overflow-hidden lg:hidden">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="w-[260px] shrink-0 space-y-3">
+          <div key={i} className="w-[200px] shrink-0 space-y-2.5">
             <Skeleton className="aspect-square rounded-2xl" />
-            <Skeleton className="h-4 w-3/4 rounded-full" />
+            <Skeleton className="h-3.5 w-3/4 rounded-full" />
             <Skeleton className="h-3 w-1/2 rounded-full" />
           </div>
         ))}
       </div>
-      <div className="hidden lg:grid grid-cols-5 xl:grid-cols-6 gap-6 xl:gap-8">
+      {/* Desktop */}
+      <div className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6">
         {Array.from({ length: count }).map((_, i) => (
-          <div key={i} className="space-y-3">
+          <div key={i} className="space-y-2.5">
             <Skeleton className="aspect-square rounded-2xl" />
-            <Skeleton className="h-4 w-3/4 rounded-full" />
+            <Skeleton className="h-3.5 w-3/4 rounded-full" />
             <Skeleton className="h-3 w-1/2 rounded-full" />
           </div>
         ))}
       </div>
     </>
+  );
+}
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+      {message}
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+      {message}
+    </div>
   );
 }

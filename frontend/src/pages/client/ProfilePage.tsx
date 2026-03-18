@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+import { useState, memo, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Edit,
   Music,
@@ -6,429 +7,341 @@ import {
   Calendar,
   MapPin,
   ExternalLink,
+  Heart,
+  History,
+  Mic2,
+  PieChart,
+  LayoutGrid,
 } from "lucide-react";
-import { Button } from "../../components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "../../components/ui/avatar";
-import { Badge } from "../../components/ui/badge";
-import { Separator } from "../../components/ui/separator";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../../components/ui/tabs";
-import { ImageWithFallback } from "../../components/figma/ImageWithFallback";
 
-const profileData = {
-  id: 1,
-  name: "Alex Johnson",
-  username: "alexmusic",
-  bio: "Music enthusiast and playlist curator. Always discovering new sounds and sharing them with the world.",
-  avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200",
+// Đảm bảo các import này đúng với cấu trúc thư mục của bạn
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { cn } from "@/lib/utils";
+
+const mockUser = {
+  fullName: "Trần Văn Phú",
+  username: "phutran2005",
+  email: "phu@example.com",
+  role: "user",
+  avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400",
   coverImage:
-    "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200",
-  location: "San Francisco, CA",
-  joinDate: "January 2023",
-  website: "alexmusic.com",
+    "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=1200",
+  bio: "Đam mê lập trình và âm nhạc lo-fi. Đang xây dựng hệ thống streaming âm nhạc của riêng mình. 🚀",
+  location: "Hồ Chí Minh, Việt Nam",
+  joinDate: "Tháng 8, 2023",
+  website: "phutran.dev",
+  themeColor: "#3b82f6",
   stats: {
-    followers: 1247,
-    following: 856,
-    playlists: 23,
-    likedSongs: 1892,
+    followers: 1250,
+    following: 450,
+    likedTracks: 856,
   },
-  recentPlaylists: [
-    {
-      id: 1,
-      title: "Summer Vibes 2024",
-      description: "Perfect soundtrack for sunny days",
-      image:
-        "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=300",
-      songs: 45,
-      followers: 127,
-    },
-    {
-      id: 2,
-      title: "Workout Energy",
-      description: "High-energy tracks to power your workout",
-      image:
-        "https://images.unsplash.com/photo-1571974599782-87624638275c?w=300",
-      songs: 32,
-      followers: 89,
-    },
-    {
-      id: 3,
-      title: "Late Night Study",
-      description: "Chill beats for focus and concentration",
-      image:
-        "https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=300",
-      songs: 78,
-      followers: 234,
-    },
-  ],
-  recentActivity: [
-    {
-      id: 1,
-      type: "playlist_created",
-      title: "Created playlist 'Summer Vibes 2024'",
-      time: "2 hours ago",
-    },
-    {
-      id: 2,
-      type: "song_liked",
-      title: "Liked 'Midnight Echoes' by Aurora Dreams",
-      time: "5 hours ago",
-    },
-    {
-      id: 3,
-      type: "artist_followed",
-      title: "Started following Maya Chen",
-      time: "1 day ago",
-    },
-    {
-      id: 4,
-      type: "playlist_updated",
-      title: "Added 5 songs to 'Workout Energy'",
-      time: "2 days ago",
-    },
+  insights: [
+    { genre: "Pop", percentage: 45 },
+    { genre: "Indie", percentage: 30 },
+    { genre: "Lo-fi", percentage: 15 },
+    { genre: "Rock", percentage: 10 },
   ],
   topArtists: [
     {
-      id: 1,
-      name: "Aurora Dreams",
+      name: "Đen Vâu",
       image:
         "https://images.unsplash.com/photo-1494790108755-2616c5e93413?w=150",
-      genre: "Electronic",
+      genre: "Rap",
     },
     {
-      id: 2,
-      name: "Maya Chen",
+      name: "Vũ.",
+      image:
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
+      genre: "Indie",
+    },
+    {
+      name: "Sơn Tùng M-TP",
       image:
         "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150",
-      genre: "Folk",
-    },
-    {
-      id: 3,
-      name: "Street Symphony",
-      image:
-        "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150",
-      genre: "Hip-Hop",
+      genre: "V-Pop",
     },
   ],
 };
 
 export function ProfilePage() {
+  const [activeTab, setActiveTab] = useState("overview");
+
   return (
-    <div className="min-h-screen">
-      {/* Profile Header */}
-      <section className="relative h-80 lg:h-96 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10" />
+    <div className="min-h-screen bg-[#02040a] text-white overflow-x-hidden">
+      {/* --- 1. HEADER & COVER --- */}
+      <section className="relative h-64 md:h-80 w-full overflow-hidden">
+        <div
+          className="absolute inset-0 z-10 opacity-60"
+          style={{
+            background: `linear-gradient(to top, #02040a, ${mockUser.themeColor}44)`,
+          }}
+        />
         <ImageWithFallback
-          src={profileData.coverImage}
-          alt="Profile cover"
+          src={mockUser.coverImage}
+          alt="Cover"
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        <div className="container relative z-20 h-full flex items-end px-4 lg:px-6 pb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="flex flex-col lg:flex-row items-start lg:items-end gap-6 text-white w-full"
-          >
-            {/* Profile Avatar */}
+        <div className="container relative z-20 h-full flex items-end px-4 md:px-6 pb-6 mx-auto">
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-6 w-full">
             <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, scale: 0.5 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
+              className="relative group shrink-0"
             >
-              <Avatar className="w-32 h-32 lg:w-40 lg:h-40 border-4 border-white/20">
-                <AvatarImage src={profileData.avatar} />
-                <AvatarFallback className="text-4xl">
-                  {profileData.name.charAt(0)}
+              <Avatar className="w-32 h-32 md:w-40 md:h-40 border-4 border-[#02040a] shadow-2xl">
+                <AvatarImage src={mockUser.avatar} alt={mockUser.fullName} />
+                <AvatarFallback className="bg-blue-600 text-3xl font-bold">
+                  P
                 </AvatarFallback>
               </Avatar>
+              <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer">
+                <Edit className="size-6 text-white" />
+              </div>
             </motion.div>
 
-            {/* Profile Info */}
-            <div className="flex-1 min-w-0">
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.5 }}
-              >
-                <Badge
-                  variant="secondary"
-                  className="mb-3 bg-white/20 text-white border-0"
-                >
-                  Profile
-                </Badge>
-
-                <h1 className="text-4xl lg:text-5xl font-bold mb-2">
-                  {profileData.name}
-                </h1>
-
-                <p className="text-lg opacity-90 mb-4">
-                  @{profileData.username}
-                </p>
-
-                <div className="flex flex-wrap items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1">
-                    <Users className="h-4 w-4" />
-                    <span>
-                      {profileData.stats.followers.toLocaleString()} followers
-                    </span>
-                  </div>
-                  <span>•</span>
-                  <span>{profileData.stats.following} following</span>
-                  <span>•</span>
-                  <div className="flex items-center gap-1">
-                    <Music className="h-4 w-4" />
-                    <span>{profileData.stats.playlists} playlists</span>
-                  </div>
-                </div>
-              </motion.div>
+            <div className="flex-1 text-center md:text-left">
+              <Badge className="mb-2 bg-blue-500 hover:bg-blue-600 text-white border-none">
+                PRO MEMBER
+              </Badge>
+              <h1 className="text-3xl md:text-5xl font-black tracking-tight mb-1 text-white">
+                {mockUser.fullName}
+              </h1>
+              <p className="text-white/50 font-medium">@{mockUser.username}</p>
             </div>
 
-            {/* Action Buttons */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.7 }}
-              className="flex items-center gap-3"
-            >
-              <Button className="bg-white text-black hover:bg-white/90">
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Profile
+            <div className="flex gap-3 mb-2 shrink-0">
+              <Button className="rounded-full bg-white text-black hover:bg-white/90 px-6 font-bold">
+                <Edit className="mr-2 size-4" /> Chỉnh sửa
               </Button>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Profile Content */}
-      <div className="container px-4 lg:px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2">
-            <Tabs defaultValue="playlists" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="playlists">Playlists</TabsTrigger>
-                <TabsTrigger value="activity">Activity</TabsTrigger>
-                <TabsTrigger value="artists">Top Artists</TabsTrigger>
+      {/* --- 2. MAIN CONTENT GRID --- */}
+      <div className="container px-4 md:px-6 py-8 mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* SIDEBAR */}
+          <aside className="lg:col-span-4 space-y-6">
+            <Card className="bg-white/5 border-white/10 backdrop-blur-md text-white">
+              <CardContent className="p-6 space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white/40 uppercase mb-2 tracking-wider">
+                    Giới thiệu
+                  </h3>
+                  <p className="text-sm leading-relaxed text-white/90">
+                    {mockUser.bio}
+                  </p>
+                </div>
+
+                <Separator className="bg-white/10" />
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 text-sm text-white/70">
+                    <MapPin className="size-4 text-blue-400" />{" "}
+                    {mockUser.location}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-white/70">
+                    <Calendar className="size-4 text-blue-400" /> Tham gia{" "}
+                    {mockUser.joinDate}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-white/70">
+                    <ExternalLink className="size-4 text-blue-400" />
+                    <a
+                      href={`https://${mockUser.website}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-400 hover:underline"
+                    >
+                      {mockUser.website}
+                    </a>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 pt-4">
+                  <div className="text-center p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                    <div className="text-lg font-bold">
+                      {mockUser.stats.followers}
+                    </div>
+                    <div className="text-[10px] text-white/40 uppercase font-bold">
+                      Followers
+                    </div>
+                  </div>
+                  <div className="text-center p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                    <div className="text-lg font-bold">
+                      {mockUser.stats.following}
+                    </div>
+                    <div className="text-[10px] text-white/40 uppercase font-bold">
+                      Following
+                    </div>
+                  </div>
+                  <div className="text-center p-2 rounded-xl bg-white/5 border border-blue-500/30">
+                    <div className="text-lg font-bold text-blue-400">
+                      {mockUser.stats.likedTracks}
+                    </div>
+                    <div className="text-[10px] text-white/40 uppercase font-bold">
+                      Likes
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* GU ÂM NHẠC */}
+            <Card className="bg-white/5 border-white/10 overflow-hidden text-white">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <PieChart className="size-4 text-blue-400" /> GU ÂM NHẠC
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {mockUser.insights.map((item) => (
+                  <div key={item.genre} className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span>{item.genre}</span>
+                      <span className="text-white/40">{item.percentage}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${item.percentage}%` }}
+                        transition={{ duration: 1, ease: "easeOut" }}
+                        className="h-full bg-blue-500"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </aside>
+
+          {/* MAIN TABS */}
+          <div className="lg:col-span-8 space-y-6">
+            <Tabs
+              defaultValue="overview"
+              onValueChange={setActiveTab}
+              className="w-full"
+            >
+              <TabsList className="bg-white/5 border border-white/10 p-1 rounded-full w-full max-w-md flex">
+                <TabsTrigger
+                  value="overview"
+                  className="flex-1 rounded-full data-[state=active]:bg-blue-500 data-[state=active]:text-white transition-all"
+                >
+                  <LayoutGrid className="size-4 mr-2" /> Tổng quan
+                </TabsTrigger>
+                <TabsTrigger
+                  value="playlists"
+                  className="flex-1 rounded-full data-[state=active]:bg-blue-500 data-[state=active]:text-white transition-all"
+                >
+                  <Music className="size-4 mr-2" /> Playlist
+                </TabsTrigger>
+                <TabsTrigger
+                  value="history"
+                  className="flex-1 rounded-full data-[state=active]:bg-blue-500 data-[state=active]:text-white transition-all"
+                >
+                  <History className="size-4 mr-2" /> Gần đây
+                </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="playlists" className="mt-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-6"
-                >
-                  {profileData.recentPlaylists.map((playlist, index) => (
+              <div className="mt-8">
+                <AnimatePresence mode="wait">
+                  {activeTab === "overview" && (
                     <motion.div
-                      key={playlist.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ y: -4 }}
+                      key="overview"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="space-y-8"
                     >
-                      <Card className="group cursor-pointer hover:shadow-lg transition-all duration-300">
-                        <CardContent className="p-0">
-                          <div className="relative">
-                            <ImageWithFallback
-                              src={playlist.image}
-                              alt={playlist.title}
-                              className="w-full h-48 object-cover rounded-t-lg"
-                            />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-t-lg flex items-center justify-center">
-                              <Button className="bg-white text-black hover:bg-white/90">
-                                Play
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="p-4">
-                            <h3 className="font-semibold mb-2">
-                              {playlist.title}
-                            </h3>
-                            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                              {playlist.description}
-                            </p>
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <span>{playlist.songs} songs</span>
-                              <span>{playlist.followers} followers</span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              </TabsContent>
-
-              <TabsContent value="activity" className="mt-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  {profileData.recentActivity.map((activity, index) => (
-                    <motion.div
-                      key={activity.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg"
-                    >
-                      <div className="w-2 h-2 bg-primary rounded-full shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm">{activity.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {activity.time}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              </TabsContent>
-
-              <TabsContent value="artists" className="mt-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6"
-                >
-                  {profileData.topArtists.map((artist, index) => (
-                    <motion.div
-                      key={artist.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ y: -4 }}
-                    >
-                      <Card className="group cursor-pointer hover:shadow-lg transition-all duration-300">
-                        <CardContent className="p-6 text-center">
-                          <Avatar className="w-20 h-20 mx-auto mb-4">
-                            <AvatarImage src={artist.image} />
-                            <AvatarFallback>
-                              {artist.name.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <h3 className="font-semibold mb-1">{artist.name}</h3>
-                          <Badge variant="secondary" className="text-xs">
-                            {artist.genre}
-                          </Badge>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* About */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.8 }}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle>About</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {profileData.bio}
-                  </p>
-
-                  <Separator />
-
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span>{profileData.location}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>Joined {profileData.joinDate}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={`https://${profileData.website}`}
-                        className="text-primary hover:underline"
+                      {/* Liked Songs Card */}
+                      <motion.div
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.99 }}
+                        className="relative h-40 rounded-3xl overflow-hidden group cursor-pointer shadow-2xl"
                       >
-                        {profileData.website}
-                      </a>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 opacity-80 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 flex items-center justify-between px-6 md:px-8">
+                          <div className="flex items-center gap-4 md:gap-6">
+                            <div className="size-16 md:size-20 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
+                              <Heart className="size-8 md:size-10 text-white fill-current" />
+                            </div>
+                            <div>
+                              <h2 className="text-xl md:text-2xl font-black">
+                                Bài hát đã thích
+                              </h2>
+                              <p className="text-sm opacity-80">
+                                {mockUser.stats.likedTracks} bài hát trong thư
+                                viện
+                              </p>
+                            </div>
+                          </div>
+                          <Button className="rounded-full bg-white/20 hover:bg-white/40 text-white border-white/20 hidden md:flex">
+                            Nghe ngay
+                          </Button>
+                        </div>
+                      </motion.div>
 
-            {/* Stats */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.9 }}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle>Statistics</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-primary">
-                        {profileData.stats.followers.toLocaleString()}
+                      {/* Top Artists */}
+                      <div className="space-y-4">
+                        <h3 className="text-xl font-bold flex items-center gap-2">
+                          <Mic2 className="size-5 text-blue-400" /> Nghệ sĩ nghe
+                          nhiều nhất
+                        </h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          {mockUser.topArtists.map((artist, idx) => (
+                            <motion.div
+                              key={artist.name}
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: idx * 0.1 }}
+                              className="flex flex-col items-center p-4 rounded-3xl bg-white/5 hover:bg-white/10 transition-all text-center group border border-white/5"
+                            >
+                              <Avatar className="size-20 mb-3 border-2 border-transparent group-hover:border-blue-500 transition-all shadow-xl">
+                                <AvatarImage
+                                  src={artist.image}
+                                  alt={artist.name}
+                                />
+                                <AvatarFallback>
+                                  {artist.name[0]}
+                                </AvatarFallback>
+                              </Avatar>
+                              <p className="font-bold text-sm truncate w-full">
+                                {artist.name}
+                              </p>
+                              <p className="text-[10px] text-white/40 uppercase font-bold">
+                                {artist.genre}
+                              </p>
+                            </motion.div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Followers
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-primary">
-                        {profileData.stats.following}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Following
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-primary">
-                        {profileData.stats.playlists}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Playlists
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-primary">
-                        {profileData.stats.likedSongs.toLocaleString()}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Liked Songs
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === "playlists" && (
+                    <motion.div
+                      key="playlists"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center justify-center h-40 bg-white/5 rounded-3xl border border-dashed border-white/10 text-white/40"
+                    >
+                      Chưa có playlist công khai nào.
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </Tabs>
           </div>
         </div>
       </div>
     </div>
   );
 }
-export default ProfilePage;

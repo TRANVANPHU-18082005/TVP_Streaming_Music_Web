@@ -2,11 +2,11 @@ import { Server as HttpServer } from "http";
 import { Server, Socket } from "socket.io";
 import analyticsService from "./services/analytics.service";
 import { getRealtimeChart } from "./services/chart.service";
-// 👇 Nhớ import service analytics
+import { viewQueue } from "./queue/view.queue"; // Đảm bảo chữ q viết thường
+import { cacheRedis } from "./config/redis";
 
 let io: Server;
 
-// Helper: Lấy IP thật
 const getClientIp = (socket: Socket): string => {
   const forwarded = socket.handshake.headers["x-forwarded-for"];
   if (forwarded) {
@@ -18,36 +18,30 @@ const getClientIp = (socket: Socket): string => {
 
 export const initSocket = (httpServer: HttpServer) => {
   io = new Server(httpServer, {
-    cors: {
-      // 🔥 FIX QUAN TRỌNG: Cho phép tất cả (*) để test kết nối trước
-      // Nếu để localhost:5173 mà Vite nhảy sang 5174 là tạch ngay
-      origin: "*",
-      methods: ["GET", "POST"],
-      credentials: true,
-    },
+    cors: { origin: "*", methods: ["GET", "POST"], credentials: true },
     pingTimeout: 60000,
     transports: ["websocket", "polling"],
   });
 
   io.on("connection", (socket: Socket) => {
-    // 👇 LOG NÀY PHẢI HIỆN KHI F5 TRÌNH DUYỆT
-    console.log(
-      `🔌 Socket Connected: ${socket.id} | IP: ${getClientIp(socket)}`
-    );
+    const userIp = getClientIp(socket);
+    // 🔥 BƯỚC QUAN TRỌNG CHO NOTIFICATION:
+    // Khi user connect, check xem họ có gửi userId (thông qua query hoặc auth) không.
+    // Nếu dùng Auth middleware cho Socket thì lấy từ socket.data.user.
+    // Ở đây mình lấy đơn giản từ query hoặc handshake để bạn dễ test.
+    const userId = socket.handshake.query.userId as string;
 
-    // =================================================
-    // PHẦN 1: LOGIC JOIN ROOM / LISTENING (Của File 1 cũ)
-    // =================================================
-    socket.on("join_room", (room: string) => {
-      socket.join(room);
-      console.log(`User ${socket.id} joined room: ${room}`);
-    });
+    if (userId && userId !== "undefined") {
+      socket.join(userId);
+      console.log(`🔔 User ${userId} joined their private notification room`);
+    }
 
-    socket.on("leave_room", (room: string) => {
-      socket.leave(room);
-    });
+    // 1. Theo dõi vị trí (Analytics ngay khi vào app)
+    analyticsService.trackUserLocation(userIp);
 
-    // Realtime Listeners Count (Số người đang nghe cùng 1 bài)
+    // --- PHẦN 1: ROOMS & LISTENERS ---
+    socket.on("join_room", (room: string) => socket.join(room));
+
     socket.on("listening_track", (trackId: string) => {
       const roomName = `track:${trackId}`;
       socket.join(roomName);
@@ -55,93 +49,104 @@ export const initSocket = (httpServer: HttpServer) => {
       io.to(roomName).emit("listeners_count", count);
     });
 
-    // =================================================
-    // PHẦN 2: LOGIC ANALYTICS (Của File 2 cũ - ĐƯỢC KÍCH HOẠT TẠI ĐÂY)
-    // =================================================
-
-    // A. Tracking Vị trí GeoIP ngay khi connect
-    analyticsService.trackUserLocation(getClientIp(socket));
-
-    // B. HEARTBEAT (User Online)
+    // --- PHẦN 2: REAL-TIME ANALYTICS HEARTBEAT ---
     socket.on(
       "client_heartbeat",
-      (data: { userId: string; trackId: string }) => {
-        // Logic backend cũ của bạn check if (data.userId && data.trackId) là SAI
-        // Sửa lại: Chỉ cần userId là tính online rồi
+      (data: { userId: string; trackId?: string }) => {
         if (data.userId) {
           analyticsService.pingUserActivity(data.userId, data.trackId);
         }
-      }
+      },
     );
+
+    // --- PHẦN 3: XỬ LÝ VIEW NHẠC (CHUẨN PRODUCTION) ---
+    socket.on(
+      "track_play",
+      async (data: { trackId: string; userId?: string }) => {
+        try {
+          const { trackId, userId } = data;
+
+          // 🛡️ BƯỚC 1: ANTI-SPAM (Khóa 10 phút)
+          // Chặn người dùng emit liên tục để phá chart
+          const spamKey = `limit:view:${trackId}:${userId || userIp}`;
+          const isSpam = await cacheRedis.get(spamKey);
+
+          if (isSpam) {
+            console.log(
+              `🚫 Spam detected for track ${trackId} from ${userId || userIp}`,
+            );
+            return;
+          }
+
+          // Đánh dấu đã đếm (10 phút = 600s)
+          await cacheRedis.set(spamKey, "1", "EX", 600);
+
+          // 🚀 BƯỚC 2: ANALYTICS (Ghi RAM -> Dashboard nhảy số sau 10s)
+          analyticsService.trackPlay(trackId);
+
+          // 📦 BƯỚC 3: BULLMQ (Ghi Log vĩnh viễn vào MongoDB)
+          await viewQueue.add(
+            "log-listen-history",
+            {
+              trackId,
+              userId,
+              ip: userIp,
+              timestamp: new Date(),
+            },
+            { removeOnComplete: true },
+          );
+
+          console.log(`✅ Track Play Recorded: ${trackId}`);
+        } catch (error) {
+          console.error("❌ Socket track_play error:", error);
+        }
+      },
+    );
+
+    // --- PHẦN 4: ADMIN & CHART ROOMS ---
     socket.on("join_chart_page", () => {
       socket.join("live_chart_room");
-      // Gửi data ngay lập tức (Initial Load qua Socket)
       getRealtimeChart().then((data) => socket.emit("chart_update", data));
     });
 
-    socket.on("leave_chart_page", () => {
-      socket.leave("live_chart_room");
-    });
-    // C. TRACK PLAY (Đếm View)
-    socket.on("track_play", (data: { trackId: string; userId?: string }) => {
-      // Đẩy vào Buffer của Analytics Service
-      analyticsService.trackPlay(
-        data.trackId,
-        data.userId,
-        getClientIp(socket)
-      );
-    });
-
-    // D. ADMIN DASHBOARD
     socket.on("join_admin_dashboard", () => {
-      console.log("👨‍💻 Admin joined dashboard");
       socket.join("admin_room");
-      // Gửi data ngay lập tức
-      analyticsService.getStats().then((stats) => {
-        socket.emit("admin_analytics_update", stats);
-      });
+      analyticsService
+        .getStats()
+        .then((stats) => socket.emit("admin_analytics_update", stats));
     });
-
-    // --- DISCONNECT ---
-    // Server-side
-    socket.on("disconnect", (reason) => {
-      console.log(`❌ Disconnected: ${socket.id} | Reason: ${reason}`);
+    // --- PHẦN 5: NOTIFICATION LOGIC (BỔ SUNG) ---
+    // API để đánh dấu đã đọc hoặc các tương tác thông báo khác nếu cần
+    socket.on("mark_notifications_read", () => {
+      // Logic xử lý nhanh nếu cần
+    });
+    socket.on("disconnect", () => {
+      console.log(`❌ Disconnected: ${socket.id}`);
     });
   });
 
-  // =================================================
-  // PHẦN 3: SERVER PUSH (Gửi data cho Admin mỗi 5s)
-  // =================================================
+  // --- SERVER PUSH (Tối ưu hiệu năng) ---
+
+  // Update Dashboard Admin (Mỗi 5s nếu có admin online)
   setInterval(async () => {
-    try {
-      const room = io.sockets.adapter.rooms.get("admin_room");
-      // Chỉ gửi khi có người xem admin
-      if (room && room.size > 0) {
-        const stats = await analyticsService.getStats();
-        io.to("admin_room").emit("admin_analytics_update", stats);
-      }
-    } catch (error) {
-      console.error("Socket Push Error", error);
+    if (io.sockets.adapter.rooms.get("admin_room")?.size) {
+      const stats = await analyticsService.getStats();
+      io.to("admin_room").emit("admin_analytics_update", stats);
     }
   }, 5000);
+
+  // Update Chart (Mỗi 10s nếu có user xem chart)
   setInterval(async () => {
-    try {
-      const room = io.sockets.adapter.rooms.get("live_chart_room");
-      // Chỉ tính toán khi có người xem
-      if (room && room.size > 0) {
-        const chartData = await getRealtimeChart();
-        io.to("live_chart_room").emit("chart_update", chartData);
-      }
-    } catch (e) {
-      console.error("Socket Push Error", e);
+    if (io.sockets.adapter.rooms.get("live_chart_room")?.size) {
+      const chartData = await getRealtimeChart();
+      io.to("live_chart_room").emit("chart_update", chartData);
     }
   }, 10000);
+
   return io;
 };
 
 export const getIO = () => {
-  if (!io) {
-    throw new Error("Socket.io not initialized!");
-  }
+  if (!io) throw new Error("Socket.io not initialized!");
   return io;
 };

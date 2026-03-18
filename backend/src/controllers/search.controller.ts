@@ -1,8 +1,9 @@
+// src/controllers/search.controller.ts
 import { Request, Response } from "express";
 import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
-import { SearchQueryInput } from "../validations/search.schema";
 import searchService from "../services/search.service";
+import { SearchQueryInput } from "../validations/search.schema";
 
 export const search = catchAsync(
   async (req: Request<{}, {}, {}, SearchQueryInput>, res: Response) => {
@@ -14,5 +15,5 @@ export const search = catchAsync(
       status: "success",
       data,
     });
-  }
+  },
 );

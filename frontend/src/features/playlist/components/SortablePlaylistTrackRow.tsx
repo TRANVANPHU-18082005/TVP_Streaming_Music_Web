@@ -3,10 +3,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Disc } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { Track } from "@/features/track/types";
+import { ITrack } from "@/features/track/types";
 
 interface SortablePlaylistTrackRowProps {
-  track: Track;
+  track: ITrack;
   index: number;
   onRemove?: (id: string) => void;
   isRemoving?: boolean;
@@ -112,3 +112,4 @@ export const SortablePlaylistTrackRow = ({
     </div>
   );
 };
+export default SortablePlaylistTrackRow;

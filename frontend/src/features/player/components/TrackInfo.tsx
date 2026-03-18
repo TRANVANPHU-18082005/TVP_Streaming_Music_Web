@@ -3,14 +3,14 @@ import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { cn } from "@/lib/utils";
-import { Track } from "@/features/track/types";
+import { ITrack } from "@/features/track";
 
 export const TrackInfo = ({
   track,
   layout = "full",
   className,
 }: {
-  track: Track;
+  track: ITrack;
   layout?: "mini" | "full";
   className?: string;
 }) => {
@@ -38,7 +38,7 @@ export const TrackInfo = ({
           size="icon"
           className={cn(
             "text-muted-foreground hidden sm:flex hover:text-red-500",
-            isLiked && "text-red-500"
+            isLiked && "text-red-500",
           )}
           onClick={(e) => {
             e.stopPropagation();
@@ -65,7 +65,7 @@ export const TrackInfo = ({
         size="icon"
         className={cn(
           "mb-1 text-muted-foreground hover:bg-white/10 rounded-full size-12 shrink-0",
-          isLiked && "text-red-500"
+          isLiked && "text-red-500",
         )}
         onClick={() => setIsLiked(!isLiked)}
       >
@@ -74,3 +74,4 @@ export const TrackInfo = ({
     </div>
   );
 };
+export default TrackInfo;

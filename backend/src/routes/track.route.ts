@@ -26,9 +26,11 @@ router.get(
   "/",
   optionalAuth,
   validate(getTracksSchema),
-  trackController.getTracks
+  trackController.getTracks,
 );
 router.get("/charts/realtime", trackController.getTopChart); // 🔥 Route này
+// 🔥 ROUTE GHI NHẬN VIEW (Sau khi nghe 30s)
+router.post("/:trackId/view", optionalAuth, trackController.recordTrackView);
 router.get("/:id", optionalAuth, trackController.getTrackDetail);
 
 // ==========================================
@@ -42,7 +44,7 @@ router.post(
   authorize("artist", "admin"),
   uploadTrackFiles,
   validate(createTrackSchema),
-  trackController.uploadTrack
+  trackController.uploadTrack,
 );
 
 // 2. BULK OPERATIONS (🔥 NEW SECTION)
@@ -51,7 +53,7 @@ router.patch(
   "/bulk/update",
   authorize("admin"), // Thường chỉ Admin mới được làm Bulk Update để an toàn
   validate(bulkUpdateTracksSchema), // Validate input chặt chẽ
-  trackController.bulkUpdateTracks
+  trackController.bulkUpdateTracks,
 );
 
 // 3. SINGLE UPDATE & ACTIONS
@@ -59,7 +61,7 @@ router.patch(
   "/change-status/:id",
   authorize("artist", "admin"),
   validate(changeStatusSchema),
-  trackController.changeTrackStatus
+  trackController.changeTrackStatus,
 );
 
 router.post("/:id/retry", authorize("admin"), trackController.retryTranscode);
@@ -70,14 +72,14 @@ router.patch(
   authorize("artist", "admin"),
   uploadTrackFiles,
   validate(updateTrackSchema),
-  trackController.updateTrack
+  trackController.updateTrack,
 );
 
 // 4. DELETE
 router.delete(
   "/:id",
   authorize("artist", "admin"),
-  trackController.deleteTrack
+  trackController.deleteTrack,
 );
 
 export default router;

@@ -1,5 +1,5 @@
 import React from "react";
-import { Disc, Home, Search, Music, ArrowLeft } from "lucide-react";
+import { Disc, Home, Search, Music } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 
@@ -38,7 +38,7 @@ const Button = React.forwardRef<
         base,
         variants[variant],
         sizes[size as keyof typeof sizes],
-        className
+        className,
       )}
       {...props}
     />

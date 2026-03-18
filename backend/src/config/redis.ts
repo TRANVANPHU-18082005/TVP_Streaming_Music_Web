@@ -36,6 +36,7 @@ const queueUrl = process.env.QUEUE_REDIS_URL || "redis://localhost:6380";
 export const queueRedis = new Redis(queueUrl, {
   lazyConnect: true,
   maxRetriesPerRequest: null, // 🔥 BẮT BUỘC: BullMQ yêu cầu phải là null
+  keepAlive: 10000,
   enableReadyCheck: false,
   retryStrategy: (times) => Math.min(times * 50, 2000),
   tls: getTlsConfig(queueUrl),

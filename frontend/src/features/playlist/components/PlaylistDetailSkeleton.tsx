@@ -38,3 +38,4 @@ export const PlaylistDetailSkeleton = () => {
     </div>
   );
 };
+export default PlaylistDetailSkeleton;

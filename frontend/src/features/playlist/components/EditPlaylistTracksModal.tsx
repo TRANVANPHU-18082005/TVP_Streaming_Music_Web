@@ -12,7 +12,6 @@ import {
   Settings2,
   X,
   Music4,
-  GripVertical,
 } from "lucide-react";
 
 // UI Components
@@ -499,3 +498,4 @@ export const EditPlaylistTracksModal: React.FC<
     document.body,
   );
 };
+export default EditPlaylistTracksModal;

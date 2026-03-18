@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "@/utils/track-helper";
 import { Link } from "react-router-dom";
 import { ITrack } from "@/features/track/types";
+import { LikeButton } from "@/features";
 
 interface TrackRowProps {
   track: ITrack;
@@ -132,6 +133,11 @@ export const TrackRow = memo(
         {/* ===== DURATION + ACTION ===== */}
         <TableCell className="w-28 pr-4 text-right">
           <div className="flex items-center justify-end gap-2">
+            <LikeButton
+              trackId={track._id}
+              isLiked={track.isLiked || false}
+              size="sm"
+            />
             <span className="text-xs tabular-nums text-muted-foreground">
               {formatDuration(track.duration)}
             </span>
@@ -157,5 +163,5 @@ export const TrackRow = memo(
     );
   },
 );
-
+export default TrackRow;
 TrackRow.displayName = "TrackRow";

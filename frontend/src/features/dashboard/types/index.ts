@@ -1,11 +1,5 @@
 // --- 1. COMMON TYPES ---
 
-// Kiểu dữ liệu cho 1 điểm trên biểu đồ
-export interface ChartDataPoint {
-  _id: string; // Format: "YYYY-MM-DD"
-  count: number; // Số lượng
-}
-
 // Kiểu dữ liệu cho 1 ô thống kê (Card Overview)
 export interface StatItem {
   value: number;

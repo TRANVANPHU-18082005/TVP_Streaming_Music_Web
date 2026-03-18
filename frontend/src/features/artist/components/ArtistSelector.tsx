@@ -191,3 +191,4 @@ export const ArtistSelector: React.FC<ArtistSelectorProps> = ({
     </div>
   );
 };
+export default ArtistSelector;

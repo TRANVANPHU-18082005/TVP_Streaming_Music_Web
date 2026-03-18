@@ -9,7 +9,7 @@ import { DashboardSkeleton } from "@/features/dashboard/components/DashboardSkel
 import ActiveUsersCard from "@/features/analytics/components/ActiveUsersCard";
 import TrendingTracks from "@/features/analytics/components/TrendingTracks";
 import GeographySection from "@/features/analytics/components/GeographySection";
-import { useRealtimeStats } from "@/features/analytics/hooks/useRealtimeStats.ts";
+import { useRealtimeStats } from "@/features/analytics/hooks/useRealtimeStats";
 import { DashboardRange } from "@/features/dashboard/schemas/dashboard.schema";
 import { Activity, Globe } from "lucide-react";
 
@@ -20,7 +20,7 @@ const AnalyticPage = () => {
   const { data: historyData, isLoading: historyLoading } =
     useDashboardAnalytics(timeRange);
   const { data: realtimeData } = useRealtimeStats();
-
+  console.log("AnalyticPage render", { historyData, realtimeData });
   if (historyLoading) return <DashboardSkeleton />;
   if (!historyData) return null;
 

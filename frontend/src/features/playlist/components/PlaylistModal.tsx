@@ -16,7 +16,6 @@ import {
   AlertCircle,
   Type,
   AlignLeft,
-  Settings2,
   Palette,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -64,7 +63,7 @@ const PlaylistModal: React.FC<PlaylistModalProps> = ({
   // --- LOGIC UI: Xử lý Preview ảnh ---
   const [preview, setPreview] = useState<string | null>(null);
   const coverValue = watch("coverImage");
-  const themeColor = watch("themeColor");
+  // const themeColor = watch("themeColor");
 
   useEffect(() => {
     if (coverValue instanceof File) {
@@ -355,7 +354,7 @@ const PlaylistModal: React.FC<PlaylistModalProps> = ({
                         )}
                       >
                         <UserSelector
-                          multi
+                          singleSelect={false}
                           value={field.value}
                           onChange={(val) => {
                             field.onChange(val);

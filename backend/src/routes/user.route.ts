@@ -27,7 +27,7 @@ router.get(
   "/:id/profile",
   // Có thể thêm middleware 'optionalAuth' nếu muốn check follow cho guest login
   // Ở đây dùng logic trong controller để handle req.user nếu có
-  userController.getPublicProfile
+  userController.getPublicProfile,
 );
 
 // ==========================================
@@ -40,21 +40,14 @@ router.patch(
   "/profile",
   uploadImages.single("avatar"),
   validate(updateProfileSchema), // Validate body
-  userController.updateProfile
+  userController.updateProfile,
 );
 
 // Đổi mật khẩu
 router.post(
   "/change-password",
   validate(changePasswordSchema),
-  userController.changePassword
-);
-
-// Follow / Unfollow User khác
-router.post(
-  "/:id/follow",
-  validate(toggleFollowSchema), // Validate params & body (nếu có)
-  userController.toggleFollow
+  userController.changePassword,
 );
 
 // ==========================================
@@ -71,7 +64,7 @@ router.post(
   "/",
   uploadImages.single("avatar"),
   validate(adminCreateUserSchema),
-  userController.createUser
+  userController.createUser,
 );
 
 // Update User bất kỳ (Ban/Unban, Verify, Role...)
@@ -80,7 +73,7 @@ router.patch(
   "/:id",
   uploadImages.single("avatar"),
   validate(adminUpdateUserSchema),
-  userController.updateUser
+  userController.updateUser,
 );
 router.post("/:id/block", userController.toggleBlock);
 

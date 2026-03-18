@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { usePlayerPadding } from "@/hooks/usePlayerPadding";
 import { cn } from "@/lib/utils";
-import Header from "@/layouts/admin/components/Header";
 import Sidebar from "@/layouts/admin/components/Sidebar";
+import Header from "@/layouts/admin/components/Header";
 
 const AdminLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -37,7 +37,7 @@ const AdminLayout = () => {
         <main
           className={cn(
             "flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 lg:p-8 scroll-smooth bg-muted/20", // Thêm bg-muted/20 để tách biệt với header/sidebar trắng
-            paddingProps.className
+            paddingProps.className,
           )}
           style={paddingProps.style}
         >

@@ -34,3 +34,4 @@ export const AlbumDetailSkeleton = () => {
     </div>
   );
 };
+export default AlbumDetailSkeleton;

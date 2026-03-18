@@ -99,54 +99,6 @@ class UserService {
   }
 
   /**
-   * 4. TOGGLE FOLLOW (Logic Tách Bảng)
-   */
-  async toggleFollow(currentUserId: string, targetId: string) {
-    if (currentUserId === targetId) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "Không thể tự follow chính mình",
-      );
-    }
-
-    // Check target (User hoặc Artist)
-    const targetUser = await User.findById(targetId);
-    const targetArtist = !targetUser ? await Artist.findById(targetId) : null;
-
-    if (!targetUser && !targetArtist) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Đối tượng không tồn tại");
-    }
-
-    const existingFollow = await Follow.findOne({
-      follower: currentUserId,
-      following: targetId,
-    });
-
-    if (existingFollow) {
-      // --- UNFOLLOW ---
-      await existingFollow.deleteOne();
-      if (targetArtist) {
-        await Artist.findByIdAndUpdate(targetId, {
-          $inc: { followerCount: -1 },
-        });
-      }
-      return { isFollowing: false };
-    } else {
-      // --- FOLLOW ---
-      await Follow.create({
-        follower: currentUserId,
-        following: targetId,
-      });
-      if (targetArtist) {
-        await Artist.findByIdAndUpdate(targetId, {
-          $inc: { followerCount: 1 },
-        });
-      }
-      return { isFollowing: true };
-    }
-  }
-
-  /**
    * 5. GET USERS (Admin)
    */
   async getUsers(filter: UserFilterInput) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Check,
   ChevronsUpDown,
@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks/useDebounce";
-import type { Track } from "@/features/track/types";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -30,7 +29,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDuration } from "@/utils/track-helper";
-import { useTrackAdmin } from "@/features/track/hooks/useTrackAdmin";
+import { ITrack } from "@/features/track/types";
+import { useAdminTracks } from "@/features/track/hooks/useTracksQuery";
 
 interface TrackSelectorProps {
   value?: string | string[]; // ID đơn hoặc mảng ID
@@ -57,14 +57,14 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
 
   // --- 1. API SEARCH ---
   // Gọi API search tracks (Lấy danh sách gợi ý)
-  const { data, isLoading } = useTrackAdmin({
+  const { data, isLoading } = useAdminTracks({
     page: 1,
     limit: 20,
     keyword: debouncedSearch,
     status: "ready", // Chỉ lấy bài đã ready
   });
 
-  const tracks = data?.data?.data || [];
+  const tracks = data?.tracks || [];
 
   // --- 2. SELECTED ITEMS LOGIC ---
   // Để hiển thị đúng các bài đã chọn (khi search term thay đổi làm mất track trong list),
@@ -80,7 +80,7 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
   };
 
   // Handler select
-  const handleSelect = (track: Track) => {
+  const handleSelect = (track: ITrack) => {
     if (multiple) {
       const currentValues = Array.isArray(value) ? value : [];
       const newValues = currentValues.includes(track._id)
@@ -116,7 +116,7 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
               !value || (Array.isArray(value) && value.length === 0)
                 ? "text-muted-foreground"
                 : "text-foreground",
-              error && "border-destructive ring-destructive/20"
+              error && "border-destructive ring-destructive/20",
             )}
           >
             <div className="flex flex-wrap gap-2 items-center w-full overflow-hidden">
@@ -144,7 +144,7 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
                 // SINGLE SELECT VIEW
                 <span className="truncate font-medium">
                   {/* Tìm track trong list hiện tại để hiện tên, nếu không thấy hiện ID (hoặc text fallback) */}
-                  {tracks.find((t: Track) => t._id === value)?.title ||
+                  {tracks.find((t: ITrack) => t._id === value)?.title ||
                     "Selected Track"}
                 </span>
               )}
@@ -181,7 +181,7 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
 
               <CommandGroup>
                 <ScrollArea className="h-[300px]">
-                  {tracks.map((track: Track) => {
+                  {tracks.map((track: ITrack) => {
                     const active = isSelected(track._id);
                     return (
                       <CommandItem
@@ -197,7 +197,7 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
                               "flex items-center justify-center w-4 h-4 border rounded-sm transition-all",
                               active
                                 ? "bg-primary border-primary text-primary-foreground"
-                                : "border-muted-foreground/30 opacity-50"
+                                : "border-muted-foreground/30 opacity-50",
                             )}
                           >
                             {active && <Check className="w-3 h-3" />}
@@ -292,3 +292,4 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
     </div>
   );
 };
+export default TrackSelector;

@@ -242,3 +242,4 @@ export const ModalTrackFilter: React.FC<ModalTrackFilterProps> = ({
     </div>
   );
 };
+export default ModalTrackFilter;

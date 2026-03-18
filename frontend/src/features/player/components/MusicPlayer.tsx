@@ -80,3 +80,4 @@ export function MusicPlayer() {
     </>
   );
 }
+export default MusicPlayer;

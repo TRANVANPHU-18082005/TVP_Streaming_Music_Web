@@ -49,20 +49,6 @@ export const changePassword = catchAsync(
   },
 );
 
-// 4. PRIVATE: Toggle Follow (Follow/Unfollow)
-export const toggleFollow = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.toggleFollow(
-    req.user!._id.toString(),
-    req.params.id,
-  );
-
-  res.status(httpStatus.OK).json({
-    success: true,
-    message: result.isFollowing ? "Đã theo dõi" : "Đã hủy theo dõi",
-    data: result,
-  });
-});
-
 // --- ADMIN CONTROLLERS ---
 
 // 5. ADMIN: Get List Users

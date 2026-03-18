@@ -31,7 +31,7 @@ const sidebarGroups = [
     items: [
       {
         label: "Dashboard",
-        path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.DASHBOARD}`,
+        path: `${ADMIN_PATHS.ADMIN}`,
         icon: LayoutDashboard,
       },
     ],
@@ -115,7 +115,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-
   return (
     <aside
       className={cn(
@@ -155,7 +154,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </Link>
           {!isCollapsed && (
             <span className="text-lg font-bold tracking-tight text-primary">
-              TVP MUSIC
+              TVP Music
             </span>
           )}
         </div>
@@ -182,7 +181,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </h4>
               )}
               {group.items.map((item) => {
-                const isActive = location.pathname.includes(item.path);
+                const isActive =
+                  item.path === ADMIN_PATHS.ADMIN
+                    ? location.pathname === item.path
+                    : location.pathname.startsWith(item.path);
+
                 return (
                   <button
                     key={item.label}

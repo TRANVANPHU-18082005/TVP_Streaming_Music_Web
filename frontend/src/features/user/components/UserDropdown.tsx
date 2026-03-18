@@ -27,7 +27,7 @@ interface UserDropdownProps {
   navigate: (path: string) => void;
 }
 
-export function UserDropdown({ user, navigate }: UserDropdownProps) {
+export const UserDropdown = ({ user, navigate }: UserDropdownProps) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -114,7 +114,7 @@ export function UserDropdown({ user, navigate }: UserDropdownProps) {
       </DropdownMenuContent>
     </DropdownMenu>
   );
-}
+};
 
 // Helper component nhỏ cho shortcut phím tắt
 function DropdownMenuShortcut({

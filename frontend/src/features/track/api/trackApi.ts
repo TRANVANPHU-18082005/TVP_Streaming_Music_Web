@@ -119,6 +119,14 @@ const trackApi = {
     );
     return data;
   },
+  // trackApi.ts thêm vào phần ACTIONS
+  recordView: async (trackId: string) => {
+    // Dùng api.post tương tự các hàm khác để giữ tính đồng nhất
+    const { data } = await api.post<ApiResponse<null>>(
+      `/tracks/${trackId}/view`,
+    );
+    return data;
+  },
 };
 
 export default trackApi;

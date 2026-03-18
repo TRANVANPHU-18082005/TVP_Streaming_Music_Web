@@ -13,7 +13,7 @@ import {
   formatBytes,
   calculatePercent,
 } from "../utils/helper";
-import { audioQueue } from "../queue/producer";
+import { audioQueue } from "../queue/transcodeTrack.queue";
 
 // --- CONFIGURATION ---
 const DASHBOARD_CACHE_TTL = 600; // 10 phút (Cache data từ DB)

@@ -14,7 +14,7 @@ import { setQueue, setIsPlaying } from "@/features/player";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { ITrack } from "@/features/track/types";
-import { Clock, Play } from "lucide-react";
+import { Clock } from "lucide-react";
 
 interface TrackTableProps {
   tracks: ITrack[];
@@ -152,5 +152,5 @@ export const TrackTable: React.FC<TrackTableProps> = ({
     </div>
   );
 };
-
+export default TrackTable;
 TrackTable.displayName = "TrackTable";

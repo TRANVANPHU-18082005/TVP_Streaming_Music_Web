@@ -41,23 +41,6 @@ export interface VerificationRequest {
 
 // --- 3. FORM TYPES (INPUT) ---
 
-/**
- * Type cho Form "Become Artist" (User nhập liệu)
- * Tự động infer từ Zod Schema để đảm bảo đồng bộ 100%
- */
-export type BecomeArtistFormValues = z.infer<typeof becomeArtistSchema>;
-// Cấu trúc thực tế của nó sẽ là:
-// {
-//   artistName: string;
-//   realName: string;
-//   emailWork: string;
-//   socialLink: string;
-//   frontImage: File;
-//   backImage: File;
-// }
-
-// --- 4. API REQUEST PARAMETERS ---
-
 // Admin Filter Params
 export interface VerificationFilterParams {
   page: number;

@@ -32,3 +32,4 @@ export const SubGenreGrid = ({ genres }: { genres: Genre[] }) => {
     </div>
   );
 };
+export default SubGenreGrid;

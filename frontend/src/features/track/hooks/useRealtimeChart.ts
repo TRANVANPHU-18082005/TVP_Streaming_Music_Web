@@ -1,4 +1,10 @@
-import { useEffect, useState, useRef, useMemo } from "react";
+/**
+ * @file useRealtimeChart.ts
+ * @description Hook quản lý bảng xếp hạng thời gian thực đạt chuẩn Production.
+ * Kết hợp dữ liệu từ React Query và Socket.io với cơ chế chống giật và tính toán thứ hạng.
+ */
+
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocket } from "@/hooks/useSocket";
 import trackApi from "@/features/track/api/trackApi";
@@ -8,117 +14,122 @@ export const useRealtimeChart = () => {
   const queryClient = useQueryClient();
   const { socket, isConnected } = useSocket();
   const [isUpdating, setIsUpdating] = useState(false);
-  const prevRankMapRef = useRef<Record<string, number>>({});
 
-  // 1. Initial Fetch
-  const { data: apiResponse, isLoading } = useQuery({
+  // 1. Ref Quản lý trạng thái không gây re-render
+  const prevRankMapRef = useRef<Record<string, number>>({});
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 2. Initial Fetch: Lấy dữ liệu nền tảng
+  const {
+    data: apiResponse,
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: ["live-chart"],
     queryFn: trackApi.getRealtimeChart,
-    staleTime: Infinity, // Giữ data không bao giờ cũ để ưu tiên Socket update
+    staleTime: Infinity, // Không tự động gọi lại API, ưu tiên Socket
+    gcTime: 1000 * 60 * 60, // Giữ trong cache 1 tiếng
   });
 
-  // 🔥 FIX 1: Chuẩn hóa dữ liệu đầu ra (Normalization)
-  // Dù API trả về gì, ta cũng convert về 1 format duy nhất để dùng trong Component
+  // 3. Normalization: Luôn trả về cấu trúc dữ liệu chuẩn dù API trả về gì
   const { tracks, chartData } = useMemo(() => {
     const rawData = apiResponse?.data;
-
     if (!rawData) return { tracks: [], chartData: [] };
 
-    // Case 1: Backend cũ (Array) -> Chart rỗng
-    if (Array.isArray(rawData)) {
-      return { tracks: rawData as ChartTrack[], chartData: [] };
-    }
+    // Hỗ trợ cả Format cũ (Array) và Format mới (Object {items, chart})
+    const items = Array.isArray(rawData) ? rawData : rawData?.items || [];
+    const chart = Array.isArray(rawData) ? [] : rawData?.chart || [];
 
-    // Case 2: Backend mới (Object) -> Lấy đủ
-    return {
-      tracks: (rawData as any).items || [],
-      chartData: (rawData as any).chart || [],
-    };
+    return { tracks: items as ChartTrack[], chartData: chart };
   }, [apiResponse]);
 
-  // 2. Init PrevRank Map (Giữ nguyên)
-  useEffect(() => {
-    if (tracks.length > 0 && Object.keys(prevRankMapRef.current).length === 0) {
-      const map: Record<string, number> = {};
-      tracks.forEach((t, i) => {
-        map[t._id] = i + 1;
-      });
-      prevRankMapRef.current = map;
-    }
-  }, [tracks]);
-
-  // 3. Socket Realtime
-  useEffect(() => {
-    if (!socket || !isConnected) return;
-
-    socket.emit("join_chart_page");
-
-    const handleUpdate = (payload: any) => {
-      setIsUpdating(true);
-      setTimeout(() => setIsUpdating(false), 800);
-
-      // 🔥 FIX 2: Logic Merge thông minh (QUAN TRỌNG NHẤT)
-      // Không bao giờ được phép làm mất 'chart' nếu payload không có nó
+  /**
+   * 4. Logic cập nhật Cache thông minh
+   * Tách riêng để code sạch và dễ bảo trì
+   */
+  const updateChartCache = useCallback(
+    (payload: any) => {
       queryClient.setQueryData(["live-chart"], (old: any) => {
         if (!old) return old;
 
-        // Lấy dữ liệu cũ an toàn
         const oldData = old.data;
         const oldItems = Array.isArray(oldData)
           ? oldData
           : oldData?.items || [];
         const oldChart = Array.isArray(oldData) ? [] : oldData?.chart || [];
 
-        // Payload mới từ Socket
-        let newItems = [];
-        let newChart = [];
-
-        if (Array.isArray(payload)) {
-          // Case A: Socket chỉ bắn về List Tracks (Backend cũ)
-          // -> Cập nhật Tracks, GIỮ NGUYÊN Chart cũ
-          newItems = payload;
-          newChart = oldChart;
-        } else {
-          // Case B: Socket bắn về Object {items, chart} (Backend mới)
-          // -> Nếu chart mới rỗng (backend lỗi?), vẫn dùng chart cũ cho đỡ giật
-          newItems = payload.items || oldItems;
-          newChart =
-            payload.chart && payload.chart.length > 0
-              ? payload.chart
-              : oldChart;
-        }
-
-        // Tính toán Rank cũ (Logic cũ của bạn)
+        // Tính toán thứ hạng cũ trước khi ghi đè data mới (phục vụ animation)
         const newPrevMap: Record<string, number> = {};
-        // Lưu rank của list CŨ trước khi update để làm animation
         oldItems.forEach((t: ChartTrack, i: number) => {
           newPrevMap[t._id] = i + 1;
         });
         prevRankMapRef.current = newPrevMap;
 
-        // Return cấu trúc dữ liệu chuẩn Object cho React Query Cache
+        // Merge dữ liệu: Ưu tiên payload, fallback về dữ liệu cũ nếu payload thiếu hụt
+        let nextItems = [];
+        let nextChart = [];
+
+        if (Array.isArray(payload)) {
+          nextItems = payload;
+          nextChart = oldChart;
+        } else {
+          nextItems = payload.items || oldItems;
+          nextChart =
+            payload.chart && payload.chart.length > 0
+              ? payload.chart
+              : oldChart;
+        }
+
         return {
           ...old,
           data: {
-            items: newItems,
-            chart: newChart, // Luôn đảm bảo có chart
+            items: nextItems,
+            chart: nextChart,
           },
         };
       });
+    },
+    [queryClient],
+  );
+
+  // 5. Quản lý kết nối Socket
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    // Join room chuyên biệt cho Chart
+    socket.emit("join_chart_page");
+
+    const handleUpdate = (payload: any) => {
+      // Hiệu ứng "Updating" nhấp nháy nhẹ trên UI
+      setIsUpdating(true);
+      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+      updateTimeoutRef.current = setTimeout(() => setIsUpdating(false), 800);
+
+      // Cập nhật dữ liệu vào React Query Cache
+      updateChartCache(payload);
     };
 
     socket.on("chart_update", handleUpdate);
 
+    // Cleanup khi component unmount
     return () => {
       socket.emit("leave_chart_page");
       socket.off("chart_update", handleUpdate);
+      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
     };
-  }, [socket, isConnected, queryClient]);
+  }, [socket, isConnected, updateChartCache]);
+
+  // 6. Cơ chế Re-sync: Nếu mất mạng rồi có lại, fetch lại API để đảm bảo data mới nhất
+  useEffect(() => {
+    if (isConnected) {
+      refetch();
+    }
+  }, [isConnected, refetch]);
 
   return {
     tracks,
     chartData,
-    prevRankMap: prevRankMapRef.current,
+    prevRankMap: prevRankMapRef.current, // Dùng để tính toán Up/Down/Stay trong Component
     isLoading,
     isUpdating,
     isConnected,

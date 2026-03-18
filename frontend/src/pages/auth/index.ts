@@ -6,3 +6,6 @@ export const GoogleCallbackPage = lazy(() => import("./GoogleCallbackPage"));
 export const LogoutPage = lazy(() => import("./LogoutPage"));
 export const ForgotPasswordPage = lazy(() => import("./ForgotPasswordPage"));
 export const ResetPasswordPage = lazy(() => import("./ResetPasswordPage"));
+export const ForceChangePasswordPage = lazy(
+  () => import("./ForceChangePasswordPage"),
+);

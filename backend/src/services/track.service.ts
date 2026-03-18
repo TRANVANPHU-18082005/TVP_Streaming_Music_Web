@@ -6,7 +6,7 @@ import Artist from "../models/Artist";
 import Album from "../models/Album";
 import Genre from "../models/Genre";
 import ApiError from "../utils/ApiError";
-import { addTranscodeJob, audioQueue } from "../queue/producer";
+import { addTranscodeJob, audioQueue } from "../queue/transcodeTrack.queue";
 import { generateUniqueSlug } from "../utils/slug";
 import {
   BulkUpdateTrackInput,
@@ -16,6 +16,10 @@ import {
   UpdateTrackInput,
 } from "../validations/track.validation";
 import { deleteFolderFromB2, deleteFromB2 } from "../utils/fileCleanup";
+import { cacheRedis } from "../config/redis";
+import { notifyQueue } from "../queue/notify.queue";
+import Follow from "../models/Follow";
+import { viewQueue } from "../queue/view.queue"; // Đảm bảo chữ q viết thường
 
 type MulterS3File = Express.Multer.File & { location: string; key: string };
 
@@ -42,7 +46,7 @@ class TrackService {
   }
 
   /**
-   * 1. CREATE TRACK (Transaction + Atomic Cleanup)
+   * 1. CREATE TRACK (Transaction + Atomic Cleanup + Notification Fan-out)
    */
   async createTrack(
     currentUser: IUser,
@@ -51,31 +55,39 @@ class TrackService {
   ): Promise<ITrack> {
     // A. Permission & Artist Check
     let targetArtistId: Types.ObjectId;
+    let targetArtistName = ""; // Biến để lưu tên nghệ sĩ cho Notification
+
     if (currentUser.role === "admin") {
       if (!data.artistId)
         throw new ApiError(httpStatus.BAD_REQUEST, "Admin phải chọn Artist");
-      targetArtistId = new Types.ObjectId(data.artistId);
+
+      const artist = await Artist.findById(data.artistId).lean();
+      if (!artist)
+        throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy Artist");
+
+      targetArtistId = artist._id as Types.ObjectId;
+      targetArtistName = artist.name;
     } else {
       const artist = await Artist.findOne({ user: currentUser._id }).lean();
       if (!artist)
         throw new ApiError(httpStatus.FORBIDDEN, "Bạn chưa có Profile Nghệ sĩ");
+
       targetArtistId = artist._id as Types.ObjectId;
+      targetArtistName = artist.name;
     }
 
     const audioFile = files["audio"]?.[0] as MulterS3File;
     if (!audioFile)
       throw new ApiError(httpStatus.BAD_REQUEST, "Thiếu file Audio");
 
-    // Kiểm tra nếu location chỉ là path tương đối thì ghép thêm Domain
     const formatUrl = (location: string, key: string) => {
       if (location.startsWith("http")) return location;
-      const endpoint = process.env.B2_ENDPOINT?.replace(/\/$/, ""); // Loại bỏ / cuối
+      const endpoint = process.env.B2_ENDPOINT?.replace(/\/$/, "");
       const bucket = process.env.B2_BUCKET_NAME;
-      // Ghép: https://f004.backblazeb2.com/file/tvp-music-hls/tracks/abc...
       return `${endpoint}/${bucket}/${key}`;
     };
+
     const fullTrackUrl = formatUrl(audioFile.location, audioFile.key);
-    // B. Prepare Data
     const duration = Number(data.duration) || 0;
     let coverImageUrl = "";
     let coverFileKey = "";
@@ -95,7 +107,7 @@ class TrackService {
     session.startTransaction();
 
     try {
-      // C. Create Record (Sử dụng new Track().save() để tránh lỗi TS Overload)
+      // C. Create Record
       const track = new Track({
         ...data,
         slug: seoSlug,
@@ -133,24 +145,54 @@ class TrackService {
         }).session(session);
       }
 
+      // CHỐT TRANSACTION
       await session.commitTransaction();
 
-      // E. Queue (Background)
+      // ==========================================================
+      // E. QUEUE JOBS (NÊN GỌI SAU KHI COMMIT ĐỂ ĐẢM BẢO DATA ĐÃ CÓ TRONG DB)
+      // ==========================================================
+
+      // 1. Queue Transcode (HLS)
       addTranscodeJob({
         trackId: track._id.toString(),
         fileUrl: track.trackUrl,
         duration,
-      }).catch((err) => console.error("❌ Add Queue Failed:", err));
+      }).catch((err) => console.error("❌ Add Transcode Queue Failed:", err));
+
+      // 2. Queue Notification (Fan-out cho Fan)
+      this.pushNewTrackNotification(track, targetArtistName).catch((err) =>
+        console.error("❌ Add Notification Queue Failed:", err),
+      );
 
       return track;
     } catch (error) {
       await session.abortTransaction();
-      // Rollback files ngay lập tức nếu DB lỗi
       if (audioFile.key) deleteFromB2(audioFile.key).catch(console.error);
       if (coverFileKey) deleteFromB2(coverFileKey).catch(console.error);
       throw error;
     } finally {
       await session.endSession();
+    }
+  }
+
+  /**
+   * Private helper: Tìm fan và đẩy vào hàng chờ thông báo
+   */
+  private async pushNewTrackNotification(track: any, artistName: string) {
+    const followers = await Follow.find({ artistId: track.artist })
+      .select("followerId")
+      .lean();
+    const followerIds = followers.map((f) => f.followerId.toString());
+
+    if (followerIds.length > 0) {
+      await notifyQueue.add("send-new-track", {
+        artistId: track.artist,
+        trackId: track._id,
+        trackTitle: track.title,
+        artistName: artistName,
+        followerIds,
+      });
+      console.log(`🚀 Queued notification for ${followerIds.length} followers`);
     }
   }
 
@@ -598,6 +640,50 @@ class TrackService {
     track.status = newStatus.status;
     await track.save();
     return track;
+  }
+  /**
+   * 9. RECORD TRACK VIEW (Transaction Required)
+   */
+  async recordTrackView(trackId: string, userId?: string, userIp?: string) {
+    try {
+      // 1. Anti-Spam: 1 User/IP - 1 Bài - 1 View trong 10 phút
+      const spamKey = `limit:view:${trackId}:${userId || userIp}`;
+      const isSpam = await cacheRedis.get(spamKey);
+
+      if (isSpam) {
+        return { status: "ignored", reason: "spam_limit" };
+      }
+
+      // 2. Đánh dấu đã đếm view (Hết hạn sau 10 phút)
+      await cacheRedis.set(spamKey, "1", "EX", 600);
+
+      // 3. Tăng buffer trong Redis cho Cron Job quét (track:views:ID)
+      const viewKey = `track:views:${trackId}`;
+      await cacheRedis.incr(viewKey);
+
+      // 4. Đẩy vào Queue để ghi Log chi tiết (Async)
+      // Dùng job name chuẩn để Worker dễ filter
+      await viewQueue.add(
+        "log-listen-history",
+        {
+          trackId,
+          userId,
+          ip: userIp,
+          timestamp: new Date(),
+        },
+        {
+          // Option thêm: tự xóa job khi hoàn thành để đỡ tốn ram Redis
+          removeOnComplete: true,
+        },
+      );
+
+      return { status: "success" };
+    } catch (error) {
+      // Log lỗi nhưng không quăng lỗi ra ngoài làm sập request của user
+      // Vì đếm view là tính năng phụ, không nên làm user không nghe được nhạc
+      console.error("❌ [Service Error] recordTrackView:", error);
+      return { status: "error", message: "Ghi nhận view thất bại" };
+    }
   }
 }
 

@@ -1,31 +1,36 @@
 // src/types/socket.ts
 
-import { ChartTrack } from "@/features/track/types";
-
 // 1. Sự kiện Server gửi xuống Client (Listen)
 export interface ServerToClientEvents {
-  // Sự kiện kết nối cơ bản
   connect: () => void;
   disconnect: () => void;
 
-  // Analytics (Admin nhận)
+  // Analytics
   admin_analytics_update: (data: RealtimeStats) => void;
-  chart_update: (data: ChartTrack[]) => void;
-
-  // Admin dashboard (nếu có dùng chung)
+  chart_update: (data: any) => void; // Thường là object { items, chart } như hook useRealtimeChart đã dùng
 
   // Đếm người nghe realtime
   listeners_count: (count: number) => void;
-  // Thông báo (Ví dụ thêm)
-  notification: (data: { message: string; type: string }) => void;
+
+  // 🔥 NOTIFICATION (Cần thêm vào đây)
+  // Khớp với: io.to(uid).emit("notification_received", ...) ở Worker
+  notification_received: (data: {
+    message: string;
+    trackId?: string;
+    type?: string;
+    link?: string;
+  }) => void;
+
+  // Đồng bộ trạng thái đã đọc (nếu có dùng socket logic bổ sung)
+  notifications_marked_as_read_success: () => void;
 }
 
 // 2. Sự kiện Client gửi lên Server (Emit)
 export interface ClientToServerEvents {
-  // Analytics (User gửi)
+  // Analytics
   client_heartbeat: (data: { userId: string; trackId: string }) => void;
 
-  // Admin
+  // Admin & Chart
   join_admin_dashboard: () => void;
   leave_admin_dashboard: () => void;
   join_chart_page: () => void;
@@ -36,11 +41,15 @@ export interface ClientToServerEvents {
 
   // Tham gia phòng nghe nhạc cụ thể
   listening_track: (trackId: string) => void;
+
+  // 🔥 NOTIFICATION ACTIONS (Cần thêm vào đây)
+  // Khớp với socket.on("mark_notifications_read") ở Backend
+  mark_notifications_read: () => void;
 }
 
-// Data Models (Tái sử dụng từ file types trước đó)
 export interface RealtimeStats {
   activeUsers: number;
   nowListening: any[];
   trending: any[];
+  geoData?: any[]; // Thêm nếu bạn có làm bản đồ user
 }

@@ -382,3 +382,4 @@ export const UserFilters: React.FC<UserFiltersProps> = ({
     </div>
   );
 };
+export default UserFilters;

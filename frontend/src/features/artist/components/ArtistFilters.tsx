@@ -412,3 +412,4 @@ export const ArtistFilters: React.FC<ArtistFiltersProps> = ({
     </div>
   );
 };
+export default ArtistFilters;

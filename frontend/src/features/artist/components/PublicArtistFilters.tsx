@@ -207,3 +207,4 @@ export const PublicArtistFilters: React.FC<PublicArtistFiltersProps> = ({
     </div>
   );
 };
+export default PublicArtistFilters;

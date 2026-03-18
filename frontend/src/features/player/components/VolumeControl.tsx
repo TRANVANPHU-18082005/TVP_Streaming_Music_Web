@@ -15,7 +15,7 @@ export const VolumeControl = ({ className }: { className?: string }) => {
   const { volume, isMuted } = useSelector(selectPlayer);
   const handleVolumeChange = useCallback(
     (val: number[]) => dispatch(setVolume(val[0] / 100)),
-    [dispatch]
+    [dispatch],
   );
   const VolumeIcon =
     isMuted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
@@ -42,3 +42,4 @@ export const VolumeControl = ({ className }: { className?: string }) => {
     </div>
   );
 };
+export default VolumeControl;

@@ -35,7 +35,7 @@ export const ExtraControls = ({
           "transition-colors",
           isQueueActive
             ? "text-primary bg-primary/10"
-            : "text-white hover:text-primary hover:bg-secondary"
+            : "text-white hover:text-primary hover:bg-secondary",
         )}
         title="Queue"
         onClick={onQueueClick}
@@ -71,3 +71,4 @@ export const ExtraControls = ({
     </div>
   );
 };
+export default ExtraControls;

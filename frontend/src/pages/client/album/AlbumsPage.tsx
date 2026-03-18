@@ -19,12 +19,7 @@ import { albumKeys } from "@/features/album/utils/albumKeys";
 import { useAppDispatch } from "@/store/hooks";
 import { setIsPlaying, setQueue } from "@/features";
 
-// Redux (Giả định)
-// import { useAppDispatch } from "@/store/hooks";
-// import { setQueue, setIsPlaying } from "@/features/player/playerSlice";
-
 const AlbumPage = () => {
-  // const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
 
   // --- 1. STATE QUẢN LÝ QUA URL ---
@@ -163,7 +158,6 @@ const AlbumPage = () => {
                 >
                   <PublicAlbumCard
                     album={album}
-                    // 🔥 TRUYỀN HÀM PLAY VÀO ĐÂY
                     onPlay={() => handlePlayAlbum(album._id)}
                   />
                 </div>

@@ -174,7 +174,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                       "flex items-center justify-between p-4 border rounded-xl transition-all cursor-pointer select-none group",
                       isPublic !== undefined
                         ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20"
-                        : "border-border bg-background hover:bg-muted/40 hover:border-foreground/20"
+                        : "border-border bg-background hover:bg-muted/40 hover:border-foreground/20",
                     )}
                     // Click vào cả khối để toggle
                     onClick={() => {
@@ -192,7 +192,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                           "p-2.5 rounded-lg border shrink-0 transition-colors",
                           isPublic !== undefined
                             ? "bg-background border-primary/20 text-primary"
-                            : "bg-muted border-transparent text-muted-foreground group-hover:bg-muted/80"
+                            : "bg-muted border-transparent text-muted-foreground group-hover:bg-muted/80",
                         )}
                       >
                         <Globe className="size-5" />
@@ -206,14 +206,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                             "text-xs font-medium mt-0.5 transition-colors",
                             isPublic !== undefined
                               ? "text-primary"
-                              : "text-muted-foreground"
+                              : "text-muted-foreground",
                           )}
                         >
                           {isPublic === undefined
                             ? "Giữ nguyên (Không đổi)"
                             : isPublic
-                            ? "Đặt thành Công khai (Public)"
-                            : "Đặt thành Riêng tư (Private)"}
+                              ? "Đặt thành Công khai (Public)"
+                              : "Đặt thành Riêng tư (Private)"}
                         </p>
                       </div>
                     </div>
@@ -317,3 +317,4 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     </Dialog>
   );
 };
+export default BulkEditModal;

@@ -51,7 +51,7 @@ export const SystemHealthDialog = ({ data, children }: Props) => {
                 "p-3 rounded-xl border-2 shadow-sm transition-colors",
                 hasErrors
                   ? "bg-destructive/10 text-destructive border-destructive/20 animate-pulse"
-                  : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                  : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
               )}
             >
               {hasErrors ? (
@@ -69,13 +69,13 @@ export const SystemHealthDialog = ({ data, children }: Props) => {
                   <span
                     className={cn(
                       "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
-                      hasErrors ? "bg-red-400" : "bg-emerald-400"
+                      hasErrors ? "bg-red-400" : "bg-emerald-400",
                     )}
                   ></span>
                   <span
                     className={cn(
                       "relative inline-flex rounded-full h-2 w-2",
-                      hasErrors ? "bg-red-500" : "bg-emerald-500"
+                      hasErrors ? "bg-red-500" : "bg-emerald-500",
                     )}
                   ></span>
                 </span>
@@ -90,7 +90,7 @@ export const SystemHealthDialog = ({ data, children }: Props) => {
               "hidden sm:flex px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border",
               hasErrors
                 ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
-                : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
+                : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800",
             )}
           >
             {hasErrors ? "Attention Needed" : "All Systems Operational"}
@@ -172,12 +172,12 @@ export const SystemHealthDialog = ({ data, children }: Props) => {
                                 "h-full transition-all duration-700 ease-out rounded-full",
                                 data.storage.cloudinary.bandwidth.percent > 90
                                   ? "bg-gradient-to-r from-red-500 to-red-600"
-                                  : "bg-gradient-to-r from-blue-400 to-blue-600"
+                                  : "bg-gradient-to-r from-blue-400 to-blue-600",
                               )}
                               style={{
                                 width: `${Math.min(
                                   data.storage.cloudinary.bandwidth.percent,
-                                  100
+                                  100,
                                 )}%`,
                               }}
                             />
@@ -347,14 +347,14 @@ const SectionCard = ({
   <div
     className={cn(
       "group p-5 rounded-2xl bg-card border border-border shadow-sm transition-all duration-300 hover:shadow-md",
-      borderColor
+      borderColor,
     )}
   >
     <div className="flex items-center gap-3 mb-5 pb-3 border-b border-border/60">
       <div
         className={cn(
           "p-2 rounded-lg bg-background shadow-sm ring-1 ring-inset ring-gray-200 dark:ring-gray-800",
-          color
+          color,
         )}
       >
         <Icon className="w-5 h-5" />
@@ -391,7 +391,7 @@ const QueueMetric = ({
       className={cn(
         "flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-300",
         themeStyles[theme],
-        alert && "animate-pulse ring-2 ring-red-500/50"
+        alert && "animate-pulse ring-2 ring-red-500/50",
       )}
     >
       <span className="text-[10px] uppercase font-bold opacity-80 mb-1 tracking-wide">
@@ -428,7 +428,7 @@ const PipelineRow = ({
         "flex justify-between items-center p-3 rounded-xl transition-colors border",
         "bg-background border-border/40 hover:border-border hover:bg-muted/30",
         alert &&
-          "bg-red-50/50 border-red-200 dark:bg-red-900/10 dark:border-red-900/50"
+          "bg-red-50/50 border-red-200 dark:bg-red-900/10 dark:border-red-900/50",
       )}
     >
       <div className="flex items-center gap-3">
@@ -439,16 +439,16 @@ const PipelineRow = ({
               ? theme === "red"
                 ? "text-red-500"
                 : theme === "blue"
-                ? "text-blue-500"
-                : "text-emerald-500"
+                  ? "text-blue-500"
+                  : "text-emerald-500"
               : "text-muted-foreground",
-            animate && count > 0 && "animate-spin"
+            animate && count > 0 && "animate-spin",
           )}
         />
         <span
           className={cn(
             "text-sm font-semibold",
-            alert ? "text-red-700 dark:text-red-400" : "text-foreground/80"
+            alert ? "text-red-700 dark:text-red-400" : "text-foreground/80",
           )}
         >
           {label}
@@ -457,7 +457,7 @@ const PipelineRow = ({
       <span
         className={cn(
           "text-xs px-2.5 py-1 rounded-md font-black min-w-[40px] text-center border",
-          activeStyle
+          activeStyle,
         )}
       >
         {count}
@@ -474,16 +474,17 @@ const StatusBadge = ({ status }: { status: string }) => {
         "text-[10px] px-2 py-1 rounded-full border flex items-center gap-1.5 uppercase font-bold tracking-wider",
         isOnline
           ? "bg-emerald-100/50 border-emerald-200 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-800"
-          : "bg-red-100/50 border-red-200 text-red-700 dark:bg-red-500/10 dark:text-red-400 dark:border-red-800"
+          : "bg-red-100/50 border-red-200 text-red-700 dark:bg-red-500/10 dark:text-red-400 dark:border-red-800",
       )}
     >
       <span
         className={cn(
           "w-1.5 h-1.5 rounded-full",
-          isOnline ? "bg-emerald-500" : "bg-red-500"
+          isOnline ? "bg-emerald-500" : "bg-red-500",
         )}
       />
       {status}
     </span>
   );
 };
+export default SystemHealthDialog;

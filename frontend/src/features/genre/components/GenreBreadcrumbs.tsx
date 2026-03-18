@@ -41,3 +41,4 @@ export const GenreBreadcrumbs = ({ items, currentItem }: Props) => {
     </nav>
   );
 };
+export default GenreBreadcrumbs;

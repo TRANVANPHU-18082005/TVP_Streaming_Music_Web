@@ -37,7 +37,7 @@ export const ProgressBar = ({
       onSeek((v[0] / 100) * duration);
       requestAnimationFrame(() => setIsDragging(false));
     },
-    [duration, onSeek]
+    [duration, onSeek],
   );
 
   const previewTime = isDragging ? (value / 100) * duration : currentTime;
@@ -58,7 +58,7 @@ export const ProgressBar = ({
             "cursor-pointer",
             "[&_[role=slider]]:opacity-0",
             "hover:[&_[role=slider]]:opacity-100",
-            isDragging && "[&_[role=slider]]:opacity-100"
+            isDragging && "[&_[role=slider]]:opacity-100",
           )}
         />
       </div>
@@ -73,3 +73,4 @@ export const ProgressBar = ({
     </div>
   );
 };
+export default ProgressBar;

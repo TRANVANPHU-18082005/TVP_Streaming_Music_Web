@@ -7,10 +7,9 @@ import {
   CreateTrackInput,
   UpdateTrackInput,
   TrackFilterInput,
-  ChangeStatusInput,
   BulkUpdateTrackInput,
 } from "../validations/track.validation";
-import { trackIdsSchema } from "../validations/common.validate";
+
 import { getRealtimeChart } from "../services/chart.service";
 
 // 1. UPLOAD TRACK
@@ -149,3 +148,32 @@ export const getTopChart = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
+export const recordTrackView = catchAsync(
+  async (req: Request, res: Response) => {
+    const { trackId } = req.params;
+
+    // Ép kiểu user an toàn
+    const currentUser = req.user as IUser | undefined;
+    const userId = currentUser?._id?.toString();
+    const userIp = req.ip;
+
+    // 1. Validate định dạng MongoDB ID
+    if (!/^[0-9a-fA-F]{24}$/.test(trackId)) {
+      return res.status(httpStatus.BAD_REQUEST).json({
+        success: false,
+        message: "ID bài hát không hợp lệ",
+      });
+    }
+
+    // 2. Gọi Service
+    const result = await trackService.recordTrackView(trackId, userId, userIp);
+
+    // 3. Trả về 202 (Accepted)
+    // User nhận được kết quả này ngay lập tức, các việc ghi log sẽ chạy ngầm
+    return res.status(httpStatus.ACCEPTED).json({
+      success: true,
+      data: result,
+    });
+  },
+);

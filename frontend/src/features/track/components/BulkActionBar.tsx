@@ -97,3 +97,4 @@ const ActionButton = ({
     <span className="hidden sm:inline">{label}</span>
   </Button>
 );
+export default BulkActionBar;

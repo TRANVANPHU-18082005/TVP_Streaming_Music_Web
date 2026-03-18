@@ -374,3 +374,4 @@ export const GenreFilters: React.FC<GenreFiltersProps> = ({
     </div>
   );
 };
+export default GenreFilters;

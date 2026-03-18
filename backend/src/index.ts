@@ -10,6 +10,7 @@ import app from "./app";
 import { connectRedis, cacheRedis, queueRedis } from "./config/redis";
 import { initSocket } from "./socket";
 import { initCronJobs } from "./cron";
+import { startViewWorker } from "./workers/view.worker";
 
 const startServer = async () => {
   try {
@@ -20,7 +21,8 @@ const startServer = async () => {
     // 3. Kết nối MongoDB
     await mongoose.connect(process.env.MONGO_URI as string);
     console.log("✅ MongoDB connected successfully");
-
+    startViewWorker();
+    console.log("✅ View Worker started & listening to Queue");
     // 4. Tạo HTTP Server bọc lấy Express App
     // (Bắt buộc phải làm thế này mới chạy được Socket.IO)
     const server = http.createServer(app);

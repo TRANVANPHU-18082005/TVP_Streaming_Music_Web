@@ -195,3 +195,4 @@ export const AlbumSelector: React.FC<AlbumSelectorProps> = ({
     </div>
   );
 };
+export default AlbumSelector;

@@ -1,8 +1,16 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  memo,
+  useRef,
+} from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
+  Pause,
   MoreHorizontal,
   TrendingUp,
   Search as SearchIcon,
@@ -17,28 +25,23 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// UI Components
 import { Button } from "@/components/ui/button";
-import { CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { Input } from "@/components/ui/input";
-
-// Premium Cards
 import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
 import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
 import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
-
-// Hooks & Utils
 import { useSearch } from "@/features/search/hooks/useSearch";
 import { cn } from "@/lib/utils";
 import { SearchSkeleton } from "@/features/search/components/SearchSkeleton";
 import { formatDuration } from "@/utils/track-helper";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
+import { ITrack } from "@/features";
 
-// Redux
-// import { useAppDispatch } from "@/store/hooks";
-// import { setQueue, setIsPlaying } from "@/features/player/playerSlice";
-
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
 const TRENDING_SEARCHES = [
   "Sơn Tùng M-TP",
   "Chill cùng Indie",
@@ -51,441 +54,702 @@ const TRENDING_SEARCHES = [
 ];
 
 const MAX_RECENT_SEARCHES = 10;
+const STORAGE_KEY = "recentSearches";
 
-// 🔥 CẤU HÌNH TABS
 const SEARCH_TABS = [
-  { id: "all", label: "Tất cả" },
-  { id: "track", label: "Bài hát" },
-  { id: "artist", label: "Nghệ sĩ" },
-  { id: "album", label: "Đĩa nhạc" },
-  { id: "playlist", label: "Danh sách phát" },
+  { id: "all", label: "Tất cả", Icon: Music2 },
+  { id: "track", label: "Bài hát", Icon: Music2 },
+  { id: "artist", label: "Nghệ sĩ", Icon: Mic2 },
+  { id: "album", label: "Đĩa nhạc", Icon: Disc3 },
+  { id: "playlist", label: "Danh sách phát", Icon: ListMusic },
 ] as const;
 
 type SearchTab = (typeof SEARCH_TABS)[number]["id"];
 
-// Animation Variants
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// ANIMATION PRESETS
+// ─────────────────────────────────────────────────────────────────────────────
+const SPRING_FAST = { type: "spring", stiffness: 500, damping: 32 } as const;
+const SPRING_MEDIUM = { type: "spring", stiffness: 300, damping: 28 } as const;
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
+const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  visible: (i = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { type: "spring", stiffness: 120, damping: 20 },
-  },
+    transition: { ...SPRING_MEDIUM, delay: i * 0.045 },
+  }),
+  exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
 };
 
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.04 } },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function readHistory(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(arr: string[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMPTY STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const EmptyState = memo(({ query, tab }: { query: string; tab: SearchTab }) => {
+  const msgs: Record<SearchTab, string> = {
+    all: `Không tìm thấy kết quả cho "${query}"`,
+    track: `Không có bài hát nào khớp với "${query}"`,
+    artist: `Không tìm thấy nghệ sĩ "${query}"`,
+    album: `Không tìm thấy đĩa nhạc "${query}"`,
+    playlist: `Không có playlist nào cho "${query}"`,
+  };
+  return (
+    <motion.div
+      key="empty"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      transition={SPRING_MEDIUM}
+      className="flex flex-col items-center justify-center py-28 gap-5 text-center"
+    >
+      <div className="relative">
+        <div className="size-24 rounded-full dark:bg-white/[0.04] bg-black/[0.04] border-2 border-dashed dark:border-white/10 border-black/10 flex items-center justify-center">
+          <SearchIcon className="size-9 dark:text-white/20 text-gray-400" />
+        </div>
+        <motion.div
+          className="absolute inset-0 rounded-full dark:border-white/6 border-black/6 border"
+          animate={{ scale: [1, 1.3, 1], opacity: [0.6, 0, 0.6] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+      <div className="space-y-1.5 max-w-xs">
+        <p className="text-lg font-black dark:text-white/85 text-gray-800 tracking-tight">
+          {msgs[tab]}
+        </p>
+        <p className="text-sm dark:text-white/35 text-gray-500">
+          Thử từ khóa khác hoặc kiểm tra chính tả
+        </p>
+      </div>
+    </motion.div>
+  );
+});
+EmptyState.displayName = "EmptyState";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRACK ROW
+// ─────────────────────────────────────────────────────────────────────────────
+const TrackRow = memo(
+  ({
+    track,
+    index,
+    isCurrentPlaying,
+    isLoadingThis,
+    onPlay,
+    onArtistClick,
+    onMore,
+  }: {
+    track: ITrack;
+    index: number;
+    isCurrentPlaying: boolean;
+    isLoadingThis: boolean;
+    onPlay: (e: React.MouseEvent) => void;
+    onArtistClick: (e: React.MouseEvent) => void;
+    onMore: (e: React.MouseEvent) => void;
+  }) => (
+    <motion.div
+      custom={index}
+      variants={fadeUp}
+      className={cn(
+        "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer",
+        "transition-colors duration-150",
+        isCurrentPlaying
+          ? "dark:bg-primary/10 bg-primary/8"
+          : "dark:hover:bg-white/[0.05] hover:bg-black/[0.04]",
+      )}
+      onClick={onPlay}
+    >
+      {/* Active accent line */}
+      {isCurrentPlaying && (
+        <motion.div
+          layoutId="track-accent"
+          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-primary rounded-r-full"
+          transition={SPRING_FAST}
+        />
+      )}
+
+      {/* Index / playing indicator */}
+      <div className="w-6 shrink-0 flex justify-center items-center">
+        {isCurrentPlaying ? (
+          <div className="flex items-end gap-[2px] h-3.5">
+            {[0, 1, 2].map((i) => (
+              <motion.span
+                key={i}
+                className="w-[2.5px] bg-primary rounded-full origin-bottom"
+                animate={{ scaleY: [0.3, 1, 0.4, 0.9, 0.25, 1] }}
+                transition={{
+                  duration: 0.9 + i * 0.12,
+                  repeat: Infinity,
+                  repeatType: "mirror",
+                  ease: "easeInOut",
+                  delay: i * 0.1,
+                }}
+                style={{ height: 14 }}
+              />
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs font-mono dark:text-white/28 text-gray-400 group-hover:opacity-0 transition-opacity">
+            {index + 1}
+          </span>
+        )}
+      </div>
+
+      {/* Cover */}
+      <div className="relative size-11 shrink-0 rounded-lg overflow-hidden dark:bg-white/8 bg-black/6">
+        <ImageWithFallback
+          src={track.coverImage}
+          alt={track.title}
+          className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+        {/* Play overlay */}
+        <motion.div
+          className="absolute inset-0 flex items-center justify-center dark:bg-black/55 bg-black/40 backdrop-blur-[2px]"
+          animate={{ opacity: isLoadingThis ? 1 : 0 }}
+          whileHover={{ opacity: 1 }}
+          transition={{ duration: 0.16 }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {isLoadingThis ? (
+              <motion.div
+                key="l"
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.6, opacity: 0 }}
+              >
+                <Loader2 className="size-4 text-white animate-spin" />
+              </motion.div>
+            ) : isCurrentPlaying ? (
+              <motion.div
+                key="pa"
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.6, opacity: 0 }}
+                transition={SPRING_FAST}
+              >
+                <Pause className="size-4 text-white fill-white" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="pl"
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.6, opacity: 0 }}
+                transition={SPRING_FAST}
+              >
+                <Play className="size-4 text-white fill-white ml-0.5" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p
+          className={cn(
+            "text-[13.5px] font-semibold truncate leading-tight transition-colors",
+            isCurrentPlaying
+              ? "text-primary"
+              : "dark:text-white/88 text-gray-900 group-hover:text-primary",
+          )}
+        >
+          {track.title}
+        </p>
+        <p
+          className="text-[12px] dark:text-white/40 text-gray-500 truncate mt-0.5 hover:underline w-fit transition-colors hover:dark:text-white/65 hover:text-gray-700 leading-tight"
+          onClick={onArtistClick}
+        >
+          {track.artist?.name ?? "Unknown Artist"}
+        </p>
+      </div>
+
+      {/* Album (md+) */}
+      <p className="hidden md:block text-[12px] dark:text-white/32 text-gray-400 truncate max-w-[160px] shrink-0 px-4">
+        {track.album?.title ?? ""}
+      </p>
+
+      {/* Duration + more */}
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="hidden sm:block text-[12px] font-mono dark:text-white/30 text-gray-400 w-9 text-right tabular-nums">
+          {formatDuration(track.duration ?? 0)}
+        </span>
+        <motion.button
+          onClick={onMore}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.88 }}
+          transition={SPRING_FAST}
+          className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center size-8 rounded-full dark:hover:bg-white/8 hover:bg-black/8 dark:text-white/45 text-gray-500"
+        >
+          <MoreHorizontal className="size-4" />
+        </motion.button>
+      </div>
+    </motion.div>
+  ),
+);
+TrackRow.displayName = "TrackRow";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOP RESULT CARD
+// ─────────────────────────────────────────────────────────────────────────────
+const TopResultCard = memo(
+  ({
+    item,
+    isCurrentPlaying,
+    isLoadingThis,
+    onNavigate,
+    onPlay,
+  }: {
+    item: any;
+    isCurrentPlaying: boolean;
+    isLoadingThis: boolean;
+    onNavigate: () => void;
+    onPlay: (e: React.MouseEvent) => void;
+  }) => {
+    const isArtist = item.type === "artist";
+    return (
+      <motion.div
+        variants={fadeUp}
+        custom={0}
+        className="h-full flex flex-col gap-3.5"
+      >
+        <h2 className="text-[11px] font-black uppercase tracking-[0.2em] dark:text-white/45 text-gray-500">
+          Kết quả hàng đầu
+        </h2>
+        <motion.div
+          onClick={onNavigate}
+          whileHover={{ scale: 1.012 }}
+          transition={SPRING_MEDIUM}
+          className={cn(
+            "group relative flex-1 flex flex-col justify-end p-6 rounded-2xl overflow-hidden cursor-pointer",
+            "dark:bg-white/[0.04] bg-black/[0.03]",
+            "border dark:border-white/[0.06] border-black/[0.06]",
+            "dark:hover:border-primary/30 hover:border-primary/25",
+            "transition-colors duration-300 min-h-[220px]",
+            "shadow-sm hover:shadow-lg",
+          )}
+        >
+          {/* Glow behind image */}
+          <div
+            className={cn(
+              "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none",
+              "bg-gradient-to-br from-primary/10 via-transparent to-transparent",
+            )}
+          />
+
+          {/* Art */}
+          <div
+            className={cn(
+              "absolute top-6 left-6 shadow-xl transition-transform duration-500 group-hover:scale-[1.04]",
+              isArtist
+                ? "size-24 rounded-full border-2 dark:border-white/10 border-black/10"
+                : "size-24 rounded-xl",
+              "overflow-hidden",
+            )}
+          >
+            <ImageWithFallback
+              src={isArtist ? item.avatar : item.coverImage}
+              alt={item.name ?? item.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* Content */}
+          <div className="relative z-10 mt-28 flex flex-col gap-2">
+            <h3 className="text-2xl font-black tracking-tight dark:text-white text-gray-900 line-clamp-2 group-hover:text-primary transition-colors">
+              {item.name ?? item.title}
+            </h3>
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "text-[10px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-full",
+                  "dark:bg-white/8 bg-black/6 dark:text-white/55 text-gray-600",
+                )}
+              >
+                {isArtist ? "Nghệ sĩ" : "Bài hát"}
+              </span>
+              {!isArtist && item.artist?.name && (
+                <span className="text-sm dark:text-white/45 text-gray-500 truncate">
+                  {item.artist.name}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Play button */}
+          {!isArtist && (
+            <motion.button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlay(e);
+              }}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
+              transition={SPRING_FAST}
+              disabled={isLoadingThis}
+              className={cn(
+                "absolute bottom-5 right-5 z-10",
+                "flex items-center justify-center size-13 rounded-full",
+                "bg-primary text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
+                "opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0",
+                "transition-all duration-250",
+                isCurrentPlaying && "opacity-100 translate-y-0",
+              )}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {isLoadingThis ? (
+                  <motion.span
+                    key="l"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <Loader2 className="size-5 animate-spin" />
+                  </motion.span>
+                ) : isCurrentPlaying ? (
+                  <motion.span
+                    key="pa"
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.6, opacity: 0 }}
+                    transition={SPRING_FAST}
+                  >
+                    <Pause className="size-5 fill-current" />
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="pl"
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.6, opacity: 0 }}
+                    transition={SPRING_FAST}
+                  >
+                    <Play className="size-5 fill-current ml-0.5" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+          )}
+        </motion.div>
+      </motion.div>
+    );
+  },
+);
+TopResultCard.displayName = "TopResultCard";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION HEADER
+// ─────────────────────────────────────────────────────────────────────────────
+const SectionHeader = memo(
+  ({
+    title,
+    showMore,
+    onMore,
+  }: {
+    title: string;
+    showMore?: boolean;
+    onMore?: () => void;
+  }) => (
+    <div className="flex items-center justify-between mb-4">
+      <h2 className="text-[11px] font-black uppercase tracking-[0.2em] dark:text-white/45 text-gray-500">
+        {title}
+      </h2>
+      {showMore && (
+        <motion.button
+          onClick={onMore}
+          whileHover={{ x: 2 }}
+          transition={SPRING_FAST}
+          className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.12em] dark:text-white/40 text-gray-500 hover:text-primary transition-colors"
+        >
+          Xem tất cả <ChevronRight className="size-3.5" />
+        </motion.button>
+      )}
+    </div>
+  ),
+);
+SectionHeader.displayName = "SectionHeader";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 export default function SearchPage() {
   const navigate = useNavigate();
-  // const dispatch = useAppDispatch();
+  const dispatch = useAppDispatch();
+  const { currentTrack, isPlaying: isGlobalPlaying } =
+    useAppSelector(selectPlayer);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const query = searchParams.get("q") || "";
+  const query = searchParams.get("q") ?? "";
   const [localInput, setLocalInput] = useState(query);
-
-  const { data, isLoading, isError } = useSearch(query);
-  const [playingId, setPlayingId] = useState<string | null>(null);
-
-  // Lịch sử & Tab State
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<SearchTab>("all");
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() =>
+    readHistory(),
+  );
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Reset tab về "Tất cả" nếu xóa search
-  useEffect(() => {
-    if (!query) setActiveTab("all");
-  }, [query]);
-
-  // Load Lịch sử
-  useEffect(() => {
-    const savedHistory = localStorage.getItem("recentSearches");
-    if (savedHistory) {
-      try {
-        setRecentSearches(JSON.parse(savedHistory));
-      } catch (e) {
-        console.error("Parse history failed");
-      }
-    }
-  }, []);
-
-  const saveToHistory = (term: string) => {
-    const trimmedTerm = term.trim();
-    if (!trimmedTerm) return;
-    setRecentSearches((prev) => {
-      const filtered = prev.filter(
-        (t) => t.toLowerCase() !== trimmedTerm.toLowerCase(),
-      );
-      const updated = [trimmedTerm, ...filtered].slice(0, MAX_RECENT_SEARCHES);
-      localStorage.setItem("recentSearches", JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  const removeHistoryItem = (e: React.MouseEvent, term: string) => {
-    e.stopPropagation();
-    setRecentSearches((prev) => {
-      const updated = prev.filter((t) => t !== term);
-      localStorage.setItem("recentSearches", JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  const clearAllHistory = () => {
-    setRecentSearches([]);
-    localStorage.removeItem("recentSearches");
-    toast.success("Đã xóa lịch sử tìm kiếm");
-  };
-
-  // Handlers Input
+  // Sync input with URL
   useEffect(() => {
     setLocalInput(query);
   }, [query]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setLocalInput(val);
-    if (val.trim()) setSearchParams({ q: val });
-    else setSearchParams({});
-  };
+  // Reset tab when query cleared
+  useEffect(() => {
+    if (!query) setActiveTab("all");
+  }, [query]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && localInput.trim()) saveToHistory(localInput);
-  };
+  const { data, isLoading, isError } = useSearch(query);
 
-  const handleTagClick = (term: string) => {
-    setSearchParams({ q: term });
-    saveToHistory(term);
-  };
+  // ── History helpers ──────────────────────────────────────────────────────
+  const saveToHistory = useCallback((term: string) => {
+    const t = term.trim();
+    if (!t) return;
+    setRecentSearches((prev) => {
+      const next = [
+        t,
+        ...prev.filter((x) => x.toLowerCase() !== t.toLowerCase()),
+      ].slice(0, MAX_RECENT_SEARCHES);
+      writeHistory(next);
+      return next;
+    });
+  }, []);
 
-  const handleResultClick = (url: string) => {
-    if (query) saveToHistory(query);
-    navigate(url);
-  };
+  const removeHistoryItem = useCallback((e: React.MouseEvent, term: string) => {
+    e.stopPropagation();
+    setRecentSearches((prev) => {
+      const next = prev.filter((t) => t !== term);
+      writeHistory(next);
+      return next;
+    });
+  }, []);
 
-  const clearSearch = () => {
+  const clearAllHistory = useCallback(() => {
+    setRecentSearches([]);
+    writeHistory([]);
+    toast.success("Đã xóa lịch sử tìm kiếm");
+  }, []);
+
+  // ── Input handlers ────────────────────────────────────────────────────────
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setLocalInput(val);
+      if (val.trim()) setSearchParams({ q: val });
+      else setSearchParams({});
+    },
+    [setSearchParams],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter" && localInput.trim()) saveToHistory(localInput);
+      if (e.key === "Escape") {
+        setLocalInput("");
+        setSearchParams({});
+      }
+    },
+    [localInput, saveToHistory, setSearchParams],
+  );
+
+  const handleTagClick = useCallback(
+    (term: string) => {
+      setSearchParams({ q: term });
+      saveToHistory(term);
+      inputRef.current?.focus();
+    },
+    [setSearchParams, saveToHistory],
+  );
+
+  const clearSearch = useCallback(() => {
     setLocalInput("");
     setSearchParams({});
     setActiveTab("all");
-  };
+    inputRef.current?.focus();
+  }, [setSearchParams]);
 
-  const handlePlayTrack = async (e: React.MouseEvent, track: any) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (query) saveToHistory(query);
+  const handleResultClick = useCallback(
+    (url: string) => {
+      if (query) saveToHistory(query);
+      navigate(url);
+    },
+    [query, saveToHistory, navigate],
+  );
 
-    setPlayingId(track._id);
-    try {
-      // dispatch(setQueue({ tracks: [track], startIndex: 0 }));
-      // dispatch(setIsPlaying(true));
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      toast.success(`Đang phát: ${track.title}`);
-    } catch (err) {
-      toast.error("Không thể phát nhạc lúc này.");
-    } finally {
-      setPlayingId(null);
-    }
-  };
+  // ── Play track ────────────────────────────────────────────────────────────
+  const handlePlayTrack = useCallback(
+    async (e: React.MouseEvent, track: ITrack) => {
+      e.preventDefault();
+      e.stopPropagation();
 
+      // If this track is current → toggle play/pause
+      if (currentTrack?._id === track._id) {
+        dispatch(setIsPlaying(!isGlobalPlaying));
+        return;
+      }
+
+      if (query) saveToHistory(query);
+      setLoadingId(track._id);
+      try {
+        dispatch(setQueue({ tracks: [track], startIndex: 0 }));
+        dispatch(setIsPlaying(true));
+      } catch {
+        toast.error("Không thể phát nhạc lúc này.");
+      } finally {
+        setLoadingId(null);
+      }
+    },
+    [currentTrack, isGlobalPlaying, query, saveToHistory, dispatch],
+  );
+
+  // ── isNoResults ───────────────────────────────────────────────────────────
   const isNoResults = useMemo(() => {
-    if (isLoading || !query) return false;
-    if (activeTab === "track") return !data?.tracks?.length;
-    if (activeTab === "artist") return !data?.artists?.length;
-    if (activeTab === "album") return !data?.albums?.length;
-    if (activeTab === "playlist") return !data?.playlists?.length;
-    return (
-      !data?.topResult &&
-      !data?.tracks?.length &&
-      !data?.artists?.length &&
-      !data?.albums?.length &&
-      !data?.playlists?.length
-    );
+    if (isLoading || !query || !data) return false;
+    const checks: Record<SearchTab, boolean> = {
+      all:
+        !data.topResult &&
+        !data.tracks?.length &&
+        !data.artists?.length &&
+        !data.albums?.length &&
+        !data.playlists?.length,
+      track: !data.tracks?.length,
+      artist: !data.artists?.length,
+      album: !data.albums?.length,
+      playlist: !data.playlists?.length,
+    };
+    return checks[activeTab];
   }, [data, isLoading, query, activeTab]);
 
-  /* ================= 1. KẾT QUẢ HÀNG ĐẦU ================= */
-  const renderTopResult = () => {
-    if (!data?.topResult || activeTab !== "all") return null;
-    const item = data.topResult;
-    const isArtist = item.type === "artist";
-    const isLoadingThis = playingId === item._id;
-    const itemUrl = isArtist
-      ? `/artist/${item.slug || item._id}`
-      : `/tracks/${item.slug || item._id}`;
+  // ── Tab change with direction ─────────────────────────────────────────────
+  const tabOrder = SEARCH_TABS.map((t) => t.id);
+  const [tabDir, setTabDir] = useState(1);
 
-    return (
-      <motion.section variants={itemVariants} className="space-y-4 h-full">
-        <h2 className="text-xl sm:text-2xl font-black tracking-tighter text-foreground uppercase">
-          Kết quả hàng đầu
-        </h2>
+  const switchTab = useCallback(
+    (id: SearchTab) => {
+      const prev = tabOrder.indexOf(activeTab);
+      const next = tabOrder.indexOf(id);
+      setTabDir(next > prev ? 1 : -1);
+      setActiveTab(id);
+    },
+    [activeTab, tabOrder],
+  );
 
-        <div
-          onClick={() => handleResultClick(itemUrl)}
-          className="group relative h-[calc(100%-44px)] min-h-[220px] overflow-hidden bg-card/60 backdrop-blur-md border border-border/40 hover:border-primary/40 transition-all duration-500 shadow-sm hover:shadow-xl rounded-[1.5rem] sm:rounded-[2rem] cursor-pointer flex flex-col justify-center"
-        >
-          <CardContent className="p-5 sm:p-6 md:p-8 flex flex-col sm:flex-row gap-5 md:gap-8 items-start sm:items-center relative z-10">
-            <div className="relative shrink-0 w-24 h-24 sm:w-32 sm:h-32 md:w-36 md:h-36">
-              <ImageWithFallback
-                src={isArtist ? item.avatar : item.coverImage}
-                alt={item.name || item.title}
-                className={cn(
-                  "w-full h-full object-cover shadow-xl transition-transform duration-[800ms] ease-out group-hover:scale-105",
-                  isArtist
-                    ? "rounded-full border border-border/50"
-                    : "rounded-2xl",
-                )}
-              />
-              <div
-                className={cn(
-                  "absolute inset-0 -z-10 blur-[40px] opacity-20 group-hover:opacity-50 transition-opacity duration-700 bg-primary",
-                  isArtist ? "rounded-full" : "rounded-2xl",
-                )}
-              />
-            </div>
-
-            <div className="flex-1 min-w-0 space-y-2 sm:space-y-3 w-full">
-              <h3 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter leading-tight text-foreground group-hover:text-primary transition-colors line-clamp-2 break-words">
-                {item.name || item.title}
-              </h3>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <Badge className="uppercase text-[10px] sm:text-[11px] font-black tracking-widest px-3 py-1 bg-primary/10 text-primary border-none shadow-none">
-                  {isArtist ? "Nghệ sĩ" : "Bài hát"}
-                </Badge>
-                {!isArtist && (
-                  <span className="text-sm sm:text-base text-muted-foreground font-semibold truncate group-hover:underline">
-                    {item.artist?.name || "Unknown Artist"}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {!isArtist && (
-              <Button
-                size="icon"
-                onClick={(e) => handlePlayTrack(e, item)}
-                disabled={isLoadingThis}
-                className="absolute bottom-5 right-5 sm:relative sm:bottom-0 sm:right-0 shrink-0 size-12 sm:size-16 rounded-full bg-primary text-primary-foreground shadow-[0_8px_20px_rgba(var(--primary),0.4)] hover:scale-110 active:scale-95 transition-all"
-              >
-                {isLoadingThis ? (
-                  <Loader2 className="size-5 sm:size-7 animate-spin" />
-                ) : (
-                  <Play className="size-5 sm:size-7 fill-current ml-1" />
-                )}
-              </Button>
-            )}
-          </CardContent>
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-background/5 pointer-events-none" />
-        </div>
-      </motion.section>
-    );
-  };
-
-  /* ================= 2. DANH SÁCH BÀI HÁT ================= */
-  const renderSongs = () => {
-    if (!data?.tracks?.length) return null;
-    if (activeTab !== "all" && activeTab !== "track") return null;
-
-    const displayTracks =
-      activeTab === "all" ? data.tracks.slice(0, 4) : data.tracks;
-
-    return (
-      <motion.section variants={itemVariants} className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl sm:text-2xl font-black tracking-tighter text-foreground uppercase">
-            Bài hát
-          </h2>
-          {activeTab === "all" && data.tracks.length > 4 && (
-            <Button
-              variant="ghost"
-              className="text-muted-foreground hover:text-primary font-bold text-[11px] sm:text-xs uppercase tracking-widest gap-1 pr-0"
-              onClick={() => setActiveTab("track")}
-            >
-              Xem tất cả <ChevronRight className="size-4" />
-            </Button>
-          )}
-        </div>
-
-        <div
-          className={cn(
-            "flex flex-col gap-1 sm:gap-2",
-            activeTab === "track" &&
-              "grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2",
-          )}
-        >
-          {displayTracks.map((track) => {
-            const isLoadingThis = playingId === track._id;
-            return (
-              <div
-                key={track._id}
-                onClick={(e) => handlePlayTrack(e, track)}
-                className="group flex items-center gap-3 sm:gap-4 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:bg-muted/60 border border-transparent transition-colors cursor-pointer"
-              >
-                <div className="relative size-12 sm:size-14 shrink-0 overflow-hidden rounded-lg sm:rounded-xl bg-muted shadow-sm border border-border/40">
-                  <ImageWithFallback
-                    src={track.coverImage}
-                    alt={track.title}
-                    className="size-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div
-                    className={cn(
-                      "absolute inset-0 bg-black/40 backdrop-blur-[1px] flex items-center justify-center transition-all",
-                      isLoadingThis
-                        ? "opacity-100"
-                        : "opacity-0 group-hover:opacity-100",
-                    )}
-                  >
-                    {isLoadingThis ? (
-                      <Loader2 className="size-5 sm:size-6 text-white animate-spin" />
-                    ) : (
-                      <Play className="size-5 sm:size-6 text-white fill-white ml-0.5" />
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <h4 className="font-bold text-[14px] sm:text-[15px] text-foreground truncate group-hover:text-primary transition-colors">
-                    {track.title}
-                  </h4>
-                  <p
-                    className="text-[12px] sm:text-[13px] text-muted-foreground font-medium truncate mt-0.5 hover:underline hover:text-foreground w-fit transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleResultClick(`/artist/${track.artist?.slug}`);
-                    }}
-                  >
-                    {track.artist?.name || "Unknown Artist"}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-                  <span className="hidden sm:block text-[13px] font-mono text-muted-foreground/70 font-medium w-10 text-right">
-                    {formatDuration(track.duration || 0)}
-                  </span>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={(e) => e.stopPropagation()}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity size-8 sm:size-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-background"
-                  >
-                    <MoreHorizontal className="size-5" />
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </motion.section>
-    );
-  };
-
-  /* ================= 3. RENDER GRIDS CÁC LOẠI ================= */
-  const renderGridSection = (
-    title: string,
-    items: any[],
-    type: SearchTab,
-    icon: any,
-  ) => {
-    if (!items?.length) return null;
-    if (activeTab !== "all" && activeTab !== type) return null;
-
-    const limit = activeTab === "all" ? 6 : items.length;
-    const displayItems = items.slice(0, limit);
-
-    return (
-      <motion.section
-        variants={itemVariants}
-        className="space-y-4 sm:space-y-5"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl sm:text-2xl font-black tracking-tighter text-foreground uppercase flex items-center gap-2.5">
-            {title} <span className="hidden sm:block opacity-80">{icon}</span>
-          </h2>
-          {activeTab === "all" && items.length > 6 && (
-            <Button
-              variant="ghost"
-              className="text-muted-foreground hover:text-primary font-bold text-[11px] sm:text-xs uppercase tracking-widest gap-1 pr-0"
-              onClick={() => setActiveTab(type)}
-            >
-              Xem tất cả <ChevronRight className="size-4" />
-            </Button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-          {displayItems.map((item) => (
-            <div
-              key={item._id}
-              onClick={() => {
-                if (query) saveToHistory(query);
-              }}
-            >
-              {type === "artist" && <PublicArtistCard artist={item} />}
-              {type === "album" && <PublicAlbumCard album={item} />}
-              {type === "playlist" && <PublicPlaylistCard playlist={item} />}
-            </div>
-          ))}
-        </div>
-      </motion.section>
-    );
-  };
-
-  /* ================= MAIN RENDER ================= */
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    // 🔥 BỎ `overflow-x-hidden` ĐỂ STICKY HOẠT ĐỘNG! Thêm `clip-path` nếu cần giữ Glow không tràn ra ngoài.
-    <div className="relative min-h-screen bg-background pb-32">
-      {/* Background Glow tinh tế */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-[1000px] h-[300px] bg-primary/5 blur-[120px] rounded-full pointer-events-none -z-10" />
-
-      {/* --- CỤM STICKY HEADER (SEARCH + TABS) --- */}
-      {/* 🔥 Chỉnh `top-0` (nếu không có Navbar trên đầu) hoặc `top-[64px]` (nếu Navbar cao 64px). Bắt buộc phải có `top` thì mới Sticky được! */}
-      <div className="sticky top-[56px] lg:top-[64px] z-50 bg-background/85 backdrop-blur-2xl border-b border-border/40 shadow-sm transition-all pb-1 sm:pb-2 pt-2 sm:pt-4">
-        <div className="container mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
-          {/* Ô Tìm Kiếm */}
-          <div className="relative group w-full max-w-4xl mx-auto">
-            <SearchIcon className="absolute left-4 sm:left-5 size-5 sm:size-6 text-muted-foreground/60 group-focus-within:text-primary transition-colors z-10 top-1/2 -translate-y-1/2" />
+    <div className="relative min-h-screen dark:bg-[#0a0a0a] bg-gray-50/50 pb-36">
+      {/* ── STICKY HEADER ─────────────────────────────────────────────── */}
+      <div
+        className={cn(
+          "sticky top-[56px] lg:top-[64px] z-50",
+          "dark:bg-[#0a0a0a]/90 bg-gray-50/90 backdrop-blur-2xl",
+          "border-b dark:border-white/[0.06] border-black/[0.07]",
+          "pb-0",
+        )}
+      >
+        <div className="container mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-3 sm:pb-4">
+          {/* Search input */}
+          <div className="relative group w-full max-w-2xl mx-auto lg:mx-0">
+            <SearchIcon
+              className={cn(
+                "absolute left-4 top-1/2 -translate-y-1/2 size-4 sm:size-5 z-10 transition-colors duration-200 pointer-events-none",
+                localInput
+                  ? "dark:text-white/60 text-gray-600"
+                  : "dark:text-white/25 text-gray-400 group-focus-within:dark:text-white/60 group-focus-within:text-gray-600",
+              )}
+            />
             <Input
+              ref={inputRef}
               value={localInput}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Bạn muốn nghe gì hôm nay?"
+              placeholder="Tìm bài hát, nghệ sĩ, album..."
               autoFocus
-              className="pl-12 sm:pl-14 pr-12 h-12 sm:h-14 lg:h-16 text-base sm:text-lg lg:text-xl font-bold rounded-full bg-card border-2 border-border/60 hover:border-primary/40 focus-visible:bg-background focus-visible:ring-4 focus-visible:ring-primary/10 focus-visible:border-primary placeholder:text-muted-foreground/40 shadow-sm transition-all w-full"
+              className={cn(
+                "pl-10 sm:pl-11 pr-10 h-11 sm:h-12 text-sm sm:text-base font-medium w-full",
+                "rounded-xl dark:bg-white/[0.06] bg-white dark:text-white text-gray-900",
+                "dark:border-white/[0.08] border-black/[0.08] border",
+                "dark:placeholder:text-white/25 placeholder:text-gray-400",
+                "dark:focus-visible:ring-white/12 focus-visible:ring-black/8 focus-visible:ring-2",
+                "dark:focus-visible:border-white/20 focus-visible:border-black/20",
+                "transition-all",
+              )}
             />
-            {localInput && (
-              <button
-                onClick={clearSearch}
-                className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              >
-                <X className="size-4 sm:size-5" />
-              </button>
-            )}
+            <AnimatePresence>
+              {localInput && (
+                <motion.button
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.6, opacity: 0 }}
+                  transition={SPRING_FAST}
+                  onClick={clearSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-6 rounded-full dark:bg-white/10 bg-black/8 dark:text-white/60 text-gray-600 hover:dark:bg-white/18 hover:bg-black/14 transition-colors"
+                >
+                  <X className="size-3.5" />
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Thanh Tabs Phân Loại */}
+          {/* Tabs */}
           <AnimatePresence>
             {query && !isLoading && !isError && (
               <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="mt-3 sm:mt-4 overflow-hidden"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.22, ease: "easeInOut" }}
+                className="overflow-hidden"
               >
-                {/* Ẩn scrollbar, cho phép cuộn ngang mượt mà trên mobile */}
-                <div className="flex gap-2 sm:gap-3 overflow-x-auto hide-scrollbar pb-2 snap-x max-w-4xl mx-auto">
+                <div
+                  className="flex gap-1.5 mt-3 pb-3 overflow-x-auto"
+                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                >
                   {SEARCH_TABS.map((tab) => {
                     const isActive = activeTab === tab.id;
                     return (
-                      <button
+                      <motion.button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
+                        onClick={() => switchTab(tab.id)}
+                        whileTap={{ scale: 0.95 }}
+                        transition={SPRING_FAST}
                         className={cn(
-                          "snap-start shrink-0 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full text-[13px] sm:text-[14px] font-bold transition-all duration-300 border-2",
+                          "relative shrink-0 px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors duration-200 whitespace-nowrap",
                           isActive
-                            ? "bg-foreground text-background border-foreground shadow-md"
-                            : "bg-muted/50 text-foreground/80 border-transparent hover:bg-muted hover:text-foreground hover:border-border/50",
+                            ? "dark:text-white text-gray-900"
+                            : "dark:text-white/45 text-gray-500 hover:dark:text-white/70 hover:text-gray-700",
                         )}
                       >
-                        {tab.label}
-                      </button>
+                        {isActive && (
+                          <motion.div
+                            layoutId="tab-pill"
+                            className="absolute inset-0 rounded-full dark:bg-white/12 bg-black/8"
+                            transition={SPRING_FAST}
+                          />
+                        )}
+                        <span className="relative z-10">{tab.label}</span>
+                      </motion.button>
                     );
                   })}
                 </div>
@@ -495,179 +759,314 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* --- CONTENT AREA --- */}
-      <div className="container mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-8 md:py-10 relative z-10">
+      {/* ── CONTENT ───────────────────────────────────────────────────── */}
+      <div className="container mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
         <AnimatePresence mode="wait">
-          {/* STATE 1: KHÔNG GÕ GÌ (RECENT & TRENDING) */}
-          {!query ? (
+          {/* STATE 1: EMPTY QUERY — Recent + Trending */}
+          {!query && (
             <motion.div
-              key="trending"
-              initial={{ opacity: 0, y: 10 }}
+              key="home"
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-12 max-w-4xl mx-auto mt-4"
+              exit={{ opacity: 0, y: -8 }}
+              transition={SPRING_MEDIUM}
+              className="max-w-2xl space-y-10 mt-2"
             >
-              {/* Lịch sử */}
+              {/* Recent */}
               {recentSearches.length > 0 && (
-                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5 text-foreground">
-                      <History className="size-5 text-primary" />
-                      <h2 className="text-sm sm:text-base font-black uppercase tracking-widest">
-                        Lịch sử tìm kiếm
-                      </h2>
+                    <div className="flex items-center gap-2 dark:text-white/55 text-gray-600">
+                      <History className="size-4 text-primary" />
+                      <span className="text-[11px] font-black uppercase tracking-[0.2em]">
+                        Lịch sử
+                      </span>
                     </div>
-                    <Button
-                      variant="ghost"
+                    <button
                       onClick={clearAllHistory}
-                      className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 rounded-full px-3"
+                      className="text-[11px] font-bold dark:text-white/28 text-gray-400 hover:text-destructive transition-colors"
                     >
                       Xóa tất cả
-                    </Button>
+                    </button>
                   </div>
-                  <div className="flex flex-wrap gap-2.5">
-                    {recentSearches.map((term) => (
-                      <Badge
+                  <div className="flex flex-wrap gap-2">
+                    {recentSearches.map((term, i) => (
+                      <motion.div
                         key={term}
-                        variant="secondary"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ ...SPRING_FAST, delay: i * 0.03 }}
+                        className={cn(
+                          "group flex items-center gap-1.5 px-3.5 py-1.5 rounded-full cursor-pointer",
+                          "dark:bg-white/[0.06] bg-white border dark:border-white/[0.08] border-black/[0.08]",
+                          "dark:hover:border-primary/30 hover:border-primary/25 transition-all duration-200",
+                          "text-[13px] dark:text-white/70 text-gray-700 font-medium",
+                        )}
                         onClick={() => handleTagClick(term)}
-                        className="group flex items-center gap-1.5 cursor-pointer pl-4 pr-1.5 py-1.5 sm:py-2 rounded-full text-[13px] sm:text-[14px] font-semibold bg-muted/60 hover:bg-primary/10 hover:text-primary transition-all duration-300"
                       >
-                        <span className="pb-0.5">{term}</span>
-                        <div
-                          className="p-1.5 rounded-full text-muted-foreground hover:bg-background hover:text-destructive hover:shadow-sm transition-all"
+                        <History className="size-3 dark:text-white/30 text-gray-400 shrink-0" />
+                        <span>{term}</span>
+                        <button
                           onClick={(e) => removeHistoryItem(e, term)}
-                          title="Xóa khỏi lịch sử"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 dark:hover:text-white hover:text-gray-900"
                         >
-                          <X className="size-3.5 stroke-[3]" />
-                        </div>
-                      </Badge>
+                          <X className="size-3" />
+                        </button>
+                      </motion.div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Xu hướng */}
+              {/* Trending */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2.5">
-                  <TrendingUp className="size-5 text-primary" />
-                  <h2 className="text-sm sm:text-base font-black uppercase tracking-widest text-foreground">
-                    Xu hướng tìm kiếm
-                  </h2>
+                <div className="flex items-center gap-2 dark:text-white/55 text-gray-600">
+                  <TrendingUp className="size-4 text-primary" />
+                  <span className="text-[11px] font-black uppercase tracking-[0.2em]">
+                    Đang thịnh hành
+                  </span>
                 </div>
-                <div className="flex flex-wrap gap-2.5">
-                  {TRENDING_SEARCHES.map((term) => (
-                    <Badge
+                <div className="flex flex-wrap gap-2">
+                  {TRENDING_SEARCHES.map((term, i) => (
+                    <motion.button
                       key={term}
-                      variant="outline"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ ...SPRING_MEDIUM, delay: i * 0.04 }}
+                      whileHover={{ scale: 1.04, y: -1 }}
+                      whileTap={{ scale: 0.97 }}
+                      transition2={SPRING_FAST}
                       onClick={() => handleTagClick(term)}
-                      className="cursor-pointer px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-[13px] sm:text-[14px] font-bold border border-border/60 hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all hover:-translate-y-1 hover:shadow-md bg-card"
+                      className={cn(
+                        "px-4 py-2 rounded-full text-[13px] font-semibold",
+                        "dark:bg-white/[0.06] bg-white border dark:border-white/[0.08] border-black/[0.08]",
+                        "dark:text-white/65 text-gray-700",
+                        "dark:hover:border-primary/35 hover:border-primary/30",
+                        "dark:hover:text-white hover:text-primary",
+                        "transition-colors duration-200 shadow-sm",
+                      )}
                     >
                       {term}
-                    </Badge>
+                    </motion.button>
                   ))}
                 </div>
               </div>
             </motion.div>
-          ) : // STATE 2: LOADING
-          isLoading ? (
+          )}
+
+          {/* STATE 2: LOADING */}
+          {query && isLoading && (
             <motion.div
               key="loading"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="pt-8"
+              className="mt-6"
             >
               <SearchSkeleton />
             </motion.div>
-          ) : // STATE 3: LỖI SERVER
-          isError ? (
-            <motion.div key="error" className="text-center py-32 space-y-4">
-              <div className="size-20 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto mb-2">
-                <X className="size-8" />
+          )}
+
+          {/* STATE 3: ERROR */}
+          {query && isError && !isLoading && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={SPRING_MEDIUM}
+              className="flex flex-col items-center justify-center py-28 gap-5 text-center"
+            >
+              <div className="size-20 rounded-full dark:bg-destructive/10 bg-red-50 border dark:border-destructive/20 border-red-200 flex items-center justify-center">
+                <X className="size-7 text-destructive" />
               </div>
-              <h3 className="text-2xl sm:text-3xl font-black">Lỗi kết nối</h3>
+              <div className="space-y-1.5">
+                <p className="text-lg font-black dark:text-white/85 text-gray-800">
+                  Lỗi kết nối
+                </p>
+                <p className="text-sm dark:text-white/35 text-gray-500">
+                  Không thể lấy kết quả tìm kiếm
+                </p>
+              </div>
               <Button
                 onClick={() => window.location.reload()}
                 variant="outline"
-                className="mt-4 rounded-full font-bold"
+                className="rounded-full font-bold"
               >
                 Thử lại
               </Button>
             </motion.div>
-          ) : // STATE 4: TRỐNG
-          isNoResults ? (
-            <motion.div
-              key="no-results"
-              className="text-center py-24 sm:py-32 space-y-6 animate-in fade-in"
-            >
-              <div className="inline-flex items-center justify-center size-28 rounded-full bg-muted/40 border-2 border-dashed border-border/80">
-                <SearchIcon className="size-10 text-muted-foreground/30" />
-              </div>
-              <h3 className="text-2xl sm:text-3xl font-black text-foreground">
-                Không tìm thấy kết quả ở mục này
-              </h3>
-            </motion.div>
-          ) : (
-            // STATE 5: KẾT QUẢ THÀNH CÔNG
+          )}
+
+          {/* STATE 4: NO RESULTS */}
+          {query && !isLoading && !isError && isNoResults && (
+            <EmptyState
+              key={`empty-${activeTab}`}
+              query={query}
+              tab={activeTab}
+            />
+          )}
+
+          {/* STATE 5: RESULTS */}
+          {query && !isLoading && !isError && !isNoResults && (
             <motion.div
               key={`results-${activeTab}`}
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="space-y-10 sm:space-y-14 mt-4"
+              custom={tabDir}
+              initial={{ opacity: 0, x: tabDir * 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: tabDir * -20 }}
+              transition={SPRING_MEDIUM}
+              className="space-y-10 mt-2"
             >
-              {/* TOP RESULT & SONGS */}
-              {(activeTab === "all" || activeTab === "track") &&
-                (data?.topResult || data?.tracks?.length > 0) && (
-                  <div
-                    className={cn(
-                      "grid gap-8 lg:gap-10 xl:gap-16",
-                      activeTab === "all"
-                        ? "grid-cols-1 lg:grid-cols-12"
-                        : "grid-cols-1",
-                    )}
-                  >
-                    {activeTab === "all" && data?.topResult && (
-                      <div className="lg:col-span-5 xl:col-span-4">
-                        {renderTopResult()}
-                      </div>
-                    )}
-                    {data?.tracks?.length > 0 && (
-                      <div
-                        className={
-                          activeTab === "all" && data?.topResult
-                            ? "lg:col-span-7 xl:col-span-8"
-                            : "lg:col-span-12"
-                        }
+              {/* ── TOP RESULT + TRACKS ── */}
+              {(activeTab === "all" || activeTab === "track") && (
+                <div
+                  className={cn(
+                    "grid gap-6 lg:gap-8",
+                    activeTab === "all" && data?.topResult
+                      ? "grid-cols-1 lg:grid-cols-[320px_1fr] xl:grid-cols-[360px_1fr]"
+                      : "grid-cols-1",
+                  )}
+                >
+                  {/* Top result */}
+                  {activeTab === "all" && data?.topResult && (
+                    <TopResultCard
+                      item={data.topResult}
+                      isCurrentPlaying={
+                        isGlobalPlaying &&
+                        currentTrack?._id === data.topResult._id
+                      }
+                      isLoadingThis={loadingId === data.topResult._id}
+                      onNavigate={() =>
+                        handleResultClick(
+                          data.topResult.type === "artist"
+                            ? `/artist/${data.topResult.slug ?? data.topResult._id}`
+                            : `/tracks/${data.topResult.slug ?? data.topResult._id}`,
+                        )
+                      }
+                      onPlay={(e) => handlePlayTrack(e, data.topResult)}
+                    />
+                  )}
+
+                  {/* Tracks list */}
+                  {data?.tracks?.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <SectionHeader
+                        title="Bài hát"
+                        showMore={activeTab === "all" && data.tracks.length > 4}
+                        onMore={() => switchTab("track")}
+                      />
+                      <motion.div
+                        variants={staggerContainer}
+                        initial="hidden"
+                        animate="visible"
+                        className={cn(
+                          "flex flex-col",
+                          activeTab === "track" &&
+                            "md:grid md:grid-cols-2 md:gap-x-4",
+                        )}
                       >
-                        {renderSongs()}
-                      </div>
-                    )}
+                        {(activeTab === "all"
+                          ? data.tracks.slice(0, 5)
+                          : data.tracks
+                        ).map((track: any, i: number) => (
+                          <TrackRow
+                            key={track._id}
+                            track={track}
+                            index={i}
+                            isCurrentPlaying={
+                              isGlobalPlaying && currentTrack?._id === track._id
+                            }
+                            isLoadingThis={loadingId === track._id}
+                            onPlay={(e) => handlePlayTrack(e, track)}
+                            onArtistClick={(e) => {
+                              e.stopPropagation();
+                              handleResultClick(
+                                `/artist/${track.artist?.slug}`,
+                              );
+                            }}
+                            onMore={(e) => e.stopPropagation()}
+                          />
+                        ))}
+                      </motion.div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── ARTISTS ── */}
+              {(activeTab === "all" || activeTab === "artist") &&
+                data?.artists?.length > 0 && (
+                  <div>
+                    <SectionHeader
+                      title="Nghệ sĩ"
+                      showMore={activeTab === "all" && data.artists.length > 6}
+                      onMore={() => switchTab("artist")}
+                    />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                      {(activeTab === "all"
+                        ? data.artists.slice(0, 6)
+                        : data.artists
+                      ).map((artist: any) => (
+                        <div
+                          key={artist._id}
+                          onClick={() => saveToHistory(query)}
+                        >
+                          <PublicArtistCard artist={artist} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
-              {/* VÙNG GRIDS */}
-              <div className="space-y-12 sm:space-y-16">
-                {renderGridSection(
-                  "Nghệ sĩ",
-                  data?.artists || [],
-                  "artist",
-                  <Mic2 className="size-5 sm:size-6 text-primary" />,
+              {/* ── ALBUMS ── */}
+              {(activeTab === "all" || activeTab === "album") &&
+                data?.albums?.length > 0 && (
+                  <div>
+                    <SectionHeader
+                      title="Đĩa nhạc"
+                      showMore={activeTab === "all" && data.albums.length > 5}
+                      onMore={() => switchTab("album")}
+                    />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
+                      {(activeTab === "all"
+                        ? data.albums.slice(0, 5)
+                        : data.albums
+                      ).map((album: any) => (
+                        <div
+                          key={album._id}
+                          onClick={() => saveToHistory(query)}
+                        >
+                          <PublicAlbumCard album={album} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                {renderGridSection(
-                  "Tuyển tập đĩa nhạc",
-                  data?.albums || [],
-                  "album",
-                  <Disc3 className="size-5 sm:size-6 text-primary" />,
+
+              {/* ── PLAYLISTS ── */}
+              {(activeTab === "all" || activeTab === "playlist") &&
+                data?.playlists?.length > 0 && (
+                  <div>
+                    <SectionHeader
+                      title="Danh sách phát"
+                      showMore={
+                        activeTab === "all" && data.playlists.length > 5
+                      }
+                      onMore={() => switchTab("playlist")}
+                    />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
+                      {(activeTab === "all"
+                        ? data.playlists.slice(0, 5)
+                        : data.playlists
+                      ).map((pl: any) => (
+                        <div key={pl._id} onClick={() => saveToHistory(query)}>
+                          <PublicPlaylistCard playlist={pl} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                {renderGridSection(
-                  "Danh sách phát",
-                  data?.playlists || [],
-                  "playlist",
-                  <ListMusic className="size-5 sm:size-6 text-primary" />,
-                )}
-              </div>
             </motion.div>
           )}
         </AnimatePresence>

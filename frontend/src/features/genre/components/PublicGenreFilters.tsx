@@ -197,3 +197,4 @@ export const PublicGenreFilter: React.FC<PublicGenreFilterProps> = ({
     </div>
   );
 };
+export default PublicGenreFilter;

@@ -38,6 +38,7 @@ export interface ITrack {
   bitrate: number;
 
   // Stats
+  isLiked?: boolean; // 🔥 Quan trọng để hiển thị trạng thái Like
   playCount: number;
   likeCount: number;
   status: "pending" | "processing" | "ready" | "failed";
