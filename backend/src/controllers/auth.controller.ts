@@ -4,6 +4,7 @@ import httpStatus from "http-status"; // Import thêm enum status
 import catchAsync from "../utils/catchAsync";
 import AuthService from "../services/auth.service";
 import { generateTokens, setRefreshTokenCookie } from "../utils/token";
+import { IUser } from "../models/User";
 
 // 1. Google Auth (Start)
 export const googleAuth = passport.authenticate("google", {
@@ -129,7 +130,7 @@ export const refreshAccessToken = catchAsync(
         },
       },
     });
-  }
+  },
 );
 
 // 7. Get Me
@@ -142,6 +143,12 @@ export const getMe = (req: Request, res: Response) => {
 
 // 8. Logout
 export const logout = catchAsync(async (req: Request, res: Response) => {
+  const currentUserId = req.user
+    ? (req.user as IUser)._id.toString()
+    : undefined;
+  if (currentUserId) {
+    await AuthService.logout(currentUserId);
+  }
   res.clearCookie("refreshToken");
   res.status(httpStatus.OK).json({
     success: true,
@@ -166,7 +173,7 @@ export const forgotPassword = catchAsync(
       success: true,
       message: "Vui lòng kiểm tra email để đặt lại mật khẩu.",
     });
-  }
+  },
 );
 
 // 11. Reset Password
@@ -174,7 +181,7 @@ export const resetPassword = catchAsync(async (req: Request, res: Response) => {
   // Lưu ý: req.body.newPassword phải khớp với validation schema
   await AuthService.resetPassword(
     req.body.token || req.params.token,
-    req.body.newPassword
+    req.body.newPassword,
   );
 
   res.status(httpStatus.OK).json({

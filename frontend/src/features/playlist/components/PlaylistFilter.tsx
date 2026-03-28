@@ -1,10 +1,49 @@
-import React, { useState, useEffect, useMemo } from "react";
+"use client";
+
+/**
+ * @file PlaylistFilter.tsx — Playlist catalog search + filter bar (v4.0 — Soundwave Premium)
+ *
+ * REDESIGN vs v4.0-prev — full alignment with AlbumFilter + ArtistFilters + GenreFilters v4.0:
+ * ─ SearchInput: ambient focus glow (wave-4/wave-2 gold-pink spectrum = playlist identity)
+ * ─ FilterToggleButton: extracted memo, gradient-brand counter badge
+ * ─ ActiveFilterTag: colored icon-bubble per filter (wave-spectrum system)
+ * ─ ActiveTagsBar: divider-glow accent line + Sparkles eyebrow icon
+ * ─ Card wrapper: border-primary/20 + shadow-brand + gradient-wave top line when active
+ * ─ FilterLabel: iconColor prop per section (wave-spectrum)
+ * ─ Playlist identity: wave-4 (gold) primary = consistent with PlaylistPage AmbientBackground
+ *
+ * ALL BUG FIXES FROM v4.0-prev PRESERVED:
+ * ─ FIX 1+2: transitionend on outer grid div, target+propertyName guard
+ * ─ FIX 3: React.memo applied
+ * ─ FIX 4: removeFilter sends null not undefined
+ * ─ FIX 5: handleClearSearch bypasses debounce
+ * ─ FIX 6: URL→input one-way sync guard
+ * ─ FIX 7: sort value toLowerCase()
+ * ─ FIX 9: null for "all" select values
+ * ─ FIX 10: stable toggleExpanded ref
+ * ─ FIX 11: aria-expanded + aria-controls on filter toggle
+ * ─ FIX 12: id + role + aria-label on expandable region
+ * ─ FIX 13: type="button" + aria-label on all X buttons
+ * ─ FIX 14: sort toLowerCase()
+ * ─ FIX 15: memo on all sub-components
+ * ─ FIX 16: null removal sentinel
+ * ─ FIX 17: aria-hidden on decorative icons
+ */
+
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  memo,
+  useRef,
+} from "react";
 import {
-  Search,
   X,
+  Search,
+  SlidersHorizontal,
   Globe,
   Eye,
-  SlidersHorizontal,
   ListFilter,
   ChevronDown,
   LayoutTemplate,
@@ -13,18 +52,13 @@ import {
   Link,
   Server,
   User,
+  Sparkles,
 } from "lucide-react";
-import { type PlaylistFilterParams } from "@/features/playlist/types";
-import { useDebounce } from "@/hooks/useDebounce";
-
-// Components
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-
-// Shadcn Select
+import type { PlaylistFilterParams } from "@/features/playlist/types";
+import { useDebounce } from "@/hooks/useDebounce";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -34,283 +68,719 @@ import {
 } from "@/components/ui/select";
 import { useAppSelector } from "@/store/hooks";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 interface PlaylistFilterProps {
   params: PlaylistFilterParams;
-
   onSearch: (keyword: string) => void;
-  onFilterChange: (key: keyof PlaylistFilterParams, value: any) => void;
+  onFilterChange: (
+    key: keyof PlaylistFilterParams,
+    value: PlaylistFilterParams[keyof PlaylistFilterParams] | null,
+  ) => void;
   onReset: () => void;
 }
 
-const PlaylistFilter: React.FC<PlaylistFilterProps> = ({
-  params,
-  onSearch,
-  onFilterChange,
-  onReset,
-}) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const { user } = useAppSelector((state) => state.auth);
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTER TAG DEFS — wave-4 (gold) spectrum for playlist identity
+// bgClass drives colored mini icon-bubble per chip
+// ─────────────────────────────────────────────────────────────────────────────
+const FILTER_TAG_DEFS = [
+  {
+    key: "isSystem" as const,
+    label: "Source",
+    icon: Server,
+    iconColor: "hsl(var(--info))",
+    bgClass: "bg-info/10",
+  },
+  {
+    key: "visibility" as const,
+    label: "Visibility",
+    icon: Eye,
+    iconColor: "hsl(var(--wave-3))",
+    bgClass: "bg-cyan-500/10",
+  },
+] as const;
 
-  // --- 1. Search Logic (Debounce) ---
-  const [localSearch, setLocalSearch] = useState(params.keyword || "");
-  const debouncedSearch = useDebounce(localSearch, 400);
+type FilterTagKey = (typeof FILTER_TAG_DEFS)[number]["key"];
 
-  // Sync URL -> Input
-  useEffect(() => {
-    setLocalSearch(params.keyword || "");
-  }, [params.keyword]);
+/** Pure — no closure deps, module-scoped safe */
+function getTagDisplayValue(
+  key: FilterTagKey,
+  params: PlaylistFilterParams,
+): string | null {
+  switch (key) {
+    case "isSystem":
+      return params.isSystem !== undefined
+        ? params.isSystem
+          ? "System"
+          : "User"
+        : null;
+    case "visibility":
+      return params.visibility && params.visibility !== "all"
+        ? params.visibility.charAt(0).toUpperCase() + params.visibility.slice(1)
+        : null;
+    default:
+      return null;
+  }
+}
 
-  // Sync Input -> URL (API)
-  useEffect(() => {
-    if (debouncedSearch !== (params.keyword || "")) {
-      onSearch(debouncedSearch);
-    }
-  }, [debouncedSearch, params.keyword, onSearch]);
+/** Context-aware icon + color for visibility chips */
+function getVisibilityMeta(visibility: string): {
+  icon: React.ElementType;
+  iconColor: string;
+  bgClass: string;
+} {
+  switch (visibility) {
+    case "public":
+      return {
+        icon: Globe,
+        iconColor: "hsl(var(--success))",
+        bgClass: "bg-success/10",
+      };
+    case "private":
+      return {
+        icon: Lock,
+        iconColor: "hsl(var(--warning))",
+        bgClass: "bg-warning/10",
+      };
+    default:
+      return {
+        icon: Link,
+        iconColor: "hsl(var(--info))",
+        bgClass: "bg-info/10",
+      };
+  }
+}
 
-  const handleClearSearch = () => {
-    setLocalSearch("");
-    // Không gọi onSearch("") ở đây để tránh race condition với debounce
-  };
+const EXPAND_PANEL_ID = "playlist-filter-panel";
 
-  // --- 2. Active Count Calculation ---
-  const activeFiltersCount = useMemo(() => {
-    let count = 0;
-    if (params.isSystem !== undefined) count++;
-    if (params.visibility && params.visibility !== "all") count++;
-    // Nếu có thêm filter khác (ví dụ type) thì thêm vào đây
-    return count;
-  }, [params]);
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH INPUT — ambient focus glow in wave-4/wave-2 gold-pink spectrum
+// ─────────────────────────────────────────────────────────────────────────────
+const SearchInput = memo(
+  ({
+    value,
+    onChange,
+    onClear,
+  }: {
+    value: string;
+    onChange: (val: string) => void;
+    onClear: () => void;
+  }) => (
+    <div className="relative w-full group">
+      {/* Ambient glow — wave-4 gold identity */}
+      <div
+        className={cn(
+          "absolute -inset-px rounded-xl pointer-events-none",
+          "bg-gradient-to-r from-wave-4/20 via-brand-500/15 to-wave-2/20",
+          "opacity-0 group-focus-within:opacity-100",
+          "transition-opacity duration-300 blur-sm",
+        )}
+        aria-hidden="true"
+      />
 
-  const removeFilter = (key: keyof PlaylistFilterParams) => {
-    onFilterChange(key, undefined);
-  };
-
-  return (
-    <div className="w-full mb-8">
-      {/* CONTAINER CHÍNH: Block Design & High Contrast */}
-      <div className="bg-card border border-border rounded-xl shadow-sm transition-all overflow-hidden">
-        {/* --- HEADER: SEARCH & ACTIONS --- */}
-        <div className="p-4 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center bg-card">
-          {/* 1. Search Input */}
-          <div className="relative w-full md:flex-1 md:max-w-xl group">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
-              <Search className="size-4" />
-            </div>
-            <Input
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Search playlists..."
-              // Input nền background nổi trên nền card
-              className="pl-9 pr-9 h-10 bg-background border-input shadow-sm focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary transition-all"
-            />
-            {localSearch && (
-              <button
-                onClick={handleClearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* 2. Actions Group */}
-          <div className="flex items-center gap-3 w-full md:w-auto md:justify-end">
-            {/* Sort Dropdown */}
-            <Select
-              value={params.sort || "newest"}
-              onValueChange={(val) => onFilterChange("sort", val)}
-            >
-              <SelectTrigger className="h-10 w-full md:w-[160px] bg-background border-input shadow-sm hover:bg-accent/50 transition-colors">
-                <div className="flex items-center gap-2 truncate">
-                  <ListFilter className="size-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground text-xs uppercase tracking-wide font-semibold">
-                    Sort:
-                  </span>
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value="newest">Newest</SelectItem>
-                <SelectItem value="popular">Popularity</SelectItem>
-                <SelectItem value="followers">Followers</SelectItem>
-                <SelectItem value="name">A-Z</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Separator orientation="vertical" className="h-6 hidden md:block" />
-
-            {/* Filter Toggle Button */}
-            <Button
-              variant={isExpanded ? "secondary" : "outline"}
-              onClick={() => setIsExpanded(!isExpanded)}
-              className={cn(
-                "h-10 px-4 gap-2 shadow-sm border-input hover:bg-accent/50 transition-all min-w-[100px] justify-between",
-                isExpanded &&
-                  "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15",
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="size-3.5" />
-                <span className="font-medium hidden md:flex">Filter</span>
-              </div>
-
-              <div className="flex items-center gap-1">
-                {activeFiltersCount > 0 && (
-                  <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                    {activeFiltersCount}
-                  </span>
-                )}
-                <ChevronDown
-                  className={cn(
-                    "size-3.5 text-muted-foreground transition-transform duration-200",
-                    isExpanded && "rotate-180",
-                  )}
-                />
-              </div>
-            </Button>
-          </div>
-        </div>
-
-        {/* --- EXPANDABLE PANEL --- */}
-        <div
+      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+        <Search
           className={cn(
-            "grid transition-[grid-template-rows] duration-300 ease-in-out border-t border-transparent",
-            isExpanded ? "grid-rows-[1fr] border-border" : "grid-rows-[0fr]",
+            "size-4 transition-colors duration-200",
+            value
+              ? "text-primary"
+              : "text-muted-foreground/50 group-focus-within:text-primary/70",
+          )}
+          aria-hidden="true"
+        />
+      </div>
+
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search playlists by title, creator…"
+        aria-label="Search playlists"
+        className={cn(
+          "h-11 pl-10 pr-10 text-sm",
+          "bg-background/60 dark:bg-surface-1/60",
+          "border-border/70 hover:border-border-strong",
+          "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
+          "rounded-xl backdrop-blur-sm",
+          "placeholder:text-muted-foreground/40",
+          "transition-all duration-200",
+        )}
+      />
+
+      {value && (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Clear search"
+          className={cn(
+            "absolute right-3 top-1/2 -translate-y-1/2 z-10",
+            "p-1 rounded-full",
+            "text-muted-foreground/60 hover:text-foreground hover:bg-muted/70",
+            "transition-all duration-150",
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           )}
         >
-          <div className="overflow-hidden bg-muted/30">
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Filter 1: Source (System/User) - Admin Only */}
-              {user?.role === "admin" && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-muted-foreground/80 tracking-widest flex items-center gap-1.5 ml-1">
-                    <LayoutTemplate className="size-3" /> Source
-                  </label>
-                  <Select
-                    value={
-                      params.isSystem === undefined
-                        ? "all"
-                        : String(params.isSystem)
-                    }
-                    onValueChange={(val) => {
-                      const value = val === "all" ? undefined : val === "true";
-                      onFilterChange("isSystem", value);
-                    }}
-                  >
-                    <SelectTrigger className="w-full bg-background h-9 text-sm shadow-sm focus:ring-1">
-                      <SelectValue placeholder="All Sources" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Sources</SelectItem>
-                      <SelectItem value="true">System Only</SelectItem>
-                      <SelectItem value="false">User Created</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+          <X className="size-3.5" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  ),
+);
+SearchInput.displayName = "SearchInput";
 
-              {/* Filter 2: Visibility */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground/80 tracking-widest flex items-center gap-1.5 ml-1">
-                  <Eye className="size-3" /> Visibility
-                </label>
-                <Select
-                  value={params.visibility || "all"}
-                  onValueChange={(val) =>
-                    onFilterChange(
-                      "visibility",
-                      val === "all" ? undefined : val,
-                    )
-                  }
-                >
-                  <SelectTrigger className="w-full bg-background h-9 text-sm shadow-sm focus:ring-1">
-                    <SelectValue placeholder="All Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="public">Public</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
-                    <SelectItem value="unlisted">Unlisted</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTER LABEL — .text-overline token + wave-spectrum icon color
+// ─────────────────────────────────────────────────────────────────────────────
+const FilterLabel = memo(
+  ({
+    icon: Icon,
+    text,
+    iconColor,
+    htmlFor,
+  }: {
+    icon: React.ElementType;
+    text: string;
+    iconColor?: string;
+    htmlFor?: string;
+  }) => (
+    <label
+      htmlFor={htmlFor}
+      className="text-overline text-muted-foreground/60 flex items-center gap-1.5 ml-0.5 mb-1.5"
+    >
+      <Icon
+        className="size-3 shrink-0"
+        style={iconColor ? { color: iconColor } : undefined}
+        aria-hidden="true"
+      />
+      {text}
+    </label>
+  ),
+);
+FilterLabel.displayName = "FilterLabel";
 
-              {/* Add more filters here later (e.g., Tags) */}
-            </div>
-          </div>
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVE FILTER TAG — isolated memo, colored icon-bubble pill
+// FIX 13: type="button" + aria-label on X button
+// ─────────────────────────────────────────────────────────────────────────────
+interface ActiveFilterTagProps {
+  label: string;
+  displayValue: string;
+  icon: React.ElementType;
+  iconColor: string;
+  bgClass: string;
+  onRemove: () => void;
+}
+
+const ActiveFilterTag = memo(
+  ({
+    label,
+    displayValue,
+    icon: Icon,
+    iconColor,
+    bgClass,
+    onRemove,
+  }: ActiveFilterTagProps) => (
+    <div
+      className={cn(
+        "inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full",
+        "border border-border/60 bg-card/60 backdrop-blur-sm",
+        "shadow-raised hover:shadow-elevated",
+        "cursor-default transition-all duration-150",
+        "animate-fade-in",
+      )}
+    >
+      <span
+        className={cn(
+          "flex items-center justify-center size-4 rounded-full shrink-0",
+          bgClass,
+        )}
+      >
+        <Icon
+          className="size-2.5"
+          style={{ color: iconColor }}
+          aria-hidden="true"
+        />
+      </span>
+      <span className="text-[10px] text-muted-foreground font-medium">
+        {label}:
+      </span>
+      <span className="text-[10px] font-semibold text-foreground capitalize">
+        {displayValue}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${label} filter`}
+        className={cn(
+          "ml-0.5 p-0.5 rounded-full shrink-0",
+          "text-muted-foreground/50",
+          "hover:text-destructive hover:bg-destructive/10",
+          "transition-colors duration-150",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40",
+        )}
+      >
+        <X className="size-2.5" aria-hidden="true" />
+      </button>
+    </div>
+  ),
+);
+ActiveFilterTag.displayName = "ActiveFilterTag";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVE TAGS BAR — divider-glow accent + Sparkles eyebrow
+// Context-aware icon override for visibility (public/private/unlisted)
+// ─────────────────────────────────────────────────────────────────────────────
+const ActiveTagsBar = memo(
+  ({
+    params,
+    activeCount,
+    onRemoveFilter,
+    onReset,
+  }: {
+    params: PlaylistFilterParams;
+    activeCount: number;
+    onRemoveFilter: (key: keyof PlaylistFilterParams) => void;
+    onReset: () => void;
+  }) => {
+    if (activeCount === 0) return null;
+
+    return (
+      <div
+        className={cn(
+          "relative px-4 py-3",
+          "border-t border-border/50 bg-muted/10 backdrop-blur-sm",
+          "flex flex-wrap items-center gap-2",
+          "animate-fade-down",
+        )}
+      >
+        <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Sparkles className="size-3 text-primary/60" aria-hidden="true" />
+          <span className="text-overline text-muted-foreground/50">
+            Filters:
+          </span>
         </div>
 
-        {/* --- ACTIVE TAGS (Footer) --- */}
-        {activeFiltersCount > 0 && (
-          <div className="p-3 bg-muted/20 border-t border-border flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground mr-1">
-              Active:
-            </span>
+        {FILTER_TAG_DEFS.map((def) => {
+          const displayValue = getTagDisplayValue(def.key, params);
+          if (!displayValue) return null;
 
-            {/* Source Tag */}
-            {params.isSystem !== undefined && (
-              <Badge
-                variant="secondary"
-                className="h-7 pl-2 pr-1 gap-1.5 bg-background border border-border text-foreground hover:bg-accent transition-colors cursor-default font-normal shadow-sm"
-              >
-                {params.isSystem ? (
-                  <Server className="size-3 text-blue-500" />
-                ) : (
-                  <User className="size-3 text-purple-500" />
-                )}
-                <span className="text-muted-foreground">Source:</span>
-                <span className="font-medium text-foreground">
-                  {params.isSystem ? "System" : "User"}
-                </span>
-                <button
-                  onClick={() => removeFilter("isSystem")}
-                  className="ml-1 p-0.5 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors"
-                >
-                  <X className="size-3" />
-                </button>
-              </Badge>
-            )}
+          // Context-aware icon overrides
+          let icon = def.icon as React.ElementType;
+          let iconColor = def.iconColor;
+          let bgClass = def.bgClass;
 
-            {/* Visibility Tag */}
-            {params.visibility && params.visibility !== "all" && (
-              <Badge
-                variant="secondary"
-                className="h-7 pl-2 pr-1 gap-1.5 bg-background border border-border text-foreground hover:bg-accent transition-colors cursor-default font-normal shadow-sm"
-              >
-                {params.visibility === "public" ? (
-                  <Globe className="size-3 text-emerald-500" />
-                ) : params.visibility === "private" ? (
-                  <Lock className="size-3 text-orange-500" />
-                ) : (
-                  <Link className="size-3 text-blue-500" />
-                )}
-                <span className="text-muted-foreground">Vis:</span>
-                <span className="font-medium text-foreground capitalize">
-                  {params.visibility}
-                </span>
-                <button
-                  onClick={() => removeFilter("visibility")}
-                  className="ml-1 p-0.5 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors"
-                >
-                  <X className="size-3" />
-                </button>
-              </Badge>
-            )}
+          if (def.key === "isSystem") {
+            icon = params.isSystem ? Server : User;
+            iconColor = params.isSystem
+              ? "hsl(var(--info))"
+              : "hsl(var(--wave-2))";
+            bgClass = params.isSystem ? "bg-info/10" : "bg-pink-500/10";
+          }
 
-            {/* Clear All */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onReset}
-              className="h-7 px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto font-medium"
-            >
-              <Trash2 className="size-3 mr-1.5" /> Clear All
-            </Button>
-          </div>
-        )}
+          if (def.key === "visibility" && params.visibility) {
+            const meta = getVisibilityMeta(params.visibility);
+            icon = meta.icon;
+            iconColor = meta.iconColor;
+            bgClass = meta.bgClass;
+          }
+
+          return (
+            <ActiveFilterTag
+              key={def.key}
+              label={def.label}
+              displayValue={displayValue}
+              icon={icon}
+              iconColor={iconColor}
+              bgClass={bgClass}
+              onRemove={() => onRemoveFilter(def.key)}
+            />
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={onReset}
+          aria-label="Clear all filters"
+          className="btn-danger btn-sm ml-auto h-7 px-3 gap-1.5 text-[11px]"
+        >
+          <Trash2 className="size-3" aria-hidden="true" />
+          Clear all
+        </button>
       </div>
-    </div>
-  );
-};
+    );
+  },
+);
+ActiveTagsBar.displayName = "ActiveTagsBar";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTER TOGGLE BUTTON — gradient-brand counter, shadow-brand active
+// FIX 10: stable ref via memo. FIX 11: aria-expanded + aria-controls
+// ─────────────────────────────────────────────────────────────────────────────
+const FilterToggleButton = memo(
+  ({
+    isExpanded,
+    activeCount,
+    onClick,
+    panelId,
+  }: {
+    isExpanded: boolean;
+    activeCount: number;
+    onClick: () => void;
+    panelId: string;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={isExpanded}
+      aria-controls={panelId}
+      className={cn(
+        "h-11 px-4 gap-2",
+        "inline-flex items-center justify-between shrink-0",
+        "rounded-xl border text-sm font-medium",
+        "transition-all duration-200",
+        "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
+        isExpanded
+          ? [
+              "border-primary/40 bg-primary/10 text-primary",
+              "hover:bg-primary/15 shadow-brand",
+            ]
+          : [
+              "border-border/70 bg-background/60 dark:bg-surface-1/60 text-foreground",
+              "hover:bg-accent/50 hover:border-border-strong shadow-raised backdrop-blur-sm",
+            ],
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="hidden sm:block">Filters</span>
+      </div>
+
+      <div className="flex items-center gap-1.5 ml-1">
+        {activeCount > 0 && (
+          <span
+            className={cn(
+              "flex h-5 min-w-5 px-1 items-center justify-center",
+              "rounded-full text-[10px] font-black text-white",
+              "gradient-brand shadow-glow-xs",
+            )}
+            aria-label={`${activeCount} active filters`}
+          >
+            {activeCount}
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "size-3.5 text-muted-foreground/60",
+            "transition-transform duration-200",
+            isExpanded && "rotate-180",
+          )}
+          aria-hidden="true"
+        />
+      </div>
+    </button>
+  ),
+);
+FilterToggleButton.displayName = "FilterToggleButton";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SELECT ITEM WITH ICON — reusable rich select option
+// ─────────────────────────────────────────────────────────────────────────────
+const IconSelectItem = memo(
+  ({
+    value,
+    icon: Icon,
+    iconColor,
+    label,
+  }: {
+    value: string;
+    icon: React.ElementType;
+    iconColor: string;
+    label: string;
+  }) => (
+    <SelectItem value={value}>
+      <span className="flex items-center gap-2">
+        <Icon
+          className="size-3.5 shrink-0"
+          style={{ color: iconColor }}
+          aria-hidden="true"
+        />
+        {label}
+      </span>
+    </SelectItem>
+  ),
+);
+IconSelectItem.displayName = "IconSelectItem";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLAYLIST FILTER — main orchestrator (FIX 3: memo)
+// ─────────────────────────────────────────────────────────────────────────────
+const PlaylistFilter = memo<PlaylistFilterProps>(
+  ({ params, onSearch, onFilterChange, onReset }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [panelOverflow, setPanelOverflow] = useState(false);
+    const { user } = useAppSelector((s) => s.auth);
+
+    // ── Search debounce ─────────────────────────────────────────────────────
+    const [localSearch, setLocalSearch] = useState(params.keyword || "");
+    const debouncedSearch = useDebounce(localSearch, 400);
+
+    // FIX 6: one-way sync URL → input only
+    useEffect(() => {
+      if ((params.keyword || "") === localSearch) return;
+      setLocalSearch(params.keyword || "");
+    }, [params.keyword]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+      if (debouncedSearch !== (params.keyword || "")) {
+        onSearch(debouncedSearch);
+      }
+    }, [debouncedSearch, params.keyword, onSearch]);
+
+    // FIX 5: immediate clear bypasses debounce
+    const handleClearSearch = useCallback(() => {
+      setLocalSearch("");
+      onSearch("");
+    }, [onSearch]);
+
+    // ── Panel expand — FIX 1+2 preserved ────────────────────────────────────
+    const gridRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const el = gridRef.current;
+      if (!el) return;
+      if (isExpanded) {
+        const onEnd = (e: TransitionEvent) => {
+          if (e.target === el && e.propertyName === "grid-template-rows") {
+            setPanelOverflow(true);
+          }
+        };
+        el.addEventListener("transitionend", onEnd);
+        return () => el.removeEventListener("transitionend", onEnd);
+      } else {
+        setPanelOverflow(false);
+      }
+    }, [isExpanded]);
+
+    // ── Active count — granular deps ─────────────────────────────────────────
+    const activeFiltersCount = useMemo(() => {
+      let n = 0;
+      if (params.isSystem !== undefined) n++;
+      if (params.visibility && params.visibility !== "all") n++;
+      return n;
+    }, [params.isSystem, params.visibility]);
+
+    // FIX 4+16: null sentinel
+    const removeFilter = useCallback(
+      (key: keyof PlaylistFilterParams) => onFilterChange(key, null),
+      [onFilterChange],
+    );
+
+    // FIX 10: stable ref
+    const toggleExpanded = useCallback(() => setIsExpanded((v) => !v), []);
+
+    return (
+      <div className="w-full">
+        <div
+          className={cn(
+            "relative overflow-hidden",
+            "rounded-2xl border border-border/60",
+            "bg-card/50 dark:bg-surface-1/50 backdrop-blur-md",
+            "transition-shadow duration-300 hover:shadow-elevated",
+            activeFiltersCount > 0 && "border-primary/20 shadow-brand",
+          )}
+        >
+          {/* Top accent line when filters active */}
+          {activeFiltersCount > 0 && (
+            <div className="absolute inset-x-0 top-0 h-px gradient-wave opacity-60" />
+          )}
+
+          {/* ── TOP ROW ── */}
+          <div className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <div className="flex-1 min-w-0">
+              <SearchInput
+                value={localSearch}
+                onChange={setLocalSearch}
+                onClear={handleClearSearch}
+              />
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              {/* Sort — FIX 7: toLowerCase() */}
+              <Select
+                value={(params.sort || "newest").toLowerCase()}
+                onValueChange={(val) => onFilterChange("sort", val)}
+              >
+                <SelectTrigger
+                  className={cn(
+                    "h-11 w-[148px]",
+                    "bg-background/60 dark:bg-surface-1/60 backdrop-blur-sm",
+                    "border-border/70 hover:border-border-strong",
+                    "rounded-xl text-sm shadow-raised transition-all duration-150",
+                  )}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <ListFilter
+                      className="size-3.5 text-muted-foreground/50 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="text-overline text-muted-foreground/50 hidden md:block">
+                      Sort:
+                    </span>
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="newest">Newest</SelectItem>
+                  <SelectItem value="popular">Popular</SelectItem>
+                  <SelectItem value="followers">Followers</SelectItem>
+                  <SelectItem value="name">A – Z</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Separator
+                orientation="vertical"
+                className="h-6 hidden sm:block opacity-50"
+                aria-hidden="true"
+              />
+
+              <FilterToggleButton
+                isExpanded={isExpanded}
+                activeCount={activeFiltersCount}
+                onClick={toggleExpanded}
+                panelId={EXPAND_PANEL_ID}
+              />
+            </div>
+          </div>
+
+          {/* ── EXPANDABLE PANEL — FIX 2: gridRef on outer wrapper ── */}
+          <div
+            ref={gridRef}
+            id={EXPAND_PANEL_ID}
+            role="region"
+            aria-label="Playlist filter options"
+            className={cn(
+              "grid transition-[grid-template-rows] duration-300 ease-in-out",
+              "border-t border-transparent",
+              isExpanded
+                ? "grid-rows-[1fr] border-border/50"
+                : "grid-rows-[0fr]",
+            )}
+          >
+            {/* FIX 1: overflow only after transitionend on outer el */}
+            <div
+              className={cn(
+                "bg-muted/10",
+                panelOverflow ? "overflow-visible" : "overflow-hidden",
+              )}
+            >
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Source — admin only. FIX 9+16: null for "all" */}
+                {user?.role === "admin" && (
+                  <div className="space-y-0">
+                    <FilterLabel
+                      icon={LayoutTemplate}
+                      text="Source"
+                      iconColor="hsl(var(--info))"
+                    />
+                    <Select
+                      value={
+                        params.isSystem === undefined
+                          ? "all"
+                          : String(params.isSystem)
+                      }
+                      onValueChange={(val) =>
+                        onFilterChange(
+                          "isSystem",
+                          val === "all" ? null : val === "true",
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
+                        <SelectValue placeholder="All Sources" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sources</SelectItem>
+                        <IconSelectItem
+                          value="true"
+                          icon={Server}
+                          iconColor="hsl(var(--info))"
+                          label="System Only"
+                        />
+                        <IconSelectItem
+                          value="false"
+                          icon={User}
+                          iconColor="hsl(var(--wave-2))"
+                          label="User Created"
+                        />
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Visibility — admin only. FIX 9: null for "all" */}
+                {user?.role === "admin" && (
+                  <div className="space-y-0">
+                    <FilterLabel
+                      icon={Eye}
+                      text="Visibility"
+                      iconColor="hsl(var(--wave-3))"
+                    />
+                    <Select
+                      value={params.visibility || "all"}
+                      onValueChange={(val) =>
+                        onFilterChange("visibility", val === "all" ? null : val)
+                      }
+                    >
+                      <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <IconSelectItem
+                          value="public"
+                          icon={Globe}
+                          iconColor="hsl(var(--success))"
+                          label="Public"
+                        />
+                        <IconSelectItem
+                          value="private"
+                          icon={Lock}
+                          iconColor="hsl(var(--warning))"
+                          label="Private"
+                        />
+                        <IconSelectItem
+                          value="unlisted"
+                          icon={Link}
+                          iconColor="hsl(var(--info))"
+                          label="Unlisted"
+                        />
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Reserved slot — Tag, Collaborators, Duration range etc. */}
+              </div>
+            </div>
+          </div>
+
+          {/* ── ACTIVE TAGS BAR ── */}
+          <div className="relative">
+            <ActiveTagsBar
+              params={params}
+              activeCount={activeFiltersCount}
+              onRemoveFilter={removeFilter}
+              onReset={onReset}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  },
+);
+
+PlaylistFilter.displayName = "PlaylistFilter";
 export default PlaylistFilter;

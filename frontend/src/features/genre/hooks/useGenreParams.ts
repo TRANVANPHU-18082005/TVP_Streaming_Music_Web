@@ -40,7 +40,7 @@ export const useGenreParams = (initialLimit = 20) => {
   const handleFilterChange = useCallback(
     <K extends keyof GenreFilterParams>(
       key: K,
-      value: GenreFilterParams[K],
+      value: GenreFilterParams[K] | null,
     ) => {
       setParams({ [key]: value, page: 1 });
     },

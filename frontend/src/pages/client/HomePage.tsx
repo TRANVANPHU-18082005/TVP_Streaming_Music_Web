@@ -2,8 +2,8 @@ import { Hero } from "../../components/Hero";
 import { FeaturedAlbums } from "../../components/FeaturedAlbums";
 import { ArtistSpotlight } from "@/components/ArtistSpotlight";
 import { FeaturedPlaylists } from "@/components/FeaturedPlaylists";
-import { TopFeaturedTracks } from "@/components/TopFeaturedTracks.tsx";
 import { FeaturedGenres } from "@/components/FeaturedGenres";
+import TopFeaturedTracks from "@/components/TopFeaturedTracks";
 
 export function HomePage() {
   return (

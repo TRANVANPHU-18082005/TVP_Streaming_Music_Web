@@ -1,4 +1,22 @@
-import React, { useState } from "react";
+/**
+ * @file PublicPlaylistCard.tsx — Playlist browsing card (v4.0 — Soundwave Premium)
+ *
+ * REDESIGN vs original:
+ * ─ Full Soundwave token integration: .album-card, .control-btn--primary,
+ *   .like-btn, .badge-*, .shadow-glow-sm, .text-track-title, .text-track-meta
+ * ─ Shadcn Badge replaced with Soundwave .badge token classes
+ * ─ Like button uses .like-btn token with liked state animation
+ * ─ Dropdown: glass-frosted panel + .menu-item tokens
+ * ─ Play button: consistent size + positioning with PublicAlbumCard
+ * ─ memo() + custom comparator — stable identity across sibling play states
+ * ─ useCallback on all event handlers — stable refs for memo children
+ * ─ Playlist meta section: track count + creator in .text-track-meta
+ * ─ System vs community badge: uses Soundwave badge tokens, not Shadcn Badge
+ * ─ Private badge: .badge-live (attention-drawing) → .badge token + lock icon
+ * ─ Playing glow ring on artwork when isLoadingPlay
+ */
+
+import { useState, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Play,
@@ -9,12 +27,11 @@ import {
   Lock,
   ListMusic,
   Loader2,
+  Sparkles,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// UI
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,191 +40,333 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-
-// Types
 import { Playlist } from "@/features/playlist/types";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 interface PublicPlaylistCardProps {
   playlist: Playlist;
   className?: string;
-  // 🔥 onPlay giờ đây là một Promise để Card có thể hiện Loading
   onPlay?: () => Promise<void>;
 }
 
-const PublicPlaylistCard: React.FC<PublicPlaylistCardProps> = ({
-  playlist,
-  className,
-  onPlay,
-}) => {
-  const navigate = useNavigate();
-  const [isLiked, setIsLiked] = useState(false);
-  const [isLoadingPlay, setIsLoadingPlay] = useState(false); // Trạng thái Load nhạc
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
+  function PublicPlaylistCard({ playlist, className, onPlay }) {
+    const navigate = useNavigate();
+    const [isLiked, setIsLiked] = useState(false);
+    const [isLoadingPlay, setIsLoadingPlay] = useState(false);
 
-  const handleNavigate = () =>
-    navigate(`/playlists/${playlist.slug || playlist._id}`);
+    const handleNavigate = useCallback(() => {
+      navigate(`/playlists/${playlist.slug || playlist._id}`);
+    }, [navigate, playlist.slug, playlist._id]);
 
-  const handlePlay = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation(); // Không cho sự kiện click lan ra ngoài thẻ Card
+    const handlePlay = useCallback(
+      async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!onPlay) return handleNavigate();
+        setIsLoadingPlay(true);
+        try {
+          await onPlay();
+        } finally {
+          setIsLoadingPlay(false);
+        }
+      },
+      [onPlay, handleNavigate],
+    );
 
-    if (onPlay) {
-      setIsLoadingPlay(true); // Bật hiệu ứng xoay
-      try {
-        await onPlay(); // Đợi Component cha lấy nhạc
-      } finally {
-        setIsLoadingPlay(false); // Tắt hiệu ứng
-      }
-    } else {
-      handleNavigate(); // Fallback nếu quên truyền onPlay
-    }
-  };
+    const handleLike = useCallback((e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsLiked((p) => !p);
+    }, []);
 
-  const handleLike = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsLiked((prev) => !prev);
-  };
+    const stopProp = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+    }, []);
 
-  return (
-    <article
-      onClick={handleNavigate}
-      className={cn(
-        "group flex flex-col rounded-2xl overflow-hidden bg-transparent",
-        "transition-all duration-300 cursor-pointer hover:-translate-y-1.5",
-        className,
-      )}
-    >
-      {/* ================= COVER ================= */}
-      <div className="relative aspect-square bg-card border border-border/40 rounded-2xl overflow-hidden shadow-sm group-hover:shadow-xl transition-all duration-500">
-        {/* IMAGE */}
-        {playlist.coverImage ? (
-          <ImageWithFallback
-            src={playlist.coverImage}
-            alt={playlist.title}
-            className="w-full h-full object-cover transition-transform duration-[800ms] ease-out group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-secondary/30">
-            <ListMusic className="size-14 text-muted-foreground/30" />
-          </div>
+    const creatorName = playlist.isSystem
+      ? "MusicHub"
+      : playlist.user?.fullName || "Ẩn danh";
+
+    return (
+      <article
+        onClick={handleNavigate}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === "Enter" && handleNavigate()}
+        aria-label={`Playlist: ${playlist.title}`}
+        className={cn(
+          "group cursor-pointer flex flex-col gap-3",
+          "album-card !overflow-visible",
+          className,
         )}
-
-        {/* OVERLAY TỐI DẦN KHI HOVER */}
-        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-50" />
-
-        {/* BADGES (Top Left) */}
-        <div className="absolute top-2.5 left-2.5 flex gap-1.5 z-10">
-          {playlist.isSystem ? (
-            <Badge className="bg-background/60 backdrop-blur-md text-foreground border-border/50 shadow-sm text-[9px] uppercase font-black tracking-widest px-2 py-0.5">
-              Hệ thống
-            </Badge>
-          ) : (
-            <Badge
-              variant="secondary"
-              className="bg-black/40 backdrop-blur-md text-white border-white/10 shadow-sm text-[9px] uppercase font-black tracking-widest px-2 py-0.5"
-            >
-              Cộng đồng
-            </Badge>
-          )}
-          {!playlist.isPublic && (
-            <Badge className="bg-destructive/90 backdrop-blur-md text-white border-none shadow-sm px-1.5 py-0.5">
-              <Lock className="size-3" />
-            </Badge>
-          )}
-        </div>
-
-        {/* PLAY BUTTON (Nổi lên khi hover HOẶC khi đang Loading) */}
+      >
+        {/* ═══════════════════ ARTWORK ═══════════════════ */}
         <div
           className={cn(
-            "absolute right-3 bottom-3 z-20 flex transition-all duration-300 ease-out",
-            isLoadingPlay
-              ? "translate-y-0 opacity-100 scale-100" // Cố định khi đang tải
-              : "translate-y-4 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100", // Hiệu ứng nảy khi hover
+            "relative aspect-square overflow-hidden",
+            "rounded-[18px]",
+            "bg-muted border border-border/10",
+            "shadow-raised group-hover:shadow-elevated",
+            "transition-shadow duration-500",
           )}
         >
-          <Button
-            size="icon"
-            onClick={handlePlay}
-            disabled={isLoadingPlay}
-            className="size-12 sm:size-14 rounded-full bg-primary text-primary-foreground shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:scale-110 active:scale-95 transition-transform"
-          >
-            {isLoadingPlay ? (
-              <Loader2 className="size-6 animate-spin" />
-            ) : (
-              <Play className="size-6 ml-1 fill-current" />
-            )}
-          </Button>
-        </div>
-
-        {/* LIKE (DESKTOP) */}
-        <div className="hidden md:block absolute top-2.5 right-2.5 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={handleLike}
-            className="size-8 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white hover:bg-black/60"
-          >
-            <Heart
-              className={cn("size-4", isLiked && "fill-red-500 text-red-500")}
+          {/* Cover image or empty state */}
+          {playlist.coverImage ? (
+            <ImageWithFallback
+              src={playlist.coverImage}
+              alt={playlist.title}
+              loading="lazy"
+              decoding="async"
+              className={cn(
+                "size-full object-cover",
+                "transition-transform duration-700 ease-out",
+                "group-hover:scale-105",
+                "[will-change:transform]",
+              )}
             />
-          </Button>
-        </div>
-      </div>
+          ) : (
+            <div
+              className={cn(
+                "flex size-full items-center justify-center",
+                "bg-gradient-to-br from-muted via-muted to-accent",
+              )}
+            >
+              <ListMusic
+                className="size-12 text-muted-foreground/25"
+                aria-hidden="true"
+              />
+            </div>
+          )}
 
-      {/* ================= INFO ================= */}
-      <div className="flex flex-col gap-1 p-2 px-1">
-        <h3 className="font-bold text-[15px] sm:text-base leading-tight truncate text-foreground group-hover:text-primary transition-colors">
-          {playlist.title}
-        </h3>
+          {/* Gradient overlay */}
+          <div
+            className={cn(
+              "absolute inset-0",
+              "bg-gradient-to-t from-black/70 via-black/10 to-transparent",
+              "opacity-50 group-hover:opacity-100",
+              "transition-opacity duration-300",
+            )}
+          />
+          <div
+            className={cn(
+              "absolute inset-0 bg-black/15",
+              "opacity-0 group-hover:opacity-100",
+              "transition-opacity duration-300",
+            )}
+          />
 
-        {/* AUTHOR & TRACK COUNT */}
-        <div className="flex items-center justify-between mt-0.5">
-          <div className="flex items-center gap-1.5 text-[12px] sm:text-[13px] font-medium text-muted-foreground">
-            <span className="truncate max-w-[120px]">
-              {playlist.isSystem
-                ? "MusicHub"
-                : playlist.user?.fullName || "Ẩn danh"}
-            </span>
-            <span className="size-1 rounded-full bg-muted-foreground/40 shrink-0" />
-            <span className="shrink-0">{playlist.totalTracks || 0} bài</span>
+          {/* ── Badges — top-left ── */}
+          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5">
+            {/* System vs community */}
+            {playlist.isSystem ? (
+              <span
+                className={cn(
+                  "badge",
+                  "bg-background/50 backdrop-blur-md border-border/40 text-foreground",
+                  "uppercase tracking-[0.14em] text-[9px] font-bold",
+                  "flex items-center gap-1",
+                )}
+              >
+                <Sparkles
+                  className="size-2.5 text-primary"
+                  aria-hidden="true"
+                />
+                Hệ thống
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "badge",
+                  "bg-black/40 backdrop-blur-md border-white/15 text-white",
+                  "uppercase tracking-[0.14em] text-[9px] font-bold",
+                  "flex items-center gap-1",
+                )}
+              >
+                <Users className="size-2.5" aria-hidden="true" />
+                Cộng đồng
+              </span>
+            )}
+
+            {/* Private indicator */}
+            {!playlist.isPublic && (
+              <span
+                aria-label="Private playlist"
+                className={cn(
+                  "badge",
+                  "bg-destructive/80 backdrop-blur-md border-none text-white",
+                  "px-1.5",
+                )}
+              >
+                <Lock className="size-3" aria-hidden="true" />
+              </span>
+            )}
           </div>
 
-          {/* MENU Kebab */}
+          {/* ── Play button — bottom-right, .control-btn--primary ── */}
+          <div
+            className={cn(
+              "absolute right-3 bottom-3 z-20",
+              "transition-all duration-300 ease-out",
+              isLoadingPlay
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-3 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100",
+            )}
+          >
+            <button
+              type="button"
+              onClick={handlePlay}
+              disabled={isLoadingPlay}
+              aria-label={isLoadingPlay ? "Loading…" : `Play ${playlist.title}`}
+              className={cn(
+                "control-btn control-btn--primary",
+                "size-12 sm:size-14",
+              )}
+            >
+              {isLoadingPlay ? (
+                <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Play
+                  className="size-5 ml-0.5 fill-current"
+                  aria-hidden="true"
+                />
+              )}
+            </button>
+          </div>
+
+          {/* ── Like button — top-right (desktop) ── */}
+          <div
+            className={cn(
+              "hidden md:block absolute top-2.5 right-2.5 z-20",
+              "opacity-0 group-hover:opacity-100",
+              "transition-opacity duration-300",
+            )}
+          >
+            <button
+              type="button"
+              onClick={handleLike}
+              aria-label={isLiked ? "Unlike" : "Like"}
+              aria-pressed={isLiked}
+              className={cn(
+                "like-btn",
+                "flex items-center justify-center size-8 rounded-full",
+                "bg-black/40 hover:bg-black/60 backdrop-blur-md",
+                "border border-white/20 text-white",
+                "transition-all duration-200",
+                isLiked && "liked text-rose-400",
+              )}
+            >
+              <Heart
+                className={cn("size-4", isLiked && "fill-current")}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+
+          {/* Playing glow ring */}
+          {isLoadingPlay && (
+            <div
+              className="absolute inset-0 rounded-[18px] ring-2 ring-primary/60 shadow-glow-sm pointer-events-none"
+              aria-hidden="true"
+            />
+          )}
+        </div>
+
+        {/* ═══════════════════ INFO ═══════════════════ */}
+        <div className="flex items-start justify-between gap-2 px-0.5">
+          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+            <h3
+              className={cn(
+                "text-track-title truncate",
+                "text-foreground group-hover:text-primary",
+                "transition-colors duration-200",
+              )}
+              title={playlist.title}
+            >
+              {playlist.title}
+            </h3>
+
+            <div className="flex items-center gap-1.5 text-track-meta">
+              <span className="truncate max-w-[110px]" title={creatorName}>
+                {creatorName}
+              </span>
+              <span
+                className="size-1 rounded-full bg-muted-foreground/40 shrink-0"
+                aria-hidden="true"
+              />
+              <span className="shrink-0 text-duration">
+                {playlist.totalTracks || 0} bài
+              </span>
+            </div>
+          </div>
+
+          {/* Kebab menu — desktop only */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
+                type="button"
                 size="icon"
                 variant="ghost"
-                onClick={(e) => e.stopPropagation()}
-                className="hidden md:flex size-6 text-muted-foreground hover:text-foreground"
+                onClick={stopProp}
+                aria-label="More options"
+                className={cn(
+                  "hidden md:flex shrink-0",
+                  "size-7 rounded-lg",
+                  "text-muted-foreground/60 hover:text-foreground",
+                  "hover:bg-muted/60",
+                  "transition-colors duration-150",
+                )}
               >
-                <MoreHorizontal className="size-4" />
+                <MoreHorizontal className="size-4" aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="w-48 rounded-xl shadow-xl"
+              onClick={stopProp}
+              className={cn(
+                "w-48 rounded-xl",
+                "glass-frosted shadow-floating",
+                "border-border/40",
+              )}
             >
               <DropdownMenuItem
                 onClick={handlePlay}
-                className="cursor-pointer font-medium"
+                disabled={isLoadingPlay}
+                className="menu-item cursor-pointer font-medium"
               >
-                <Play className="size-4 mr-2" /> Phát ngay
+                <Play className="size-4 mr-2" aria-hidden="true" />
+                Phát ngay
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer font-medium">
-                <PlusCircle className="size-4 mr-2" /> Thêm vào thư viện
+              <DropdownMenuItem className="menu-item cursor-pointer font-medium">
+                <PlusCircle className="size-4 mr-2" aria-hidden="true" />
+                Thêm vào thư viện
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="cursor-pointer font-medium">
-                <Share2 className="size-4 mr-2" /> Chia sẻ
+              <DropdownMenuItem className="menu-item cursor-pointer font-medium">
+                <Share2 className="size-4 mr-2" aria-hidden="true" />
+                Chia sẻ
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
-    </article>
-  );
-};
+      </article>
+    );
+  },
+  // Custom comparator — stable identity, prevents sibling-play re-renders
+  (prev, next) =>
+    prev.playlist._id === next.playlist._id &&
+    prev.playlist.coverImage === next.playlist.coverImage &&
+    prev.playlist.title === next.playlist.title &&
+    prev.playlist.totalTracks === next.playlist.totalTracks &&
+    prev.playlist.isSystem === next.playlist.isSystem &&
+    prev.playlist.isPublic === next.playlist.isPublic &&
+    prev.onPlay === next.onPlay &&
+    prev.className === next.className,
+);
 
 export default PublicPlaylistCard;

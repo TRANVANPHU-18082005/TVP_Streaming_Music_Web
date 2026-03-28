@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import { cacheRedis } from "../config/redis";
 import httpStatus from "http-status";
@@ -67,7 +67,10 @@ export const interactionLimiter = rateLimit({
     prefix: "rl:interaction:",
   }),
   // Định danh theo userId nếu đã login, nếu không thì dùng IP
-  keyGenerator: (req: any) => req.user?._id?.toString() || req.ip,
+  keyGenerator: (req: any) => {
+    if (req.user?._id) return `user:${req.user._id}`;
+    return `ip:${ipKeyGenerator(req)}`;
+  },
   handler: (req, res) => {
     res.status(httpStatus.TOO_MANY_REQUESTS).json({
       code: httpStatus.TOO_MANY_REQUESTS,

@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface IPlayLog extends Document {
   trackId: mongoose.Types.ObjectId;
-  userId?: mongoose.Types.ObjectId;
+  userId?: mongoose.Types.ObjectId | null;
   listenedAt: Date;
   ip?: string;
   source?: string;
@@ -19,14 +19,16 @@ const playLogSchema = new Schema<IPlayLog>(
   {
     versionKey: false,
     timestamps: false,
-  }
+  },
 );
 
 // Index 1: Giúp query range thời gian và group nhanh (cho Chart Service)
 playLogSchema.index({ listenedAt: -1, trackId: 1 });
 
-// Index 2: TTL Index - Tự động xóa sau 3 ngày (3 * 24 * 60 * 60 = 259200s)
-// "expireAfterSeconds" là từ khóa bắt buộc của MongoDB
-playLogSchema.index({ listenedAt: 1 }, { expireAfterSeconds: 259200 });
+// Tăng lên 7 ngày + 1 ngày dự phòng = 8 ngày (691200 giây)
+playLogSchema.index({ listenedAt: 1 }, { expireAfterSeconds: 691200 });
+
+// Quan trọng: Thêm Compound Index để tránh Scan toàn bộ bảng
+playLogSchema.index({ userId: 1, listenedAt: 1 });
 
 export default mongoose.model<IPlayLog>("PlayLog", playLogSchema);

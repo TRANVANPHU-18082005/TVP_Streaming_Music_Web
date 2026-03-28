@@ -1,61 +1,48 @@
+// src/features/auth/pages/LoginPage.tsx
 import { LoginForm } from "@/features";
 import { useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-// Import UI Form
-
 const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-
-  // Dùng ref để chặn React.StrictMode chạy effect 2 lần (gây hiện 2 toast)
-  const toastShownRef = useRef(false);
+  const isProcessed = useRef(false);
 
   useEffect(() => {
-    const errorType = searchParams.get("error");
+    // 🚀 1. Chặn chạy 2 lần hoặc chạy lại khi re-render
+    if (isProcessed.current) return;
 
-    if (errorType && !toastShownRef.current) {
-      toastShownRef.current = true;
+    const error = searchParams.get("error");
+    const reason = searchParams.get("reason");
 
-      // 🛑 CASE 1: BỊ KHÓA (Từ Axios Interceptor)
-      if (errorType === "locked") {
-        toast.error("Tài khoản đã bị khóa", {
-          description: "Vui lòng liên hệ quản trị viên để biết thêm chi tiết.",
-          duration: 6000, // Hiện lâu để user kịp đọc
-          action: {
-            label: "Hỗ trợ",
-            onClick: () =>
-              (window.location.href = "mailto:support@musichub.com"),
-          },
-        });
-      }
+    if (!error && !reason) return;
 
-      // ⚠️ CASE 2: GOOGLE LOGIN THẤT BẠI
-      else if (errorType === "auth_failed") {
-        toast.error("Đăng nhập Google thất bại", {
-          description: "Vui lòng thử lại hoặc sử dụng email/password.",
-        });
-      }
+    // 🚀 2. Dọn dẹp URL ngay lập tức để nhìn chuyên nghiệp
+    isProcessed.current = true;
+    navigate("/login", { replace: true });
 
-      // ⚠️ CASE 3: LỖI SERVER CHUNG
-      else if (errorType === "server_error") {
-        toast.error("Lỗi hệ thống", {
-          description: "Không thể kết nối đến server.",
-        });
-      }
-
-      // Dọn dẹp URL: Xóa ?error=... đi để nhìn cho sạch
-      // replace: true để không lưu lịch sử (bấm Back không bị hiện lại lỗi)
-      navigate("/login", { replace: true });
+    // 🚀 3. Hiển thị thông báo dựa trên tín hiệu từ URL
+    if (error === "locked") {
+      toast.error("Tài khoản này đã bị khóa", {
+        description: "Vui lòng liên hệ Admin để được hỗ trợ.",
+      });
+    } else if (reason === "session_expired") {
+      toast.info("Phiên làm việc hết hạn", {
+        description: "Vui lòng đăng nhập lại để tiếp tục.",
+      });
+    } else if (error === "auth_failed") {
+      toast.error("Đăng nhập thất bại", {
+        description: "Vui lòng thử lại bằng Email/Mật khẩu.",
+      });
+    } else if (error === "server_error") {
+      toast.error("Lỗi hệ thống", {
+        description: "Không thể kết nối đến máy chủ lúc này.",
+      });
     }
   }, [searchParams, navigate]);
 
-  return (
-    <>
-      <LoginForm />
-    </>
-  );
+  return <LoginForm />;
 };
 
 export default LoginPage;

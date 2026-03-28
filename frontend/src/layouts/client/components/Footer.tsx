@@ -12,7 +12,7 @@ import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function Footer() {
   return (
-    <footer className="w-full border-t border-border/60 bg-card text-card-foreground pt-16 pb-8 mt-auto">
+    <footer className="w-full border-t border-border/60 bg-card text-card-foreground pt-16 pb-8 mt-auto z-50">
       <div className="container mx-auto px-4 md:px-6 lg:px-8">
         {/* --- TOP GRID SECTION --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-12 mb-16">

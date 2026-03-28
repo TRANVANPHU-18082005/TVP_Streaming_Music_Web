@@ -1,4 +1,4 @@
-import { configureStore, combineReducers } from "@reduxjs/toolkit";
+import { configureStore, combineReducers, AnyAction } from "@reduxjs/toolkit";
 import {
   persistStore,
   persistReducer,
@@ -31,14 +31,32 @@ const playerPersistConfig = {
   storage,
   blacklist: ["isPlaying", "isLoading", "duration"],
 };
-
+export const USER_LOGOUT = "auth/logoutAll";
 // 2. Root Reducer
-const rootReducer = combineReducers({
+
+const appReducer = combineReducers({
   auth: authReducer,
   player: persistReducer(playerPersistConfig, playerReducer),
-  // Bọc interaction bằng persist nếu Phú muốn giữ trạng thái Follow khi F5
   interaction: persistReducer(interactionPersistConfig, interactionReducer),
 });
+
+// 2. Định nghĩa Root Reducer với Type chuẩn
+const rootReducer = (
+  state: ReturnType<typeof appReducer> | undefined,
+  action: AnyAction,
+) => {
+  // 🚀 Khi nhận lệnh logout
+  if (action.type === "auth/logout") {
+    // Xóa bộ nhớ vật lý của Redux Persist
+    storage.removeItem("persist:player");
+    storage.removeItem("persist:interaction");
+
+    // Reset State về trạng thái ban đầu
+    state = undefined;
+  }
+
+  return appReducer(state, action);
+};
 
 // 3. Store Initialization
 export const store = configureStore({

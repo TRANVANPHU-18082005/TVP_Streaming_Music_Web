@@ -61,7 +61,7 @@ export const useArtistParams = (initialLimit = 10) => {
   const handleFilterChange = useCallback(
     <K extends keyof ArtistFilterParams>(
       key: K,
-      value: ArtistFilterParams[K],
+      value: ArtistFilterParams[K] | null,
     ) => {
       setParams({ [key]: value, page: 1 });
     },

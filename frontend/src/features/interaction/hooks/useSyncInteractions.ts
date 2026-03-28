@@ -2,50 +2,60 @@
 import { useEffect, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import interactionApi from "../api/interactionApi";
-import { syncLikes, syncFollows } from "../slice/interactionSlice";
+import {
+  syncInteractions,
+  InteractionTargetType,
+} from "../slice/interactionSlice";
 
-type InteractionType = "like" | "follow";
-
-/**
- * @param ids Mảng các ID cần kiểm tra trạng thái
- * @param type Loại tương tác 'like' hoặc 'follow'
- * @param enabled: Chỉ cho phép chạy khi điều kiện này là true (ví dụ: !isLoading)
- */
 export const useSyncInteractions = (
   ids: string[],
-  type: InteractionType,
-  enabled: boolean = true, // 🚀 THÊM THAM SỐ NÀY
+  type: "like" | "follow",
+  targetType: InteractionTargetType,
+  enabled: boolean = true,
 ) => {
+  console.log("useSyncInteractions called with:", {
+    ids,
+    type,
+    targetType,
+    enabled,
+  });
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const lastCheckedHash = useRef<string>("");
+  const lastHash = useRef("");
 
   useEffect(() => {
     const currentHash = [...ids].sort().join(",");
-
-    // 🚀 SỬA ĐIỀU KIỆN Ở ĐÂY: Thêm !enabled
     if (
       !user ||
       !enabled ||
       ids.length === 0 ||
-      lastCheckedHash.current === currentHash
+      lastHash.current === currentHash
     )
       return;
 
-    const fetchStatus = async () => {
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      // ⏱️ Debounce API call 300ms
       try {
-        const interactedIds = await interactionApi.checkBatch(ids, type);
-        if (type === "like") {
-          dispatch(syncLikes(interactedIds));
-        } else {
-          dispatch(syncFollows(interactedIds));
+        const response = await interactionApi.checkBatch(ids, type, targetType);
+        if (isMounted) {
+          dispatch(
+            syncInteractions({
+              interactedIds: response,
+              checkedIds: ids,
+              targetType,
+            }),
+          );
+          lastHash.current = currentHash;
         }
-        lastCheckedHash.current = currentHash;
-      } catch (error) {
-        console.error("Sync failed", error);
+      } catch (err) {
+        console.error("Sync interaction error:", err);
       }
-    };
+    }, 300);
 
-    fetchStatus();
-  }, [ids, type, user, dispatch, enabled]); // 🚀 Thêm enabled vào dependency
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [ids, type, targetType, user, enabled, dispatch]);
 };

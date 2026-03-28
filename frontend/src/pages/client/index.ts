@@ -4,7 +4,7 @@ export const HomePage = lazy(() => import("./HomePage"));
 export const BrowsePage = lazy(() => import("./BrowsePage"));
 export const SearchPage = lazy(() => import("./SearchPage"));
 export const SettingsPage = lazy(() => import("./SettingsPage"));
-// export const ClaimProfilePage = lazy(() => import("./ClaimProfilePage"));
+export const TopChartPage = lazy(() => import("./TopChartPage.tsx"));
 
 export * from "./album";
 export * from "./artist";

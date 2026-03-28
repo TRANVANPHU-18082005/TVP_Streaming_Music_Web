@@ -7,6 +7,7 @@ import {
 import type { AuthState } from "@/features/auth/types";
 import authApi from "@/features/auth/api/authApi";
 import { UserProfile } from "@/features/user";
+import { LoginInput } from "../schemas/auth.schema";
 
 // =================================================================
 // 1. Initial State
@@ -34,7 +35,7 @@ export const initAuth = createAsyncThunk(
     } catch (error: unknown) {
       return rejectWithValue(error || "Session expired");
     }
-  }
+  },
 );
 
 // B. Fetch Current User (Chạy khi update profile xong) - MỚI THÊM
@@ -48,9 +49,20 @@ export const fetchCurrentUser = createAsyncThunk(
     } catch (error: unknown) {
       return rejectWithValue(error);
     }
-  }
+  },
 );
 
+export const loginUser = createAsyncThunk(
+  "auth/loginUser",
+  async (data: LoginInput, { rejectWithValue }) => {
+    try {
+      const res = await authApi.login(data);
+      return res.data; // { accessToken, user }
+    } catch (error: unknown) {
+      return rejectWithValue(error);
+    }
+  },
+);
 // =================================================================
 // 3. Slice Logic
 // =================================================================
@@ -60,7 +72,7 @@ const authSlice = createSlice({
   reducers: {
     login: (
       state,
-      action: PayloadAction<{ accessToken: string; user: UserProfile }>
+      action: PayloadAction<{ accessToken: string; user: UserProfile }>,
     ) => {
       state.token = action.payload.accessToken;
       state.user = action.payload.user;
@@ -106,6 +118,12 @@ const authSlice = createSlice({
     builder.addCase(fetchCurrentUser.fulfilled, (state, action) => {
       // Chỉ cập nhật thông tin user, giữ nguyên token
       state.user = action.payload;
+    });
+    // --- Login User ---
+    builder.addCase(loginUser.fulfilled, (state, action) => {
+      state.token = action.payload.accessToken;
+      state.user = action.payload.user;
+      state.isAuthChecking = false;
     });
   },
 });

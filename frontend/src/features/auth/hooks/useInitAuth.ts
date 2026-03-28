@@ -1,20 +1,17 @@
+// src/features/auth/hooks/useInitAuth.ts
 import { useEffect, useRef } from "react";
-import { initAuth } from "@/features/auth/slice/authSlice"; // Import Thunk đã viết
+import { initAuth } from "@/features/auth/slice/authSlice";
 import { useAppDispatch } from "@/store/hooks";
 
 export const useInitAuth = () => {
   const dispatch = useAppDispatch();
-  const initialized = useRef(false); // Ref để tránh chạy 2 lần (Strict Mode)
+  const initialized = useRef(false);
 
   useEffect(() => {
+    // Chống React StrictMode chạy 2 lần ở môi trường Dev
     if (initialized.current) return;
     initialized.current = true;
 
-    // Chỉ cần gọi đúng 1 dòng này thôi!
-    // Thunk initAuth sẽ tự động:
-    // 1. Gọi API /refresh-token
-    // 2. Nếu thành công -> Dispatch Login -> Tắt Loading
-    // 3. Nếu thất bại -> Dispatch Logout -> Tắt Loading
     dispatch(initAuth());
   }, [dispatch]);
 };

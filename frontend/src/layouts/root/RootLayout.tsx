@@ -6,18 +6,34 @@ import { MusicPlayer } from "@/features/player/components/MusicPlayer";
 import { useAppSelector } from "@/store/hooks";
 
 const RootLayout = () => {
-  const { isAuthChecking } = useAppSelector((state) => state.auth);
+  // 1. Kích hoạt kiểm tra phiên đăng nhập ngay khi Layout mount
   useInitAuth();
 
-  if (isAuthChecking)
-    return <PulseLoader fullscreen text="Đang tải dữ liệu..." />;
+  // 2. Lấy trạng thái kiểm tra từ Store
+  const { isAuthChecking } = useAppSelector((state) => state.auth);
+
+  // 3. Splash Screen: Chặn render Outlet cho đến khi xác định được danh tính (User hoặc Guest)
+  if (isAuthChecking) {
+    return (
+      <PulseLoader
+        fullscreen
+        text="Đang kết nối hệ thống..."
+        className="dark:bg-[#0a0a0a]" // Đảm bảo background khớp với theme app
+      />
+    );
+  }
 
   return (
-    <>
-      <Outlet />
-      {/* Player luôn nằm đè lên tất cả (position fixed trong component) */}
+    <div className="relative min-h-screen">
+      <main className="">
+        {" "}
+        {/* Thêm padding bottom để không bị Player đè mất nội dung cuối trang */}
+        <Outlet />
+      </main>
+
+      {/* 4. MusicPlayer: Luôn hiện diện xuyên suốt các trang */}
       <MusicPlayer />
-    </>
+    </div>
   );
 };
 

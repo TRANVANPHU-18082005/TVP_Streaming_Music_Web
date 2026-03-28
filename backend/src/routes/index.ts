@@ -12,12 +12,14 @@ import dashboardRoutes from "./dashboard.route";
 import verificationRoutes from "./verification.route";
 import analyticRoutes from "./analytics.routes";
 import notifyRoutes from "./notify.route";
+import profileRoutes from "./profile.route";
 
 const router = express.Router();
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
 router.use("/artists", artistRoutes);
+router.use("/profile", profileRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/tracks", trackRoutes);
 router.use("/albums", albumRoutes);

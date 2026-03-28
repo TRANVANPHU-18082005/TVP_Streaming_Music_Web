@@ -1,88 +1,101 @@
-import { memo } from "react";
-import { Heart } from "lucide-react";
+import { memo, useCallback, useState } from "react";
+import { Heart, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { useInteraction } from "../hooks/useInteraction"; // Hook mới đã build
+import { useInteraction } from "../hooks/useInteraction";
+import { useAppSelector } from "@/store/hooks";
 
-const SPRING_SNAPPY = { type: "spring", stiffness: 500, damping: 25 };
+const SPRING_SNAPPY = { type: "spring", stiffness: 500, damping: 28 } as const;
+
+const BURST = {
+  initial: { scale: 0.4, opacity: 1 },
+  animate: { scale: 2.6, opacity: 0 },
+  exit: { opacity: 0 },
+  transition: { duration: 0.5, ease: "easeOut" },
+} as const;
+
+const ICON_SIZE = {
+  sm: "size-3.5",
+  md: "size-[18px]",
+  lg: "size-6",
+};
 
 interface LikeButtonProps {
-  trackId: string;
+  id: string;
+  type?: "track" | "album" | "playlist"; // 🚩 Bỏ 'artist' ra khỏi đây
   size?: "sm" | "md" | "lg";
   className?: string;
 }
 
 export const LikeButton = memo(
-  ({ trackId, size = "md", className }: LikeButtonProps) => {
-    // 🚀 LOGIC MỚI: Lấy mọi thứ từ Interaction Hook
-    const { handleLikeTrack, useIsLiked, useIsLoading } = useInteraction();
+  ({ id, type = "track", size = "md", className }: LikeButtonProps) => {
+    const { handleToggle } = useInteraction();
 
-    // Tự subscribe trạng thái like của đúng trackId này trong Store trung tâm
-    const isLiked = useIsLiked(trackId);
-    const isLoading = useIsLoading(trackId);
+    // 🚀 Chỉ truy xuất các map liên quan đến LIKE
+    const isLiked = useAppSelector((state) => {
+      const maps = {
+        track: "likedTracks",
+        album: "likedAlbums",
+        playlist: "likedPlaylists",
+      } as const;
+      return !!state.interaction[maps[type]][id];
+    });
 
-    const cls = size === "lg" ? "size-7" : size === "sm" ? "size-4" : "size-5";
+    const isLoading = useAppSelector(
+      (state) => !!state.interaction.loadingIds[id],
+    );
+    const [burstKey, setBurstKey] = useState(0);
 
-    const handleLike = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (isLoading) return; // Chống spam click
-      handleLikeTrack(trackId);
-    };
+    const handleLike = useCallback(
+      (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (isLoading) return;
+
+        // Chỉ nổ hiệu ứng khi bấm LIKE (từ trắng sang đỏ)
+        if (!isLiked) setBurstKey((k) => k + 1);
+        console.log("Toggling like for", { id, type }); // Debug log
+        handleToggle(id, type);
+      },
+      [isLoading, isLiked, handleToggle, id, type],
+    );
 
     return (
       <motion.button
         type="button"
         onClick={handleLike}
         disabled={isLoading}
-        whileHover={{ scale: 1.12 }}
-        whileTap={{ scale: 0.88 }}
+        whileHover={{ scale: 1.15 }}
+        whileTap={{ scale: 0.85 }}
         transition={SPRING_SNAPPY}
         className={cn(
-          "relative flex items-center justify-center p-2 rounded-full transition-colors",
-          "disabled:opacity-70 disabled:cursor-not-allowed",
-          isLiked ? "text-rose-500" : "text-white/40 hover:text-white/80",
+          "relative flex items-center justify-center rounded-full transition-colors duration-200",
+          isLiked
+            ? "text-[hsl(var(--error))]"
+            : "text-muted-foreground/40 hover:text-foreground",
           className,
         )}
       >
         <motion.div
-          animate={
-            isLiked
-              ? { scale: [1, 1.45, 1], rotate: [0, 15, 0] }
-              : { scale: 1, rotate: 0 }
-          }
-          transition={{
-            duration: 0.4,
-            ease: [0.34, 1.56, 0.64, 1],
-          }}
+          animate={isLiked ? { scale: [1, 1.3, 1] } : { scale: 1 }}
+          transition={{ duration: 0.3 }}
         >
-          <Heart
-            className={cn(cls, isLiked && "fill-current")}
-            strokeWidth={isLiked ? 2.5 : 2}
-          />
+          {isLoading ? (
+            <Loader2
+              className={cn(ICON_SIZE[size], "animate-spin opacity-50")}
+            />
+          ) : (
+            <Heart className={cn(ICON_SIZE[size], isLiked && "fill-current")} />
+          )}
         </motion.div>
 
-        {/* Hiệu ứng Burst */}
+        {/* Burst Effect */}
         <AnimatePresence>
           {isLiked && (
             <motion.span
-              key="burst"
-              className="absolute inset-0 rounded-full border-2 border-rose-500/60"
-              initial={{ scale: 0.4, opacity: 1 }}
-              animate={{ scale: 2.4, opacity: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Hiệu ứng Glow */}
-        <AnimatePresence>
-          {isLiked && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.5 }}
-              className="absolute inset-0 bg-rose-500/20 blur-xl rounded-full -z-10"
+              key={burstKey}
+              {...BURST}
+              className="absolute inset-0 rounded-full border-2 border-[hsl(var(--error)/0.5)] pointer-events-none"
             />
           )}
         </AnimatePresence>
@@ -90,6 +103,4 @@ export const LikeButton = memo(
     );
   },
 );
-
-LikeButton.displayName = "LikeButton";
 export default LikeButton;

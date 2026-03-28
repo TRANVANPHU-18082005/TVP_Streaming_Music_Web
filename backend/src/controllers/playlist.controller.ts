@@ -11,7 +11,7 @@ export const createPlaylist = catchAsync(
     const result = await playlistService.createPlaylist(
       req.user as IUser,
       req.body,
-      req.file
+      req.file,
     );
 
     res.status(httpStatus.CREATED).json({
@@ -19,7 +19,7 @@ export const createPlaylist = catchAsync(
       message: "Tạo playlist thành công",
       data: result,
     });
-  }
+  },
 );
 
 // 2. Get Playlists (Filter / Search)
@@ -30,7 +30,7 @@ export const getPlaylists = catchAsync(async (req: Request, res: Response) => {
   // Truyền req.user (có thể undefined nếu guest)
   const result = await playlistService.getPlaylists(
     filter,
-    req.user as IUser | undefined
+    req.user as IUser | undefined,
   );
 
   res.status(httpStatus.OK).json({
@@ -45,14 +45,14 @@ export const getPlaylistDetail = catchAsync(
     // Service đã được nâng cấp để xử lý logic Guest/User/Admin bên trong
     const result = await playlistService.getPlaylistDetail(
       req.params.id,
-      req.user as IUser | undefined
+      req.user as IUser | undefined,
     );
 
     res.status(httpStatus.OK).json({
       success: true,
       data: result,
     });
-  }
+  },
 );
 
 // 4. Update Playlist
@@ -62,7 +62,7 @@ export const updatePlaylist = catchAsync(
       req.params.id,
       req.user as IUser,
       req.body,
-      req.file
+      req.file,
     );
 
     res.status(httpStatus.OK).json({
@@ -70,7 +70,7 @@ export const updatePlaylist = catchAsync(
       message: "Cập nhật playlist thành công",
       data: result,
     });
-  }
+  },
 );
 
 // 5. Delete Playlist
@@ -82,7 +82,7 @@ export const deletePlaylist = catchAsync(
       success: true,
       message: "Đã xóa playlist thành công",
     });
-  }
+  },
 );
 
 // 6. Add Tracks (Batch Support)
@@ -93,7 +93,7 @@ export const addTracks = catchAsync(async (req: Request, res: Response) => {
     req.params.playlistId,
     // Đảm bảo luôn là mảng (dù client gửi string hay array)
     Array.isArray(trackIds) ? trackIds : [trackIds],
-    req.user as IUser
+    req.user as IUser,
   );
 
   res.status(httpStatus.OK).json({
@@ -110,7 +110,7 @@ export const removeTracks = catchAsync(async (req: Request, res: Response) => {
   const result = await playlistService.removeTracks(
     req.params.playlistId,
     Array.isArray(trackIds) ? trackIds : [trackIds],
-    req.user as IUser
+    req.user as IUser,
   );
 
   res.status(httpStatus.OK).json({
@@ -127,7 +127,7 @@ export const reorderTracks = catchAsync(async (req: Request, res: Response) => {
   const result = await playlistService.reorderTracks(
     id,
     trackIds,
-    req.user as IUser
+    req.user as IUser,
   );
 
   res.status(httpStatus.OK).json({
@@ -136,3 +136,86 @@ export const reorderTracks = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+// ==========================================
+// 👤 USER SPECIFIC METHODS
+// ==========================================
+
+/**
+ * 🚀 Quick Create (Dành cho User - Luồng Spotify)
+ * URL: POST /api/playlists/me
+ */
+export const createMyPlaylist = catchAsync(
+  async (req: Request, res: Response) => {
+    // Sử dụng service tạo nhanh: Không bắt buộc gửi Title/Visibility
+    const result = await playlistService.createQuickPlaylist(
+      req.user as IUser,
+      req.body, // title và visibility (nếu có)
+    );
+
+    res.status(httpStatus.CREATED).json({
+      success: true,
+      message: "Đã tạo danh sách phát mới",
+      data: result,
+    });
+  },
+);
+
+/**
+ * ➕ User Add Tracks + Smart Cover
+ */
+export const userAddTracks = catchAsync(async (req: Request, res: Response) => {
+  const { trackIds } = req.body;
+  const { playlistId } = req.params;
+
+  const result = await playlistService.userAddTracks(
+    playlistId,
+    Array.isArray(trackIds) ? trackIds : [trackIds],
+    req.user as IUser,
+  );
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: "Đã thêm bài hát vào danh sách",
+    data: result,
+  });
+});
+
+/**
+ * 🗑️ User Bulk Remove Tracks
+ */
+export const userRemoveTracks = catchAsync(
+  async (req: Request, res: Response) => {
+    const { trackIds } = req.body; // Mảng IDs bài hát cần xóa
+    const { playlistId } = req.params;
+
+    const result = await playlistService.bulkRemoveTracks(
+      playlistId,
+      Array.isArray(trackIds) ? trackIds : [trackIds],
+      req.user as IUser,
+    );
+
+    res.status(httpStatus.OK).json({
+      success: true,
+      message: "Đã xóa bài hát khỏi danh sách",
+      data: result,
+    });
+  },
+);
+
+/**
+ * 🔒 Toggle Privacy (Public/Private nhanh)
+ */
+export const togglePlaylistPrivacy = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await playlistService.toggleVisibility(
+      req.params.id,
+      req.user as IUser,
+    );
+
+    res.status(httpStatus.OK).json({
+      success: true,
+      message: `Đã chuyển sang chế độ ${result.visibility === "public" ? "Công khai" : "Riêng tư"}`,
+      data: { visibility: result.visibility },
+    });
+  },
+);

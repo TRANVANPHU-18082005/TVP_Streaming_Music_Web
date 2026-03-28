@@ -73,9 +73,25 @@ export const usePlaylistDetail = (slugOrId: string) => {
  */
 export const useMyPlaylists = () => {
   return useQuery({
-    queryKey: playlistKeys.list({ type: "my-library" }), // Key riêng biệt
+    queryKey: playlistKeys.list({ type: "all" }), // Key riêng biệt
     queryFn: () => playlistApi.getMyPlaylists(),
     staleTime: 1000 * 60 * 5,
     select: (response) => response.data.data as Playlist[],
+  });
+};
+/**
+ * Hook lấy danh sách Playlist của chính User đang đăng nhập
+ * Dùng cho Sidebar hoặc trang My Playlists trong Profile
+ */
+export const useMyLibraryQuery = (params?: PlaylistFilterParams) => {
+  return useQuery({
+    // Sử dụng một queryKey riêng biệt ['playlists', 'me'] để tránh cache chung với public lists
+    queryKey: [...playlistKeys.all, "me", params],
+    queryFn: () => playlistApi.getMyLibrary(params),
+    staleTime: 1000 * 60 * 5, // Cache 5 phút
+    select: (response) => ({
+      playlists: response.data.data as Playlist[],
+      meta: response.data.meta,
+    }),
   });
 };

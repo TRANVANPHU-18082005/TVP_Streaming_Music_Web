@@ -1,43 +1,55 @@
-// src/routes/interaction.route.ts
 import { Router } from "express";
-import interactionController from "../controllers/interaction.controller";
+import * as interactionController from "../controllers/interaction.controller";
 import { protect } from "../middlewares/auth.middleware";
 import { interactionLimiter } from "../middlewares/rateLimiter";
-import validate from "../middlewares/validate"; // Middleware validate dữ liệu (Joi/Zod)
-import { interactionValidation } from "../validations/interaction.validation";
-
+import {
+  toggleLikeSchema,
+  toggleFollowSchema,
+  batchCheckSchema,
+} from "../validations/interaction.validation";
+import validate from "../middlewares/validate";
 const router = Router();
 
-// Tất cả các route trong này đều cần login
+// ============================================================
+// AUTH GUARD — Toàn bộ interaction đều yêu cầu đăng nhập
+// ============================================================
 router.use(protect);
 
+// ============================================================
+// ROUTES
+// ============================================================
+
 /**
- * @route   POST /api/v1/interactions/like/track/:trackId
+ * 🚀 TOGGLE LIKE
+ * Dùng cho Track, Album, Playlist
+ * Body: { targetId, targetType }
  */
 router.post(
-  "/like/track/:trackId",
-  interactionLimiter,
-  validate(interactionValidation.toggleLike), // Thêm validate ID ở đây
+  "/toggle-like",
+  validate(toggleLikeSchema), // Chặn rác từ vòng gửi xe
+  interactionLimiter, // Chống spam click (đã có tầng 2 ở Service)
   interactionController.toggleLike,
 );
 
 /**
- * @route   POST /api/v1/interactions/follow/artist/:artistId
+ * 👥 TOGGLE FOLLOW ARTIST
+ * Path param: artistId
  */
 router.post(
   "/follow/artist/:artistId",
+  validate(toggleFollowSchema),
   interactionLimiter,
-  validate(interactionValidation.toggleFollow),
   interactionController.toggleFollow,
 );
 
 /**
- * @route   POST /api/v1/interactions/check-batch
- * @desc    Kiểm tra hàng loạt trạng thái like/follow
+ * ⚡ BATCH CHECK STATUS
+ * Kiểm tra trạng thái hàng loạt để đồng bộ UI
+ * Body: { ids, type, targetType? }
  */
 router.post(
   "/check-batch",
-  validate(interactionValidation.batchCheck),
+  validate(batchCheckSchema),
   interactionController.batchCheck,
 );
 

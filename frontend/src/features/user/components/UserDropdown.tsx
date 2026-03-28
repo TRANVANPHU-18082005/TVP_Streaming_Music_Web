@@ -21,13 +21,14 @@ import type { User } from "@/features/user/types";
 // Nếu bạn không muốn dùng framer-motion có thể bỏ qua,
 // nhưng để UX "sướng" hơn thì giữ lại animation nhấn nhẹ này.
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 interface UserDropdownProps {
   user: User;
-  navigate: (path: string) => void;
 }
 
-export const UserDropdown = ({ user, navigate }: UserDropdownProps) => {
+export const UserDropdown = ({ user }: UserDropdownProps) => {
+    const navigate = useNavigate(); 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

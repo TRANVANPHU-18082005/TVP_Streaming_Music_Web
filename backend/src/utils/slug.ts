@@ -1,6 +1,12 @@
-import slugify from "slugify";
 import { Model, Types } from "mongoose";
+import { nanoid } from "nanoid";
+import slugify from "slugify";
 
+export const generatePlaylistSlug = (title: string): string => {
+  const base = slugify(title, { lower: true, locale: "vi", strict: true });
+  // Thêm 6 ký tự ngẫu nhiên (đủ cho hàng tỷ bản ghi mà URL vẫn ngắn gọn)
+  return `${base || "playlist"}-${nanoid(6)}`;
+};
 /**
  * 1. Tạo slug cơ bản
  * Đã fix: Trả về fallback nếu chuỗi gốc bị strip hết thành rỗng

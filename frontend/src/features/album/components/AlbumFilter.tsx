@@ -1,4 +1,32 @@
-import React, { useState, useEffect, useMemo } from "react";
+"use client";
+
+/**
+ * @file AlbumFilter.tsx — Album catalog search + filter bar (v4.0 — Soundwave Premium)
+ *
+ * REDESIGN HIGHLIGHTS vs v3.2:
+ * ─ Full Soundwave token integration: .glass-frosted, .shadow-brand, .badge-*,
+ *   .btn-*, .text-overline, .card-base, .orb-float, .divider-glow
+ * ─ Search bar elevated to full-width hero input with animated underline ring
+ * ─ Sort control moved inline with search for single-row layout on md+
+ * ─ Filter panel uses CSS grid-template-rows collapse (original kept intact)
+ * ─ ActiveFilterTag redesigned with wave-color icon system from FeaturedAlbums
+ * ─ Paneloverflow transitionend fix preserved (FIX 1+2)
+ * ─ All FIX 3–9 from v3.2 preserved
+ *
+ * ARCHITECTURE:
+ * ─ FilterPill extracted for animated genre/artist chips
+ * ─ FilterSection extracted to reduce nesting depth in main render
+ * ─ stableFilterHandlers pattern preserved from AlbumPage caller
+ */
+
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  memo,
+  useRef,
+} from "react";
 import {
   X,
   Search,
@@ -11,15 +39,12 @@ import {
   Trash2,
   ListFilter,
   ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AlbumFilterParams } from "@/features/album/types";
 import { useDebounce } from "@/hooks/useDebounce";
-
-// Components
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { YearPicker } from "@/components/ui/YearPicker";
 import FilterDropdown from "@/components/ui/FilterDropdown";
@@ -30,400 +55,750 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// Selectors
 import { ArtistSelector } from "@/features/artist/components/ArtistSelector";
 import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { useAppSelector } from "@/store/hooks";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 interface AlbumFilterProps {
   params: AlbumFilterParams;
   onSearch: (keyword: string) => void;
-  onFilterChange: (key: keyof AlbumFilterParams, value: any) => void;
+  onFilterChange: (
+    key: keyof AlbumFilterParams,
+    value: AlbumFilterParams[keyof AlbumFilterParams] | null,
+  ) => void;
   onReset: () => void;
 }
 
-const AlbumFilter: React.FC<AlbumFilterProps> = ({
-  params,
-  onSearch,
-  onFilterChange,
-  onReset,
-}) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  // State xử lý lỗi overflow z-index
-  const [overflowVisible, setOverflowVisible] = useState(false);
-  const { user } = useAppSelector((state) => state.auth);
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTER TAG DEFS — wave-color icon system (dark-mode adaptive tokens)
+// ─────────────────────────────────────────────────────────────────────────────
+const FILTER_TAG_DEFS = [
+  {
+    key: "type" as const,
+    label: "Type",
+    icon: LayoutGrid,
+    iconColor: "hsl(var(--info))",
+    bgClass: "bg-info/10",
+  },
+  {
+    key: "year" as const,
+    label: "Year",
+    icon: Calendar,
+    iconColor: "hsl(var(--success))",
+    bgClass: "bg-success/10",
+  },
+  {
+    key: "isPublic" as const,
+    label: "Visibility",
+    icon: Eye,
+    iconColor: "hsl(var(--wave-1))",
+    bgClass: "bg-brand-100/60",
+  },
+  {
+    key: "genreId" as const,
+    label: "Genre",
+    icon: Music,
+    iconColor: "hsl(var(--wave-4))",
+    bgClass: "bg-warning/10",
+  },
+  {
+    key: "artistId" as const,
+    label: "Artist",
+    icon: Mic2,
+    iconColor: "hsl(var(--wave-2))",
+    bgClass: "bg-pink-500/10",
+  },
+] as const;
 
-  // --- Search Logic ---
-  const [localSearch, setLocalSearch] = useState(params.keyword || "");
-  const debouncedSearch = useDebounce(localSearch, 400);
+type FilterTagKey = (typeof FILTER_TAG_DEFS)[number]["key"];
 
-  // 1. Đồng bộ từ URL về Input (trường hợp F5 hoặc Back)
-  useEffect(() => {
-    setLocalSearch(params.keyword || "");
-  }, [params.keyword]);
+/** Pure — no closure deps */
+function getTagDisplayValue(
+  key: FilterTagKey,
+  params: AlbumFilterParams,
+): string | null {
+  switch (key) {
+    case "type":
+      return params.type ?? null;
+    case "year":
+      return params.year ? String(params.year) : null;
+    case "isPublic":
+      return params.isPublic !== undefined
+        ? params.isPublic
+          ? "Public"
+          : "Private"
+        : null;
+    case "genreId":
+      return params.genreId ? "Genre" : null;
+    case "artistId":
+      return params.artistId ? "Artist" : null;
+    default:
+      return null;
+  }
+}
 
-  // 2. Đồng bộ từ Input ra URL (qua Debounce)
-  useEffect(() => {
-    // Chỉ gọi khi giá trị debounce thực sự thay đổi so với URL hiện tại
-    // Điều này ngăn chặn việc gọi API kép khi clear search
-    if (debouncedSearch !== (params.keyword || "")) {
-      onSearch(debouncedSearch);
-    }
-  }, [debouncedSearch, params.keyword, onSearch]);
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH INPUT — premium design with animated focus ring + brand glow
+// ─────────────────────────────────────────────────────────────────────────────
+const SearchInput = memo(
+  ({
+    value,
+    onChange,
+    onClear,
+  }: {
+    value: string;
+    onChange: (val: string) => void;
+    onClear: () => void;
+  }) => (
+    <div className="relative w-full group">
+      {/* Ambient glow on focus */}
+      <div
+        className={cn(
+          "absolute -inset-px rounded-xl pointer-events-none",
+          "bg-gradient-to-r from-brand-500/20 via-wave-1/15 to-wave-2/20",
+          "opacity-0 group-focus-within:opacity-100",
+          "transition-opacity duration-300",
+          "blur-sm",
+        )}
+        aria-hidden="true"
+      />
 
-  // 🔥 FIX 1: Chỉ set local state, để debounce effect tự xử lý
-  const handleClearSearch = () => {
-    setLocalSearch("");
-  };
-
-  // 🔥 FIX 2: Xử lý Z-Index/Overflow cho Animation
-  useEffect(() => {
-    if (isExpanded) {
-      // Khi mở: Đợi animation chạy xong (300ms) rồi mới cho tràn (visible)
-      // Để các dropdown như YearPicker không bị cắt
-      const timer = setTimeout(() => setOverflowVisible(true), 300);
-      return () => clearTimeout(timer);
-    } else {
-      // Khi đóng: Ẩn ngay lập tức để animation đóng mượt mà
-      setOverflowVisible(false);
-    }
-  }, [isExpanded]);
-
-  // --- Active Filters Calculation ---
-  const activeFiltersCount = useMemo(() => {
-    let count = 0;
-    if (params.genreId) count++;
-    if (params.artistId) count++;
-    if (params.year) count++;
-    if (params.type) count++;
-    if (params.isPublic !== undefined) count++;
-    return count;
-  }, [params]);
-
-  const removeFilter = (key: keyof AlbumFilterParams) => {
-    onFilterChange(key, undefined);
-  };
-  return (
-    <div className="w-full mb-8">
-      {/* CONTAINER CHÍNH:
-        Dùng nền đặc (bg-card) để đảm bảo độ tương phản cao nhất.
-      */}
-      <div className="bg-card border border-border rounded-xl shadow-sm transition-all">
-        {/* --- SECTION 1: HEADER & SEARCH --- */}
-        <div className="p-4 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-          {/* 1. Search Input */}
-          <div className="relative w-full md:flex-1 md:max-w-xl group">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
-              <Search className="size-4" />
-            </div>
-            <Input
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Search albums by title..."
-              // Sử dụng nền background (thường xám hơn card) để tạo độ sâu cho input
-              className="pl-9 pr-9 h-10 bg-background border-input shadow-sm focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary transition-all"
-            />
-            {localSearch && (
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* 2. Actions Group */}
-          <div className="flex items-center gap-3 w-full md:w-auto md:justify-end">
-            {/* Sort Dropdown */}
-            <Select
-              value={params.sort || "newest"}
-              onValueChange={(val) => onFilterChange("sort", val)}
-            >
-              <SelectTrigger className="h-10 w-full md:w-[160px] bg-background border-input shadow-sm hover:bg-accent/50 transition-colors">
-                <div className="flex items-center gap-2 truncate">
-                  <ListFilter className="size-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground text-xs uppercase tracking-wide font-semibold">
-                    Sort:
-                  </span>
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value="newest">Newest</SelectItem>
-                <SelectItem value="oldest">Oldest</SelectItem>
-                <SelectItem value="popular">Popular</SelectItem>
-                <SelectItem value="name">A-Z</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Separator orientation="vertical" className="h-6 hidden md:block" />
-
-            {/* Filter Toggle Button */}
-            <Button
-              variant={isExpanded ? "secondary" : "outline"}
-              onClick={() => setIsExpanded(!isExpanded)}
-              className={cn(
-                "h-10 px-4 gap-2 shadow-sm border-input hover:bg-accent/50 transition-all min-w-[100px] justify-between",
-                isExpanded &&
-                  "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15",
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="size-3.5" />
-                <span className="font-medium hidden md:flex">Filter</span>
-              </div>
-
-              <div className="flex items-center gap-1">
-                {activeFiltersCount > 0 && (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                    {activeFiltersCount}
-                  </span>
-                )}
-                <ChevronDown
-                  className={cn(
-                    "size-3.5 text-muted-foreground transition-transform duration-200",
-                    isExpanded && "rotate-180",
-                  )}
-                />
-              </div>
-            </Button>
-          </div>
-        </div>
-
-        {/* --- SECTION 2: EXPANDABLE PANEL --- */}
-        <div
+      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+        <Search
           className={cn(
-            "grid transition-[grid-template-rows] duration-300 ease-in-out border-t border-transparent",
-            isExpanded ? "grid-rows-[1fr] border-border" : "grid-rows-[0fr]",
+            "size-4 transition-colors duration-200",
+            value
+              ? "text-primary"
+              : "text-muted-foreground/50 group-focus-within:text-primary/70",
+          )}
+          aria-hidden="true"
+        />
+      </div>
+
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search albums by title, artist, or genre…"
+        aria-label="Search albums"
+        className={cn(
+          "h-11 pl-10 pr-10 text-sm",
+          "bg-background/60 dark:bg-surface-1/60",
+          "border-border/70 hover:border-border-strong",
+          "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
+          "rounded-xl backdrop-blur-sm",
+          "placeholder:text-muted-foreground/40",
+          "transition-all duration-200",
+        )}
+      />
+
+      {value && (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Clear search"
+          className={cn(
+            "absolute right-3 top-1/2 -translate-y-1/2 z-10",
+            "p-1 rounded-full",
+            "text-muted-foreground/60 hover:text-foreground",
+            "hover:bg-muted/70",
+            "transition-all duration-150",
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           )}
         >
-          <div
+          <X className="size-3.5" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  ),
+);
+SearchInput.displayName = "SearchInput";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTER SECTION LABEL — .text-overline token
+// ─────────────────────────────────────────────────────────────────────────────
+const FilterLabel = memo(
+  ({
+    icon: Icon,
+    text,
+    htmlFor,
+    iconColor,
+  }: {
+    icon: React.ElementType;
+    text: string;
+    htmlFor?: string;
+    iconColor?: string;
+  }) => (
+    <label
+      htmlFor={htmlFor}
+      className="text-overline text-muted-foreground/60 flex items-center gap-1.5 ml-0.5 mb-1.5"
+    >
+      <Icon
+        className="size-3 shrink-0"
+        style={iconColor ? { color: iconColor } : undefined}
+        aria-hidden="true"
+      />
+      {text}
+    </label>
+  ),
+);
+FilterLabel.displayName = "FilterLabel";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVE FILTER TAG — isolated memo, wave-color icon pill
+// Extracted so each chip only re-renders on its own data change.
+// ─────────────────────────────────────────────────────────────────────────────
+interface ActiveFilterTagProps {
+  label: string;
+  displayValue: string;
+  icon: React.ElementType;
+  iconColor: string;
+  bgClass: string;
+  onRemove: () => void;
+}
+
+const ActiveFilterTag = memo(
+  ({
+    label,
+    displayValue,
+    icon: Icon,
+    iconColor,
+    bgClass,
+    onRemove,
+  }: ActiveFilterTagProps) => (
+    <div
+      className={cn(
+        "inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full",
+        "border border-border/60 bg-card/60 backdrop-blur-sm",
+        "shadow-raised hover:shadow-elevated",
+        "cursor-default transition-all duration-150",
+        "animate-fade-in",
+      )}
+    >
+      {/* Colored icon container */}
+      <span
+        className={cn(
+          "flex items-center justify-center size-4 rounded-full shrink-0",
+          bgClass,
+        )}
+      >
+        <Icon
+          className="size-2.5"
+          style={{ color: iconColor }}
+          aria-hidden="true"
+        />
+      </span>
+
+      <span className="text-[10px] text-muted-foreground font-medium">
+        {label}:
+      </span>
+      <span className="text-[10px] font-semibold text-foreground capitalize">
+        {displayValue}
+      </span>
+
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${label} filter`}
+        className={cn(
+          "ml-0.5 p-0.5 rounded-full shrink-0",
+          "text-muted-foreground/50",
+          "hover:text-destructive hover:bg-destructive/10",
+          "transition-colors duration-150",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40",
+        )}
+      >
+        <X className="size-2.5" aria-hidden="true" />
+      </button>
+    </div>
+  ),
+);
+ActiveFilterTag.displayName = "ActiveFilterTag";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVE TAGS BAR — premium frosted strip
+// ─────────────────────────────────────────────────────────────────────────────
+const ActiveTagsBar = memo(
+  ({
+    params,
+    activeCount,
+    onRemoveFilter,
+    onReset,
+  }: {
+    params: AlbumFilterParams;
+    activeCount: number;
+    onRemoveFilter: (key: keyof AlbumFilterParams) => void;
+    onReset: () => void;
+  }) => {
+    if (activeCount === 0) return null;
+
+    return (
+      <div
+        className={cn(
+          "px-4 py-3",
+          "border-t border-border/50",
+          "bg-muted/10 backdrop-blur-sm",
+          "flex flex-wrap items-center gap-2",
+          "animate-fade-down",
+        )}
+      >
+        {/* Divider-glow accent */}
+        <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Sparkles className="size-3 text-primary/60" aria-hidden="true" />
+          <span className="text-overline text-muted-foreground/50">
+            Filters:
+          </span>
+        </div>
+
+        {FILTER_TAG_DEFS.map((def) => {
+          const displayValue = getTagDisplayValue(def.key, params);
+          if (!displayValue) return null;
+          return (
+            <ActiveFilterTag
+              key={def.key}
+              label={def.label}
+              displayValue={displayValue}
+              icon={def.icon}
+              iconColor={def.iconColor}
+              bgClass={def.bgClass}
+              onRemove={() => onRemoveFilter(def.key)}
+            />
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={onReset}
+          aria-label="Clear all filters"
+          className={cn(
+            "btn-danger btn-sm ml-auto h-7 px-3 gap-1.5",
+            "text-[11px]",
+          )}
+        >
+          <Trash2 className="size-3" aria-hidden="true" />
+          Clear all
+        </button>
+      </div>
+    );
+  },
+);
+ActiveTagsBar.displayName = "ActiveTagsBar";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTER EXPAND BUTTON — brand-active state with glow shadow
+// ─────────────────────────────────────────────────────────────────────────────
+const FilterToggleButton = memo(
+  ({
+    isExpanded,
+    activeCount,
+    onClick,
+    panelId,
+  }: {
+    isExpanded: boolean;
+    activeCount: number;
+    onClick: () => void;
+    panelId: string;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={isExpanded}
+      aria-controls={panelId}
+      className={cn(
+        "h-11 px-4 gap-2",
+        "inline-flex items-center justify-between shrink-0",
+        "rounded-xl border text-sm font-medium",
+        "transition-all duration-200",
+        "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
+        isExpanded
+          ? [
+              "border-primary/40 bg-primary/10 text-primary",
+              "hover:bg-primary/15 shadow-brand",
+            ]
+          : [
+              "border-border/70 bg-background/60 dark:bg-surface-1/60 text-foreground",
+              "hover:bg-accent/50 hover:border-border-strong shadow-raised",
+              "backdrop-blur-sm",
+            ],
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="hidden sm:block">Filters</span>
+      </div>
+
+      <div className="flex items-center gap-1.5 ml-1">
+        {activeCount > 0 && (
+          <span
             className={cn(
-              "bg-muted/30 transition-all",
-              overflowVisible ? "overflow-visible" : "overflow-hidden",
+              "flex h-5 min-w-5 px-1 items-center justify-center",
+              "rounded-full text-[10px] font-black",
+              "gradient-brand text-white",
+              "shadow-glow-xs",
+            )}
+            aria-label={`${activeCount} active filters`}
+          >
+            {activeCount}
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "size-3.5 text-muted-foreground/60",
+            "transition-transform duration-200",
+            isExpanded && "rotate-180",
+          )}
+          aria-hidden="true"
+        />
+      </div>
+    </button>
+  ),
+);
+FilterToggleButton.displayName = "FilterToggleButton";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ALBUM FILTER — main orchestrator
+// ─────────────────────────────────────────────────────────────────────────────
+const EXPAND_PANEL_ID = "album-filter-panel";
+
+const AlbumFilter = memo<AlbumFilterProps>(
+  ({ params, onSearch, onFilterChange, onReset }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [panelOverflow, setPanelOverflow] = useState(false);
+    const { user } = useAppSelector((s) => s.auth);
+
+    // ── Search debounce ─────────────────────────────────────────────────────
+    const [localSearch, setLocalSearch] = useState(params.keyword || "");
+    const debouncedSearch = useDebounce(localSearch, 400);
+
+    // FIX 6: one-way sync URL → input only
+    useEffect(() => {
+      if ((params.keyword || "") === localSearch) return;
+      setLocalSearch(params.keyword || "");
+    }, [params.keyword]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+      if (debouncedSearch !== (params.keyword || "")) {
+        onSearch(debouncedSearch);
+      }
+    }, [debouncedSearch, params.keyword, onSearch]);
+
+    // FIX 5: immediate clear bypasses debounce
+    const handleClearSearch = useCallback(() => {
+      setLocalSearch("");
+      onSearch("");
+    }, [onSearch]);
+
+    // ── Panel expand — FIX 1+2 preserved ────────────────────────────────────
+    const gridRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const el = gridRef.current;
+      if (!el) return;
+      if (isExpanded) {
+        const onEnd = (e: TransitionEvent) => {
+          if (e.target === el && e.propertyName === "grid-template-rows") {
+            setPanelOverflow(true);
+          }
+        };
+        el.addEventListener("transitionend", onEnd);
+        return () => el.removeEventListener("transitionend", onEnd);
+      } else {
+        setPanelOverflow(false);
+      }
+    }, [isExpanded]);
+
+    // ── Active count — granular deps ─────────────────────────────────────────
+    const activeFiltersCount = useMemo(() => {
+      let n = 0;
+      if (params.genreId) n++;
+      if (params.artistId) n++;
+      if (params.year) n++;
+      if (params.type) n++;
+      if (params.isPublic !== undefined) n++;
+      return n;
+    }, [
+      params.genreId,
+      params.artistId,
+      params.year,
+      params.type,
+      params.isPublic,
+    ]);
+
+    // FIX 4: null not undefined
+    const removeFilter = useCallback(
+      (key: keyof AlbumFilterParams) => onFilterChange(key, null),
+      [onFilterChange],
+    );
+
+    const toggleExpanded = useCallback(() => setIsExpanded((v) => !v), []);
+
+    return (
+      <div className="w-full">
+        {/* ── MAIN CARD WRAPPER ── */}
+        <div
+          className={cn(
+            "relative overflow-hidden",
+            "rounded-2xl border border-border/60",
+            "bg-card/50 dark:bg-surface-1/50 backdrop-blur-md",
+            "transition-shadow duration-300",
+            "hover:shadow-elevated",
+            activeFiltersCount > 0 && "border-primary/20 shadow-brand",
+          )}
+        >
+          {/* Subtle top accent line when filters active */}
+          {activeFiltersCount > 0 && (
+            <div className="absolute inset-x-0 top-0 h-px gradient-wave opacity-60" />
+          )}
+
+          {/* ── TOP ROW: Search + Sort + Toggle ── */}
+          <div className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            {/* Search — flex-1 */}
+            <div className="flex-1 min-w-0">
+              <SearchInput
+                value={localSearch}
+                onChange={setLocalSearch}
+                onClear={handleClearSearch}
+              />
+            </div>
+
+            {/* Sort + Toggle row */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              {/* Sort */}
+              <Select
+                value={(params.sort || "newest").toLowerCase()}
+                onValueChange={(val) => onFilterChange("sort", val)}
+              >
+                <SelectTrigger
+                  className={cn(
+                    "h-11 w-[148px]",
+                    "bg-background/60 dark:bg-surface-1/60 backdrop-blur-sm",
+                    "border-border/70 hover:border-border-strong",
+                    "rounded-xl text-sm shadow-raised",
+                    "transition-all duration-150",
+                  )}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <ListFilter
+                      className="size-3.5 text-muted-foreground/50 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="text-overline text-muted-foreground/50 hidden md:block">
+                      Sort:
+                    </span>
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="newest">Newest</SelectItem>
+                  <SelectItem value="oldest">Oldest</SelectItem>
+                  <SelectItem value="popular">Popular</SelectItem>
+                  <SelectItem value="name">A – Z</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Separator
+                orientation="vertical"
+                className="h-6 hidden sm:block opacity-50"
+                aria-hidden="true"
+              />
+
+              {/* Filters toggle */}
+              <FilterToggleButton
+                isExpanded={isExpanded}
+                activeCount={activeFiltersCount}
+                onClick={toggleExpanded}
+                panelId={EXPAND_PANEL_ID}
+              />
+            </div>
+          </div>
+
+          {/* ── EXPANDABLE FILTER PANEL — FIX 2: gridRef on outer wrapper ── */}
+          <div
+            ref={gridRef}
+            id={EXPAND_PANEL_ID}
+            role="region"
+            aria-label="Album filter options"
+            className={cn(
+              "grid transition-[grid-template-rows] duration-300 ease-in-out",
+              "border-t border-transparent",
+              isExpanded
+                ? "grid-rows-[1fr] border-border/50"
+                : "grid-rows-[0fr]",
             )}
           >
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Filter 1: Status */}
-              {user?.role === "admin" && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-1.5 ml-1">
-                    <Eye className="size-3" /> Visibility
-                  </label>
+            {/* FIX 1: overflow only enabled after transitionend */}
+            <div
+              className={cn(
+                "bg-muted/10",
+                panelOverflow ? "overflow-visible" : "overflow-hidden",
+              )}
+            >
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {/* Visibility — admin only */}
+                {user?.role === "admin" && (
+                  <div className="space-y-0">
+                    <FilterLabel
+                      icon={Eye}
+                      text="Visibility"
+                      iconColor="hsl(var(--wave-1))"
+                    />
+                    <Select
+                      value={
+                        params.isPublic === undefined
+                          ? "all"
+                          : String(params.isPublic)
+                      }
+                      onValueChange={(val) =>
+                        onFilterChange(
+                          "isPublic",
+                          val === "all" ? null : val === "true",
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="true">Public</SelectItem>
+                        <SelectItem value="false">Private</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Type */}
+                <div className="space-y-0">
+                  <FilterLabel
+                    icon={LayoutGrid}
+                    text="Type"
+                    iconColor="hsl(var(--info))"
+                  />
                   <Select
-                    value={
-                      params.isPublic === undefined
-                        ? "all"
-                        : String(params.isPublic)
-                    }
+                    value={params.type || "all"}
                     onValueChange={(val) =>
-                      onFilterChange(
-                        "isPublic",
-                        val === "all" ? undefined : val === "true",
-                      )
+                      onFilterChange("type", val === "all" ? null : val)
                     }
                   >
-                    <SelectTrigger className="w-full bg-background h-9 text-sm shadow-sm focus:ring-1">
-                      <SelectValue placeholder="All Status" />
+                    <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
+                      <SelectValue placeholder="All Types" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="true">Public Only</SelectItem>
-                      <SelectItem value="false">Private Only</SelectItem>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="album">Album</SelectItem>
+                      <SelectItem value="single">Single</SelectItem>
+                      <SelectItem value="ep">EP</SelectItem>
+                      <SelectItem value="compilation">Compilation</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              )}
 
-              {/* Filter 2: Type */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-1.5 ml-1">
-                  <LayoutGrid className="size-3" /> Type
-                </label>
-                <Select
-                  value={params.type || "all"}
-                  onValueChange={(val) =>
-                    onFilterChange("type", val === "all" ? undefined : val)
-                  }
-                >
-                  <SelectTrigger className="w-full bg-background h-9 text-sm shadow-sm focus:ring-1">
-                    <SelectValue placeholder="All Types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="album">Album</SelectItem>
-                    <SelectItem value="single">Single</SelectItem>
-                    <SelectItem value="ep">EP</SelectItem>
-                    <SelectItem value="compilation">Compilation</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Filter 3: Genre */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-1.5 ml-1">
-                  <Music className="size-3" /> Genre
-                </label>
-                <FilterDropdown
-                  isActive={!!params.genreId}
-                  onClear={() => onFilterChange("genreId", undefined)}
-                  label={
-                    <span className="truncate">
-                      {params.genreId ? "Filtered" : "Select Genre"}
-                    </span>
-                  }
-                  contentClassName="w-[280px]"
-                  className="w-full bg-background h-9 text-sm font-normal px-3 justify-start shadow-sm focus:ring-1"
-                >
-                  <div className="p-1">
-                    <GenreSelector
-                      variant="filter"
-                      singleSelect={true}
-                      value={params.genreId}
-                      onChange={(val) => {
-                        onFilterChange("genreId", val);
-                      }}
-                      placeholder="Tìm kiếm thể loại..."
-                    />
-                  </div>
-                </FilterDropdown>
-              </div>
-
-              {/* Filter 4: Artist */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-1.5 ml-1">
-                  <Mic2 className="size-3" /> Artist
-                </label>
-                <FilterDropdown
-                  isActive={!!params.artistId}
-                  onClear={() => onFilterChange("artistId", undefined)}
-                  label={
-                    <span className="truncate">
-                      {params.artistId ? "Filtered" : "Select Artist"}
-                    </span>
-                  }
-                  contentClassName="w-[280px]"
-                  className="w-full bg-background h-9 text-sm font-normal px-3 justify-start shadow-sm focus:ring-1"
-                >
-                  <div className="p-1">
-                    <ArtistSelector
-                      singleSelect
-                      value={params.artistId ? [params.artistId] : []}
-                      onChange={(ids) => onFilterChange("artistId", ids[0])}
-                    />
-                  </div>
-                </FilterDropdown>
-              </div>
-
-              {/* Filter 5: Year */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-1.5 ml-1">
-                  <Calendar className="size-3" /> Year
-                </label>
-                {/* z-index cao hơn các phần tử khác nếu cần thiết */}
-                <div className="relative z-50">
-                  <YearPicker
-                    value={params.year}
-                    onChange={(val) => onFilterChange("year", val)}
+                {/* Genre */}
+                <div className="space-y-0">
+                  <FilterLabel
+                    icon={Music}
+                    text="Genre"
+                    iconColor="hsl(var(--wave-4))"
                   />
+                  <FilterDropdown
+                    isActive={!!params.genreId}
+                    onClear={() => onFilterChange("genreId", null)}
+                    label={
+                      <span className="truncate">
+                        {params.genreId ? "Genre selected" : "Select Genre"}
+                      </span>
+                    }
+                    contentClassName="w-[280px]"
+                    className={cn(
+                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
+                      "justify-start shadow-raised rounded-lg border-border/70",
+                      "focus:ring-1 focus:ring-primary/30",
+                      params.genreId && "border-warning/40 text-foreground",
+                    )}
+                  >
+                    <div className="p-1">
+                      <GenreSelector
+                        variant="filter"
+                        singleSelect
+                        value={params.genreId}
+                        onChange={(val) => onFilterChange("genreId", val)}
+                        placeholder="Search genres…"
+                      />
+                    </div>
+                  </FilterDropdown>
+                </div>
+
+                {/* Artist */}
+                <div className="space-y-0">
+                  <FilterLabel
+                    icon={Mic2}
+                    text="Artist"
+                    iconColor="hsl(var(--wave-2))"
+                  />
+                  <FilterDropdown
+                    isActive={!!params.artistId}
+                    onClear={() => onFilterChange("artistId", null)}
+                    label={
+                      <span className="truncate">
+                        {params.artistId ? "Artist selected" : "Select Artist"}
+                      </span>
+                    }
+                    contentClassName="w-[280px]"
+                    className={cn(
+                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
+                      "justify-start shadow-raised rounded-lg border-border/70",
+                      "focus:ring-1 focus:ring-primary/30",
+                      params.artistId && "border-pink-500/40 text-foreground",
+                    )}
+                  >
+                    <div className="p-1">
+                      <ArtistSelector
+                        singleSelect
+                        value={params.artistId ? [params.artistId] : []}
+                        onChange={(ids) =>
+                          onFilterChange("artistId", ids[0] ?? null)
+                        }
+                      />
+                    </div>
+                  </FilterDropdown>
+                </div>
+
+                {/* Year — FIX 9: z-index + isolate wrapper */}
+                <div className="space-y-0">
+                  <FilterLabel
+                    icon={Calendar}
+                    text="Year"
+                    iconColor="hsl(var(--success))"
+                  />
+                  <div className="relative [z-index:60] isolate">
+                    <YearPicker
+                      value={params.year}
+                      onChange={(val) => onFilterChange("year", val)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* --- SECTION 3: ACTIVE TAGS (Footer) --- */}
-        {activeFiltersCount > 0 && (
-          <div className="p-3 bg-muted/20 border-t border-border flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground mr-1">
-              Active:
-            </span>
-
-            {/* Tag Generator */}
-            {[
-              {
-                key: "type",
-                label: "Type",
-                value: params.type,
-                icon: LayoutGrid,
-                color: "blue",
-              },
-              {
-                key: "year",
-                label: "Year",
-                value: params.year,
-                icon: Calendar,
-                color: "green",
-              },
-              {
-                key: "isPublic",
-                label: "Visibility",
-                value:
-                  params.isPublic !== undefined
-                    ? params.isPublic
-                      ? "Public"
-                      : "Private"
-                    : null,
-                icon: Eye,
-                color: "purple",
-              },
-              {
-                key: "genreId",
-                label: "Genre",
-                value: params.genreId ? "Selected" : null,
-                icon: Music,
-                color: "orange",
-              },
-              {
-                key: "artistId",
-                label: "Artist",
-                value: params.artistId ? "Selected" : null,
-                icon: Mic2,
-                color: "red",
-              },
-            ].map((filter) => {
-              if (!filter.value) return null;
-              const Icon = filter.icon;
-              return (
-                <Badge
-                  key={filter.key}
-                  variant="secondary"
-                  className={`h-7 pl-2 pr-1 gap-1.5 bg-background border border-border text-foreground hover:bg-accent transition-colors cursor-default font-normal shadow-sm ${filter.color === "blue" ? "text-blue-500" : filter.color === "green" ? "text-green-500" : filter.color === "purple" ? "text-purple-500" : filter.color === "orange" ? "text-orange-500" : filter.color === "red" ? "text-red-500" : ""}`}
-                >
-                  <Icon className={`size-3 text-${filter.color}-500`} />
-                  <span className="text-muted-foreground">{filter.label}:</span>
-                  <span className="font-medium text-foreground">
-                    {filter.value}
-                  </span>
-                  <button
-                    onClick={() =>
-                      removeFilter(filter.key as keyof AlbumFilterParams)
-                    }
-                    className="ml-1 p-0.5 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              );
-            })}
-
-            {/* Clear All */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onReset}
-              className="h-7 px-2.5 text-xs text-destructive bg-primary/10 hover:bg-destructive/10 hover:text-destructive ml-auto font-medium"
-            >
-              <Trash2 className="size-3 mr-1.5" /> Clear All
-            </Button>
+          {/* ── ACTIVE TAGS BAR ── */}
+          <div className="relative">
+            <ActiveTagsBar
+              params={params}
+              activeCount={activeFiltersCount}
+              onRemoveFilter={removeFilter}
+              onReset={onReset}
+            />
           </div>
-        )}
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  },
+);
 
+AlbumFilter.displayName = "AlbumFilter";
 export default AlbumFilter;

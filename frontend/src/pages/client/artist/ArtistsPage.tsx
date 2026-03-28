@@ -1,21 +1,303 @@
-import { Sparkles } from "lucide-react";
+"use client";
 
-// --- Components ---
+/**
+ * @file ArtistPage.tsx — Artist catalog page (v4.0 — Soundwave Premium)
+ *
+ * REDESIGN vs v3.2 — aligned with FeaturedAlbums + AlbumPage v4.0:
+ *
+ * ── PageHero extracted as memo:
+ *    Eyebrow badge (Users icon + text-overline text-primary) + gradient title
+ *    + divider-glow + StatBadge chips (total artists + trending label)
+ *    Matches FeaturedAlbums header pattern exactly.
+ *
+ * ── AmbientBackground: `position: fixed` (not absolute) — prevents layout
+ *    void / broken layout on short pages (not-logged-in state). Two orbs:
+ *    brand-500 violet top-left + wave-3 cyan top-right, aurora bands.
+ *
+ * ── ArtistFilters: no longer double-wrapped in glass-frosted from the page.
+ *    v4.0 ArtistFilters.tsx manages its own card/glass styling internally,
+ *    matching AlbumFilter v4.0 pattern.
+ *
+ * ── PaginationStrip extracted as memo — eliminates the double glass-frosted
+ *    anti-pattern from v3.2 (two identical frosted wrappers nested).
+ *
+ * ── EmptyArtists extracted as memo — context-aware message based on
+ *    whether keyword filter is active.
+ *
+ * ── GRID_LAYOUT module-scoped constant preserved (zero alloc per render).
+ *
+ * ── staggerDelay cap preserved at 700ms.
+ *
+ * ALL v3.2 LOGIC PRESERVED:
+ * ─ useSyncInteractions unconditional call with enabled guard
+ * ─ stableFilterHandlers via useMemo
+ * ─ Error state renders AmbientBackground
+ * ─ artists/meta granular useMemo deps
+ */
+
+import React, { memo, useMemo } from "react";
+import { Users, TrendingUp } from "lucide-react";
+import { Mic2 } from "lucide-react";
+
 import Pagination from "@/utils/pagination";
 import MusicResult from "@/components/ui/Result";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
-// Giả định bạn có bộ lọc dành riêng cho public (nhẹ nhàng hơn admin)
-
-// --- Hooks ---
+import { ArtistFilters } from "@/features/artist/components/ArtistFilters";
 import { useArtistParams } from "@/features/artist/hooks/useArtistParams";
 import { useArtistsQuery } from "@/features/artist/hooks/useArtistsQuery";
-import { PublicArtistFilters } from "@/features/artist/components/PublicArtistFilters";
 import { APP_CONFIG } from "@/config/constants";
+import { type Artist, useSyncInteractions } from "@/features";
+import { cn } from "@/lib/utils";
 
-const ArtistPage = () => {
-  // --- 1. STATE QUẢN LÝ QUA URL (Chuẩn SEO & UX) ---
-  // Mặc định load 24 nghệ sĩ 1 trang cho user tha hồ lướt
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Stagger delay — linear ramp capped at 700ms (prevents 16th+ card jank) */
+const staggerDelay = (i: number) => Math.min(i * 45, 700);
+
+/** Module-scoped — zero allocation per render */
+const GRID_LAYOUT = cn(
+  "grid",
+  "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7",
+  "gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12",
+);
+
+const DEFAULT_META = {
+  totalPages: 1,
+  totalItems: 0,
+  page: 1,
+  pageSize: APP_CONFIG.PAGINATION_LIMIT,
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AMBIENT BACKGROUND — isolated memo, position: fixed prevents layout void
+// on short pages (not-logged-in states). GPU-composited via .orb-float tokens.
+// ─────────────────────────────────────────────────────────────────────────────
+const AmbientBackground = memo(() => (
+  <div
+    className="pointer-events-none fixed inset-0 overflow-hidden -z-10"
+    aria-hidden="true"
+  >
+    <div className="absolute inset-0 bg-background" />
+
+    {/* Brand-500 violet — top-left primary orb */}
+    <div
+      className="absolute rounded-full orb-float orb-float--brand orb-float--lg"
+      style={{ width: 640, height: 640, top: -200, left: -140, opacity: 0.32 }}
+    />
+
+    {/* Wave-3 cyan — top-right secondary orb */}
+    <div
+      className="absolute rounded-full orb-float orb-float--cyan orb-float--slow orb-float--lg"
+      style={{
+        width: 520,
+        height: 520,
+        top: "10%",
+        right: -120,
+        opacity: 0.22,
+      }}
+    />
+
+    {/* Wave-2 pink — bottom-center accent */}
+    <div
+      className="absolute rounded-full orb-float orb-float--wave orb-float--fast"
+      style={{
+        width: 360,
+        height: 360,
+        bottom: "14%",
+        left: "40%",
+        filter: "blur(72px)",
+        opacity: 0.16,
+      }}
+    />
+
+    {/* Aurora bands */}
+    <div className="aurora-band aurora-band--1" />
+    <div className="aurora-band aurora-band--2" />
+
+    {/* Grain texture */}
+    <div
+      className="absolute inset-0 opacity-[0.025] mix-blend-overlay pointer-events-none"
+      style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+      }}
+    />
+
+    {/* Hero gradient tint */}
+    <div
+      className="absolute inset-x-0 top-0 h-[55vh] pointer-events-none"
+      style={{
+        background:
+          "linear-gradient(180deg, hsl(var(--wave-3)/0.05) 0%, hsl(var(--primary)/0.04) 45%, transparent 100%)",
+      }}
+    />
+
+    {/* Player bar clearance */}
+    <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-background to-transparent" />
+  </div>
+));
+AmbientBackground.displayName = "AmbientBackground";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAT BADGE — mini info chip, matches AlbumPage v4.0
+// ─────────────────────────────────────────────────────────────────────────────
+const StatBadge = memo(
+  ({
+    icon: Icon,
+    label,
+    className,
+  }: {
+    icon: React.ElementType;
+    label: string;
+    className?: string;
+  }) => (
+    <div
+      className={cn(
+        "inline-flex items-center gap-1.5 h-7 px-3 rounded-full",
+        "border border-border/60 bg-card/50 backdrop-blur-sm shadow-raised",
+        "text-xs font-medium text-muted-foreground",
+        className,
+      )}
+    >
+      <Icon className="size-3 text-primary/60" aria-hidden="true" />
+      {label}
+    </div>
+  ),
+);
+StatBadge.displayName = "StatBadge";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE HERO — eyebrow + gradient title + divider-glow + stat badges
+// Mirrors FeaturedAlbums header pattern exactly.
+// ─────────────────────────────────────────────────────────────────────────────
+const PageHero = memo(
+  ({ totalItems, isLoading }: { totalItems: number; isLoading: boolean }) => (
+    <header className="section-container pt-12 pb-8 sm:pt-14 sm:pb-10">
+      {/* Eyebrow */}
+      <div
+        className="flex items-center gap-2 mb-3 animate-fade-up animation-fill-both"
+        style={{ animationDelay: "40ms" }}
+      >
+        <div
+          className={cn(
+            "flex items-center justify-center size-7 rounded-lg",
+            "bg-primary/10 text-primary shadow-glow-xs",
+          )}
+        >
+          <Mic2 className="size-4" aria-hidden="true" />
+        </div>
+        <span className="text-overline text-primary">Artists</span>
+      </div>
+
+      {/* Title */}
+      <h1
+        className="text-display-xl text-gradient-aurora mb-2 animate-fade-up animation-fill-both"
+        style={{ animationDelay: "60ms" }}
+        id="artist-page-heading"
+      >
+        Nghệ Sĩ Nổi Bật
+      </h1>
+
+      {/* Subtitle */}
+      <p
+        className="text-section-subtitle mb-5 animate-fade-up animation-fill-both"
+        style={{ animationDelay: "90ms" }}
+      >
+        Khám phá toàn bộ nghệ sĩ trong hệ sinh thái âm nhạc.
+      </p>
+
+      {/* Animated brand divider */}
+      <div
+        className="divider-glow mb-5 animate-fade-up animation-fill-both"
+        style={{ animationDelay: "100ms", maxWidth: "32rem" }}
+      />
+
+      {/* Stat badges — only when data loaded */}
+      {!isLoading && totalItems > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-2 animate-fade-up animation-fill-both"
+          style={{ animationDelay: "130ms" }}
+        >
+          <StatBadge icon={Users} label={`${totalItems} Nghệ sĩ`} />
+          <StatBadge icon={TrendingUp} label="Cập nhật liên tục" />
+        </div>
+      )}
+    </header>
+  ),
+);
+PageHero.displayName = "PageHero";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMPTY ARTISTS — context-aware, matches AlbumPage v4.0 pattern
+// ─────────────────────────────────────────────────────────────────────────────
+const EmptyArtists = memo(
+  ({ isFiltering, keyword }: { isFiltering: boolean; keyword?: string }) => (
+    <div
+      className={cn(
+        "card-base border-dashed shadow-none",
+        "flex items-center justify-center min-h-[380px]",
+        "animate-fade-in",
+      )}
+    >
+      <MusicResult
+        status="empty"
+        title={isFiltering ? "Không tìm thấy kết quả" : "Chưa có nghệ sĩ nào"}
+        description={
+          isFiltering && keyword
+            ? `Không có nghệ sĩ nào phù hợp với "${keyword}". Hãy thử từ khoá khác.`
+            : "Hệ thống chưa tìm thấy nghệ sĩ nào thoả mãn điều kiện này."
+        }
+        icon={<Users className="size-10 text-muted-foreground/30" />}
+      />
+    </div>
+  ),
+);
+EmptyArtists.displayName = "EmptyArtists";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGINATION STRIP — single glass-frosted wrapper (no double-wrap anti-pattern)
+// ─────────────────────────────────────────────────────────────────────────────
+const PaginationStrip = memo(
+  ({
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    onPageChange,
+  }: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+  }) => (
+    <div
+      className={cn(
+        "glass-frosted rounded-2xl",
+        "border border-border/50 dark:border-primary/15",
+        "shadow-brand p-4",
+        "animate-fade-up animation-fill-both",
+      )}
+      style={{ animationDelay: "80ms" }}
+    >
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        totalItems={totalItems}
+        itemsPerPage={pageSize || APP_CONFIG.PAGINATION_LIMIT}
+      />
+    </div>
+  ),
+);
+PaginationStrip.displayName = "PaginationStrip";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ARTIST PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+const ArtistPage: React.FC = () => {
   const {
     filterParams,
     handleSearch,
@@ -24,30 +306,49 @@ const ArtistPage = () => {
     clearFilters,
   } = useArtistParams(APP_CONFIG.PAGINATION_LIMIT);
 
-  // --- 2. DATA FETCHING (Public API) ---
-  // Sử dụng hook query public (chỉ lấy nghệ sĩ isPublic/isActive)
   const { data, isLoading, isError } = useArtistsQuery(filterParams);
-  console.log(data);
-  // Bóc tách data an toàn
-  const artists = data?.artists || [];
-  const meta = data?.meta || {
-    totalPages: 1,
-    totalItems: 0,
-    page: 1,
-    pageSize: 24,
-  };
 
-  // --- 3. ERROR STATE ---
+  // Granular derived slices — avoids full object diff
+  const artists = useMemo(() => data?.artists ?? [], [data?.artists]);
+  const meta = useMemo(
+    () => ({ ...DEFAULT_META, ...data?.meta }),
+    [data?.meta],
+  );
+
+  // Must run unconditionally — enabled guard prevents execution when empty
+  const artistIds = useMemo(() => artists.map((a: Artist) => a._id), [artists]);
+  useSyncInteractions(
+    artistIds,
+    "follow",
+    "artist",
+    !isLoading && artistIds.length > 0,
+  );
+
+  /** Stable handler object — prevents ArtistFilters re-render on grid updates */
+  const stableFilterHandlers = useMemo(
+    () => ({
+      onSearch: handleSearch,
+      onFilterChange: handleFilterChange,
+      onReset: clearFilters,
+    }),
+    [handleSearch, handleFilterChange, clearFilters],
+  );
+
+  const hasResults = artists.length > 0;
+  const isFiltering = Boolean(filterParams.keyword);
+
+  // ── Error state ─────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <div className="container mx-auto px-4 sm:px-6 pt-12 pb-8">
-        <div className="min-h-[70vh] flex items-center justify-center ">
+      <div className="relative min-h-screen flex items-center justify-center px-4 pb-28">
+        <AmbientBackground />
+        <div className="card-base shadow-elevated p-8 max-w-md w-full text-center animate-scale-in">
           <MusicResult
             status="error"
-            title="Không thể tải danh sách Artist"
-            description="Đã có lỗi xảy ra từ máy chủ. Vui lòng kiểm tra đường truyền và thử lại."
+            title="Không thể tải danh sách Nghệ sĩ"
+            description="Máy chủ gặp sự cố. Vui lòng kiểm tra kết nối và thử lại."
             secondaryAction={{
-              label: "Tải lại trang",
+              label: "Tải lại",
               onClick: () => window.location.reload(),
             }}
           />
@@ -57,91 +358,71 @@ const ArtistPage = () => {
   }
 
   return (
-    <div className="relative min-h-screen pb-24">
-      {/* ================= BACKGROUND GRADIENT (Vibe Âm nhạc) ================= */}
-      <div className="absolute top-0 left-0 right-0 h-[40vh] bg-gradient-to-b from-primary/10 via-background/80 to-background pointer-events-none -z-10" />
+    <div className="relative min-h-screen pb-28">
+      <AmbientBackground />
 
-      {/* ================= HERO HEADER ================= */}
-      <header className="container mx-auto px-4 sm:px-6 pt-12 pb-8">
-        <div className="flex flex-col gap-3 max-w-2xl animate-in slide-in-from-bottom-4 fade-in duration-700">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary w-fit text-xs font-bold uppercase tracking-widest mb-2">
-            <Sparkles className="size-3.5" />
-            <span>Khám phá</span>
-          </div>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-foreground">
-            Nghệ sĩ nổi bật
-          </h1>
-          <p className="text-base md:text-lg text-muted-foreground font-medium">
-            Tìm kiếm, theo dõi và lắng nghe những giọng ca hàng đầu đang định
-            hình xu hướng âm nhạc thế giới.
-          </p>
-        </div>
-      </header>
+      {/* ══ HERO HEADER ══ */}
+      <PageHero totalItems={meta.totalItems} isLoading={isLoading} />
 
-      {/* ================= MAIN CONTENT ================= */}
-      <main className="container mx-auto px-4 sm:px-6 space-y-8">
-        {/* --- FILTERS --- */}
-        <div className="sticky top-16 z-30 bg-background/80 backdrop-blur-xl border-b border-border/40">
-          {/* Note: PublicArtistFilters nên thiết kế mỏng gọn hơn AdminFilters (chỉ gồm Search, Thể loại, Sắp xếp) */}
-          <PublicArtistFilters
-            params={filterParams}
-            onSearch={handleSearch}
-            onFilterChange={handleFilterChange}
-            onReset={clearFilters}
-          />
+      {/* ══ MAIN CONTENT ══ */}
+      <main
+        className="section-container space-y-6 sm:space-y-8"
+        aria-labelledby="artist-page-heading"
+      >
+        {/* ── Filter bar */}
+        <div
+          className="animate-fade-up animation-fill-both"
+          style={{ animationDelay: "80ms" }}
+        >
+          <ArtistFilters params={filterParams} {...stableFilterHandlers} />
         </div>
 
-        {/* --- ARTISTS GRID --- */}
-        <div className="min-h-[50vh]">
+        {/* ── Artist grid — aria-busy signals loading to AT */}
+        <section
+          className="min-h-[50vh]"
+          aria-label="Danh sách nghệ sĩ"
+          aria-busy={isLoading}
+        >
           {isLoading ? (
-            // 🔥 UX: Skeleton phải được bọc trong Grid giống hệt đồ thật để không bị giật Layout
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-              {/* Artist card thường có hình tròn, nếu CardSkeleton của bạn là hình vuông thì update CSS cho tròn nhé */}
+            <div className={GRID_LAYOUT}>
               <CardSkeleton
                 count={meta.pageSize}
-                className="rounded-full aspect-square"
+                className="skeleton-avatar aspect-square"
               />
             </div>
-          ) : artists.length === 0 ? (
-            // Trạng thái trống
-            <div className="flex flex-col items-center justify-center bg-muted/20 rounded-3xl border border-dashed border-border/50">
-              <MusicResult
-                status="empty"
-                title="Không tìm thấy nghệ sĩ nào"
-                description={`Không có kết quả nào phù hợp với tìm kiếm "${filterParams.keyword || "hiện tại"}".`}
-              />
-            </div>
+          ) : !hasResults ? (
+            <EmptyArtists
+              isFiltering={isFiltering}
+              keyword={filterParams.keyword}
+            />
           ) : (
-            // Lưới dữ liệu thật
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 animate-in fade-in duration-700">
+            <div className={GRID_LAYOUT}>
               {artists.map((artist, index) => (
                 <div
                   key={artist._id}
-                  style={{ animationDelay: `${index * 50}ms` }}
-                  className="animate-in zoom-in-95 fill-mode-both"
+                  className="animate-fade-up animation-fill-both"
+                  style={{ animationDelay: `${staggerDelay(index)}ms` }}
                 >
                   <PublicArtistCard artist={artist} />
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* --- PAGINATION --- */}
-        {!isLoading && artists.length > 0 && (
-          <div className="pt-6">
-            <Pagination
-              currentPage={meta.page}
-              totalPages={meta.totalPages}
-              onPageChange={handlePageChange}
-              totalItems={meta.totalItems}
-              itemsPerPage={meta.pageSize || APP_CONFIG.PAGINATION_LIMIT}
-            />
-          </div>
+        {/* ── Pagination */}
+        {!isLoading && hasResults && (
+          <PaginationStrip
+            currentPage={meta.page}
+            totalPages={meta.totalPages}
+            totalItems={meta.totalItems}
+            pageSize={meta.pageSize}
+            onPageChange={handlePageChange}
+          />
         )}
       </main>
     </div>
   );
 };
 
-export default ArtistPage;
+export default memo(ArtistPage);

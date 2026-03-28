@@ -2,11 +2,25 @@ import mongoose from "mongoose";
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI || "");
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error(`❌ Error: ${(error as Error).message}`);
-    process.exit(1);
+    console.log("🔄 Trying SRV...");
+    await mongoose.connect(process.env.MONGO_URI_SRV!);
+    console.log("✅ Connected SRV");
+  } catch (err) {
+    console.log("⚠️ SRV failed:", err);
+
+    if (!process.env.MONGO_URI) {
+      console.error("❌ No fallback URI");
+      process.exit(1);
+    }
+
+    try {
+      console.log("🔄 Trying fallback...");
+      await mongoose.connect(process.env.MONGO_URI);
+      console.log("✅ Connected fallback");
+    } catch (err2) {
+      console.error("❌ Fallback also failed:", err2);
+      process.exit(1);
+    }
   }
 };
 

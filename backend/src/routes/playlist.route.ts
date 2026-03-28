@@ -20,7 +20,13 @@ import { uploadImages } from "../config/upload";
 
 const router = express.Router();
 
-// 1. SPECIFIC ROUTES
+// ─────────────────────────────────────────────────────
+// 👤 USER ROUTES (Dành cho chính người dùng đang login)
+// ─────────────────────────────────────────────────────
+
+// 1. Tạo playlist nhanh (Spotify Style)
+router.post("/me", protect, playlistController.createMyPlaylist);
+// 2. Lấy tất cả playlist của tôi (Sidebar/Profile)
 router.get(
   "/me/all",
   protect,
@@ -28,8 +34,27 @@ router.get(
     req.query.userId = req.user!._id.toString();
     next();
   },
-  validate(getPlaylistsSchema),
-  playlistController.getPlaylists
+  playlistController.getPlaylists,
+);
+
+// 3. Quản lý tracks (Có Smart Cover)
+router.post(
+  "/me/:playlistId/tracks",
+  protect,
+  validate(addTracksToPlaylistSchema),
+  playlistController.userAddTracks,
+);
+router.delete(
+  "/me/:playlistId/tracks",
+  protect,
+  playlistController.userRemoveTracks,
+);
+
+// 4. Chuyển trạng thái nhanh
+router.patch(
+  "/me/:id/toggle-visibility",
+  protect,
+  playlistController.togglePlaylistPrivacy,
 );
 
 router.post(
@@ -37,14 +62,14 @@ router.post(
   protect,
   uploadImages.single("coverImage"),
   validate(createPlaylistSchema),
-  playlistController.createPlaylist
+  playlistController.createPlaylist,
 );
 
 router.get(
   "/",
   optionalAuth,
   validate(getPlaylistsSchema),
-  playlistController.getPlaylists
+  playlistController.getPlaylists,
 );
 
 // 2. TRACK MANAGEMENT
@@ -54,7 +79,7 @@ router.post(
   "/:playlistId/tracks",
   protect,
   validate(addTracksToPlaylistSchema),
-  playlistController.addTracks
+  playlistController.addTracks,
 );
 
 // 🔥 Remove Single Track (Fix cho khớp với Hook Frontend cũ)
@@ -63,7 +88,7 @@ router.delete(
   "/:playlistId/tracks/:trackId",
   protect,
   validate(removeTracksToPlaylistSchema),
-  playlistController.removeTracks // Controller xử lý xóa 1 bài
+  playlistController.removeTracks, // Controller xử lý xóa 1 bài
 );
 
 // Remove Tracks (Batch - Optional nếu bạn muốn làm tính năng xóa nhiều bài cùng lúc)
@@ -71,7 +96,7 @@ router.delete(
   "/:playlistId/tracks",
   protect,
   validate(addTracksToPlaylistSchema),
-  playlistController.removeTracks
+  playlistController.removeTracks,
 );
 
 // 3. DYNAMIC ROUTES
@@ -82,7 +107,7 @@ router.patch(
   protect,
   uploadImages.single("coverImage"),
   validate(updatePlaylistSchema),
-  playlistController.updatePlaylist
+  playlistController.updatePlaylist,
 );
 
 router.delete("/:id", protect, playlistController.deletePlaylist);
@@ -91,6 +116,6 @@ router.put(
   protect,
   authorize("admin"), // Chỉ admin mới được reorder system playlist (hoặc chủ sở hữu)
   validate(updatePlaylistTracksSchema),
-  playlistController.reorderTracks
+  playlistController.reorderTracks,
 );
 export default router;

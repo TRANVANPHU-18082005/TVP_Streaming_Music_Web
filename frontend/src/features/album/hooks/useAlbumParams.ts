@@ -24,7 +24,7 @@ export const useAlbumParams = (initialLimit = 10) => {
     ...DEFAULT_ALBUM_PARAMS,
     limit: initialLimit,
   });
-  console.log("Raw URL params:", rawParams);
+
   // 2. Validate & Override (Logic đặc thù của Album)
   // Generic hook chỉ parse cơ bản, ở đây ta validate kỹ hơn (Enum check)
   const filterParams = useMemo((): AlbumFilterParams => {
@@ -59,7 +59,7 @@ export const useAlbumParams = (initialLimit = 10) => {
   const handleFilterChange = useCallback(
     <K extends keyof AlbumFilterParams>(
       key: K,
-      value: AlbumFilterParams[K],
+      value: AlbumFilterParams[K] | null,
     ) => {
       setParams({ [key]: value, page: 1 });
     },

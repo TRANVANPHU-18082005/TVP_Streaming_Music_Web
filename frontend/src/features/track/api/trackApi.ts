@@ -1,7 +1,7 @@
 import api from "@/lib/axios";
 import type { ApiResponse, PagedResponse } from "@/types";
 import type {
-  ChartResponse,
+  IChartResponse,
   ITrack,
   TrackFilterParams,
 } from "@/features/track/types";
@@ -114,10 +114,10 @@ const trackApi = {
 
   getRealtimeChart: async () => {
     // Giả sử ChartResponse được bọc trong ApiResponse từ backend
-    const { data } = await api.get<ApiResponse<ChartResponse>>(
+    const { data } = await api.get<ApiResponse<IChartResponse>>(
       "/tracks/charts/realtime",
     );
-    return data;
+    return data.data;
   },
   // trackApi.ts thêm vào phần ACTIONS
   recordView: async (trackId: string) => {

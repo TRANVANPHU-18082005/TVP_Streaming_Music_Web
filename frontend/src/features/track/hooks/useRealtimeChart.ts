@@ -24,6 +24,8 @@ export const useRealtimeChart = () => {
     data: apiResponse,
     isLoading,
     refetch,
+    error,
+    isRefetching,
   } = useQuery({
     queryKey: ["live-chart"],
     queryFn: trackApi.getRealtimeChart,
@@ -131,7 +133,12 @@ export const useRealtimeChart = () => {
     chartData,
     prevRankMap: prevRankMapRef.current, // Dùng để tính toán Up/Down/Stay trong Component
     isLoading,
+    error,
+    refetch,
+    isRefetching,
+
     isUpdating,
     isConnected,
+    lastUpdatedAt: apiResponse?.lastUpdatedAt || null,
   };
 };

@@ -1,48 +1,80 @@
-// src/validations/interaction.validation.ts
 import { z } from "zod";
-import { objectIdSchema } from "./common.validate";
+import { objectIdSchema, emptyToUndefined } from "./common.validate";
+
+// --- CONSTANTS ---
+const targetTypeValues = ["track", "album", "playlist", "artist"] as const;
 const interactionTypeValues = ["like", "follow"] as const;
-const interactionTypeSchema = z.enum(interactionTypeValues);
-export const interactionValidation = {
-  // --- 1. TOGGLE LIKE TRACK ---
-  // POST /interactions/like/track/:trackId
-  toggleLike: z.object({
-    params: z.object({
-      trackId: objectIdSchema.describe("ID bài hát không hợp lệ"),
-    }),
-  }),
 
-  // --- 2. TOGGLE FOLLOW ARTIST ---
-  // POST /interactions/follow/artist/:artistId
-  toggleFollow: z.object({
-    params: z.object({
-      artistId: objectIdSchema.describe("ID nghệ sĩ không hợp lệ"),
-    }),
-  }),
+// -----------------------------------------------------------------------------
+// 🚀 1. TOGGLE LIKE SCHEMA
+// -----------------------------------------------------------------------------
+export const toggleLikeSchema = z.object({
+  body: z
+    .object({
+      // Sử dụng preprocess để xử lý dữ liệu từ FormData (chuỗi rỗng "" -> undefined)
+      targetId: z.preprocess(
+        emptyToUndefined,
+        objectIdSchema.describe("ID đối tượng không hợp lệ hoặc bị trống"),
+      ),
 
-  // --- 3. BATCH CHECK ---
-  // POST /interactions/check-batch
-  batchCheck: z.object({
-    body: z.object({
-      // ids: Phải là mảng các ObjectId
+      targetType: z
+        .enum(targetTypeValues)
+        .refine((val) => targetTypeValues.includes(val), {
+          message: "Loại đối tượng phải là track, album hoặc playlist",
+        }),
+    })
+    .strict(),
+});
+
+// -----------------------------------------------------------------------------
+// 👥 2. TOGGLE FOLLOW SCHEMA
+// -----------------------------------------------------------------------------
+export const toggleFollowSchema = z.object({
+  params: z.object({
+    artistId: objectIdSchema.describe("ID nghệ sĩ không hợp lệ"),
+  }),
+});
+
+// -----------------------------------------------------------------------------
+// ⚡ 3. BATCH CHECK SCHEMA
+// -----------------------------------------------------------------------------
+export const batchCheckSchema = z.object({
+  body: z
+    .object({
+      // Giới hạn 100 IDs để bảo vệ tài nguyên hệ thống
       ids: z
         .array(objectIdSchema)
         .min(1, "Danh sách ID không được để trống")
         .max(100, "Không thể kiểm tra quá 100 mục cùng lúc"),
 
-      // type: Chỉ chấp nhận 'like' hoặc 'follow'
-      type: interactionTypeSchema.default("like"),
-    }),
-  }),
-};
+      type: z
+        .enum(interactionTypeValues)
+        .refine((val) => interactionTypeValues.includes(val), {
+          message: "Loại tương tác phải là like hoặc follow",
+        }),
 
-// --- TYPES EXPORT ---
-export type ToggleLikeParams = z.infer<
-  typeof interactionValidation.toggleLike
->["params"];
-export type ToggleFollowParams = z.infer<
-  typeof interactionValidation.toggleFollow
->["params"];
-export type BatchCheckInput = z.infer<
-  typeof interactionValidation.batchCheck
->["body"];
+      targetType: z.preprocess(
+        emptyToUndefined,
+        z.enum(targetTypeValues).optional(),
+      ),
+    })
+    .strict()
+    .refine(
+      (data) => {
+        // Business Logic: Nếu type là 'like' thì bắt buộc phải có targetType
+        if (data.type === "like") return !!data.targetType;
+        return true;
+      },
+      {
+        message: "targetType là bắt buộc khi kiểm tra trạng thái Like",
+        path: ["targetType"],
+      },
+    ),
+});
+
+// -----------------------------------------------------------------------------
+// 🔥 TYPES EXPORT (Dùng cho Services/Controllers)
+// -----------------------------------------------------------------------------
+export type ToggleLikeInput = z.infer<typeof toggleLikeSchema>["body"];
+export type ToggleFollowInput = z.infer<typeof toggleFollowSchema>["params"];
+export type BatchCheckInput = z.infer<typeof batchCheckSchema>["body"];

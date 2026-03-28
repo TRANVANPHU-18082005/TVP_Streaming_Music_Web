@@ -135,17 +135,22 @@ export const bulkUpdateTracks = catchAsync(
     });
   },
 );
+
 export const getTopChart = async (req: Request, res: Response) => {
   try {
     const data = await getRealtimeChart();
-    res.status(200).json({
+
+    return res.status(200).json({
       success: true,
-      data: data,
-      timestamp: new Date().toISOString(),
+      data: data, // Chứa { items, chart }
+      lastUpdatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Get Chart Error:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    console.error("Controller Chart Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
   }
 };
 

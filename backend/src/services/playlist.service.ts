@@ -4,7 +4,7 @@ import Playlist from "../models/Playlist";
 import Track from "../models/Track";
 import { IUser } from "../models/User";
 import ApiError from "../utils/ApiError";
-import { generateSafeSlug } from "../utils/slug";
+import { generatePlaylistSlug, generateSafeSlug } from "../utils/slug";
 import { deleteFileFromCloud } from "../utils/cloudinary";
 import { parseTags } from "../utils/helper";
 import {
@@ -507,6 +507,165 @@ class PlaylistService {
         );
       }
     }
+
+    return playlist;
+  }
+  /**
+   * 🚀 1. CREATE QUICK PLAYLIST (Luồng Spotify)
+   * User nhấn "Tạo mới" -> Backend tạo "Danh sách phát của tôi #N" -> Trả về kết quả ngay.
+   */
+  async createQuickPlaylist(
+    currentUser: IUser,
+    payload?: { title?: string; visibility?: string },
+  ) {
+    // 1. Xử lý Title: Ưu tiên payload, nếu rỗng thì đếm số để đặt tên tự động
+    let finalTitle = payload?.title?.trim();
+
+    if (!finalTitle) {
+      const userPlaylistCount = await Playlist.countDocuments({
+        user: currentUser._id,
+        isSystem: false,
+      });
+      finalTitle = `Danh sách phát của tôi #${userPlaylistCount + 1}`;
+    }
+
+    // 2. Xử lý Visibility: Ưu tiên payload, nếu rỗng mặc định 'public'
+    const finalVisibility = payload?.visibility || "public";
+
+    // 3. Generate Unique Slug (Luôn duy nhất nhờ NanoID bên trong hàm)
+    const uniqueSlug = generatePlaylistSlug(finalTitle);
+
+    // 4. Tạo bản ghi
+    const newPlaylist = await Playlist.create({
+      title: finalTitle,
+      slug: uniqueSlug,
+      user: currentUser._id,
+      description: "",
+      coverImage: "",
+      themeColor: this.generateRandomVibrantColor(), // Thêm chút màu sắc ngẫu nhiên cho đẹp
+      visibility: finalVisibility,
+      isSystem: false,
+      tracks: [],
+      totalTracks: 0,
+      totalDuration: 0,
+    });
+
+    return newPlaylist;
+  }
+
+  /**
+   * Helper để mỗi playlist tạo nhanh có một màu nền UI riêng biệt (Vibe Spotify)
+   */
+  private generateRandomVibrantColor() {
+    const vibrantColors = [
+      "#1db954",
+      "#2196f3",
+      "#ff5722",
+      "#9c27b0",
+      "#e91e63",
+      "#ffc107",
+    ];
+    return vibrantColors[Math.floor(Math.random() * vibrantColors.length)];
+  }
+
+  /**
+   * 🔄 2. UPDATE SMART COVER (Ảnh bìa thông minh)
+   * Tự động lấy ảnh của bài hát đầu tiên làm ảnh đại diện cho playlist nếu user chưa upload ảnh riêng.
+   */
+  async refreshSmartCover(playlistId: string) {
+    const playlist = await Playlist.findById(playlistId).populate({
+      path: "tracks",
+      select: "coverImage",
+      options: { limit: 1 },
+    });
+
+    if (!playlist) return;
+
+    // Chỉ tự động cập nhật nếu user chưa tự upload ảnh (coverImage rỗng)
+    if (!playlist.coverImage || playlist.coverImage === "") {
+      const firstTrack = playlist.tracks[0] as any;
+      if (firstTrack?.coverImage) {
+        await Playlist.updateOne(
+          { _id: playlistId },
+          { coverImage: firstTrack.coverImage },
+        );
+      }
+    }
+  }
+
+  /**
+   * ➕ 3. USER ADD TRACKS (Bọc lại hàm addTracks gốc)
+   * Thêm nhạc và tự động cập nhật ảnh bìa thông minh.
+   */
+  async userAddTracks(
+    playlistId: string,
+    trackIds: string[],
+    currentUser: IUser,
+  ) {
+    // Gọi logic addTracks có sẵn từ PlaylistService (hoặc viết trực tiếp nếu cần phân quyền user)
+    // Giả sử dùng logic Atomic Update của Phú
+    const result = await Playlist.findOneAndUpdate(
+      { _id: playlistId, user: currentUser._id }, // Bảo mật: Chỉ chủ sở hữu mới được thêm
+      { $addToSet: { tracks: { $each: trackIds } } },
+      { new: true },
+    );
+
+    if (!result)
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Playlist không tồn tại hoặc bạn không có quyền",
+      );
+
+    // Kích hoạt logic ảnh bìa thông minh
+    await this.refreshSmartCover(playlistId);
+
+    return result;
+  }
+
+  /**
+   * 🗑️ 4. BULK REMOVE TRACKS
+   * Xóa nhiều bài hát khỏi playlist cùng lúc cho người dùng tiện lợi.
+   */
+  async bulkRemoveTracks(
+    playlistId: string,
+    trackIds: string[],
+    currentUser: IUser,
+  ) {
+    const result = await Playlist.findOneAndUpdate(
+      { _id: playlistId, user: currentUser._id },
+      { $pullAll: { tracks: trackIds } },
+      { new: true },
+    );
+
+    if (!result)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy playlist");
+
+    // Sau khi xóa, nếu playlist trống thì có thể reset ảnh bìa
+    if (result.tracks.length === 0) {
+      result.coverImage = "";
+      await result.save();
+    } else {
+      await this.refreshSmartCover(playlistId);
+    }
+
+    return result;
+  }
+
+  /**
+   * 🔒 5. TOGGLE PRIVACY
+   * Chuyển nhanh chế độ Riêng tư/Công khai
+   */
+  async toggleVisibility(playlistId: string, currentUser: IUser) {
+    const playlist = await Playlist.findOne({
+      _id: playlistId,
+      user: currentUser._id,
+    });
+    if (!playlist)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy playlist");
+
+    playlist.visibility =
+      playlist.visibility === "public" ? "private" : "public";
+    await playlist.save();
 
     return playlist;
   }

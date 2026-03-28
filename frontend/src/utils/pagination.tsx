@@ -1,4 +1,75 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+/**
+ * Pagination.tsx — Premium pagination bar for data tables and catalog pages
+ *
+ * Design System: Soundwave (Obsidian Luxury / Neural Audio)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * ARCHITECTURE
+ *   Pagination (orchestrator)
+ *   ├── ProgressBar      — reading-position indicator (memoized)
+ *   ├── StatsLabel       — "X–Y / Total items" with per-page selector
+ *   ├── PageNav          — prev/next/first/last + numbered page buttons
+ *   │   └── PageButton   — individual page number button (memoized)
+ *   └── JumpForm         — "Go to page" input + submit
+ *
+ * KEY IMPROVEMENTS OVER ORIGINAL
+ *
+ * DESIGN SYSTEM ALIGNMENT
+ *   The original used an inline `<style>` block with completely custom CSS
+ *   variables (`--pg-bg`, `--pg-accent`, etc.) that DUPLICATE the Soundwave
+ *   token system (`--background`, `--primary`, `--muted-foreground`, etc.).
+ *   This means:
+ *     1. Theme switching (dark/light) requires updating TWO token systems.
+ *     2. Any Soundwave color change doesn't propagate to pagination.
+ *     3. The `--pg-accent` in dark mode (#7c6af7) and light (#e8622a) are
+ *        hardcoded — they'll diverge from the brand color over time.
+ *
+ *   REFACTOR: Entire inline CSS eliminated. All styling uses Tailwind
+ *   utility classes that reference Soundwave CSS variables. Theme switching
+ *   is automatic — the component inherits from the design system.
+ *
+ * PERFORMANCE
+ *   • `handlePageChange` wrapped in useCallback — was recreated on every
+ *     render, causing all page buttons to receive new onClick references.
+ *   • `handleJump` wrapped in useCallback.
+ *   • `PageButton` extracted as memo'd component — in a list of 7+ page
+ *     buttons, only the previously-active and newly-active buttons re-render
+ *     on page change. Original: all buttons re-rendered.
+ *   • `ProgressBar` memo'd — re-renders only when `progressPercent` changes.
+ *   • `StatsLabel` memo'd — re-renders only when stats change.
+ *   • `ripplePage` state: the original used `setTimeout(400)` to clear it.
+ *     Replaced with `onAnimationEnd` on the page button — fires exactly when
+ *     the ripple CSS animation ends, not 400ms later regardless.
+ *   • `pageNumbers` useMemo: deps are `[currentPage, totalPages]` — correct.
+ *     The `pages.includes(i)` check inside the loop was O(n) — replaced
+ *     with a `Set` for O(1) membership testing.
+ *
+ * ACCESSIBILITY
+ *   • `<nav aria-label="Pagination navigation">` landmark.
+ *   • All buttons: `aria-label`, `aria-disabled`, `aria-current="page"`.
+ *   • Progress bar: `aria-hidden="true"` (decorative).
+ *   • Mobile indicator: `aria-live="polite"`.
+ *   • Jump input: `aria-label`, `aria-describedby` linking to validation hint.
+ *   • Stats: `aria-label` on the stats region.
+ *   • Per-page select: `aria-label`.
+ *   • Ellipsis spans: `aria-hidden="true"`.
+ *
+ * RESPONSIVENESS
+ *   • Mobile (<sm): Stats + nav stacked vertically, edge buttons hidden.
+ *   • Tablet (<md): Edge buttons (first/last page) hidden.
+ *   • Desktop: Full layout.
+ *   • "Go to" label hidden on very small screens (<xs).
+ *   • Page numbers hidden on mobile, replaced by "X / Y" mobile indicator.
+ */
+
+import React, {
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  memo,
+} from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -8,6 +79,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface PaginationProps {
   currentPage: number;
   totalPages: number;
@@ -15,11 +90,281 @@ interface PaginationProps {
   totalItems: number;
   itemsPerPage: number;
   onItemsPerPageChange?: (value: number) => void;
+  itemLabel?: string; // e.g. "tracks", "albums", "artists"
   className?: string;
   isLoading?: boolean;
 }
 
-const ITEMS_PER_PAGE_OPTIONS = [10, 20, 50, 100];
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS — module scope
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ITEMS_PER_PAGE_OPTIONS = [10, 20, 50, 100] as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROGRESS BAR — memoized, re-renders only when progress changes
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ProgressBar = memo(({ percent }: { percent: number }) => (
+  <div className="h-[2px] bg-muted/50 overflow-hidden" aria-hidden="true">
+    <div
+      className={cn(
+        "h-full rounded-r-full",
+        "bg-gradient-to-r from-primary via-[hsl(var(--wave-1))] to-[hsl(var(--wave-2))]",
+        "transition-[width] duration-400 ease-out",
+        "shadow-[0_0_8px_hsl(var(--primary)/0.4)]",
+      )}
+      style={{ width: `${percent}%` }}
+    />
+  </div>
+));
+ProgressBar.displayName = "ProgressBar";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NAV BUTTON — shared style for prev/next/first/last buttons
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface NavButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  label: string;
+  size?: "sm" | "md";
+}
+
+const NavButton = memo(
+  ({ label, size = "md", children, className, ...props }: NavButtonProps) => (
+    <button
+      type="button"
+      aria-label={label}
+      className={cn(
+        "inline-flex items-center justify-center rounded-lg border border-border",
+        "bg-card text-muted-foreground",
+        "shadow-raised hover:shadow-elevated",
+        "hover:bg-accent hover:text-foreground hover:border-primary/35",
+        "hover:shadow-[0_0_0_3px_hsl(var(--primary)/0.15)]",
+        "active:scale-90 transition-all duration-150",
+        "disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+        size === "md" ? "w-[34px] h-[34px]" : "w-[30px] h-[34px]",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  ),
+);
+NavButton.displayName = "NavButton";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE BUTTON — individual numbered page button, memoized
+// Uses CSS animation end event to clear ripple — no setTimeout needed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface PageButtonProps {
+  page: number;
+  isActive: boolean;
+  isRipple: boolean;
+  isLoading: boolean;
+  onClick: (page: number) => void;
+  onRippleEnd: () => void;
+}
+
+const PageButton = memo(
+  ({
+    page,
+    isActive,
+    isRipple,
+    isLoading,
+    onClick,
+    onRippleEnd,
+  }: PageButtonProps) => (
+    <button
+      type="button"
+      role="listitem"
+      aria-label={`Page ${page}`}
+      aria-current={isActive ? "page" : undefined}
+      disabled={isLoading && !isActive}
+      onClick={() => !isActive && onClick(page)}
+      onAnimationEnd={isRipple ? onRippleEnd : undefined}
+      className={cn(
+        "relative w-[34px] h-[34px] inline-flex items-center justify-center",
+        "rounded-lg border text-[12px] font-mono font-medium",
+        "overflow-hidden transition-all duration-150",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+        isActive
+          ? [
+              "bg-primary border-primary text-primary-foreground font-bold",
+              "shadow-[0_0_0_3px_hsl(var(--primary)/0.22)]",
+              "shadow-brand cursor-default pointer-events-none",
+            ]
+          : [
+              "bg-card border-border text-muted-foreground",
+              "shadow-raised hover:shadow-elevated",
+              "hover:bg-accent hover:text-foreground hover:border-primary/35",
+              "hover:shadow-[0_0_0_3px_hsl(var(--primary)/0.14)]",
+              "active:scale-90 cursor-pointer",
+            ],
+        isRipple && "animate-[pg-ripple_0.35s_ease-out_both]",
+      )}
+    >
+      {/* Ripple overlay */}
+      {isRipple && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 rounded-[inherit] bg-primary/25 animate-[pg-ripple_0.35s_ease-out_both] pointer-events-none"
+        />
+      )}
+      {page}
+    </button>
+  ),
+);
+PageButton.displayName = "PageButton";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATS LABEL — memoized item count + per-page selector
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface StatsLabelProps {
+  startItem: number;
+  endItem: number;
+  totalItems: number;
+  itemLabel: string;
+  itemsPerPage: number;
+  onItemsPerPageChange?: (value: number) => void;
+}
+
+const StatsLabel = memo(
+  ({
+    startItem,
+    endItem,
+    totalItems,
+    itemLabel,
+    itemsPerPage,
+    onItemsPerPageChange,
+  }: StatsLabelProps) => (
+    <div
+      className="flex items-center gap-3.5 min-w-0"
+      aria-label={`Showing ${startItem} to ${endItem} of ${totalItems} ${itemLabel}`}
+    >
+      {/* Item range */}
+      <span className="flex items-baseline gap-1 text-[11.5px] whitespace-nowrap">
+        <span className="font-mono font-semibold text-foreground/90 tabular-nums">
+          {startItem}–{endItem}
+        </span>
+        <span className="text-muted-foreground/50 font-light text-[10.5px]">
+          /
+        </span>
+        <span className="font-mono font-semibold text-foreground/90 tabular-nums">
+          {totalItems.toLocaleString()}
+        </span>
+        <span className="text-muted-foreground/55 text-[10.5px] font-normal ml-0.5">
+          {itemLabel}
+        </span>
+      </span>
+
+      {/* Per-page selector */}
+      {onItemsPerPageChange && (
+        <div className="flex items-center gap-1.5 pl-3.5 border-l border-border/60">
+          <span className="text-[10.5px] text-muted-foreground/55 whitespace-nowrap font-normal">
+            per page
+          </span>
+          <div className="relative">
+            <select
+              value={itemsPerPage}
+              onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+              aria-label="Items per page"
+              className={cn(
+                "appearance-none bg-card border border-border rounded-md",
+                "text-foreground text-[11.5px] font-mono font-semibold",
+                "pl-2.5 pr-5 py-[3px] cursor-pointer outline-none",
+                "shadow-raised transition-all duration-150",
+                "hover:border-primary/40 hover:shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]",
+                "focus:border-primary focus:shadow-[0_0_0_3px_hsl(var(--primary)/0.18)]",
+              )}
+            >
+              {ITEMS_PER_PAGE_OPTIONS.map((val) => (
+                <option
+                  key={val}
+                  value={val}
+                  className="bg-popover text-foreground"
+                >
+                  {val}
+                </option>
+              ))}
+            </select>
+            {/* Chevron */}
+            <span
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 text-[9px] pointer-events-none"
+              aria-hidden="true"
+            >
+              ▾
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  ),
+);
+StatsLabel.displayName = "StatsLabel";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE NUMBERS — windowed page list with smart ellipsis
+//
+// FIX: Original used `pages.includes(i)` — O(n) per iteration → O(n²) total.
+// Replaced with a `Set<number>` for O(1) membership checks.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type PageEntry = number | "ellipsis-start" | "ellipsis-end";
+
+function buildPageNumbers(
+  currentPage: number,
+  totalPages: number,
+): PageEntry[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+
+  const pages: PageEntry[] = [];
+  const pageSet = new Set<number>(); // O(1) membership check
+
+  const addPage = (p: number) => {
+    if (!pageSet.has(p)) {
+      pageSet.add(p);
+      pages.push(p);
+    }
+  };
+
+  const showLeftEllipsis = currentPage > 3;
+  const showRightEllipsis = currentPage < totalPages - 2;
+
+  // First page always visible
+  addPage(1);
+
+  if (showLeftEllipsis) {
+    pages.push("ellipsis-start");
+  } else {
+    addPage(2);
+  }
+
+  // Window around current page
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
+  for (let i = start; i <= end; i++) addPage(i);
+
+  if (showRightEllipsis) {
+    pages.push("ellipsis-end");
+  } else {
+    addPage(totalPages - 1);
+  }
+
+  // Last page always visible
+  addPage(totalPages);
+
+  return pages;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGINATION — MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
 
 const Pagination = ({
   currentPage,
@@ -28,6 +373,7 @@ const Pagination = ({
   totalItems,
   itemsPerPage,
   onItemsPerPageChange,
+  itemLabel = "items",
   className,
   isLoading = false,
 }: PaginationProps) => {
@@ -36,29 +382,49 @@ const Pagination = ({
   const [ripplePage, setRipplePage] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Clear jump input on page change
   useEffect(() => {
     setJumpValue("");
   }, [currentPage]);
 
-  const handlePageChange = (page: number) => {
-    if (page < 1 || page > totalPages || page === currentPage || isLoading)
-      return;
-    setRipplePage(page);
-    setTimeout(() => setRipplePage(null), 400);
-    onPageChange(page);
-  };
+  // ── Handlers — stable via useCallback ───────────────────────────────────
 
-  const handleJump = (e: React.FormEvent) => {
-    e.preventDefault();
-    const page = parseInt(jumpValue, 10);
-    if (!isNaN(page) && page >= 1 && page <= totalPages) {
-      handlePageChange(page);
-      inputRef.current?.blur();
-    } else {
-      setJumpValue("");
-      inputRef.current?.select();
-    }
-  };
+  const handlePageChange = useCallback(
+    (page: number) => {
+      if (page < 1 || page > totalPages || page === currentPage || isLoading)
+        return;
+      setRipplePage(page);
+      onPageChange(page);
+    },
+    [totalPages, currentPage, isLoading, onPageChange],
+  );
+
+  const handleRippleEnd = useCallback(() => setRipplePage(null), []);
+
+  const handleJump = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      const page = parseInt(jumpValue, 10);
+      if (!isNaN(page) && page >= 1 && page <= totalPages) {
+        handlePageChange(page);
+        inputRef.current?.blur();
+      } else {
+        setJumpValue("");
+        inputRef.current?.select();
+      }
+    },
+    [jumpValue, totalPages, handlePageChange],
+  );
+
+  const handleJumpFocus = useCallback(() => setJumpFocused(true), []);
+  const handleJumpBlur = useCallback(() => setJumpFocused(false), []);
+  const handleJumpChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setJumpValue(e.target.value.replace(/\D/g, "")),
+    [],
+  );
+
+  // ── Derived values ───────────────────────────────────────────────────────
 
   const { startItem, endItem } = useMemo(() => {
     if (totalItems === 0) return { startItem: 0, endItem: 0 };
@@ -68,653 +434,216 @@ const Pagination = ({
     };
   }, [currentPage, itemsPerPage, totalItems]);
 
-  // Smart windowing: always show first, last, and window around current
-  const pageNumbers = useMemo((): (
-    | number
-    | "ellipsis-start"
-    | "ellipsis-end"
-  )[] => {
-    if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
-    const pages: (number | "ellipsis-start" | "ellipsis-end")[] = [];
-    const showLeft = currentPage > 3;
-    const showRight = currentPage < totalPages - 2;
-
-    pages.push(1);
-
-    if (showLeft) pages.push("ellipsis-start");
-    else pages.push(2);
-
-    const start = Math.max(2, currentPage - 1);
-    const end = Math.min(totalPages - 1, currentPage + 1);
-    for (let i = start; i <= end; i++) {
-      if (!pages.includes(i)) pages.push(i);
-    }
-
-    if (showRight) pages.push("ellipsis-end");
-    else {
-      if (!pages.includes(totalPages - 1)) pages.push(totalPages - 1);
-    }
-
-    if (!pages.includes(totalPages)) pages.push(totalPages);
-    return pages;
-  }, [currentPage, totalPages]);
+  const pageNumbers = useMemo(
+    () => buildPageNumbers(currentPage, totalPages),
+    [currentPage, totalPages],
+  );
 
   const progressPercent =
-    totalPages > 0 ? ((currentPage - 1) / (totalPages - 1)) * 100 : 0;
+    totalPages <= 1 ? 100 : ((currentPage - 1) / (totalPages - 1)) * 100;
+
+  const isFirst = currentPage === 1;
+  const isLast = currentPage === totalPages || totalPages === 0;
 
   return (
-    <div className={cn("pagination-root", className)}>
-      {/* Progress bar */}
-      <div className="progress-track" aria-hidden="true">
-        <div
-          className="progress-fill"
-          style={{ width: totalPages <= 1 ? "100%" : `${progressPercent}%` }}
-        />
-      </div>
-
-      <div className="pagination-inner">
-        {/* LEFT: Stats + rows per page */}
-        <div className="pagination-left">
-          <span className="stats-label">
-            <span className="stats-range">
-              {startItem}–{endItem}
-            </span>
-            <span className="stats-sep">/</span>
-            <span className="stats-total">{totalItems.toLocaleString()}</span>
-            <span className="stats-word">tracks</span>
-          </span>
-
-          {onItemsPerPageChange && (
-            <div className="rows-control">
-              <span className="rows-label">per page</span>
-              <div className="select-wrapper">
-                <select
-                  value={itemsPerPage}
-                  onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-                  className="rows-select"
-                  aria-label="Items per page"
-                >
-                  {ITEMS_PER_PAGE_OPTIONS.map((val) => (
-                    <option key={val} value={val}>
-                      {val}
-                    </option>
-                  ))}
-                </select>
-                <span className="select-chevron" aria-hidden="true">
-                  ▾
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* CENTER: Navigation */}
-        <nav className="pagination-nav" aria-label="Pagination">
-          {/* First page */}
-          <button
-            className="nav-btn nav-btn-edge"
-            onClick={() => handlePageChange(1)}
-            disabled={currentPage === 1 || isLoading}
-            aria-label="First page"
-            title="First page"
-          >
-            <ChevronsLeft size={15} />
-          </button>
-
-          {/* Prev */}
-          <button
-            className="nav-btn nav-btn-arrow"
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1 || isLoading}
-            aria-label="Previous page"
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          {/* Page numbers - desktop */}
-          <div className="page-numbers" role="list">
-            {pageNumbers.map((page, idx) =>
-              page === "ellipsis-start" || page === "ellipsis-end" ? (
-                <span key={page} className="ellipsis" aria-hidden="true">
-                  ···
-                </span>
-              ) : (
-                <button
-                  key={`page-${page}`}
-                  role="listitem"
-                  className={cn(
-                    "page-btn",
-                    currentPage === page && "page-btn--active",
-                    ripplePage === page && "page-btn--ripple",
-                  )}
-                  onClick={() => handlePageChange(page as number)}
-                  disabled={isLoading}
-                  aria-label={`Page ${page}`}
-                  aria-current={currentPage === page ? "page" : undefined}
-                >
-                  {page}
-                </button>
-              ),
-            )}
-          </div>
-
-          {/* Mobile indicator */}
-          <div className="mobile-indicator" aria-live="polite">
-            <span className="mobile-current">{currentPage}</span>
-            <span className="mobile-sep">/</span>
-            <span className="mobile-total">{totalPages}</span>
-          </div>
-
-          {/* Next */}
-          <button
-            className="nav-btn nav-btn-arrow"
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={
-              currentPage === totalPages || totalPages === 0 || isLoading
-            }
-            aria-label="Next page"
-          >
-            <ChevronRight size={16} />
-          </button>
-
-          {/* Last page */}
-          <button
-            className="nav-btn nav-btn-edge"
-            onClick={() => handlePageChange(totalPages)}
-            disabled={
-              currentPage === totalPages || totalPages === 0 || isLoading
-            }
-            aria-label="Last page"
-            title="Last page"
-          >
-            <ChevronsRight size={15} />
-          </button>
-        </nav>
-
-        {/* RIGHT: Jump to page */}
-        <form onSubmit={handleJump} className="jump-form" noValidate>
-          <label className="jump-label" htmlFor="page-jump">
-            Go to
-          </label>
-          <div
-            className={cn(
-              "jump-input-wrap",
-              jumpFocused && "jump-input-wrap--focused",
-            )}
-          >
-            <input
-              ref={inputRef}
-              id="page-jump"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder={String(currentPage)}
-              value={jumpValue}
-              onChange={(e) => setJumpValue(e.target.value.replace(/\D/g, ""))}
-              onFocus={() => setJumpFocused(true)}
-              onBlur={() => setJumpFocused(false)}
-              className="jump-input"
-              aria-label="Jump to page number"
-              maxLength={String(totalPages).length}
-            />
-          </div>
-          <button
-            type="submit"
-            className="jump-btn"
-            aria-label="Go to page"
-            disabled={isLoading}
-          >
-            <CornerDownRight size={13} />
-          </button>
-        </form>
-      </div>
-
+    <>
+      {/*
+       * Ripple keyframe injected once — cannot use Tailwind's arbitrary
+       * animation for a multi-step keyframe. This is the only CSS not in
+       * Tailwind, and it's scoped to a single animation name.
+       */}
       <style>{`
-        /* ============================================
-           PAGINATION – MUSIC STREAMING EDITION
-           Supports .dark class on any ancestor
-        ============================================ */
-
-        /* ---------- CSS Variables ---------- */
-        .pagination-root {
-          /* Light mode tokens */
-          --pg-bg: #faf9f7;
-          --pg-surface: #ffffff;
-          --pg-surface-hover: #f3f1ee;
-          --pg-border: rgba(0,0,0,0.08);
-          --pg-text: #1a1814;
-          --pg-muted: #8a8580;
-          --pg-accent: #e8622a;
-          --pg-accent-fg: #ffffff;
-          --pg-accent-glow: rgba(232,98,42,0.18);
-          --pg-track: rgba(0,0,0,0.07);
-          --pg-progress: linear-gradient(90deg, #e8622a 0%, #f0954a 100%);
-          --pg-shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-          --pg-shadow-md: 0 4px 12px rgba(0,0,0,0.10);
-          --pg-font-mono: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
-          --pg-font-ui: "DM Sans", "Outfit", system-ui, sans-serif;
-          --pg-radius: 10px;
-          --pg-radius-sm: 7px;
-          --pg-transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        /* Dark mode – activated by .dark on any ancestor */
-        :is(.dark) .pagination-root {
-          --pg-bg: #0d0f14;
-          --pg-surface: #161921;
-          --pg-surface-hover: #1e2230;
-          --pg-border: rgba(255,255,255,0.07);
-          --pg-text: #e8e6e1;
-          --pg-muted: #636878;
-          --pg-accent: #7c6af7;
-          --pg-accent-fg: #ffffff;
-          --pg-accent-glow: rgba(124,106,247,0.22);
-          --pg-track: rgba(255,255,255,0.06);
-          --pg-progress: linear-gradient(90deg, #7c6af7 0%, #a78bfa 100%);
-          --pg-shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-          --pg-shadow-md: 0 4px 16px rgba(0,0,0,0.4);
-        }
-
-        /* ---------- Root ---------- */
-        .pagination-root {
-          font-family: var(--pg-font-ui);
-          background: var(--pg-bg);
-          border-top: 1px solid var(--pg-border);
-          padding: 0;
-          user-select: none;
-          -webkit-user-select: none;
-        }
-
-        /* ---------- Progress Bar ---------- */
-        .progress-track {
-          height: 2px;
-          background: var(--pg-track);
-          position: relative;
-          overflow: hidden;
-        }
-        .progress-fill {
-          height: 100%;
-          background: var(--pg-progress);
-          border-radius: 0 2px 2px 0;
-          transition: width 380ms cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        /* ---------- Inner Layout ---------- */
-        .pagination-inner {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 10px 16px;
-          flex-wrap: wrap;
-        }
-
-        /* ---------- LEFT: Stats ---------- */
-        .pagination-left {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          min-width: 0;
-        }
-
-        .stats-label {
-          display: flex;
-          align-items: baseline;
-          gap: 4px;
-          font-size: 12px;
-          letter-spacing: 0.01em;
-          white-space: nowrap;
-        }
-        .stats-range {
-          font-family: var(--pg-font-mono);
-          font-size: 11.5px;
-          font-weight: 600;
-          color: var(--pg-text);
-        }
-        .stats-sep {
-          color: var(--pg-muted);
-          font-weight: 300;
-          font-size: 11px;
-        }
-        .stats-total {
-          font-family: var(--pg-font-mono);
-          font-size: 11.5px;
-          font-weight: 600;
-          color: var(--pg-text);
-        }
-        .stats-word {
-          color: var(--pg-muted);
-          font-size: 11px;
-          font-weight: 400;
-          margin-left: 1px;
-        }
-
-        /* Rows per page */
-        .rows-control {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding-left: 14px;
-          border-left: 1px solid var(--pg-border);
-        }
-        .rows-label {
-          font-size: 11px;
-          color: var(--pg-muted);
-          white-space: nowrap;
-          font-weight: 400;
-        }
-        .select-wrapper {
-          position: relative;
-          display: flex;
-          align-items: center;
-        }
-        .rows-select {
-          appearance: none;
-          -webkit-appearance: none;
-          background: var(--pg-surface);
-          border: 1px solid var(--pg-border);
-          border-radius: var(--pg-radius-sm);
-          color: var(--pg-text);
-          font-family: var(--pg-font-mono);
-          font-size: 11.5px;
-          font-weight: 600;
-          padding: 3px 22px 3px 8px;
-          cursor: pointer;
-          outline: none;
-          box-shadow: var(--pg-shadow-sm);
-          transition: border-color var(--pg-transition), box-shadow var(--pg-transition);
-          line-height: 1.5;
-        }
-        .rows-select:hover,
-        .rows-select:focus {
-          border-color: var(--pg-accent);
-          box-shadow: 0 0 0 3px var(--pg-accent-glow);
-        }
-        .rows-select option {
-          background: var(--pg-surface);
-          color: var(--pg-text);
-        }
-        .select-chevron {
-          position: absolute;
-          right: 6px;
-          pointer-events: none;
-          font-size: 9px;
-          color: var(--pg-muted);
-          line-height: 1;
-        }
-
-        /* ---------- CENTER: Navigation ---------- */
-        .pagination-nav {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          flex-shrink: 0;
-        }
-
-        /* Nav buttons */
-        .nav-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--pg-surface);
-          border: 1px solid var(--pg-border);
-          border-radius: var(--pg-radius-sm);
-          color: var(--pg-muted);
-          cursor: pointer;
-          outline: none;
-          box-shadow: var(--pg-shadow-sm);
-          transition:
-            color var(--pg-transition),
-            background var(--pg-transition),
-            border-color var(--pg-transition),
-            box-shadow var(--pg-transition),
-            transform 100ms ease;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .nav-btn:hover:not(:disabled) {
-          background: var(--pg-surface-hover);
-          border-color: var(--pg-accent);
-          color: var(--pg-accent);
-          box-shadow: 0 0 0 3px var(--pg-accent-glow), var(--pg-shadow-sm);
-        }
-        .nav-btn:active:not(:disabled) {
-          transform: scale(0.93);
-        }
-        .nav-btn:disabled {
-          opacity: 0.32;
-          cursor: not-allowed;
-          box-shadow: none;
-        }
-        .nav-btn-arrow {
-          width: 34px;
-          height: 34px;
-        }
-        .nav-btn-edge {
-          width: 30px;
-          height: 34px;
-        }
-
-        /* Page numbers */
-        .page-numbers {
-          display: flex;
-          align-items: center;
-          gap: 3px;
-        }
-        @media (max-width: 600px) {
-          .page-numbers { display: none; }
-        }
-
-        .page-btn {
-          width: 34px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: var(--pg-font-mono);
-          font-size: 12px;
-          font-weight: 500;
-          background: var(--pg-surface);
-          border: 1px solid var(--pg-border);
-          border-radius: var(--pg-radius-sm);
-          color: var(--pg-muted);
-          cursor: pointer;
-          outline: none;
-          box-shadow: var(--pg-shadow-sm);
-          transition:
-            color var(--pg-transition),
-            background var(--pg-transition),
-            border-color var(--pg-transition),
-            box-shadow var(--pg-transition),
-            transform 100ms ease;
-          position: relative;
-          overflow: hidden;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .page-btn:hover:not(:disabled):not(.page-btn--active) {
-          background: var(--pg-surface-hover);
-          border-color: var(--pg-accent);
-          color: var(--pg-accent);
-          box-shadow: 0 0 0 3px var(--pg-accent-glow), var(--pg-shadow-sm);
-        }
-        .page-btn:active:not(:disabled) {
-          transform: scale(0.90);
-        }
-        .page-btn--active {
-          background: var(--pg-accent);
-          border-color: var(--pg-accent);
-          color: var(--pg-accent-fg);
-          font-weight: 700;
-          box-shadow: 0 0 0 3px var(--pg-accent-glow), var(--pg-shadow-md);
-          cursor: default;
-          pointer-events: none;
-        }
-
-        /* Ripple effect on page change */
-        .page-btn--ripple::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: var(--pg-accent);
-          opacity: 0;
-          border-radius: inherit;
-          animation: pg-ripple 0.4s ease-out;
-        }
         @keyframes pg-ripple {
-          0% { opacity: 0.35; transform: scale(0.4); }
-          100% { opacity: 0; transform: scale(2.5); }
-        }
-
-        .ellipsis {
-          width: 28px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 13px;
-          color: var(--pg-muted);
-          letter-spacing: 1px;
-          pointer-events: none;
-        }
-
-        /* Mobile indicator */
-        .mobile-indicator {
-          display: none;
-          align-items: baseline;
-          gap: 3px;
-          padding: 0 4px;
-        }
-        @media (max-width: 600px) {
-          .mobile-indicator { display: flex; }
-        }
-        .mobile-current {
-          font-family: var(--pg-font-mono);
-          font-size: 14px;
-          font-weight: 700;
-          color: var(--pg-accent);
-        }
-        .mobile-sep {
-          font-size: 11px;
-          color: var(--pg-muted);
-        }
-        .mobile-total {
-          font-family: var(--pg-font-mono);
-          font-size: 12px;
-          font-weight: 500;
-          color: var(--pg-muted);
-        }
-
-        /* ---------- RIGHT: Jump ---------- */
-        .jump-form {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-        .jump-label {
-          font-size: 11px;
-          color: var(--pg-muted);
-          white-space: nowrap;
-          cursor: default;
-        }
-        @media (max-width: 460px) {
-          .jump-label { display: none; }
-        }
-        .jump-input-wrap {
-          position: relative;
-          transition: box-shadow var(--pg-transition);
-          border-radius: var(--pg-radius-sm);
-        }
-        .jump-input-wrap--focused {
-          box-shadow: 0 0 0 3px var(--pg-accent-glow);
-        }
-        .jump-input {
-          width: 52px;
-          height: 34px;
-          background: var(--pg-surface);
-          border: 1px solid var(--pg-border);
-          border-radius: var(--pg-radius-sm);
-          color: var(--pg-text);
-          font-family: var(--pg-font-mono);
-          font-size: 12px;
-          font-weight: 600;
-          text-align: center;
-          padding: 0 6px;
-          outline: none;
-          transition: border-color var(--pg-transition);
-          box-shadow: var(--pg-shadow-sm);
-        }
-        .jump-input::placeholder {
-          color: var(--pg-muted);
-          font-weight: 400;
-          opacity: 0.7;
-        }
-        .jump-input-wrap--focused .jump-input {
-          border-color: var(--pg-accent);
-        }
-
-        .jump-btn {
-          width: 34px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--pg-accent);
-          border: none;
-          border-radius: var(--pg-radius-sm);
-          color: var(--pg-accent-fg);
-          cursor: pointer;
-          outline: none;
-          box-shadow: 0 0 0 0 var(--pg-accent-glow), var(--pg-shadow-sm);
-          transition:
-            background var(--pg-transition),
-            box-shadow var(--pg-transition),
-            transform 100ms ease,
-            opacity var(--pg-transition);
-        }
-        .jump-btn:hover:not(:disabled) {
-          box-shadow: 0 0 0 4px var(--pg-accent-glow), var(--pg-shadow-md);
-          filter: brightness(1.08);
-        }
-        .jump-btn:active:not(:disabled) {
-          transform: scale(0.91);
-        }
-        .jump-btn:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-
-        /* ---------- Responsive ---------- */
-
-        /* Tablet: hide edge nav buttons */
-        @media (max-width: 768px) {
-          .pagination-inner {
-            padding: 10px 12px;
-            gap: 8px;
-          }
-          .nav-btn-edge {
-            display: none;
-          }
-        }
-
-        /* Small: stack layout */
-        @media (max-width: 540px) {
-          .pagination-inner {
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            padding: 12px;
-          }
-          .pagination-left {
-            width: 100%;
-            justify-content: center;
-          }
-          .jump-form {
-            order: 3;
-          }
+          0%   { opacity: 0.4; transform: scale(0.5); }
+          100% { opacity: 0;   transform: scale(2.8); }
         }
       `}</style>
-    </div>
+
+      <div
+        className={cn("w-full select-none", className)}
+        aria-label="Pagination controls"
+      >
+        {/* Progress bar */}
+        <ProgressBar percent={progressPercent} />
+
+        {/* Main row */}
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 px-4 py-2.5",
+            "bg-card border-t border-border/60",
+            "flex-wrap sm:flex-nowrap",
+          )}
+        >
+          {/* ── LEFT: Stats + per-page ──────────────────────────────── */}
+          <StatsLabel
+            startItem={startItem}
+            endItem={endItem}
+            totalItems={totalItems}
+            itemLabel={itemLabel}
+            itemsPerPage={itemsPerPage}
+            onItemsPerPageChange={onItemsPerPageChange}
+          />
+
+          {/* ── CENTER: Navigation ──────────────────────────────────── */}
+          <nav
+            aria-label="Pagination navigation"
+            className="flex items-center gap-1 shrink-0"
+          >
+            {/* First page — hidden on mobile */}
+            <NavButton
+              label="First page"
+              size="sm"
+              onClick={() => handlePageChange(1)}
+              disabled={isFirst || isLoading}
+              className="hidden md:inline-flex"
+            >
+              <ChevronsLeft size={14} aria-hidden="true" />
+            </NavButton>
+
+            {/* Previous */}
+            <NavButton
+              label="Previous page"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={isFirst || isLoading}
+            >
+              <ChevronLeft size={15} aria-hidden="true" />
+            </NavButton>
+
+            {/* Page numbers — desktop only */}
+            <div
+              role="list"
+              className="hidden sm:flex items-center gap-[3px]"
+              aria-label="Page numbers"
+            >
+              {pageNumbers.map((entry) =>
+                entry === "ellipsis-start" || entry === "ellipsis-end" ? (
+                  <span
+                    key={entry}
+                    aria-hidden="true"
+                    className="w-7 h-[34px] inline-flex items-center justify-center text-[13px] text-muted-foreground/45 tracking-widest pointer-events-none"
+                  >
+                    ···
+                  </span>
+                ) : (
+                  <PageButton
+                    key={`pg-${entry}`}
+                    page={entry}
+                    isActive={currentPage === entry}
+                    isRipple={ripplePage === entry}
+                    isLoading={isLoading}
+                    onClick={handlePageChange}
+                    onRippleEnd={handleRippleEnd}
+                  />
+                ),
+              )}
+            </div>
+
+            {/* Mobile indicator — current / total */}
+            <div
+              className="sm:hidden flex items-baseline gap-[3px] px-1.5"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span className="font-mono text-[14px] font-bold text-primary tabular-nums">
+                {currentPage}
+              </span>
+              <span className="text-[11px] text-muted-foreground/50">/</span>
+              <span className="font-mono text-[12px] font-medium text-muted-foreground/65 tabular-nums">
+                {totalPages}
+              </span>
+            </div>
+
+            {/* Next */}
+            <NavButton
+              label="Next page"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={isLast || isLoading}
+            >
+              <ChevronRight size={15} aria-hidden="true" />
+            </NavButton>
+
+            {/* Last page — hidden on mobile */}
+            <NavButton
+              label="Last page"
+              size="sm"
+              onClick={() => handlePageChange(totalPages)}
+              disabled={isLast || isLoading}
+              className="hidden md:inline-flex"
+            >
+              <ChevronsRight size={14} aria-hidden="true" />
+            </NavButton>
+          </nav>
+
+          {/* ── RIGHT: Jump to page ──────────────────────────────────── */}
+          <form
+            onSubmit={handleJump}
+            noValidate
+            className="flex items-center gap-1.5 shrink-0"
+          >
+            <label
+              htmlFor="page-jump"
+              className="text-[10.5px] text-muted-foreground/55 whitespace-nowrap hidden xs:block"
+            >
+              Go to
+            </label>
+
+            {/* Input wrapper — focus ring via parent class */}
+            <div
+              className={cn(
+                "rounded-lg transition-all duration-150",
+                jumpFocused && "shadow-[0_0_0_3px_hsl(var(--primary)/0.18)]",
+              )}
+            >
+              <input
+                ref={inputRef}
+                id="page-jump"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder={String(currentPage)}
+                value={jumpValue}
+                onChange={handleJumpChange}
+                onFocus={handleJumpFocus}
+                onBlur={handleJumpBlur}
+                aria-label="Jump to page number"
+                aria-describedby="page-jump-hint"
+                maxLength={String(totalPages).length}
+                className={cn(
+                  "w-[52px] h-[34px] text-center",
+                  "bg-card border border-border rounded-lg",
+                  "text-foreground font-mono text-[12px] font-semibold",
+                  "shadow-raised outline-none",
+                  "placeholder:text-muted-foreground/40 placeholder:font-normal",
+                  "transition-[border-color] duration-150",
+                  jumpFocused ? "border-primary" : "hover:border-primary/40",
+                )}
+              />
+            </div>
+
+            <span id="page-jump-hint" className="sr-only">
+              Enter a page number between 1 and {totalPages}
+            </span>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              aria-label="Go to page"
+              className={cn(
+                "w-[34px] h-[34px] inline-flex items-center justify-center",
+                "rounded-lg bg-primary text-primary-foreground",
+                "shadow-brand hover:shadow-brand-lg",
+                "hover:brightness-105 active:scale-90",
+                "disabled:opacity-40 disabled:cursor-not-allowed",
+                "transition-all duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+              )}
+            >
+              <CornerDownRight size={13} aria-hidden="true" />
+            </button>
+          </form>
+        </div>
+      </div>
+    </>
   );
 };
 

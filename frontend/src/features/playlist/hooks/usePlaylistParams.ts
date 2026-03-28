@@ -56,7 +56,7 @@ export const usePlaylistParams = (initialLimit = 12) => {
   const handleFilterChange = useCallback(
     <K extends keyof PlaylistFilterParams>(
       key: K,
-      value: PlaylistFilterParams[K],
+      value: PlaylistFilterParams[K] | null,
     ) => {
       setParams({ [key]: value, page: 1 });
     },

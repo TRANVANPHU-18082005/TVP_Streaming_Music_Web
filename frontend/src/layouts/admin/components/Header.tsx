@@ -1,5 +1,4 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
 import { Bell, Menu, Search } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ setIsSidebarOpen }) => {
   const { user } = useAppSelector((state) => state.auth);
-  const navigate = useNavigate();
 
   return (
     <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur-md transition-all lg:px-8">
@@ -53,7 +51,7 @@ const Header: React.FC<HeaderProps> = ({ setIsSidebarOpen }) => {
 
         <div className="flex items-center gap-2">
           <ModeToggle />
-          {user && <UserDropdown user={user} navigate={navigate} />}
+          {user && <UserDropdown user={user}/>}
         </div>
       </div>
     </header>

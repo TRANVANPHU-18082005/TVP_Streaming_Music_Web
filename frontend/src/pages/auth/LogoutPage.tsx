@@ -6,6 +6,7 @@ import authApi from "@/features/auth/api/authApi";
 import { logout } from "@/features";
 import { VinylLoader } from "@/components/ui/MusicLoadingEffects";
 import { useAppDispatch } from "@/store/hooks";
+import { persistor } from "@/store/store";
 
 const LogoutPage = () => {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ const LogoutPage = () => {
       } finally {
         // 2. Xóa State trong Redux (Quan trọng nhất)
         dispatch(logout());
-
+        await persistor.purge();
         // 3. Thông báo nhẹ
         toast.success("Đã đăng xuất thành công");
 

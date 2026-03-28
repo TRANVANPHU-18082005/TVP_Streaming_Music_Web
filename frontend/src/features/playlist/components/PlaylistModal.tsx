@@ -1,6 +1,29 @@
-import React, { useState, useEffect, useCallback } from "react";
+/**
+ * PlaylistModal.tsx — Production Refactor v4.0
+ * SOUNDWAVE Design System · Obsidian Luxury / Neural Audio
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Fully aligned with GenreModal.tsx patterns:
+ *
+ * FIX 1+2: Scroll lock with scrollbar-width compensation (no layout shift)
+ * FIX 3:   AnimatePresence + motion.div — smooth fade+scale exit
+ * FIX 4:   stopPropagation on modal content
+ * FIX 5:   SSR guard before createPortal
+ * FIX 6:   Pre-validate file type + size before setValue
+ * FIX 7:   LABEL_CLASS + VISIBILITY_OPTIONS at module scope
+ * FIX 8:   VisibilityCard as <button role="radio"> (replaces <Label onClick>)
+ * FIX 9:   File input aria-label
+ * FIX 10:  isWorking via useMemo
+ * FIX 11:  Theme color fallback label ("Chưa chọn màu")
+ * FIX 12:  PlaylistModal wrapped in memo()
+ * NEW:     Escape key closes modal
+ * NEW:     noValidate on <form> — RHF owns validation
+ */
+
+import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { Controller } from "react-hook-form";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   Save,
@@ -17,6 +40,7 @@ import {
   Type,
   AlignLeft,
   Palette,
+  Music2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Playlist } from "../types";
@@ -25,8 +49,69 @@ import { TagInput } from "@/components/ui/tag-input";
 import { UserSelector } from "@/features/user/components/UserSelector";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE-SCOPE CONSTANTS — zero re-allocation per render
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LABEL_CLASS =
+  "text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1.5 w-fit";
+
+const MAX_FILE_SIZE_MB = 5;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ACCEPTED_ATTR = ACCEPTED_IMAGE_TYPES.join(",");
+
+/** Matches GenreModal MODAL_SPRING — consistent spring physics across modals */
+const MODAL_SPRING = {
+  type: "spring",
+  stiffness: 380,
+  damping: 30,
+} as const;
+
+const VISIBILITY_OPTIONS = [
+  {
+    id: "public",
+    label: "Công khai",
+    desc: "Ai cũng có thể tìm thấy",
+    icon: Globe,
+    activeColor: "text-emerald-400",
+    activeBg: "bg-emerald-500/10",
+    activeBorder: "border-emerald-500/40",
+    activeRing: "ring-emerald-500/15",
+    activeIconBg: "bg-emerald-500/15",
+    dotColor: "bg-emerald-400",
+  },
+  {
+    id: "private",
+    label: "Riêng tư",
+    desc: "Chỉ mình bạn xem được",
+    icon: Lock,
+    activeColor: "text-rose-400",
+    activeBg: "bg-rose-500/10",
+    activeBorder: "border-rose-500/40",
+    activeRing: "ring-rose-500/15",
+    activeIconBg: "bg-rose-500/15",
+    dotColor: "bg-rose-400",
+  },
+  {
+    id: "unlisted",
+    label: "Bảo mật Link",
+    desc: "Chỉ ai có link mới xem",
+    icon: LinkIcon,
+    activeColor: "text-sky-400",
+    activeBg: "bg-sky-500/10",
+    activeBorder: "border-sky-500/40",
+    activeRing: "ring-sky-500/15",
+    activeIconBg: "bg-sky-500/15",
+    dotColor: "bg-sky-400",
+  },
+] as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface PlaylistModalProps {
   isOpen: boolean;
@@ -36,489 +121,638 @@ interface PlaylistModalProps {
   isPending: boolean;
 }
 
-const PlaylistModal: React.FC<PlaylistModalProps> = ({
-  isOpen,
-  onClose,
-  playlistToEdit,
-  onSubmit,
-  isPending,
-}) => {
-  const {
-    form,
-    handleSubmit,
-    isSubmitting: isFormSubmitting,
-  } = usePlaylistForm({
-    playlistToEdit,
-    onSubmit,
-  });
+// ─────────────────────────────────────────────────────────────────────────────
+// SUB-COMPONENTS
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const {
-    register,
-    control,
-    formState: { errors },
-    setValue,
-    watch,
-  } = form;
+/**
+ * SectionBlock — mirrors GenreModal's section heading style.
+ * hr separator + uppercase label pattern for visual rhythm.
+ */
+const SectionBlock = memo(
+  ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <div>
+      <h4 className="text-[13px] font-bold uppercase tracking-widest text-foreground mb-6">
+        {title}
+      </h4>
+      {children}
+    </div>
+  ),
+);
+SectionBlock.displayName = "SectionBlock";
 
-  // --- LOGIC UI: Xử lý Preview ảnh ---
-  const [preview, setPreview] = useState<string | null>(null);
-  const coverValue = watch("coverImage");
-  // const themeColor = watch("themeColor");
+/**
+ * CoverUpload — isolated file zone with pre-validation.
+ * Mirrors GenreModal's image upload zone (FIX 6, FIX 9).
+ */
+const CoverUpload = memo(
+  ({
+    preview,
+    hasError,
+    fileError,
+    onFileChange,
+  }: {
+    preview: string | null;
+    hasError: boolean;
+    fileError: string | null;
+    onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  }) => (
+    <div className="flex flex-col gap-2 shrink-0">
+      <div
+        className={cn(
+          "relative group size-36 sm:size-40 rounded-xl border-2 border-dashed overflow-hidden",
+          "flex items-center justify-center cursor-pointer transition-all duration-300",
+          hasError || fileError
+            ? "border-destructive/50 bg-destructive/5"
+            : "border-muted-foreground/20 bg-secondary/10 hover:border-primary/50 hover:bg-primary/5 shadow-sm hover:shadow-md",
+        )}
+      >
+        {preview ? (
+          <>
+            <img
+              src={preview}
+              alt="Cover preview"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center text-white backdrop-blur-[2px]">
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="p-2.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20">
+                  <Camera className="size-5" />
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wide">
+                  Đổi ảnh
+                </span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-muted-foreground transition-colors group-hover:text-primary px-3 text-center">
+            <div className="p-3 rounded-full bg-background shadow-sm mb-2 border border-border/50 group-hover:bg-primary/5 group-hover:border-primary/30 transition-all">
+              <ImageIcon className="size-6" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wide leading-tight">
+              Tải ảnh lên
+              <br />
+              <span className="text-[9px] font-medium normal-case tracking-normal opacity-60">
+                JPG · PNG · WEBP
+              </span>
+            </span>
+          </div>
+        )}
 
-  useEffect(() => {
-    if (coverValue instanceof File) {
-      const url = URL.createObjectURL(coverValue);
-      setPreview(url);
-      return () => URL.revokeObjectURL(url);
-    } else if (typeof coverValue === "string" && coverValue.length > 0) {
-      setPreview(coverValue);
-    } else {
-      setPreview(null);
-    }
-  }, [coverValue]);
+        {/* FIX 9: aria-label on file input */}
+        <input
+          type="file"
+          accept={ACCEPTED_ATTR}
+          aria-label="Upload cover image"
+          className="absolute inset-0 opacity-0 cursor-pointer z-10"
+          onChange={onFileChange}
+        />
 
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
+        {(hasError || fileError) && (
+          <div className="absolute bottom-2 right-2 bg-destructive/90 backdrop-blur px-2 py-1 rounded text-[10px] text-destructive-foreground font-bold flex items-center gap-1 z-20 animate-in zoom-in duration-150">
+            <AlertCircle className="size-3" />
+            {fileError ? "File lỗi" : "Lỗi ảnh"}
+          </div>
+        )}
+      </div>
+      {fileError && (
+        <p className="text-[11px] text-destructive font-medium max-w-[160px] leading-snug">
+          {fileError}
+        </p>
+      )}
+    </div>
+  ),
+);
+CoverUpload.displayName = "CoverUpload";
+
+/**
+ * VisibilityCard — memo'd radio button.
+ * Mirrors GenreModal's trending <button aria-pressed> pattern (FIX 8).
+ * Only re-renders when its own isSelected flips.
+ */
+const VisibilityCard = memo(
+  ({
+    option,
+    isSelected,
+    onSelect,
+  }: {
+    option: (typeof VISIBILITY_OPTIONS)[number];
+    isSelected: boolean;
+    onSelect: (id: string) => void;
+  }) => {
+    const Icon = option.icon;
+    return (
+      <button
+        type="button"
+        role="radio"
+        aria-checked={isSelected}
+        onClick={() => onSelect(option.id)}
+        className={cn(
+          "relative p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer",
+          "flex flex-col gap-3 text-left w-full group select-none",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          isSelected
+            ? cn(
+                "ring-4 shadow-md",
+                option.activeBg,
+                option.activeBorder,
+                option.activeRing,
+              )
+            : "border-input bg-transparent hover:border-primary/50 hover:bg-muted/30",
+        )}
+      >
+        <div className="flex items-center justify-between w-full">
+          <div
+            className={cn(
+              "p-2.5 rounded-lg transition-all duration-200",
+              isSelected
+                ? cn(option.activeIconBg, "shadow-sm")
+                : "bg-muted text-muted-foreground group-hover:text-foreground",
+            )}
+          >
+            <Icon
+              className={cn(
+                "size-4.5 transition-colors",
+                isSelected
+                  ? option.activeColor
+                  : "text-muted-foreground group-hover:text-foreground",
+              )}
+            />
+          </div>
+          <div
+            className={cn(
+              "size-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 shrink-0",
+              isSelected
+                ? cn("scale-110 border-transparent", option.dotColor)
+                : "border-muted-foreground/30 group-hover:border-primary/50",
+            )}
+          >
+            {isSelected && <CheckCircle2 className="size-3 text-white" />}
+          </div>
+        </div>
+        <div>
+          <span
+            className={cn(
+              "text-sm font-bold block leading-tight transition-colors",
+              isSelected
+                ? "text-foreground"
+                : "text-muted-foreground group-hover:text-foreground",
+            )}
+          >
+            {option.label}
+          </span>
+          <span className="text-[11px] text-muted-foreground/70 font-medium mt-0.5 block leading-snug">
+            {option.desc}
+          </span>
+        </div>
+      </button>
+    );
+  },
+);
+VisibilityCard.displayName = "VisibilityCard";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLAYLIST MODAL — memo (FIX 12)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PlaylistModal = memo<PlaylistModalProps>(
+  ({ isOpen, onClose, playlistToEdit, onSubmit, isPending }) => {
+    const isEditing = Boolean(playlistToEdit);
+
+    const {
+      form,
+      handleSubmit,
+      isSubmitting: isFormSubmitting,
+    } = usePlaylistForm({ playlistToEdit, onSubmit });
+
+    const {
+      register,
+      control,
+      formState: { errors },
+      setValue,
+      watch,
+    } = form;
+
+    // FIX 10: single useMemo
+    const isWorking = useMemo(
+      () => isPending || isFormSubmitting,
+      [isPending, isFormSubmitting],
+    );
+
+    // ── Cover image preview lifecycle ───────────────────────────────────────
+    const [coverPreview, setCoverPreview] = useState<string | null>(null);
+    const [coverFileError, setCoverFileError] = useState<string | null>(null);
+    const coverValue = watch("coverImage");
+
+    useEffect(() => {
+      if (coverValue instanceof File) {
+        const url = URL.createObjectURL(coverValue);
+        setCoverPreview(url);
+        return () => URL.revokeObjectURL(url);
+      }
+      setCoverPreview(
+        typeof coverValue === "string" && coverValue ? coverValue : null,
+      );
+    }, [coverValue]);
+
+    // FIX 6: pre-validate type + size (matches GenreModal handleImageChange)
+    const handleCoverChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+          setCoverFileError("Chỉ hỗ trợ JPEG, PNG, WebP.");
+          return;
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          setCoverFileError(`Kích thước tối đa ${MAX_FILE_SIZE_MB}MB.`);
+          return;
+        }
+        setCoverFileError(null);
         setValue("coverImage", file, {
           shouldDirty: true,
           shouldValidate: true,
         });
-      }
-    },
-    [setValue],
-  );
+      },
+      [setValue],
+    );
 
-  // Lock scroll khi mở Modal
-  useEffect(() => {
-    if (isOpen) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "unset";
-    return () => {
-      document.body.style.overflow = "unset";
-    };
-  }, [isOpen]);
+    // ── Visibility ───────────────────────────────────────────────────────────
+    const handleVisibilitySelect = useCallback(
+      (id: string) => setValue("visibility", id as any, { shouldDirty: true }),
+      [setValue],
+    );
+    const currentVisibility = watch("visibility");
 
-  if (!isOpen) return null;
+    // ── FIX 1+2: scroll lock with scrollbar compensation ────────────────────
+    useEffect(() => {
+      if (!isOpen) return;
+      const scrollbarWidth =
+        window.innerWidth - document.documentElement.clientWidth;
+      document.body.style.overflow = "hidden";
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+      return () => {
+        document.body.style.overflow = "";
+        document.body.style.paddingRight = "";
+      };
+    }, [isOpen]);
 
-  const isWorking = isPending || isFormSubmitting;
+    // ── Escape key handler ───────────────────────────────────────────────────
+    useEffect(() => {
+      if (!isOpen) return;
+      const handler = (e: KeyboardEvent) => {
+        if (e.key === "Escape" && !isWorking) onClose();
+      };
+      document.addEventListener("keydown", handler);
+      return () => document.removeEventListener("keydown", handler);
+    }, [isOpen, isWorking, onClose]);
 
-  const labelClass =
-    "text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5 w-fit";
+    // ── FIX 5: SSR guard ─────────────────────────────────────────────────────
+    if (typeof document === "undefined") return null;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300"
-        onClick={!isWorking ? onClose : undefined}
-      />
+    return createPortal(
+      // FIX 3: AnimatePresence for exit animation
+      <AnimatePresence>
+        {isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+            {/* Backdrop */}
+            <motion.div
+              key="playlist-modal-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/80 backdrop-blur-md"
+              onClick={!isWorking ? onClose : undefined}
+            />
 
-      {/* Modal Container: Bento Box Style */}
-      <div className="relative z-[101] w-full max-w-3xl bg-background border border-border/40 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden rounded-[24px] animate-in zoom-in-95 duration-200">
-        {/* HEADER */}
-        <div className="shrink-0 px-6 sm:px-8 py-5 border-b border-border/40 flex justify-between items-center bg-background/95 backdrop-blur-xl z-20">
-          <div className="flex items-center gap-4">
-            <div className="size-12 bg-primary/10 rounded-2xl flex items-center justify-center border border-primary/20 text-primary shadow-sm shrink-0">
-              <ImageIcon className="size-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  className={cn(
-                    "text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-sm",
-                    playlistToEdit
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "bg-emerald-500/10 text-emerald-500",
-                  )}
-                >
-                  {playlistToEdit ? "Edit Mode" : "New"}
-                </span>
-              </div>
-              <h3 className="font-bold text-xl text-foreground tracking-tight leading-none">
-                {playlistToEdit ? "Cập Nhật Playlist" : "Tạo Playlist Mới"}
-              </h3>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            disabled={isWorking}
-            className="rounded-full size-10 bg-muted/40 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-          >
-            <X className="size-5" />
-          </Button>
-        </div>
-
-        {/* BODY */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 bg-muted/10">
-          <form
-            id="playlist-form"
-            onSubmit={handleSubmit}
-            className="space-y-6"
-          >
-            {/* ===== KHỐI 1: ẢNH VÀ THÔNG TIN CƠ BẢN ===== */}
-            <div className="bg-card border border-border/50 rounded-[20px] p-5 sm:p-6 shadow-sm">
-              <h4 className="text-[12px] font-bold uppercase tracking-widest text-foreground mb-6 flex items-center gap-2">
-                <span className="w-1.5 h-4 rounded-full bg-primary" />
-                Thông tin chung
-              </h4>
-
-              <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-start">
-                {/* --- COVER IMAGE --- */}
-                <div className="flex flex-col gap-3 shrink-0">
-                  <div
-                    className={cn(
-                      "relative group size-36 sm:size-44 rounded-2xl border-2 border-dashed overflow-hidden flex items-center justify-center cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md",
-                      errors.coverImage
-                        ? "border-destructive/60 bg-destructive/5"
-                        : "border-border/60 bg-background hover:border-primary/50",
+            {/* Content — FIX 4: stopPropagation */}
+            <motion.div
+              key="playlist-modal-content"
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 4 }}
+              transition={MODAL_SPRING}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="playlist-modal-title"
+              className="relative z-[101] w-full max-w-2xl bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
+            >
+              {/* ══════ HEADER ══════ */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-background shrink-0 z-20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-primary/10 rounded-xl text-primary border border-primary/10 shadow-sm">
+                    {isEditing ? (
+                      <Palette className="size-5" />
+                    ) : (
+                      <Music2 className="size-5" />
                     )}
-                  >
-                    {preview ? (
-                      <>
-                        <img
-                          src={preview}
-                          alt="Cover"
-                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  </div>
+                  <div>
+                    <h3
+                      id="playlist-modal-title"
+                      className="text-lg font-bold leading-none text-foreground uppercase tracking-tight"
+                    >
+                      {isEditing ? "Cập Nhật Playlist" : "Tạo Playlist Mới"}
+                    </h3>
+                    <p className="text-[13px] font-medium text-muted-foreground mt-1">
+                      {isEditing
+                        ? "Chỉnh sửa thông tin chi tiết của danh sách phát."
+                        : "Thêm một danh sách phát mới vào hệ thống."}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={isWorking}
+                  aria-label="Đóng modal"
+                  className="rounded-md size-8 flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <X className="size-5" aria-hidden="true" />
+                </button>
+              </div>
+
+              {/* ══════ BODY ══════ */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar bg-background p-6 sm:p-8">
+                <form
+                  id="playlist-form"
+                  onSubmit={handleSubmit}
+                  noValidate
+                  className="space-y-8"
+                >
+                  {/* ── Section 1: General ── */}
+                  <SectionBlock title="Thông tin chung">
+                    <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-start">
+                      {/* Cover + theme color */}
+                      <div className="flex flex-col gap-3 shrink-0">
+                        <CoverUpload
+                          preview={coverPreview}
+                          hasError={Boolean(errors.coverImage)}
+                          fileError={coverFileError}
+                          onFileChange={handleCoverChange}
                         />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-sm">
-                          <div className="bg-background/20 text-white rounded-full p-3 backdrop-blur-md">
-                            <Camera className="size-6" />
+
+                        {/* Theme color — mirrors GenreModal color row style */}
+                        <div
+                          className={cn(
+                            "flex items-center justify-between p-1.5 border rounded-md bg-transparent transition-colors",
+                            errors.themeColor
+                              ? "border-destructive ring-1 ring-destructive/20"
+                              : "border-input",
+                          )}
+                        >
+                          <div className="flex items-center gap-2 pl-1">
+                            <Palette className="size-3.5 text-muted-foreground" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                              Màu chủ đạo
+                            </span>
+                          </div>
+                          <div className="relative size-8 rounded overflow-hidden border border-border shadow-inner shrink-0 group hover:ring-2 hover:ring-primary/50 transition-all cursor-pointer">
+                            <input
+                              type="color"
+                              {...register("themeColor")}
+                              aria-label="Chọn màu chủ đạo"
+                              className="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] cursor-pointer p-0 m-0"
+                            />
                           </div>
                         </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-muted-foreground/60 transition-colors group-hover:text-primary">
-                        <div className="p-3 rounded-full bg-muted/50 mb-2 border border-border/50 shadow-inner group-hover:bg-primary/10 group-hover:border-primary/30 transition-all">
-                          <ImageIcon className="size-6" />
-                        </div>
-                        <span className="text-[10px] font-bold uppercase tracking-wide">
-                          Tải ảnh lên
-                        </span>
                       </div>
-                    )}
 
-                    <input
-                      type="file"
-                      accept="image/jpeg, image/png, image/webp"
-                      className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                      onChange={handleFileChange}
-                    />
-
-                    {/* Lỗi Upload */}
-                    {errors.coverImage && (
-                      <div className="absolute bottom-2 right-2 bg-destructive/95 backdrop-blur shadow-lg px-2 py-1 rounded text-[10px] text-white font-bold flex items-center gap-1.5 z-20 animate-in zoom-in">
-                        <AlertCircle className="size-3" /> Lỗi ảnh
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Theme Color Picker - Style Badge */}
-                  <div className="flex items-center justify-between bg-background border border-border/60 rounded-[14px] p-2 px-3 shadow-sm hover:border-primary/40 transition-colors group">
-                    <div className="flex items-center gap-2">
-                      <Palette className="size-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground">
-                        Màu chủ đạo
-                      </span>
-                    </div>
-                    <div className="relative size-6 rounded-full overflow-hidden border border-border shadow-inner ring-2 ring-transparent group-hover:ring-primary/20 transition-all">
-                      <input
-                        type="color"
-                        {...register("themeColor")}
-                        className="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] cursor-pointer p-0 m-0"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* --- BASIC INFO INPUTS --- */}
-                <div className="flex-1 w-full space-y-5">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="title" className={labelClass}>
-                      <Type className="size-3.5" /> Tên Playlist{" "}
-                      <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="title"
-                        {...register("title")}
-                        placeholder="VD: Lofi Chill Vibes 2024..."
-                        className={cn(
-                          "h-12 bg-background border-border/60 rounded-xl text-[15px] font-semibold shadow-sm focus-visible:ring-1 focus-visible:ring-primary transition-all",
-                          errors.title &&
-                            "border-destructive focus-visible:ring-destructive pr-10 bg-destructive/5",
-                        )}
-                      />
-                      {errors.title && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive">
-                          <AlertCircle className="size-5" />
-                        </div>
-                      )}
-                    </div>
-                    {errors.title && (
-                      <p className="text-[12px] font-semibold text-destructive flex items-center gap-1.5 animate-in slide-in-from-top-1">
-                        {errors.title.message as string}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="description" className={labelClass}>
-                      <AlignLeft className="size-3.5" /> Mô tả (Tùy chọn)
-                    </Label>
-                    <Textarea
-                      id="description"
-                      {...register("description")}
-                      rows={4}
-                      placeholder="Giới thiệu đôi nét về danh sách phát này..."
-                      className={cn(
-                        "resize-none bg-background border-border/60 rounded-xl text-sm font-medium shadow-sm focus-visible:ring-1 focus-visible:ring-primary transition-all",
-                        errors.description &&
-                          "border-destructive focus-visible:ring-destructive bg-destructive/5",
-                      )}
-                    />
-                    {errors.description && (
-                      <p className="text-[12px] font-semibold text-destructive flex items-center gap-1.5 animate-in slide-in-from-top-1">
-                        <AlertCircle className="size-3.5" />{" "}
-                        {errors.description.message as string}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ===== KHỐI 2: METADATA (Tags & Collaborators) ===== */}
-            <div className="bg-card border border-border/50 rounded-[20px] p-5 sm:p-6 shadow-sm">
-              <h4 className="text-[12px] font-bold uppercase tracking-widest text-foreground mb-6 flex items-center gap-2">
-                <span className="w-1.5 h-4 rounded-full bg-primary" />
-                Phân loại & Hợp tác
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-                {/* Tags */}
-                <div className="space-y-2">
-                  <Label className={labelClass}>
-                    <Tags className="size-3.5" /> Thẻ Tags (Keywords)
-                  </Label>
-                  <Controller
-                    name="tags"
-                    control={control}
-                    render={({ field }) => (
-                      <div
-                        className={cn(
-                          "rounded-xl border border-border/60 bg-background shadow-sm overflow-hidden transition-all focus-within:ring-1 focus-within:ring-primary",
-                          errors.tags &&
-                            "border-destructive focus-within:ring-destructive bg-destructive/5",
-                        )}
-                      >
-                        <TagInput
-                          value={field.value || []}
-                          onChange={(val) => {
-                            field.onChange(val);
-                            setValue("tags", val, {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            });
-                          }}
-                          placeholder="Nhập tag & Enter..."
-                          className="border-none shadow-none min-h-[46px] bg-transparent"
-                        />
-                      </div>
-                    )}
-                  />
-                  {errors.tags?.message &&
-                    typeof errors.tags.message === "string" && (
-                      <p className="text-[12px] font-semibold text-destructive flex items-center gap-1.5 animate-in slide-in-from-top-1">
-                        <AlertCircle className="size-3.5" />{" "}
-                        {errors.tags.message}
-                      </p>
-                    )}
-                </div>
-
-                {/* Collaborators */}
-                <div className="space-y-2">
-                  <Label className={labelClass}>
-                    <Users className="size-3.5" /> Người cộng tác
-                  </Label>
-                  <Controller
-                    name="collaborators"
-                    control={control}
-                    render={({ field }) => (
-                      <div
-                        className={cn(
-                          "rounded-xl shadow-sm overflow-hidden border border-border/60 bg-background transition-all",
-                          errors.collaborators &&
-                            "border-destructive ring-1 ring-destructive",
-                        )}
-                      >
-                        <UserSelector
-                          singleSelect={false}
-                          value={field.value}
-                          onChange={(val) => {
-                            field.onChange(val);
-                            setValue("collaborators", val, {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            });
-                          }}
-                          initialUsers={playlistToEdit?.collaborators}
-                          className="border-none shadow-none bg-transparent"
-                        />
-                      </div>
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* ===== KHỐI 3: VISIBILITY (Settings) ===== */}
-            <div className="bg-card border border-border/50 rounded-[20px] p-5 sm:p-6 shadow-sm">
-              <h4 className="text-[12px] font-bold uppercase tracking-widest text-foreground mb-5 flex items-center gap-2">
-                <span className="w-1.5 h-4 rounded-full bg-primary" />
-                Trạng thái hiển thị
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {[
-                  {
-                    id: "public",
-                    label: "Công khai",
-                    desc: "Ai cũng có thể tìm thấy",
-                    icon: Globe,
-                    activeColor: "text-emerald-500",
-                    activeRing:
-                      "ring-emerald-500/20 border-emerald-500/50 bg-emerald-500/5",
-                  },
-                  {
-                    id: "private",
-                    label: "Riêng tư",
-                    desc: "Chỉ mình bạn xem được",
-                    icon: Lock,
-                    activeColor: "text-rose-500",
-                    activeRing:
-                      "ring-rose-500/20 border-rose-500/50 bg-rose-500/5",
-                  },
-                  {
-                    id: "unlisted",
-                    label: "Bảo mật Link",
-                    desc: "Chỉ ai có link mới xem được",
-                    icon: LinkIcon,
-                    activeColor: "text-blue-500",
-                    activeRing:
-                      "ring-blue-500/20 border-blue-500/50 bg-blue-500/5",
-                  },
-                ].map((item) => {
-                  const isSelected = watch("visibility") === item.id;
-                  return (
-                    <Label
-                      key={item.id}
-                      onClick={() =>
-                        setValue("visibility", item.id as any, {
-                          shouldDirty: true,
-                        })
-                      }
-                      className={cn(
-                        "relative p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer flex flex-col gap-3 select-none group",
-                        isSelected
-                          ? cn("shadow-md ring-4", item.activeRing)
-                          : "border-border/50 bg-background hover:border-border hover:bg-muted/50",
-                      )}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <div
-                          className={cn(
-                            "p-2.5 rounded-lg transition-colors",
-                            isSelected
-                              ? "bg-background shadow-sm"
-                              : "bg-muted text-muted-foreground group-hover:text-foreground",
+                      {/* Text inputs */}
+                      <div className="flex-1 w-full space-y-5">
+                        {/* Title */}
+                        <div className="space-y-2">
+                          <Label htmlFor="pl-title" className={LABEL_CLASS}>
+                            <Type className="size-3.5" />
+                            Tên Playlist{" "}
+                            <span className="text-destructive">*</span>
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="pl-title"
+                              {...register("title")}
+                              placeholder="VD: Lofi Chill Vibes 2025..."
+                              autoComplete="off"
+                              className={cn(
+                                "h-11 bg-transparent border-input rounded-md text-[15px] font-semibold focus-visible:ring-1 focus-visible:ring-primary transition-all",
+                                errors.title &&
+                                  "border-destructive focus-visible:ring-destructive pr-10",
+                              )}
+                            />
+                            {errors.title && (
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive">
+                                <AlertCircle className="size-4" />
+                              </div>
+                            )}
+                          </div>
+                          {errors.title && (
+                            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1.5 animate-in slide-in-from-top-1">
+                              {errors.title.message as string}
+                            </p>
                           )}
-                        >
-                          <item.icon
+                        </div>
+
+                        {/* Description */}
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="pl-description"
+                            className={LABEL_CLASS}
+                          >
+                            <AlignLeft className="size-3.5" />
+                            Mô tả ngắn
+                          </Label>
+                          <Textarea
+                            id="pl-description"
+                            {...register("description")}
+                            rows={3}
+                            placeholder="Giới thiệu đôi nét về danh sách phát này..."
                             className={cn(
-                              "size-4.5",
-                              isSelected ? item.activeColor : "",
+                              "resize-none custom-scrollbar bg-transparent border-input text-sm focus-visible:ring-1 focus-visible:ring-primary",
+                              errors.description &&
+                                "border-destructive focus-visible:ring-destructive",
                             )}
                           />
-                        </div>
-                        <div
-                          className={cn(
-                            "size-5 rounded-full border-2 flex items-center justify-center transition-all",
-                            isSelected
-                              ? cn(
-                                  "scale-110 border-transparent",
-                                  item.activeColor.replace("text", "bg"),
-                                )
-                              : "border-muted-foreground/30 group-hover:border-primary/40",
-                          )}
-                        >
-                          {isSelected && (
-                            <CheckCircle2 className="size-3.5 text-white" />
+                          {errors.description && (
+                            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1.5 animate-in slide-in-from-top-1">
+                              <AlertCircle className="size-3.5" />{" "}
+                              {errors.description.message as string}
+                            </p>
                           )}
                         </div>
                       </div>
-                      <div>
-                        <span
-                          className={cn(
-                            "text-[14px] font-bold block transition-colors",
-                            isSelected
-                              ? "text-foreground"
-                              : "text-muted-foreground group-hover:text-foreground",
+                    </div>
+                  </SectionBlock>
+
+                  <hr className="border-border border-dashed" />
+
+                  {/* ── Section 2: Tags & Collaborators ── */}
+                  <SectionBlock title="Phân loại & Hợp tác">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Tags */}
+                      <div className="space-y-2">
+                        <Label className={LABEL_CLASS}>
+                          <Tags className="size-3.5" /> Thẻ Tags (Keywords)
+                        </Label>
+                        <Controller
+                          name="tags"
+                          control={control}
+                          render={({ field }) => (
+                            <div
+                              className={cn(
+                                "rounded-md border bg-transparent overflow-hidden transition-all",
+                                "focus-within:ring-1 focus-within:ring-primary focus-within:border-primary",
+                                errors.tags
+                                  ? "border-destructive focus-within:ring-destructive"
+                                  : "border-input",
+                              )}
+                            >
+                              <TagInput
+                                value={field.value || []}
+                                onChange={(val) => {
+                                  field.onChange(val);
+                                  setValue("tags", val, {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  });
+                                }}
+                                placeholder="Nhập tag & Enter..."
+                                className="border-none shadow-none min-h-[44px] bg-transparent"
+                              />
+                            </div>
                           )}
-                        >
-                          {item.label}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground font-medium mt-0.5 block leading-tight">
-                          {item.desc}
-                        </span>
+                        />
+                        {errors.tags?.message &&
+                          typeof errors.tags.message === "string" && (
+                            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1.5">
+                              <AlertCircle className="size-3.5" />{" "}
+                              {errors.tags.message}
+                            </p>
+                          )}
                       </div>
-                    </Label>
-                  );
-                })}
+
+                      {/* Collaborators */}
+                      <div className="space-y-2">
+                        <Label className={LABEL_CLASS}>
+                          <Users className="size-3.5" /> Người cộng tác
+                        </Label>
+                        <Controller
+                          name="collaborators"
+                          control={control}
+                          render={({ field }) => (
+                            <div
+                              className={cn(
+                                "rounded-md border border-input bg-transparent overflow-hidden transition-all",
+                                "focus-within:ring-1 focus-within:ring-primary focus-within:border-primary",
+                                errors.collaborators &&
+                                  "border-destructive ring-1 ring-destructive/20",
+                              )}
+                            >
+                              <UserSelector
+                                singleSelect={false}
+                                value={field.value}
+                                onChange={(val) => {
+                                  field.onChange(val);
+                                  setValue("collaborators", val, {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  });
+                                }}
+                                initialUsers={playlistToEdit?.collaborators}
+                                className="border-none shadow-none bg-transparent"
+                              />
+                            </div>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </SectionBlock>
+
+                  <hr className="border-border border-dashed" />
+
+                  {/* ── Section 3: Visibility ──
+                   * <button role="radio"> pattern from GenreModal trending FIX 8:
+                   * keyboard nav (Tab + Space/Enter) + aria-checked for AT.
+                   */}
+                  <SectionBlock title="Trạng thái hiển thị">
+                    <div
+                      role="radiogroup"
+                      aria-label="Chọn trạng thái hiển thị"
+                      className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+                    >
+                      {VISIBILITY_OPTIONS.map((opt) => (
+                        <VisibilityCard
+                          key={opt.id}
+                          option={opt}
+                          isSelected={currentVisibility === opt.id}
+                          onSelect={handleVisibilitySelect}
+                        />
+                      ))}
+                    </div>
+                  </SectionBlock>
+                </form>
               </div>
-            </div>
-          </form>
-        </div>
 
-        {/* FOOTER */}
-        <div className="shrink-0 px-6 sm:px-8 py-5 border-t border-border/50 bg-background/95 backdrop-blur-xl flex justify-between items-center z-20">
-          <p className="text-[11px] text-muted-foreground font-medium hidden sm:block">
-            Các trường có{" "}
-            <span className="text-destructive font-bold text-sm">*</span> là bắt
-            buộc.
-          </p>
-          <div className="flex gap-3 w-full sm:w-auto">
-            <Button
-              variant="ghost"
-              onClick={onClose}
-              disabled={isWorking}
-              className="font-bold text-muted-foreground hover:text-foreground hover:bg-muted flex-1 sm:flex-none h-11 px-6 rounded-xl"
-            >
-              Hủy
-            </Button>
-            <Button
-              form="playlist-form"
-              type="submit"
-              disabled={isWorking}
-              className="font-bold flex-1 sm:flex-none shadow-xl hover:shadow-primary/20 hover:scale-105 active:scale-95 transition-all h-11 px-8 rounded-xl"
-            >
-              {isWorking ? (
-                <>
-                  <Loader2 className="size-5 animate-spin mr-2" /> Đang xử lý...
-                </>
-              ) : (
-                <>
-                  <Save className="size-5 mr-2" />{" "}
-                  {playlistToEdit ? "Lưu thay đổi" : "Tạo Playlist"}
-                </>
-              )}
-            </Button>
+              {/* ══════ FOOTER ══════ */}
+              <div className="flex items-center justify-between p-5 border-t border-border bg-background shrink-0 z-20">
+                <p className="text-[11px] text-muted-foreground font-medium hidden sm:block">
+                  Các trường có{" "}
+                  <span className="text-destructive font-bold text-sm">*</span>{" "}
+                  là bắt buộc.
+                </p>
+                <div className="flex gap-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isWorking}
+                    className={cn(
+                      "font-bold border border-input bg-background",
+                      "hover:bg-accent hover:text-foreground",
+                      "h-10 px-5 rounded-md flex-1 sm:flex-none text-sm",
+                      "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                    )}
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    form="playlist-form"
+                    disabled={isWorking}
+                    className={cn(
+                      "font-bold h-10 px-6 rounded-md flex-1 sm:flex-none",
+                      "inline-flex items-center justify-center gap-2 text-sm",
+                      "bg-primary text-primary-foreground",
+                      "shadow-md hover:shadow-lg hover:brightness-110 active:scale-[0.98]",
+                      "transition-all duration-150",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
+                    )}
+                  >
+                    {isWorking ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Đang lưu...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="size-4" />
+                        {isEditing ? "Lưu thay đổi" : "Tạo Playlist"}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-};
+        )}
+      </AnimatePresence>,
+      document.body,
+    );
+  },
+);
 
+PlaylistModal.displayName = "PlaylistModal";
 export default PlaylistModal;

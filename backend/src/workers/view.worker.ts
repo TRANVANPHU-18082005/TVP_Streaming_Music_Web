@@ -1,59 +1,98 @@
-import { Worker } from "bullmq";
+import { Worker, Job } from "bullmq";
 import { cacheRedis, queueRedis } from "../config/redis";
 import PlayLog from "../models/PlayLog";
+import DailyStats from "../models/DailyStats";
+import mongoose from "mongoose";
+
+// Định nghĩa Interface cho Job Data để chặt chẽ về Type
+interface ILogListenJob {
+  trackId: string;
+  userId?: string;
+  ip?: string;
+  timestamp: string | Date;
+}
 
 export const startViewWorker = () => {
   const worker = new Worker(
-    "view-updates", // Tên Queue
-    async (job) => {
-      // 1. Chỉ xử lý job đúng tên để tránh nhầm lẫn dữ liệu
+    "view-updates",
+    async (job: Job<ILogListenJob>) => {
       if (job.name === "log-listen-history") {
         const { trackId, userId, ip, timestamp } = job.data;
 
-        try {
-          console.log(`🎬 [Worker] Recording PlayLog for track: ${trackId}`);
+        // 1. XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7)
+        // Dùng toLocaleDateString với timezone cố định để lấy chính xác YYYY-MM-DD tại VN
+        const listenDate = new Date(timestamp);
+        const vnDateStr = listenDate.toLocaleDateString("en-CA", {
+          timeZone: "Asia/Ho_Chi_Minh",
+        }); // Kết quả luôn là "YYYY-MM-DD" theo giờ VN
 
-          // 2. GHI LOG VĨNH VIỄN: Nhiệm vụ quan trọng nhất của Worker
-          // Lưu vào MongoDB để phục vụ Lịch sử nghe nhạc & Data Analytics lâu dài
-          await PlayLog.create({
-            trackId,
-            userId: userId || null,
+        try {
+          // 2. TẠO CÁC PROMISE XỬ LÝ SONG SONG
+
+          // Task A: Ghi Log thô (Audit Trail)
+          const logPromise = PlayLog.create({
+            trackId: new mongoose.Types.ObjectId(trackId),
+            userId: userId ? new mongoose.Types.ObjectId(userId) : null,
             ip: ip || "unknown",
-            listenedAt: timestamp || new Date(),
+            listenedAt: listenDate,
             source: "web",
           });
 
-          // 3. CẬP NHẬT CHART HOURLY (REAL-TIME CHART)
-          // Đây là dữ liệu dùng cho biểu đồ đường (Line Chart) biến động theo giờ
-          const vnHour = new Date().getHours();
+          // Task B: Cập nhật Global Chart (Redis)
+          const vnHour = new Date(
+            listenDate.toLocaleString("en-US", {
+              timeZone: "Asia/Ho_Chi_Minh",
+            }),
+          ).getHours();
           const hourKey = `chart:hourly:${vnHour}`;
-          await cacheRedis.zincrby(hourKey, 1, trackId);
-          // Set expire 48h để tự dọn dẹp Redis
-          await cacheRedis.expire(hourKey, 172800);
+
+          const redisPromises = [
+            cacheRedis.zincrby(hourKey, 1, trackId),
+            cacheRedis.expire(hourKey, 172800), // 48h
+          ];
+
+          // Task C: Cập nhật Daily Stats (Cho User Chart)
+          let statsPromise = Promise.resolve() as Promise<any>;
+
+          if (userId) {
+            const userOid = new mongoose.Types.ObjectId(userId);
+
+            // Atomic Upsert: Chống race condition tuyệt đối
+            statsPromise = DailyStats.updateOne(
+              { userId: userOid, date: vnDateStr },
+              { $inc: { count: 1 } },
+              { upsert: true },
+            ).then(() => {
+              // Xóa cache dashboard để user thấy data mới
+              return cacheRedis.del(`profile:dashboard:${userId}`);
+            });
+          }
+
+          // 3. THỰC THI ĐỒNG THỜI
+          await Promise.all([logPromise, ...redisPromises, statsPromise]);
 
           console.log(
-            `✅ [Worker] Success: PlayLog & Chart updated for ${trackId}`,
+            `✅ [Worker] Processed: ${trackId} | User: ${userId || "Guest"} | Date: ${vnDateStr}`,
           );
         } catch (error) {
-          console.error("❌ [Worker] Critical Error during processing:", error);
-          // Quăng lỗi để BullMQ biết và thực hiện cơ chế 'attempts' (thử lại)
-          throw error;
+          console.error("❌ [Worker] Critical Error:", error);
+          throw error; // Đẩy lại để BullMQ retry
         }
       }
     },
     {
       connection: queueRedis,
-      // Tối ưu: Chỉ xử lý 5 job cùng lúc để không làm nghẽn CPU
-      concurrency: 5,
+      concurrency: 5, // Xử lý 5 jobs cùng lúc
+      removeOnComplete: { count: 100 }, // Giữ lại 100 history gần nhất để check
+      removeOnFail: { count: 500 },
     },
   );
 
-  // Lắng nghe các sự kiện của Worker để dễ Debug
   worker.on("completed", (job) => {
-    console.log(`🏁 Job ${job.id} has completed!`);
+    console.log(`🏁 Job ${job.id} completed`);
   });
 
   worker.on("failed", (job, err) => {
-    console.error(`⚠️ Job ${job?.id} failed with error: ${err.message}`);
+    console.error(`⚠️ Job ${job?.id} failed: ${err.message}`);
   });
 };

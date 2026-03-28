@@ -11,7 +11,9 @@ import { connectRedis, cacheRedis, queueRedis } from "./config/redis";
 import { initSocket } from "./socket";
 import { initCronJobs } from "./cron";
 import { startViewWorker } from "./workers/view.worker";
-
+import "./workers/interaction.worker";
+import { closeInteractionQueue } from "./queue/interaction.queue";
+import { closeInteractionWorker } from "./workers/interaction.worker";
 const startServer = async () => {
   try {
     // 2. Kết nối Dual Redis (Quan trọng để chạy trước)
@@ -23,6 +25,7 @@ const startServer = async () => {
     console.log("✅ MongoDB connected successfully");
     startViewWorker();
     console.log("✅ View Worker started & listening to Queue");
+    console.log("✅ Interaction Worker is listening to Queue...");
     // 4. Tạo HTTP Server bọc lấy Express App
     // (Bắt buộc phải làm thế này mới chạy được Socket.IO)
     const server = http.createServer(app);
@@ -45,7 +48,8 @@ const startServer = async () => {
       if (server) {
         server.close(async () => {
           console.log("🛑 API Server closed");
-
+          await closeInteractionWorker();
+          await closeInteractionQueue();
           // Đóng kết nối Database an toàn
           await mongoose.disconnect();
 

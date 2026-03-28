@@ -8,5 +8,6 @@ export interface FollowResponse {
 }
 
 export interface BatchCheckResponse {
-  likedTrackIds: string[];
+  checkedIds: string[];
+  interactedIds: string[];
 }

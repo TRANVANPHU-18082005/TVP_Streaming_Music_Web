@@ -1,113 +1,85 @@
+// src/features/auth/hooks/useLogin.ts
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-
-// Redux & API
-import authApi from "@/features/auth/api/authApi";
-import { loginSchema, type LoginInput } from "../schemas/auth.schema";
-import { login } from "@/features/auth/slice/authSlice";
-import type { ApiErrorResponse } from "@/types";
 import { useAppDispatch } from "@/store/hooks";
+import { loginUser } from "../slice/authSlice";
+import { loginSchema, type LoginInput } from "../schemas/auth.schema";
 
 export const useLogin = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-
-  // State local cho UI (Show/Hide password)
   const [showPassword, setShowPassword] = useState(false);
 
-  // 1. Setup React Hook Form
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    mode: "onBlur", // Validate khi rời ô input
-    defaultValues: {
-      email: "",
-      password: "",
-      rememberMe: false,
-    },
+    mode: "onBlur",
+    defaultValues: { email: "", password: "", rememberMe: false },
   });
 
-  // 2. Logic Submit Form
-  const handleLogin = async (data: LoginInput) => {
-    try {
-      // Gọi API
-      const res = await authApi.login(data);
+  const onSubmit = async (data: LoginInput) => {
+    // Dispatch thunk thay vì gọi trực tiếp API
+    const resultAction = await dispatch(loginUser(data));
 
-      // Lưu vào Redux Store
-      dispatch(
-        login({
-          accessToken: res.data.accessToken,
-          user: res.data.user,
-        }),
-      );
-      if (res.data.user.mustChangePassword) {
+    if (loginUser.fulfilled.match(resultAction)) {
+      const { user } = resultAction.payload;
+
+      // 1. Xử lý chuyển hướng đặc biệt
+      if (user.mustChangePassword) {
         toast.warning("Yêu cầu bảo mật", {
-          description: "Vui lòng đổi mật khẩu mới cho lần đăng nhập đầu tiên.",
+          description: "Vui lòng đổi mật khẩu mới.",
         });
-
-        // Chuyển hướng sang trang bắt buộc đổi pass
-        navigate("/force-change-password");
-        return; // Dừng lại, không navigate("/") về Home
+        return navigate("/force-change-password");
       }
+
       toast.success("Welcome back!", {
-        description: `Logged in as ${
-          res.data.user.fullName || res.data.user.username
-        }`,
+        description: `Logged in as ${user.fullName}`,
       });
-
-      // Về trang chủ
       navigate("/");
-    } catch (error: unknown) {
-      const err = error as ApiErrorResponse;
-      const errorCode = err.response?.data?.errorCode;
-      const message = err.response?.data?.message || "Login failed";
-      // 🛑 CASE 1: TÀI KHOẢN BỊ KHÓA (MỚI THÊM)
-      if (errorCode === "ACCOUNT_LOCKED") {
-        toast.error("Tài khoản đã bị khóa", {
-          description:
-            message || "Vui lòng liên hệ quản trị viên để biết thêm chi tiết.",
-          duration: 5000, // Hiện lâu chút để đọc
-          action: {
-            label: "Liên hệ",
-            onClick: () =>
-              (window.location.href = "mailto:support@musichub.com"),
-          },
-        });
-        return; // Dừng lại, không làm gì thêm
-      }
-      // CASE 2: Tài khoản chưa xác thực -> Chuyển sang trang OTP
-      if (errorCode === "UNVERIFIED_ACCOUNT") {
-        const email = err.response?.data?.data?.email; // Lấy email từ response chuẩn
-
-        toast.warning("Account not verified.", {
-          description: "Redirecting to verification page...",
-        });
-
-        setTimeout(() => {
-          navigate("/verify-otp", { state: { email, isResend: true } });
-        }, 1500);
-        return;
-      }
-
-      // CASE 2: Sai thông tin -> Báo lỗi và focus lại input
-      toast.error("Login failed", { description: message });
-
-      // Set Error thủ công để hiện viền đỏ
-      form.setError("root", { message: message }); // Lỗi chung
-      form.setError("email", { type: "manual" });
-      form.setError("password", { type: "manual" });
+    } else {
+      // 2. Xử lý lỗi tập trung
+      const errorPayload = resultAction.payload as any;
+      handleAuthError(errorPayload, form, navigate);
     }
   };
 
-  // 3. Toggle Show/Hide Password
-  const toggleShowPassword = () => setShowPassword(!showPassword);
-
   return {
-    form, // Trả về instance form để UI dùng (register, formState...)
+    form,
     showPassword,
-    toggleShowPassword,
-    onSubmit: form.handleSubmit(handleLogin), // Hàm submit đã bọc logic
+    toggleShowPassword: () => setShowPassword((prev) => !prev),
+    onSubmit: form.handleSubmit(onSubmit),
   };
+};
+
+/**
+ * Helper xử lý lỗi tập trung - Chuẩn Production
+ */
+const handleAuthError = (error: any, form: any, navigate: any) => {
+  const errorCode = error.errorCode;
+  const message = error.message || "Đăng nhập thất bại";
+
+  switch (errorCode) {
+    case "ACCOUNT_LOCKED":
+      toast.error("Tài khoản đã bị khóa", {
+        description: message,
+        action: {
+          label: "Hỗ trợ",
+          onClick: () => (window.location.href = "mailto:support@musichub.com"),
+        },
+      });
+      break;
+    case "UNVERIFIED_ACCOUNT":
+      toast.warning("Tài khoản chưa xác thực");
+      navigate("/verify-otp", {
+        state: { email: error.data?.email, isResend: true },
+      });
+      break;
+    default:
+      toast.error("Lỗi", { description: message });
+      // Focus và đánh dấu lỗi đỏ cho Input
+      form.setError("email", { type: "manual" });
+      form.setError("password", { type: "manual" });
+  }
 };

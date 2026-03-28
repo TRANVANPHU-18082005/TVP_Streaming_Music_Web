@@ -103,6 +103,71 @@ const playlistApi = {
     );
     return response.data;
   },
+  // ==========================================
+  // 👤 USER SPECIFIC ACTIONS (MỚI BỔ SUNG)
+  // ==========================================
+
+  /**
+   * 🚀 Tạo nhanh Playlist (Spotify Style)
+   * Không bắt buộc gửi data, Backend tự đặt tên "Danh sách phát của tôi #N"
+   */
+  createQuickPlaylist: async (data?: {
+    title?: string;
+    visibility?: string;
+  }) => {
+    const response = await api.post<ApiResponse<Playlist>>(
+      "/playlists/me",
+      data || {},
+    );
+    return response.data;
+  },
+
+  /**
+   * ➕ User thêm nhạc (Có xử lý Smart Cover ở Backend)
+   * URL: POST /api/playlists/me/:playlistId/tracks
+   */
+  userAddTracks: async (playlistId: string, trackIds: string[]) => {
+    const response = await api.post<ApiResponse<Playlist>>(
+      `/playlists/me/${playlistId}/tracks`,
+      { trackIds },
+    );
+    return response.data;
+  },
+
+  /**
+   * 🗑️ User xóa nhạc (Bulk Remove + Refresh Smart Cover)
+   * URL: DELETE /api/playlists/me/:playlistId/tracks
+   */
+  userRemoveTracks: async (playlistId: string, trackIds: string[]) => {
+    const response = await api.delete<ApiResponse<Playlist>>(
+      `/playlists/me/${playlistId}/tracks`,
+      { data: { trackIds } }, // Axios DELETE body
+    );
+    return response.data;
+  },
+
+  /**
+   * 🔒 Chuyển trạng thái riêng tư/công khai nhanh
+   * URL: PATCH /api/playlists/me/:id/toggle-visibility
+   */
+  toggleMyPlaylistVisibility: async (id: string) => {
+    const response = await api.patch<ApiResponse<{ visibility: string }>>(
+      `/playlists/me/${id}/toggle-visibility`,
+    );
+    return response.data;
+  },
+
+  /**
+   * 📋 Lấy danh sách Playlist của chính tôi (Dùng cho Sidebar)
+   * Thường sẽ gọn nhẹ hơn getAll thông thường
+   */
+  getMyLibrary: async (params?: PlaylistFilterParams) => {
+    const response = await api.get<ApiResponse<PagedResponse<Playlist>>>(
+      "/playlists/me/all",
+      { params },
+    );
+    return response.data;
+  },
 };
 
 export default playlistApi;

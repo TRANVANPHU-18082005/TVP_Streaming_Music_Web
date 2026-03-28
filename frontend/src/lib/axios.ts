@@ -1,7 +1,6 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { env } from "@/config/env";
-import type { Store, AnyAction } from "@reduxjs/toolkit"; // Import Type
-import { toast } from "sonner";
+import type { Store } from "@reduxjs/toolkit"; // Import Type
 
 // Định nghĩa Interface
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
@@ -68,7 +67,7 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 // ============================================================================
@@ -137,9 +136,8 @@ api.interceptors.response.use(
         }
 
         setGlobalAccessToken(newAccessToken);
-        api.defaults.headers.common[
-          "Authorization"
-        ] = `Bearer ${newAccessToken}`;
+        api.defaults.headers.common["Authorization"] =
+          `Bearer ${newAccessToken}`;
         // Cập nhật Redux (Store sẽ tự update ngược lại biến currentAccessToken qua subscribe)
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         store?.dispatch({
@@ -161,8 +159,15 @@ api.interceptors.response.use(
 
         if (status === 400 || status === 401 || status === 403) {
           // Lúc này mới chắc chắn là phiên đăng nhập hết hạn thật sự
+          // 1. Dọn dẹp Redux (Kích hoạt Cầu chì tổng)
           store?.dispatch({ type: "auth/logout" });
           setGlobalAccessToken(null);
+
+          // 2. Điều hướng kèm theo query string để trang Login biết lý do
+          // Thay vì 'locked', ta dùng 'expired'
+          if (window.location.pathname !== "/login") {
+            window.location.href = "/login?reason=session_expired";
+          }
         }
 
         // Nếu là lỗi 500, lỗi mạng (network error)... thì KHÔNG logout.
@@ -175,7 +180,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

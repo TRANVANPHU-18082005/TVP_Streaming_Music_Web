@@ -29,10 +29,6 @@ export interface UserProfile {
   isActive: boolean;
   isVerified: boolean;
 
-  // Relations (Chỉ lấy count hoặc ID)
-  followersCount?: number;
-  followingCount?: number;
-  isFollowed?: boolean; // Backend trả về cờ này
   authProvider?: "local" | "google";
   mustChangePassword: boolean;
   createdAt: string;

@@ -68,21 +68,86 @@ export interface ChartDataPoint {
   top3: number;
 }
 
-// 2. Cấu trúc bài hát trong BXH
-export interface ChartTrack extends ITrack {
+export interface IChartDataPoint {
+  time: string;
+  top1: number;
+  top2: number;
+  top3: number;
+}
+
+export interface IChartItem {
+  _id: string;
+  title: string;
+  slug: string;
+  duration: number;
+  coverImage: string;
+  hlsUrl?: string;
+  playCount: number;
+  score: number;
+  artist: {
+    _id: string;
+    name: string;
+    avatar: string;
+    slug: string;
+  };
+  album?: {
+    _id: string;
+    title: string;
+    slug: string;
+  };
+  featuringArtists: Artist[];
+}
+
+export interface IRealtimeChartData {
+  items: IChartItem[];
+  chart: IChartDataPoint[];
+}
+
+export interface IChartResponse {
+  success: boolean;
+  data: IRealtimeChartData;
+  lastUpdatedAt: string;
+}
+// Định nghĩa Artist và Album tối giản để dùng chung cho Chart và Track
+export interface IArtistMin {
+  _id: string;
+  name: string;
+  avatar: string;
+  slug: string;
+}
+
+export interface IAlbumMin {
+  _id: string;
+  title: string;
+  slug: string;
+}
+
+// 1. Dữ liệu điểm biểu đồ
+export interface IChartDataPoint {
+  time: string;
+  top1: number;
+  top2: number;
+  top3: number;
+}
+
+// 3. ChartTrack dùng cho UI (thêm các field tính toán hạng)
+export interface ChartTrack extends IChartItem {
   rank?: number;
   lastRank?: number;
 }
 
-// 3. Cấu trúc Data trả về từ API / Socket (Bao gồm cả List và Chart)
-export interface RealtimeChartData {
-  items: ChartTrack[]; // Danh sách 100 bài
-  chart: ChartDataPoint[]; // Dữ liệu biểu đồ cho Top 3
+// 4. Cấu trúc Data từ API
+export interface IRealtimeChartData {
+  items: IChartItem[];
+  chart: IChartDataPoint[];
+  lastUpdatedAt?: string; // Đưa vào đây luôn cho đồng bộ
 }
 
-// 4. Response bọc ngoài cùng
-export interface ChartResponse {
+// 5. Response chuẩn từ Backend
+export interface IChartResponse {
   success: boolean;
-  data: RealtimeChartData; // 🔥 Sửa lại chỗ này: Không phải ChartTrack[] nữa
-  timestamp?: string;
+  data: IRealtimeChartData;
+  lastUpdatedAt: string;
 }
+
+export type ChartUpdatePayload = Partial<IRealtimeChartData>;

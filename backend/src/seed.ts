@@ -17,7 +17,7 @@ const seedData = async () => {
         bio: "Famous Vietnamese Singer",
       });
       console.log(
-        `✅ Created Artist: ${newArtist.name} - ID: ${newArtist._id}`
+        `✅ Created Artist: ${newArtist.name} - ID: ${newArtist._id}`,
       );
       console.log("⚠️ HÃY COPY ID Ở TRÊN ĐỂ DÙNG KHI TEST UPLOAD!");
     } else {

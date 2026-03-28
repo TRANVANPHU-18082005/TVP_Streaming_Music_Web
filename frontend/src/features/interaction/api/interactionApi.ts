@@ -1,9 +1,12 @@
 import api from "@/lib/axios";
 import { ApiResponse } from "@/types";
+import { InteractionTargetType } from "../slice/interactionSlice";
+import { BatchCheckResponse } from "../types";
 
-// Interface cho kết quả trả về từ API toggle
+// Interface đồng nhất với Backend Response
 export interface ToggleLikeResponse {
   isLiked: boolean;
+  targetType: InteractionTargetType;
 }
 
 export interface ToggleFollowResponse {
@@ -12,18 +15,21 @@ export interface ToggleFollowResponse {
 
 const interactionApi = {
   /**
-   * Toggle Like cho một bài hát
-   * @route POST /api/v1/interactions/like/track/:trackId
+   * 🚀 TOGGLE LIKE (Dùng chung cho Track, Album, Playlist)
+   * @route POST /api/v1/interactions/toggle-like
+   * @body { targetId, targetType }
    */
-  toggleLike: async (trackId: string) => {
+  toggleLike: async (targetId: string, targetType: InteractionTargetType) => {
+    console.log("Toggling like:", { targetId, targetType });
     const response = await api.post<ApiResponse<ToggleLikeResponse>>(
-      `/interactions/like/track/${trackId}`,
+      `/interactions/toggle-like`,
+      { targetId, targetType },
     );
     return response.data.data;
   },
 
   /**
-   * Toggle Follow cho một nghệ sĩ
+   * 👥 TOGGLE FOLLOW (Dành riêng cho Artist)
    * @route POST /api/v1/interactions/follow/artist/:artistId
    */
   toggleFollow: async (artistId: string) => {
@@ -34,21 +40,20 @@ const interactionApi = {
   },
 
   /**
-   * Kiểm tra hàng loạt trạng thái (Like hoặc Follow)
+   * ⚡ CHECK BATCH (Đồng bộ hàng loạt trạng thái)
    * @route POST /api/v1/interactions/check-batch
-   * @param ids Mảng các ID cần kiểm tra
-   * @param type 'like' | 'follow'
    */
-  checkBatch: async (ids: string[], type: "like" | "follow") => {
-    const response = await api.post<ApiResponse<string[]>>(
+  checkBatch: async (
+    ids: string[],
+    type: "like" | "follow",
+    targetType?: InteractionTargetType,
+  ) => {
+    const response = await api.post<ApiResponse<BatchCheckResponse>>(
       "/interactions/check-batch",
-      {
-        ids,
-        type,
-      },
+      { ids, type, targetType },
     );
-    // Trả về mảng các ID đã tương tác (đã like hoặc đã follow)
-    return response.data.data;
+    // Trả về interactedIds (mảng các ID mà user ĐÃ like/follow)
+    return response.data.data.interactedIds;
   },
 };
 

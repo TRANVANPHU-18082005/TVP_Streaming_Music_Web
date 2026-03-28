@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import { generateUniqueSlug } from "../utils/slug";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import interactionService from "./interaction.service";
 
 // Hash giả hợp lệ (cost 10) để chống Timing Attack
 const DUMMY_HASH = "$2b$10$2b102b102b102b102b102uX/fakestringtofoolhacker...";
@@ -26,7 +27,7 @@ class AuthService {
       if (existingUser.authProvider === "google") {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          "Email này đã đăng ký bằng Google."
+          "Email này đã đăng ký bằng Google.",
         );
       }
       throw new ApiError(httpStatus.BAD_REQUEST, "Email đã được sử dụng");
@@ -50,7 +51,7 @@ class AuthService {
 
     // Fire & Forget email
     sendEmail(email, "Mã xác thực", `<h1>Mã OTP: ${otp}</h1>`).catch((err) =>
-      console.error("❌ Lỗi gửi mail register:", err)
+      console.error("❌ Lỗi gửi mail register:", err),
     );
 
     return user;
@@ -66,7 +67,7 @@ class AuthService {
     if (!user)
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "Mã OTP không đúng hoặc email sai"
+        "Mã OTP không đúng hoặc email sai",
       );
 
     if (
@@ -78,7 +79,7 @@ class AuthService {
 
     const { accessToken, refreshToken } = generateTokens(
       user._id.toString(),
-      user.role
+      user.role,
     );
 
     user.isVerified = true;
@@ -96,7 +97,7 @@ class AuthService {
     const { email, password, rememberMe } = data;
 
     const user = await User.findOne({ email }).select(
-      "+password +isVerified +isActive +role"
+      "+password +isVerified +isActive +role",
     );
 
     // CHỐNG TIMING ATTACK:
@@ -105,7 +106,7 @@ class AuthService {
       await bcrypt.compare(password, DUMMY_HASH).catch(() => {});
       throw new ApiError(
         httpStatus.UNAUTHORIZED,
-        "Email hoặc mật khẩu không đúng"
+        "Email hoặc mật khẩu không đúng",
       );
     }
 
@@ -113,7 +114,7 @@ class AuthService {
     if (!isMatch) {
       throw new ApiError(
         httpStatus.UNAUTHORIZED,
-        "Email hoặc mật khẩu không đúng"
+        "Email hoặc mật khẩu không đúng",
       );
     }
 
@@ -123,14 +124,14 @@ class AuthService {
       throw new ApiError(
         httpStatus.FORBIDDEN,
         "Tài khoản bị khóa",
-        "ACCOUNT_LOCKED"
+        "ACCOUNT_LOCKED",
       );
     }
 
     const { accessToken, refreshToken } = generateTokens(
       user._id.toString(),
       user.role,
-      rememberMe
+      rememberMe,
     );
 
     user.refreshToken = refreshToken;
@@ -148,11 +149,11 @@ class AuthService {
     try {
       const decoded: any = jwt.verify(
         cookieToken,
-        process.env.JWT_REFRESH_SECRET!
+        process.env.JWT_REFRESH_SECRET!,
       );
 
       const user = await User.findById(decoded.id).select(
-        "+refreshToken +isActive +role"
+        "+refreshToken +isActive +role",
       );
 
       // Token Reuse Detection
@@ -163,7 +164,7 @@ class AuthService {
         }
         throw new ApiError(
           httpStatus.FORBIDDEN,
-          "Token không hợp lệ (Reuse detected)"
+          "Token không hợp lệ (Reuse detected)",
         );
       }
 
@@ -172,7 +173,7 @@ class AuthService {
 
       const { accessToken, refreshToken } = generateTokens(
         user._id.toString(),
-        user.role
+        user.role,
       );
 
       user.refreshToken = refreshToken; // Xoay vòng token
@@ -199,7 +200,7 @@ class AuthService {
     ) {
       throw new ApiError(
         httpStatus.TOO_MANY_REQUESTS,
-        "Vui lòng đợi 1 phút trước khi gửi lại"
+        "Vui lòng đợi 1 phút trước khi gửi lại",
       );
     }
 
@@ -211,7 +212,7 @@ class AuthService {
     await user.save();
 
     sendEmail(email, "Mã OTP mới", `<h1>Mã mới: ${otp}</h1>`).catch(
-      console.error
+      console.error,
     );
 
     return { message: "Đã gửi lại OTP" };
@@ -269,7 +270,7 @@ class AuthService {
     if (user.authProvider === "google") {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "Tài khoản Google không thể reset mật khẩu."
+        "Tài khoản Google không thể reset mật khẩu.",
       );
     }
 
@@ -281,7 +282,7 @@ class AuthService {
     ) {
       throw new ApiError(
         httpStatus.TOO_MANY_REQUESTS,
-        "Vui lòng đợi 1 phút trước khi gửi lại"
+        "Vui lòng đợi 1 phút trước khi gửi lại",
       );
     }
 
@@ -312,7 +313,7 @@ class AuthService {
       await user.save();
       throw new ApiError(
         httpStatus.INTERNAL_SERVER_ERROR,
-        "Lỗi gửi mail service"
+        "Lỗi gửi mail service",
       );
     }
   }
@@ -329,7 +330,7 @@ class AuthService {
     if (!user)
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "Link không hợp lệ hoặc đã hết hạn"
+        "Link không hợp lệ hoặc đã hết hạn",
       );
 
     user.password = newPassword;
@@ -341,6 +342,10 @@ class AuthService {
 
     await user.save();
     return { message: "Đổi mật khẩu thành công" };
+  }
+  async logout(userId: string) {
+    // Dọn dẹp Redis Interaction để tránh lệch data cho user sau
+    await interactionService.clearUserCache(userId);
   }
 }
 
