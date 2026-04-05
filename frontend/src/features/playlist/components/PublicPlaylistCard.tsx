@@ -1,21 +1,3 @@
-/**
- * @file PublicPlaylistCard.tsx — Playlist browsing card (v4.0 — Soundwave Premium)
- *
- * REDESIGN vs original:
- * ─ Full Soundwave token integration: .album-card, .control-btn--primary,
- *   .like-btn, .badge-*, .shadow-glow-sm, .text-track-title, .text-track-meta
- * ─ Shadcn Badge replaced with Soundwave .badge token classes
- * ─ Like button uses .like-btn token with liked state animation
- * ─ Dropdown: glass-frosted panel + .menu-item tokens
- * ─ Play button: consistent size + positioning with PublicAlbumCard
- * ─ memo() + custom comparator — stable identity across sibling play states
- * ─ useCallback on all event handlers — stable refs for memo children
- * ─ Playlist meta section: track count + creator in .text-track-meta
- * ─ System vs community badge: uses Soundwave badge tokens, not Shadcn Badge
- * ─ Private badge: .badge-live (attention-drawing) → .badge token + lock icon
- * ─ Playing glow ring on artwork when isLoadingPlay
- */
-
 import { useState, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -24,11 +6,8 @@ import {
   Heart,
   Share2,
   PlusCircle,
-  Lock,
   ListMusic,
   Loader2,
-  Sparkles,
-  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -41,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { Playlist } from "@/features/playlist/types";
+import { LikeButton } from "@/features/interaction";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -161,53 +141,6 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
             )}
           />
 
-          {/* ── Badges — top-left ── */}
-          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5">
-            {/* System vs community */}
-            {playlist.isSystem ? (
-              <span
-                className={cn(
-                  "badge",
-                  "bg-background/50 backdrop-blur-md border-border/40 text-foreground",
-                  "uppercase tracking-[0.14em] text-[9px] font-bold",
-                  "flex items-center gap-1",
-                )}
-              >
-                <Sparkles
-                  className="size-2.5 text-primary"
-                  aria-hidden="true"
-                />
-                Hệ thống
-              </span>
-            ) : (
-              <span
-                className={cn(
-                  "badge",
-                  "bg-black/40 backdrop-blur-md border-white/15 text-white",
-                  "uppercase tracking-[0.14em] text-[9px] font-bold",
-                  "flex items-center gap-1",
-                )}
-              >
-                <Users className="size-2.5" aria-hidden="true" />
-                Cộng đồng
-              </span>
-            )}
-
-            {/* Private indicator */}
-            {!playlist.isPublic && (
-              <span
-                aria-label="Private playlist"
-                className={cn(
-                  "badge",
-                  "bg-destructive/80 backdrop-blur-md border-none text-white",
-                  "px-1.5",
-                )}
-              >
-                <Lock className="size-3" aria-hidden="true" />
-              </span>
-            )}
-          </div>
-
           {/* ── Play button — bottom-right, .control-btn--primary ── */}
           <div
             className={cn(
@@ -242,30 +175,24 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
           {/* ── Like button — top-right (desktop) ── */}
           <div
             className={cn(
-              "hidden md:block absolute top-2.5 right-2.5 z-20",
-              "opacity-0 group-hover:opacity-100",
+              "block md:hidden absolute top-2.5 right-2.5 z-20 rounded-full",
+              "md:opacity-0 md:group-hover:opacity-100 md:group-hover:flex",
               "transition-opacity duration-300",
             )}
           >
-            <button
-              type="button"
-              onClick={handleLike}
-              aria-label={isLiked ? "Unlike" : "Like"}
-              aria-pressed={isLiked}
+            <span
+              aria-label="Trending genre" // FIX 10
               className={cn(
-                "like-btn",
-                "flex items-center justify-center size-8 rounded-full",
-                "bg-black/40 hover:bg-black/60 backdrop-blur-md",
-                "border border-white/20 text-white",
-                "transition-all duration-200",
-                isLiked && "liked text-rose-400",
+                "inline-flex items-center gap-1 sm:gap-1.5 shrink-0 w-50px h-8",
+                // .badge pattern from index.css §14 — adapted for dark overlay context
+                "rounded-full",
+                "bg-white/18 backdrop-blur-md border border-white/20 p-2",
+                "text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white",
+                "shadow-lg",
               )}
             >
-              <Heart
-                className={cn("size-4", isLiked && "fill-current")}
-                aria-hidden="true"
-              />
-            </button>
+              <LikeButton id={playlist._id} size="md" type="playlist" />
+            </span>
           </div>
 
           {/* Playing glow ring */}
@@ -278,7 +205,7 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
         </div>
 
         {/* ═══════════════════ INFO ═══════════════════ */}
-        <div className="flex items-start justify-between gap-2 px-0.5">
+        <div className="flex items-start justify-between gap-2 px-0.5 pl-2 pr-2 pb-2">
           <div className="flex flex-col gap-0.5 min-w-0 flex-1">
             <h3
               className={cn(

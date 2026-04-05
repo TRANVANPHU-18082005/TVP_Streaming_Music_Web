@@ -72,7 +72,7 @@ export const LikeButton = memo(
           "relative flex items-center justify-center rounded-full transition-colors duration-200",
           isLiked
             ? "text-[hsl(var(--error))]"
-            : "text-muted-foreground/40 hover:text-foreground",
+            : "text-foreground hover:text-brand",
           className,
         )}
       >

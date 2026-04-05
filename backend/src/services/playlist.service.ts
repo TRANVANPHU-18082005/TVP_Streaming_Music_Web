@@ -669,6 +669,20 @@ class PlaylistService {
 
     return playlist;
   }
+  /**
+   * 8. GET ALL MY PLAYLISTS (For Sidebar/Profile)
+   * Lấy toàn bộ playlist mà user sở hữu, không phân trang, bao gồm cả Private
+   */
+  async getMyAllPlaylists(userId: string) {
+    return await Playlist.find({
+      user: userId,
+    })
+      .select(
+        "title slug description visibility user themeColor type isSystem totalTracks coverImage",
+      ) // Chỉ lấy field cần thiết cho Sidebar
+      .sort({ createdAt: -1 })
+      .lean();
+  }
 }
 
 export default new PlaylistService();

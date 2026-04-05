@@ -76,7 +76,7 @@ export const useMyPlaylists = () => {
     queryKey: playlistKeys.list({ type: "all" }), // Key riêng biệt
     queryFn: () => playlistApi.getMyPlaylists(),
     staleTime: 1000 * 60 * 5,
-    select: (response) => response.data.data as Playlist[],
+    select: (response) => response.data,
   });
 };
 /**

@@ -166,7 +166,7 @@ const TrackManagementPage = () => {
       </div>
 
       {/* TABLE CONTENT */}
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <Table>
             <TableHeader>

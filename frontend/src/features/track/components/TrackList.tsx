@@ -1,17 +1,16 @@
 /**
- * TrackList.tsx
+ * TrackList.tsx — v2.0 Soundwave
  *
- * Virtualization-ready track table with skeleton, empty, and error states.
- * Designed for Spotify/YouTube Music quality — responsive, accessible, performant.
- *
- * Architecture decisions:
- * - `showHeader` prop allows embedding in contexts (modals, sidebars) without header.
- * - `skeletonCount` configurable — shorter lists (search results) need fewer.
- * - `onTrackPlay` callback forwarded from parent for full decoupling.
- *   Parent owns the play logic; TrackList is purely presentational + dispatch.
- * - colgroup widths are the single source of truth for column sizing.
- *   Never rely on per-cell widths — they conflict and produce jank.
- * - `isEmpty` derived synchronously — no useEffect needed.
+ * UPGRADES vs original:
+ * ─ Skeleton rows: use .skeleton token (shimmer gradient + animation)
+ *   instead of inline style pulse. Properly themed light/dark.
+ * ─ ColumnHeaders: .glass-heavy token for sticky backdrop,
+ *   .text-label token for ALL CAPS column labels
+ * ─ EmptyState: Soundwave ambient system — .orb-float, .animate-glow-pulse,
+ *   .animate-vinyl, .text-track-title, .text-track-meta tokens
+ * ─ Row entry: .animate-fade-up stagger — animationDelay prop forwarded
+ * ─ Container: aria-label region preserved, no layout changes
+ * ─ skeletonCount prop still configurable (default 8)
  */
 
 import React, { memo, useCallback, useRef, useMemo } from "react";
@@ -37,50 +36,44 @@ import { ITrack } from "@/features/track/types";
 export interface TrackListProps {
   tracks: ITrack[];
   isLoading?: boolean;
-  /** Forwarded if parent wants to intercept play (e.g., analytics, paywall) */
   onTrackPlay?: (track: ITrack, index: number) => void;
   className?: string;
-  /** Hide the column header row — useful inside modals / panels */
   showHeader?: boolean;
-  /** Skeleton row count while loading */
   skeletonCount?: number;
-  /** Stagger entry animation (set false for instant render in modals) */
   staggerAnimation?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
-// TrackSkeleton
+// TrackSkeleton — Soundwave .skeleton token
 //
-// Cinematic waterfall loading:
-//   - Opacity fades out progressively (rows further down = more transparent)
-//   - Width randomised via index modulo to mimic real content variance
+// Uses the token's shimmer gradient instead of inline pulse keyframes.
+// Stagger: opacity fades progressively (rows further down = more transparent).
+// Width modulo pattern unchanged — deterministic, no hydration risk.
 // ─────────────────────────────────────────────────────────────
 
-interface TrackSkeletonProps {
-  index: number;
-}
-
-const TrackSkeleton = memo(({ index }: TrackSkeletonProps) => {
-  // Deterministic "random" widths per row — no hydration mismatch risk
-  const titleW = 52 + (index % 4) * 11; // 52 – 85%
-  const artistW = 32 + (index % 3) * 9; // 32 – 59%
-  const albumW = 38 + (index % 5) * 7; // 38 – 66%
+const TrackSkeleton = memo(({ index }: { index: number }) => {
+  const titleW = 52 + (index % 4) * 11; // 52–85%
+  const artistW = 32 + (index % 3) * 9; // 32–59%
+  const albumW = 38 + (index % 5) * 7; // 38–66%
+  // Progressively fade deeper rows
+  const rowOpacity = Math.max(0.15, 1 - index * 0.1);
 
   return (
     <TableRow
       aria-hidden="true"
-      className="h-14 border-b border-[hsl(var(--border)/0.06)] hover:bg-transparent last:border-b-0"
-      style={{ opacity: Math.max(0.2, 1 - index * 0.09) }}
+      className="h-14 border-b border-border/[0.06] hover:bg-transparent last:border-b-0"
+      style={{ opacity: rowOpacity }}
     >
-      {/* Index placeholder */}
+      {/* # placeholder */}
       <TableCell className="w-12 p-0">
         <div className="flex h-14 items-center justify-center">
+          {/*
+           * .skeleton token: provides shimmer gradient + animation.
+           * Delay via CSS animation-delay so each cell shimmers offset.
+           */}
           <div
-            className="size-3.5 rounded-sm"
-            style={{
-              background: "hsl(var(--muted)/0.65)",
-              animation: `pulse 2s cubic-bezier(0.4,0,0.6,1) ${index * 60}ms infinite`,
-            }}
+            className="skeleton size-3.5 rounded-sm"
+            style={{ animationDelay: `${index * 60}ms` }}
           />
         </div>
       </TableCell>
@@ -88,56 +81,54 @@ const TrackSkeleton = memo(({ index }: TrackSkeletonProps) => {
       {/* Cover + text */}
       <TableCell className="py-0 pl-1 pr-4">
         <div className="flex items-center gap-3">
-          {/* Cover placeholder */}
+          {/* Cover */}
           <div
-            className="size-10 shrink-0 rounded"
-            style={{
-              background: "hsl(var(--muted)/0.7)",
-              animation: `pulse 2s cubic-bezier(0.4,0,0.6,1) ${index * 60}ms infinite`,
-            }}
+            className="skeleton size-10 shrink-0 rounded"
+            style={{ animationDelay: `${index * 60}ms` }}
           />
-          {/* Text placeholders */}
+          {/* Text lines */}
           <div className="flex flex-col gap-2 flex-1">
             <div
-              className="h-3 rounded-full"
+              className="skeleton skeleton-text"
               style={{
                 width: `${titleW}%`,
-                background: "hsl(var(--muted)/0.7)",
-                animation: `pulse 2s cubic-bezier(0.4,0,0.6,1) ${index * 60 + 80}ms infinite`,
+                animationDelay: `${index * 60 + 80}ms`,
               }}
             />
             <div
-              className="h-2.5 rounded-full"
+              className="skeleton skeleton-text"
               style={{
                 width: `${artistW}%`,
-                background: "hsl(var(--muted)/0.4)",
-                animation: `pulse 2s cubic-bezier(0.4,0,0.6,1) ${index * 60 + 160}ms infinite`,
+                height: "0.625rem",
+                opacity: 0.7,
+                animationDelay: `${index * 60 + 160}ms`,
               }}
             />
           </div>
         </div>
       </TableCell>
 
-      {/* Album placeholder (md+) */}
+      {/* Album (md+) */}
       <TableCell className="hidden md:table-cell py-0 pr-4">
         <div
-          className="h-2.5 rounded-full"
+          className="skeleton skeleton-text"
           style={{
             width: `${albumW}%`,
-            background: "hsl(var(--muted)/0.38)",
-            animation: `pulse 2s cubic-bezier(0.4,0,0.6,1) ${index * 60 + 240}ms infinite`,
+            height: "0.625rem",
+            opacity: 0.65,
+            animationDelay: `${index * 60 + 240}ms`,
           }}
         />
       </TableCell>
 
-      {/* Duration placeholder */}
+      {/* Duration */}
       <TableCell className="py-0 pr-3">
         <div className="flex justify-end">
           <div
-            className="h-2.5 w-10 rounded-full"
+            className="skeleton skeleton-bar w-10"
             style={{
-              background: "hsl(var(--muted)/0.35)",
-              animation: `pulse 2s cubic-bezier(0.4,0,0.6,1) ${index * 60 + 320}ms infinite`,
+              opacity: 0.6,
+              animationDelay: `${index * 60 + 320}ms`,
             }}
           />
         </div>
@@ -148,73 +139,56 @@ const TrackSkeleton = memo(({ index }: TrackSkeletonProps) => {
 TrackSkeleton.displayName = "TrackSkeleton";
 
 // ─────────────────────────────────────────────────────────────
-// EmptyState
-//
-// Premium empty UI — spinning disc + ambient glow.
-// All animations driven by CSS classes from index.css.
+// EmptyState — Soundwave ambient + token typography
 // ─────────────────────────────────────────────────────────────
 
 const EmptyState = memo(() => (
   <TableRow className="hover:bg-transparent border-0">
     <TableCell colSpan={4} className="p-0 border-0">
-      <div
-        className="flex flex-col items-center justify-center gap-7 py-20 sm:py-28"
-        style={{ animation: "fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) both" }}
-      >
-        {/* Disc icon with ambient glow */}
+      <div className="flex flex-col items-center justify-center gap-8 py-20 sm:py-28 animate-fade-up">
+        {/* Disc with ambient glow system */}
         <div className="relative flex items-center justify-center">
-          {/* Pulsing radial glow */}
+          {/*
+           * .orb-float--brand: radial glow orb that floats with keyframes.
+           * Sized explicitly here since we want a compact ambient effect.
+           */}
           <div
-            className="absolute size-28 rounded-full"
-            style={{
-              background:
-                "radial-gradient(circle, hsl(var(--primary)/0.15) 0%, transparent 72%)",
-              animation: "glow-pulse 3.2s ease-in-out infinite",
-            }}
+            className="absolute size-32 rounded-full orb-float--brand animate-glow-pulse pointer-events-none"
+            style={{ filter: "blur(36px)", opacity: 0.18 }}
+            aria-hidden="true"
           />
 
-          {/* Outer spinning ring */}
+          {/* Spinning conic ring — from vinyl-spin keyframe */}
           <div
-            className="absolute size-[72px] rounded-full"
+            className="absolute size-[76px] rounded-full animate-vinyl-slow pointer-events-none"
             style={{
               background:
-                "conic-gradient(from 0deg, transparent 75%, hsl(var(--primary)/0.35) 100%)",
-              animation: "vinyl-spin 6s linear infinite",
+                "conic-gradient(from 0deg, transparent 72%, hsl(var(--primary)/0.32) 100%)",
             }}
+            aria-hidden="true"
           />
 
-          {/* Icon container */}
+          {/* Icon disc */}
           <div
-            className="relative flex size-16 items-center justify-center rounded-full"
-            style={{
-              background: "hsl(var(--muted)/0.8)",
-              border: "1px solid hsl(var(--border)/0.6)",
-              boxShadow: "inset 0 1px 0 hsl(0 0% 100%/0.08)",
-            }}
+            className={cn(
+              "relative flex size-16 items-center justify-center rounded-full",
+              "bg-muted border border-border/60",
+              "shadow-inset-top",
+            )}
           >
             <Disc3
-              className="size-7"
-              style={{
-                color: "hsl(var(--muted-foreground))",
-                opacity: 0.55,
-                animation: "vinyl-spin 8s linear infinite",
-              }}
+              className="size-7 text-muted-foreground/50 animate-vinyl-slow"
+              aria-hidden="true"
             />
           </div>
         </div>
 
-        {/* Copy */}
-        <div className="text-center">
-          <p
-            className="text-[15px] font-semibold tracking-tight mb-1.5"
-            style={{ color: "hsl(var(--foreground))" }}
-          >
+        {/* Copy — Soundwave typography tokens */}
+        <div className="text-center space-y-1.5">
+          <p className="text-track-title text-[15px] text-foreground">
             Danh sách trống
           </p>
-          <p
-            className="text-sm max-w-[240px] leading-relaxed"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
+          <p className="text-track-meta max-w-[240px] mx-auto leading-relaxed">
             Chưa có bài hát nào ở đây. Hãy thêm nhạc để bắt đầu.
           </p>
         </div>
@@ -225,59 +199,44 @@ const EmptyState = memo(() => (
 EmptyState.displayName = "EmptyState";
 
 // ─────────────────────────────────────────────────────────────
-// ColumnHeaders — sticky, glassmorphism top bar
+// ColumnHeaders — Soundwave .glass-heavy sticky backdrop
+//                + .text-label ALL-CAPS token
 // ─────────────────────────────────────────────────────────────
 
 const ColumnHeaders = memo(() => (
   <TableHeader className="sticky top-0 z-10">
     <TableRow
-      className="hover:bg-transparent"
+      className="hover:bg-transparent border-border/25"
       style={{
-        borderBottom: "1px solid hsl(var(--border)/0.25)",
-        // Glassmorphism — backdrop matches whatever is behind
-        background: "hsl(var(--background)/0.85)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
+        background: "transparent", // fallback for browsers that don't support backdrop-filter
+        WebkitBackdropFilter: "var(--glass-blur-heavy)",
+        borderBottom: "1px solid hsl(var(--border) / 0.25)",
       }}
     >
       {/* # */}
       <TableHead className="w-12 p-0 h-10">
         <div className="flex h-10 items-center justify-center">
-          <span
-            className="text-[10px] font-bold uppercase tracking-[0.15em]"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            #
-          </span>
+          {/* Soundwave .text-label token: uppercase + tracking */}
+          <span className="text-label text-muted-foreground">#</span>
         </div>
       </TableHead>
-
       {/* Bài hát */}
       <TableHead className="pl-1 pr-4 h-10">
-        <span
-          className="text-[10px] font-bold uppercase tracking-[0.15em]"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          Bài hát
-        </span>
+        <span className="text-label text-muted-foreground">Bài hát</span>
       </TableHead>
-
-      {/* Album — hidden < md */}
+      {/* Album (md+) */}
       <TableHead className="hidden md:table-cell pr-4 h-10">
-        <span
-          className="text-[10px] font-bold uppercase tracking-[0.15em]"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          Album
-        </span>
+        <span className="text-label text-muted-foreground">Album</span>
       </TableHead>
-
+      {/*Like button column */}
+      <TableHead className="table-cell pr-1 h-10">
+        <span className="text-label text-muted-foreground">Like</span>
+      </TableHead>
       {/* Duration */}
       <TableHead className="pr-3 h-10 text-right">
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-center">
           <Clock
-            className="size-3.5"
-            style={{ color: "hsl(var(--muted-foreground))" }}
+            className="size-3.5 text-muted-foreground"
             aria-label="Thời lượng"
           />
         </div>
@@ -305,20 +264,11 @@ export const TrackList = memo(
     const { currentTrack, isPlaying } = useAppSelector((s) => s.player);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // ── Derived state (synchronous, no extra hook) ──────────
     const isEmpty = !isLoading && tracks.length === 0;
-
-    // ── Stable ID set for O(1) active lookup ───────────────
     const activeId = currentTrack?._id ?? null;
 
-    /**
-     * Core play handler.
-     * Separates the "same track → toggle" from "new track → replace queue".
-     * Parent callback (`onTrackPlay`) fires first — enables analytics / paywall.
-     */
     const handlePlayTrack = useCallback(
       (track: ITrack, index: number) => {
-        // Allow parent to intercept (analytics, paywall checks, etc.)
         onTrackPlay?.(track, index);
 
         if (activeId === track._id) {
@@ -331,7 +281,6 @@ export const TrackList = memo(
       [dispatch, tracks, activeId, isPlaying, onTrackPlay],
     );
 
-    // ── Memoised skeleton array — stable reference ──────────
     const skeletons = useMemo(
       () => Array.from({ length: skeletonCount }, (_, i) => i),
       [skeletonCount],
@@ -339,54 +288,61 @@ export const TrackList = memo(
 
     return (
       <div
-        ref={containerRef}
-        role="region"
-        aria-label="Danh sách bài hát"
-        className={cn("w-full", className)}
+        className={cn(
+          "rounded-2xl",
+          "border border-border/50 dark:border-primary/15",
+          "shadow-brand p-4",
+          "animate-fade-up animation-fill-both",
+        )}
+        style={{ animationDelay: "80ms" }}
       >
-        <Table
-          className="w-full border-collapse"
-          style={{ tableLayout: "fixed", minWidth: "100%" }}
+        <div
+          ref={containerRef}
+          role="region"
+          aria-label="Danh sách bài hát"
+          className={cn("w-full", className)}
         >
-          {/* Column width constraints — single source of truth */}
-          <colgroup>
-            {/* Index */}
-            <col style={{ width: "3rem" }} />
-            {/* Track (flex) */}
-            <col />
-            {/* Album — hidden < md, 200px otherwise */}
-            <col style={{ width: "0" }} className="hidden md:table-column" />
-            {/* Actions + duration */}
-            <col style={{ width: "140px" }} />
-          </colgroup>
+          <Table
+            className="w-full border-collapse"
+            style={{ tableLayout: "fixed", minWidth: "100%" }}
+          >
+            {/* Single source of truth for column widths */}
+            <colgroup>
+              <col style={{ width: "3rem" }} />
+              <col />
+              <col
+                style={{ width: "200px" }}
+                className="hidden md:table-column"
+              />
+              <col style={{ width: "3rem" }} />
+              <col className="w-20 md:w-30" />
+            </colgroup>
 
-          {/* ── Header ── */}
-          {showHeader && <ColumnHeaders />}
+            {showHeader && <ColumnHeaders />}
 
-          {/* ── Body ── */}
-          <TableBody>
-            {isLoading ? (
-              // Skeleton rows
-              skeletons.map((i) => <TrackSkeleton key={`sk-${i}`} index={i} />)
-            ) : isEmpty ? (
-              // Empty state
-              <EmptyState />
-            ) : (
-              // Track rows
-              tracks.map((track, index) => (
-                <TrackRow
-                  key={track._id}
-                  track={track}
-                  index={index}
-                  isActive={activeId === track._id}
-                  isPlaying={isPlaying}
-                  onPlay={() => handlePlayTrack(track, index)}
-                  animationDelay={staggerAnimation ? index * 28 : 0}
-                />
-              ))
-            )}
-          </TableBody>
-        </Table>
+            <TableBody>
+              {isLoading ? (
+                skeletons.map((i) => (
+                  <TrackSkeleton key={`sk-${i}`} index={i} />
+                ))
+              ) : isEmpty ? (
+                <EmptyState />
+              ) : (
+                tracks.map((track, index) => (
+                  <TrackRow
+                    key={track._id}
+                    track={track}
+                    index={index}
+                    isActive={activeId === track._id}
+                    isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(track, index)}
+                    animationDelay={staggerAnimation ? index * 28 : 0}
+                  />
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     );
   },

@@ -1,600 +1,862 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useCallback, memo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
   Bell,
   Shield,
   Palette,
   Volume2,
-  Download,
-  Smartphone,
-  Globe,
-  CreditCard,
-  HelpCircle,
   LogOut,
+  Check,
+  Sparkles,
+  Moon,
+  Monitor,
+  Sun,
+  ChevronRight,
+  Zap,
+  Globe,
+  Save,
+  Camera,
 } from "lucide-react";
-import { Button } from "../../components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
-import { Switch } from "../../components/ui/switch";
-import { Label } from "../../components/ui/label";
-import { Input } from "../../components/ui/input";
-import { Textarea } from "../../components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
-import { Separator } from "../../components/ui/separator";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../../components/ui/tabs";
-import { Slider } from "../../components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { useTheme, type Skin, type Theme } from "@/hooks/useTheme";
+import { cn } from "@/lib/utils";
 
-export function SettingsPage() {
-  const [theme, setTheme] = useState("system");
-  const [notifications, setNotifications] = useState({
-    newReleases: true,
-    playlists: true,
-    followers: false,
-    email: true,
-    push: false,
-  });
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS — only the 8 skins registered in index.css [data-theme] selectors
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SKINS: { id: Skin; label: string; color: string; desc: string }[] = [
+  {
+    id: "obsidian",
+    label: "Obsidian",
+    color: "hsl(258 90% 56%)",
+    desc: "Deep Indigo",
+  },
+  {
+    id: "tokyo",
+    label: "Tokyo Night",
+    color: "hsl(340 90% 68%)",
+    desc: "Neon Cyberpunk",
+  },
+  {
+    id: "sahara",
+    label: "Sahara Gold",
+    color: "hsl(36 95% 56%)",
+    desc: "Luxury Amber",
+  },
+  {
+    id: "nordic",
+    label: "Nordic Ice",
+    color: "hsl(199 92% 66%)",
+    desc: "Arctic Minimal",
+  },
+  {
+    id: "amazon",
+    label: "Forest Zen",
+    color: "hsl(152 68% 56%)",
+    desc: "Emerald Calm",
+  },
+  {
+    id: "crimson",
+    label: "Crimson",
+    color: "hsl(356 88% 56%)",
+    desc: "Ruby Passion",
+  },
+  {
+    id: "vapor",
+    label: "Vaporwave",
+    color: "hsl(286 92% 72%)",
+    desc: "80s Dream",
+  },
+  {
+    id: "slate",
+    label: "Slate",
+    color: "hsl(215 28% 76%)",
+    desc: "Pro Steel Gray",
+  },
+];
+
+const MODES: {
+  id: Theme;
+  label: string;
+  icon: React.ElementType;
+  desc: string;
+}[] = [
+  { id: "light", label: "Light", icon: Sun, desc: "Clean & bright" },
+  { id: "dark", label: "Dark", icon: Moon, desc: "Obsidian abyss" },
+  { id: "system", label: "System", icon: Monitor, desc: "Follow device" },
+];
+
+type SectionId =
+  | "account"
+  | "appearance"
+  | "playback"
+  | "notifications"
+  | "privacy";
+
+const SECTIONS: {
+  id: SectionId;
+  label: string;
+  icon: React.ElementType;
+  desc: string;
+}[] = [
+  { id: "account", label: "Account", icon: User, desc: "Profile & Security" },
+  {
+    id: "appearance",
+    label: "Appearance",
+    icon: Palette,
+    desc: "Themes & Skins",
+  },
+  { id: "playback", label: "Playback", icon: Volume2, desc: "Audio Quality" },
+  { id: "notifications", label: "Alerts", icon: Bell, desc: "Push & Email" },
+  { id: "privacy", label: "Privacy", icon: Shield, desc: "Data Safety" },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MOTION VARIANTS — aligned with --ease-snappy / --ease-spring tokens
+// ─────────────────────────────────────────────────────────────────────────────
+const TAB_VARIANTS = {
+  enter: { opacity: 0, x: 16, filter: "blur(4px)" },
+  center: {
+    opacity: 1,
+    x: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+  },
+  exit: {
+    opacity: 0,
+    x: -12,
+    filter: "blur(2px)",
+    transition: { duration: 0.18, ease: [0.4, 0, 1, 1] },
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION NAV ITEM — extracted for memo
+// ─────────────────────────────────────────────────────────────────────────────
+const SectionNavItem = memo(
+  ({
+    section,
+    isActive,
+    onClick,
+    index,
+  }: {
+    section: (typeof SECTIONS)[number];
+    isActive: boolean;
+    onClick: () => void;
+    index: number;
+  }) => (
+    <button
+      onClick={onClick}
+      role="tab"
+      aria-selected={isActive}
+      aria-controls={`settings-panel-${section.id}`}
+      className={cn(
+        "group w-full flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4",
+        "rounded-2xl border text-left",
+        "transition-all duration-200",
+        "focus-visible:outline-2 focus-visible:outline-offset-2",
+        "focus-visible:outline-[hsl(var(--ring))]",
+        "animate-fade-up",
+        isActive
+          ? ["bg-card border-border/50 text-primary", "shadow-elevated"]
+          : [
+              "border-transparent text-foreground",
+              "hover:bg-surface-2/70 hover:border-border/30",
+            ],
+      )}
+      style={{ animationDelay: `${index * 60}ms` }}
+    >
+      {/* Icon container */}
+      <div
+        className={cn(
+          "size-9 sm:size-10 rounded-xl flex items-center justify-center shrink-0",
+          "transition-all duration-200",
+          isActive
+            ? "bg-primary text-primary-foreground shadow-glow-xs"
+            : "bg-muted/30 text-muted-foreground group-hover:bg-muted/50",
+        )}
+      >
+        <section.icon size={18} aria-hidden="true" />
+      </div>
+
+      {/* Labels — hidden on very small mobile, shown sm+ */}
+      <div className="hidden sm:block text-left flex-1 min-w-0">
+        <p className="font-semibold text-[14px] leading-tight truncate">
+          {section.label}
+        </p>
+        <p className="text-[11px] text-muted-foreground font-medium mt-0.5 truncate">
+          {section.desc}
+        </p>
+      </div>
+
+      <ChevronRight
+        size={14}
+        className={cn(
+          "ml-auto shrink-0 text-muted-foreground/50",
+          "transition-all duration-200",
+          isActive
+            ? "opacity-100 translate-x-0"
+            : "opacity-0 -translate-x-1 group-hover:opacity-60 group-hover:translate-x-0",
+        )}
+        aria-hidden="true"
+      />
+    </button>
+  ),
+);
+SectionNavItem.displayName = "SectionNavItem";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION CARD WRAPPER — glass-frosted + shadow-card + consistent padding
+// ─────────────────────────────────────────────────────────────────────────────
+const SectionCard = memo(
+  ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <div
+      className={cn("card-base glass-frosted", "overflow-hidden", className)}
+    >
+      {children}
+    </div>
+  ),
+);
+SectionCard.displayName = "SectionCard";
+
+const SectionCardHeader = ({
+  icon: Icon,
+  title,
+  description,
+  iconColor,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description?: string;
+  iconColor?: string;
+}) => (
+  <div className="p-6 sm:p-8 pb-4 sm:pb-5">
+    <div className="flex items-center gap-3 mb-3">
+      <div
+        className="size-10 rounded-xl flex items-center justify-center shadow-glow-xs"
+        style={{
+          background: iconColor
+            ? `hsl(var(--primary) / 0.12)`
+            : "hsl(var(--muted))",
+          color: iconColor ?? "hsl(var(--primary))",
+        }}
+      >
+        <Icon size={20} aria-hidden="true" />
+      </div>
+      <h2 className="text-display-lg">{title}</h2>
+    </div>
+    {description && (
+      <p className="text-muted-foreground text-sm leading-relaxed">
+        {description}
+      </p>
+    )}
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPEARANCE SECTION
+// ─────────────────────────────────────────────────────────────────────────────
+const AppearanceSection = memo(
+  ({
+    currentMode,
+    currentSkin,
+    setTheme,
+    setSkin,
+  }: {
+    currentMode: Theme;
+    currentSkin: Skin;
+    setTheme: (t: Theme) => void;
+    setSkin: (s: Skin) => void;
+  }) => (
+    <div className="space-y-6">
+      {/* Interface Mode */}
+      <SectionCard>
+        <SectionCardHeader
+          icon={Sparkles}
+          title="Interface Mode"
+          description="Optimized visual experience for every lighting condition."
+        />
+        <div className="px-6 sm:px-8 pb-6 sm:pb-8 grid grid-cols-3 gap-3">
+          {MODES.map((m) => {
+            const isActive = currentMode === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setTheme(m.id)}
+                aria-pressed={isActive}
+                aria-label={`Set ${m.label} mode`}
+                className={cn(
+                  "pressable flex flex-col items-center gap-3 p-4 sm:p-6 rounded-2xl border-2",
+                  "transition-all duration-200",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2",
+                  "focus-visible:outline-[hsl(var(--ring))]",
+                  isActive
+                    ? "bg-primary/6 border-primary shadow-brand"
+                    : "bg-surface-1/60 border-border/40 hover:border-primary/25 hover:bg-surface-2/60",
+                )}
+              >
+                <div
+                  className={cn(
+                    "size-11 rounded-full flex items-center justify-center",
+                    "transition-all duration-200",
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-glow-sm"
+                      : "bg-muted/30 text-muted-foreground",
+                  )}
+                >
+                  <m.icon size={22} aria-hidden="true" />
+                </div>
+                <div className="text-center">
+                  <p
+                    className={cn(
+                      "font-bold text-xs uppercase tracking-wider leading-none",
+                      isActive ? "text-primary" : "text-foreground",
+                    )}
+                  >
+                    {m.label}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-1 font-medium">
+                    {m.desc}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </SectionCard>
+
+      {/* Skin Grid */}
+      <SectionCard>
+        <SectionCardHeader
+          icon={Palette}
+          title="Color Skins"
+          description="Adaptive Color system auto-adjusts saturation per theme mode."
+        />
+        <div className="px-6 sm:px-8 pb-6 sm:pb-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+          {SKINS.map((s, i) => {
+            const isActive = currentSkin === s.id;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setSkin(s.id)}
+                aria-pressed={isActive}
+                aria-label={`Apply ${s.label} skin`}
+                className={cn(
+                  "group pressable flex items-center gap-3.5 p-3.5 rounded-2xl border",
+                  "transition-all duration-200",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2",
+                  "focus-visible:outline-[hsl(var(--ring))]",
+                  "animate-fade-up",
+                  isActive
+                    ? "bg-primary/6 border-primary/40 shadow-glow-xs"
+                    : "bg-surface-1/60 border-border/40 hover:bg-surface-2/70 hover:border-border-strong",
+                )}
+                style={{ animationDelay: `${i * 35}ms` }}
+              >
+                {/* Color swatch */}
+                <div
+                  className="size-9 rounded-xl shrink-0 flex items-center justify-center shadow-md transition-transform duration-200 group-hover:scale-110"
+                  style={{ backgroundColor: s.color }}
+                  aria-hidden="true"
+                >
+                  {isActive && (
+                    <Check className="size-4 text-white drop-shadow" />
+                  )}
+                </div>
+                <div className="text-left truncate min-w-0">
+                  <p
+                    className={cn(
+                      "font-semibold text-sm leading-tight truncate",
+                      isActive ? "text-primary" : "text-foreground",
+                    )}
+                  >
+                    {s.label}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-medium truncate mt-0.5">
+                    {s.desc}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </SectionCard>
+    </div>
+  ),
+);
+AppearanceSection.displayName = "AppearanceSection";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNT SECTION
+// ─────────────────────────────────────────────────────────────────────────────
+const AccountSection = memo(() => (
+  <SectionCard>
+    {/* Hero banner — gradient-brand token */}
+    <div
+      className="h-28 sm:h-36 gradient-brand opacity-30"
+      aria-hidden="true"
+    />
+
+    <div className="px-6 sm:px-8 pb-8">
+      {/* Avatar + name row */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-end gap-5 -mt-10 sm:-mt-14 mb-8">
+        <div className="relative group size-24 sm:size-28 rounded-[28px] sm:rounded-[32px] shrink-0">
+          {/* Avatar frame — card-base tokens */}
+          <div className="size-full rounded-[inherit] bg-card border-2 border-border/60 shadow-card-md flex items-center justify-center overflow-hidden">
+            <User
+              size={44}
+              className="text-muted-foreground/30"
+              aria-hidden="true"
+            />
+          </div>
+          {/* Hover overlay */}
+          <button
+            className={cn(
+              "absolute inset-0 rounded-[inherit]",
+              "bg-overlay/70 backdrop-blur-sm",
+              "flex flex-col items-center justify-center gap-1",
+              "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+              "transition-opacity duration-200",
+              "focus-visible:outline-2 focus-visible:outline-offset-2",
+              "focus-visible:outline-[hsl(var(--ring))]",
+            )}
+            aria-label="Change profile photo"
+          >
+            <Camera size={20} className="text-white" aria-hidden="true" />
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">
+              Change
+            </span>
+          </button>
+        </div>
+
+        <div className="pb-1 sm:pb-2 min-w-0">
+          <h3 className="text-2xl font-black tracking-tight text-foreground truncate">
+            Soundwave User
+          </h3>
+          <p
+            className="text-xs font-bold uppercase tracking-widest mt-1"
+            style={{ color: "hsl(var(--primary))" }}
+          >
+            Premium Member
+          </p>
+        </div>
+      </div>
+
+      {/* Form fields */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+        <div className="space-y-2">
+          <label className="text-overline text-muted-foreground/60 ml-0.5">
+            Username
+          </label>
+          <Input
+            className="input-base h-11"
+            defaultValue="Neural_Artist_01"
+            aria-label="Username"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-overline text-muted-foreground/60 ml-0.5">
+            Email
+          </label>
+          <Input
+            className="input-base h-11 opacity-70 cursor-not-allowed"
+            defaultValue="user@soundwave.io"
+            readOnly
+            aria-label="Email address (read-only)"
+          />
+        </div>
+
+        <div className="md:col-span-2 space-y-2">
+          <label className="text-overline text-muted-foreground/60 ml-0.5">
+            Biography
+          </label>
+          <Textarea
+            className="input-base min-h-[110px] resize-none py-3"
+            placeholder="Tell us about your musical taste…"
+            aria-label="Biography"
+          />
+        </div>
+      </div>
+
+      {/* Save CTA — .btn-primary from design system */}
+      <button className="btn-primary btn-lg mt-8 gap-2.5">
+        <Save size={16} aria-hidden="true" />
+        Save Profile
+      </button>
+    </div>
+  </SectionCard>
+));
+AccountSection.displayName = "AccountSection";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLAYBACK SECTION
+// ─────────────────────────────────────────────────────────────────────────────
+const PlaybackSection = memo(
+  ({
+    audioQuality,
+    setAudioQuality,
+    normalize,
+    setNormalize,
+  }: {
+    audioQuality: number[];
+    setAudioQuality: (v: number[]) => void;
+    normalize: boolean;
+    setNormalize: (v: boolean) => void;
+  }) => (
+    <SectionCard>
+      <SectionCardHeader
+        icon={Volume2}
+        title="Audio Fidelity"
+        description="Configure streaming quality and Neural Audio Engine settings."
+      />
+      <div className="px-6 sm:px-8 pb-8 space-y-8">
+        {/* Quality slider */}
+        <div className="space-y-5">
+          <div className="flex items-end justify-between">
+            <div className="space-y-1">
+              <p className="font-semibold text-base text-foreground">
+                Streaming Quality
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Higher quality uses more data.
+              </p>
+            </div>
+            <div className="text-right shrink-0 ml-4">
+              <span
+                className="text-display-lg tabular-nums"
+                style={{ color: "hsl(var(--primary))" }}
+              >
+                {audioQuality[0]}
+              </span>
+              <span className="text-overline text-muted-foreground/60 ml-1">
+                KBPS
+              </span>
+            </div>
+          </div>
+
+          <Slider
+            value={audioQuality}
+            onValueChange={setAudioQuality}
+            max={320}
+            min={96}
+            step={32}
+            className="cursor-grab active:cursor-grabbing"
+            aria-label="Streaming quality in kbps"
+          />
+
+          {/* Quality markers */}
+          <div className="flex justify-between px-1">
+            {[96, 128, 160, 192, 256, 320].map((v) => (
+              <span
+                key={v}
+                className={cn(
+                  "text-[10px] font-mono tabular-nums",
+                  audioQuality[0] === v
+                    ? "text-primary font-bold"
+                    : "text-muted-foreground/40",
+                )}
+              >
+                {v}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <Separator style={{ background: "hsl(var(--border) / 0.4)" }} />
+
+        {/* Toggle options */}
+        <div className="space-y-5">
+          {[
+            {
+              id: "normalize",
+              label: "Normalize Volume",
+              desc: "Auto-balance loudness across your entire library.",
+              checked: normalize,
+              onChange: setNormalize,
+            },
+            {
+              id: "crossfade",
+              label: "Crossfade Tracks",
+              desc: "Blend between songs during playback (5s transition).",
+              checked: true,
+              onChange: () => {},
+            },
+            {
+              id: "gapless",
+              label: "Gapless Playback",
+              desc: "Remove silence between tracks in albums.",
+              checked: false,
+              onChange: () => {},
+            },
+          ].map((item, i) => (
+            <div
+              key={item.id}
+              className={cn(
+                "flex items-center justify-between gap-4 py-1",
+                "animate-fade-up",
+              )}
+              style={{ animationDelay: `${i * 60}ms` }}
+            >
+              <div className="space-y-0.5 flex-1 min-w-0">
+                <Label
+                  htmlFor={item.id}
+                  className="text-[15px] font-semibold text-foreground cursor-pointer"
+                >
+                  {item.label}
+                </Label>
+                <p className="text-sm text-muted-foreground">{item.desc}</p>
+              </div>
+              <Switch
+                id={item.id}
+                checked={item.checked}
+                onCheckedChange={item.onChange}
+                aria-label={item.label}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </SectionCard>
+  ),
+);
+PlaybackSection.displayName = "PlaybackSection";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLACEHOLDER SECTION — for Notifications & Privacy
+// ─────────────────────────────────────────────────────────────────────────────
+const PlaceholderSection = memo(
+  ({
+    icon: Icon,
+    title,
+    description,
+  }: {
+    icon: React.ElementType;
+    title: string;
+    description: string;
+  }) => (
+    <SectionCard>
+      <div className="flex flex-col items-center justify-center py-20 px-8 text-center gap-5">
+        <div
+          className="size-16 rounded-2xl flex items-center justify-center shadow-glow-xs"
+          style={{
+            background: "hsl(var(--primary) / 0.10)",
+            color: "hsl(var(--primary))",
+          }}
+        >
+          <Icon size={28} aria-hidden="true" />
+        </div>
+        <div className="space-y-2 max-w-sm">
+          <h3 className="text-display-lg">{title}</h3>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            {description}
+          </p>
+        </div>
+        <div className="badge badge-muted mt-2">Coming Soon</div>
+      </div>
+    </SectionCard>
+  ),
+);
+PlaceholderSection.displayName = "PlaceholderSection";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+export default function SettingsPage() {
+  const {
+    theme: currentMode,
+    skin: currentSkin,
+    setTheme,
+    setSkin,
+  } = useTheme();
+  const [activeSection, setActiveSection] = useState<SectionId>("account");
   const [audioQuality, setAudioQuality] = useState([320]);
-  const [autoDownload, setAutoDownload] = useState(false);
-  const [offlineMode, setOfflineMode] = useState(false);
+  const [normalize, setNormalize] = useState(true);
 
-  const settingsSections = [
-    {
-      id: "account",
-      label: "Account",
-      icon: User,
-      description: "Manage your profile and account settings",
-    },
-    {
-      id: "notifications",
-      label: "Notifications",
-      icon: Bell,
-      description: "Control when and how you receive notifications",
-    },
-    {
-      id: "privacy",
-      label: "Privacy",
-      icon: Shield,
-      description: "Manage your privacy and security settings",
-    },
-    {
-      id: "appearance",
-      label: "Appearance",
-      icon: Palette,
-      description: "Customize the look and feel of the app",
-    },
-    {
-      id: "playback",
-      label: "Playback",
-      icon: Volume2,
-      description: "Audio quality and playback preferences",
-    },
-    {
-      id: "downloads",
-      label: "Downloads",
-      icon: Download,
-      description: "Manage offline content and storage",
-    },
-  ];
+  const handleSetSection = useCallback(
+    (id: SectionId) => () => setActiveSection(id),
+    [],
+  );
 
   return (
-    <div className="container px-4 lg:px-6 py-8 max-w-6xl">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+    <div className="relative min-h-screen bg-background pb-24">
+      {/* ── Ambient orbs — token-driven, skin-aware ── */}
+      <div
+        className="fixed inset-0 pointer-events-none overflow-hidden -z-10"
+        aria-hidden="true"
       >
-        <h1 className="text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-          Settings
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Customize your MusicHub experience
-        </p>
-      </motion.div>
+        <div className="orb-float orb-float--brand orb-float--lg absolute -top-32 -right-32 size-[500px] opacity-[0.12]" />
+        <div className="orb-float orb-float--wave orb-float--slow absolute bottom-0 -left-32 size-[400px] opacity-[0.07]" />
+        <div className="orb-float orb-float--fast absolute top-1/2 left-1/2 size-[300px] opacity-[0.05]" />
+      </div>
 
-      <Tabs defaultValue="account" className="w-full">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="flex flex-col lg:flex-row gap-8"
-        >
-          {/* Sidebar Navigation */}
-          <div className="lg:w-80">
-            <TabsList className="grid w-full grid-cols-1 h-auto p-1">
-              {settingsSections.map((section, index) => {
-                const Icon = section.icon;
-                return (
-                  <motion.div
-                    key={section.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
+      <div className="section-container py-10 lg:py-16">
+        {/* ── Page Header ── */}
+        <header className="mb-10 animate-fade-up">
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="badge badge-brand">
+              <Zap size={10} className="mr-1" aria-hidden="true" />
+              Soundwave v5
+            </span>
+            <span className="badge badge-playing">
+              <span
+                className="size-1.5 rounded-full bg-current mr-1 animate-pulse"
+                aria-hidden="true"
+              />
+              Neural Active
+            </span>
+          </div>
+          <h1 className="text-display-xl text-brand mb-3">Settings</h1>
+          <p className="text-muted-foreground max-w-xl leading-relaxed">
+            Personalize your Soundwave experience with Adaptive Skins and Neural
+            Audio Engine.
+          </p>
+        </header>
+
+        <div className="flex flex-col lg:flex-row gap-8 xl:gap-12">
+          {/* ── Sidebar Navigation ── */}
+          <aside
+            className="lg:w-72 xl:w-80 shrink-0"
+            aria-label="Settings navigation"
+          >
+            {/*
+             * Mobile: horizontal scrollable strip
+             * lg+: vertical list
+             */}
+            <div
+              className={cn(
+                // Mobile: horizontal scroll
+                "flex flex-row lg:flex-col gap-2",
+                "overflow-x-auto lg:overflow-x-visible",
+                "pb-2 lg:pb-0",
+                "no-scrollbar",
+                // Fade edges on mobile
+                "scroll-overflow-mask lg:[mask-image:none]",
+              )}
+              role="tablist"
+              aria-label="Settings sections"
+            >
+              {SECTIONS.map((section, i) => (
+                <div
+                  key={section.id}
+                  className="shrink-0 lg:shrink w-auto lg:w-full"
+                >
+                  <SectionNavItem
+                    section={section}
+                    isActive={activeSection === section.id}
+                    onClick={handleSetSection(section.id)}
+                    index={i}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Infrastructure panel — .glass from design system */}
+            <div
+              className={cn(
+                "hidden lg:block mt-6 p-5 rounded-2xl glass",
+                "space-y-3 animate-fade-up delay-400",
+              )}
+            >
+              <p className="text-overline text-muted-foreground/45 px-1">
+                Infrastructure
+              </p>
+              <div className="space-y-1">
+                <button
+                  className={cn(
+                    "btn-ghost w-full justify-start gap-3 h-11 rounded-xl text-sm font-medium",
+                  )}
+                >
+                  <Globe size={15} aria-hidden="true" />
+                  Language
+                  <span
+                    className="ml-auto text-xs font-mono"
+                    style={{ color: "hsl(var(--primary))" }}
                   >
-                    <TabsTrigger
-                      value={section.id}
-                      className="w-full justify-start p-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                    >
-                      <Icon className="h-5 w-5 mr-3" />
-                      <div className="text-left">
-                        <div className="font-medium">{section.label}</div>
-                        <div className="text-xs opacity-80 hidden sm:block">
-                          {section.description}
-                        </div>
-                      </div>
-                    </TabsTrigger>
-                  </motion.div>
-                );
-              })}
-            </TabsList>
-          </div>
+                    EN (UTF-8)
+                  </span>
+                </button>
 
-          {/* Settings Content */}
-          <div className="flex-1">
-            {/* Account Settings */}
-            <TabsContent value="account">
+                <button
+                  className={cn(
+                    "btn-ghost w-full justify-start gap-3 h-11 rounded-xl text-sm font-medium",
+                    // Danger color via token
+                    "text-[hsl(var(--error))] hover:bg-[hsl(var(--error)/0.08)] hover:text-[hsl(var(--error))]",
+                  )}
+                >
+                  <LogOut size={15} aria-hidden="true" />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          {/* ── Main Content ── */}
+          <main className="flex-1 min-w-0" aria-live="polite">
+            <AnimatePresence mode="wait">
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
+                key={activeSection}
+                variants={TAB_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                id={`settings-panel-${activeSection}`}
+                role="tabpanel"
+                aria-label={SECTIONS.find((s) => s.id === activeSection)?.label}
               >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Profile Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="firstName">First Name</Label>
-                        <Input id="firstName" defaultValue="Alex" />
-                      </div>
-                      <div>
-                        <Label htmlFor="lastName">Last Name</Label>
-                        <Input id="lastName" defaultValue="Johnson" />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        defaultValue="alex@example.com"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="bio">Bio</Label>
-                      <Textarea
-                        id="bio"
-                        placeholder="Tell us about yourself..."
-                        defaultValue="Music enthusiast and playlist curator. Always discovering new sounds and sharing them with the world."
-                      />
-                    </div>
-                    <Button>Save Changes</Button>
-                  </CardContent>
-                </Card>
+                {activeSection === "account" && <AccountSection />}
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Account Security</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="currentPassword">Current Password</Label>
-                      <Input id="currentPassword" type="password" />
-                    </div>
-                    <div>
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <Input id="newPassword" type="password" />
-                    </div>
-                    <div>
-                      <Label htmlFor="confirmPassword">
-                        Confirm New Password
-                      </Label>
-                      <Input id="confirmPassword" type="password" />
-                    </div>
-                    <Button>Update Password</Button>
-                  </CardContent>
-                </Card>
+                {activeSection === "appearance" && (
+                  <AppearanceSection
+                    currentMode={currentMode}
+                    currentSkin={currentSkin}
+                    setTheme={setTheme}
+                    setSkin={setSkin}
+                  />
+                )}
+
+                {activeSection === "playback" && (
+                  <PlaybackSection
+                    audioQuality={audioQuality}
+                    setAudioQuality={setAudioQuality}
+                    normalize={normalize}
+                    setNormalize={setNormalize}
+                  />
+                )}
+
+                {activeSection === "notifications" && (
+                  <PlaceholderSection
+                    icon={Bell}
+                    title="Notification Center"
+                    description="Push and email alert preferences are coming in the next release."
+                  />
+                )}
+
+                {activeSection === "privacy" && (
+                  <PlaceholderSection
+                    icon={Shield}
+                    title="Privacy & Data"
+                    description="Data safety controls and export tools are being finalized."
+                  />
+                )}
               </motion.div>
-            </TabsContent>
-
-            {/* Notifications Settings */}
-            <TabsContent value="notifications">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Push Notifications</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>New Releases</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Get notified when artists you follow release new music
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notifications.newReleases}
-                        onCheckedChange={(checked: boolean) =>
-                          setNotifications({
-                            ...notifications,
-                            newReleases: checked,
-                          })
-                        }
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Playlist Updates</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Get notified when playlists you follow are updated
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notifications.playlists}
-                        onCheckedChange={(checked: boolean) =>
-                          setNotifications({
-                            ...notifications,
-                            playlists: checked,
-                          })
-                        }
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>New Followers</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Get notified when someone follows you
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notifications.followers}
-                        onCheckedChange={(checked: boolean) =>
-                          setNotifications({
-                            ...notifications,
-                            followers: checked,
-                          })
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Communication Preferences</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Email Notifications</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Receive notifications via email
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notifications.email}
-                        onCheckedChange={(checked: boolean) =>
-                          setNotifications({ ...notifications, email: checked })
-                        }
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Mobile Push Notifications</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Receive push notifications on mobile devices
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notifications.push}
-                        onCheckedChange={(checked: boolean) =>
-                          setNotifications({ ...notifications, push: checked })
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </TabsContent>
-
-            {/* Privacy Settings */}
-            <TabsContent value="privacy">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Profile Visibility</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Public Profile</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Make your profile visible to other users
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Show Recently Played</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Display your recently played music on your profile
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Allow Friend Suggestions</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Let others find you through mutual connections
-                        </p>
-                      </div>
-                      <Switch />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Data & Privacy</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <Button variant="outline" className="w-full justify-start">
-                      <Download className="h-4 w-4 mr-2" />
-                      Download Your Data
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start">
-                      <Shield className="h-4 w-4 mr-2" />
-                      Privacy Policy
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      className="w-full justify-start"
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Delete Account
-                    </Button>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </TabsContent>
-
-            {/* Appearance Settings */}
-            <TabsContent value="appearance">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Theme</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label>Color Theme</Label>
-                      <Select value={theme} onValueChange={setTheme}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="light">Light</SelectItem>
-                          <SelectItem value="dark">Dark</SelectItem>
-                          <SelectItem value="system">System</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Display</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Compact Mode</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Show more content in less space
-                        </p>
-                      </div>
-                      <Switch />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Show Album Art</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Display album artwork in player
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </TabsContent>
-
-            {/* Playback Settings */}
-            <TabsContent value="playback">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Audio Quality</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <Label>Streaming Quality</Label>
-                        <span className="text-sm text-muted-foreground">
-                          {audioQuality[0]} kbps
-                        </span>
-                      </div>
-                      <Slider
-                        value={audioQuality}
-                        onValueChange={setAudioQuality}
-                        max={320}
-                        min={96}
-                        step={32}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                        <span>96 kbps</span>
-                        <span>160 kbps</span>
-                        <span>320 kbps</span>
-                      </div>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Crossfade</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Smoothly transition between songs
-                        </p>
-                      </div>
-                      <Switch />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Normalize Volume</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Keep volume consistent across all songs
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </TabsContent>
-
-            {/* Downloads Settings */}
-            <TabsContent value="downloads">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Offline Music</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Auto Download</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Automatically download liked songs for offline
-                          listening
-                        </p>
-                      </div>
-                      <Switch
-                        checked={autoDownload}
-                        onCheckedChange={setAutoDownload}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Offline Mode</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Only play downloaded music
-                        </p>
-                      </div>
-                      <Switch
-                        checked={offlineMode}
-                        onCheckedChange={setOfflineMode}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Download Quality</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Quality for offline downloads
-                        </p>
-                      </div>
-                      <Select defaultValue="high">
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="normal">Normal</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                          <SelectItem value="very-high">Very High</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Storage</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span>Downloaded Music</span>
-                      <span className="text-muted-foreground">2.4 GB</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Cache</span>
-                      <span className="text-muted-foreground">485 MB</span>
-                    </div>
-                    <Separator />
-                    <div className="flex gap-2">
-                      <Button variant="outline" className="flex-1">
-                        Clear Cache
-                      </Button>
-                      <Button variant="outline" className="flex-1">
-                        Manage Downloads
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </TabsContent>
-          </div>
-        </motion.div>
-      </Tabs>
+            </AnimatePresence>
+          </main>
+        </div>
+      </div>
     </div>
   );
 }
-export default SettingsPage;

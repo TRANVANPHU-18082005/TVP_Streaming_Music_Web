@@ -140,11 +140,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { AlbumDetailSkeleton } from "@/features/album/components/AlbumDetailSkeleton";
 import { TrackList } from "@/features/track/components/TrackList";
 import { useAlbumDetail } from "@/features/album/hooks/useAlbumsQuery";
 import { useAppDispatch } from "@/store/hooks";
-import { Genre, ITrack, setIsPlaying, setQueue } from "@/features";
+import {
+  AlbumDetailSkeleton,
+  Genre,
+  ITrack,
+  setIsPlaying,
+  setQueue,
+} from "@/features";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1010,7 +1015,7 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
 
           <div className="rounded-xl overflow-hidden border border-border/30 bg-card/40">
             {tracks.length > 0 ? (
-              <TrackList tracks={tracks} isLoading={false} />
+              <TrackList tracks={tracks} isLoading={isLoading} />
             ) : (
               <AlbumEmptyTracks compact />
             )}

@@ -1,41 +1,20 @@
 /**
- * ChartItem.tsx — Premium ranked track row for the live chart leaderboard
+ * ChartItem.tsx — Premium ranked track row (v4.0 — Soundwave Premium)
  *
- * Architecture & Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * ─────────────────────────────────────────────────────────────────────────
- *
- * RENDERING PERFORMANCE
- *   • Atomic Redux selector: subscribes only to `currentTrack._id` + `isPlaying`.
- *     No re-renders from currentTime ticks (60fps scroll-like updates).
- *   • WaveBars: CSS keyframes injected once via singleton guard — compositor-thread only.
- *   • ChartItem itself is memo()'d; internal handlers are stable via useCallback
- *     with minimal deps arrays.
- *   • CoverOverlay: single DOM node, state-driven `data-visible` attribute.
- *     Eliminated the original double-overlay bug (stacked opacity transitions).
- *   • motion.div wrapper removed from row root — entry animation ownership
- *     belongs to the parent list's AnimatePresence, cutting one Framer
- *     instance per row.
- *
- * UX IMPROVEMENTS
- *   • Rank column: animated rank-number scale + color system for top-3.
- *   • Hover state: meta (play-count, duration) fades out; action strip
- *     (LikeButton + overflow menu) slides in from the right with translate.
- *   • WaveBars replace rank number when the track is active — visual feedback
- *     that doesn't shift layout (fixed 20px width).
- *   • RankBadge: fixed h-4 prevents layout shift between up/down/flat states.
- *   • Cover art: scale-on-hover for top-3 only (too distracting for the full list).
- *   • Keyboard: full Enter/Space support on the row + action buttons.
- *
- * DESIGN TOKENS (from globals.css)
- *   Uses exclusively --primary, --wave-*, --brand-*, --muted-foreground,
- *   --foreground, --surface-*, --border tokens — zero hardcoded colors.
- *
- * ACCESSIBILITY
- *   • role="row" + aria-label on the container.
- *   • aria-pressed on play state.
- *   • aria-hidden on all purely decorative elements.
- *   • Focus-visible ring uses --ring token.
- *   • WCAG AA contrast maintained in both light + dark modes.
+ * UPGRADES vs previous production version:
+ * ─ Hardcoded sky-500/amber-500/emerald-500/rose-500 Tailwind color literals
+ *   in RankBadge and RANK_CFG replaced with hsl(var(--wave-*)) / hsl(var(--success))
+ *   / hsl(var(--error)) / hsl(var(--info)) CSS tokens — theme-adaptive, no flicker
+ * ─ WaveBars: CSS injection replaced with .eq-bar token classes from index.css §9
+ *   (WaveBars was the last inline-animation holdout — now purely CSS)
+ * ─ DropdownMenuContent: hardcoded bg + blur chain → .glass-frosted + .shadow-floating
+ *   tokens from index.css §6+§7 (single source of truth for glass surface)
+ * ─ DropdownMenuItem: raw hover:bg-accent/40 chain → .menu-item token from §11
+ * ─ Active cover ring: ring-primary/40 + shadow box → .shadow-glow-sm token
+ * ─ RankBadge: trend UP/DOWN colors now use CSS token inline styles
+ * ─ Play/Pause CoverOverlay: icon size bump to size-[20px] for better touch target
+ * ─ Action strip: LikeButton + MoreHorizontal button gap tightened from gap-0.5 → gap-1
+ * ─ All other architecture, memo(), useCallback, accessibility patterns preserved
  */
 
 import React, { memo, useState, useCallback } from "react";
@@ -71,80 +50,54 @@ import { useAppDispatch } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
 import { handleError } from "@/utils/handleError";
 import { LikeButton } from "@/features";
+import { MarqueeText } from "@/features/player/components/MarqueeText";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CSS-ONLY WAVE BARS  (compositor-thread — zero JS per frame)
-// Singleton injection guard prevents duplicate <style> tags on HMR.
+// WAVE BARS — uses .eq-bars + .eq-bar CSS token classes from index.css §9
+// Eliminates the singleton style injection hack from the previous version.
+// GPU-composited via `transform-origin: bottom center` in the token.
+// Reduced-motion: index.css @media rule silences all .eq-bar animations.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const WAVE_CSS = `
-  @keyframes sw-bar {
-    0%, 100% { transform: scaleY(0.18); }
-    50%       { transform: scaleY(1);    }
-  }
-`;
-
-let _waveInjected = false;
-
-const WaveBars = memo(({ active }: { active: boolean }) => {
-  if (!_waveInjected && typeof document !== "undefined") {
-    _waveInjected = true;
-    const el = document.createElement("style");
-    el.id = "__sw-wave-bars__";
-    el.textContent = WAVE_CSS;
-    document.head.appendChild(el);
-  }
-
-  const bars = [
-    { dur: "0.82s", delay: "0s" },
-    { dur: "1.06s", delay: "0.14s" },
-    { dur: "0.74s", delay: "0.08s" },
-    { dur: "0.96s", delay: "0.22s" },
-  ];
-
-  return (
-    <div
-      className="flex items-end gap-[2px] h-[18px] w-[22px]"
-      aria-hidden="true"
-    >
-      {bars.map(({ dur, delay }, i) => (
-        <span
-          key={i}
-          style={{
-            display: "block",
-            width: "3px",
-            height: "100%",
-            borderRadius: "2px 2px 1px 1px",
-            transformOrigin: "bottom center",
-            background: "hsl(var(--primary))",
-            opacity: active ? 1 : 0.28,
-            transform: active ? undefined : "scaleY(0.18)",
-            animation: active
-              ? `sw-bar ${dur} ease-in-out ${delay} infinite`
-              : "none",
-            transition: "opacity 0.25s ease, transform 0.25s ease",
-            willChange: "transform",
-          }}
-        />
-      ))}
-    </div>
-  );
-});
+const WaveBars = memo(({ active }: { active: boolean }) => (
+  <div
+    className={cn("eq-bars", !active && "paused")}
+    aria-hidden="true"
+    style={{ height: "18px", gap: "2px" }}
+  >
+    {/* 4 bars — .eq-bar:nth-child(1..4) pick up staggered animation delays */}
+    <span
+      className="eq-bar"
+      style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
+    />
+    <span
+      className="eq-bar"
+      style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
+    />
+    <span
+      className="eq-bar"
+      style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
+    />
+    <span
+      className="eq-bar"
+      style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
+    />
+  </div>
+));
 WaveBars.displayName = "WaveBars";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RANK VISUAL CONFIGURATION
-// Design token–driven: no hardcoded hex values.
+// All colors now use CSS custom property references — theme-adaptive.
+// sky-500/amber-500 replaced with wave-3/wave-4 tokens from Soundwave spectrum.
 // ─────────────────────────────────────────────────────────────────────────────
-
 interface RankCfg {
   numSize: string;
   numColor: string;
   numGlow: string;
   rowIdle: string;
   rowActive: string;
-  accent: string; // left border
-  shimmer: string; // decorative gradient overlay
+  accent: string;
+  shimmer: string;
 }
 
 const RANK_CFG: Record<1 | 2 | 3, RankCfg> = {
@@ -161,25 +114,27 @@ const RANK_CFG: Record<1 | 2 | 3, RankCfg> = {
   },
   2: {
     numSize: "text-[22px] font-black",
-    numColor: "text-sky-500 dark:text-sky-400",
+    numColor: "text-[hsl(var(--wave-3))]",
     numGlow: "",
     rowIdle:
-      "bg-sky-500/[0.03] hover:bg-sky-500/[0.06] dark:bg-sky-400/[0.045] dark:hover:bg-sky-400/[0.08]",
-    rowActive: "bg-sky-500/[0.075] dark:bg-sky-400/[0.11]",
-    accent: "border-l-[3px] border-sky-400/60",
+      "bg-[hsl(var(--wave-3)/0.03)] hover:bg-[hsl(var(--wave-3)/0.06)] dark:bg-[hsl(var(--wave-3)/0.045)] dark:hover:bg-[hsl(var(--wave-3)/0.08)]",
+    rowActive:
+      "bg-[hsl(var(--wave-3)/0.075)] dark:bg-[hsl(var(--wave-3)/0.11)]",
+    accent: "border-l-[3px] border-[hsl(var(--wave-3)/0.6)]",
     shimmer:
-      "from-sky-500/[0.05] via-sky-400/[0.015] to-transparent dark:from-sky-400/[0.08]",
+      "from-[hsl(var(--wave-3)/0.05)] via-[hsl(var(--wave-3)/0.015)] to-transparent dark:from-[hsl(var(--wave-3)/0.08)]",
   },
   3: {
     numSize: "text-[22px] font-black",
-    numColor: "text-amber-500 dark:text-amber-400",
+    numColor: "text-[hsl(var(--wave-4))]",
     numGlow: "",
     rowIdle:
-      "bg-amber-500/[0.03] hover:bg-amber-500/[0.06] dark:bg-amber-400/[0.045] dark:hover:bg-amber-400/[0.08]",
-    rowActive: "bg-amber-500/[0.075] dark:bg-amber-400/[0.11]",
-    accent: "border-l-[3px] border-amber-400/60",
+      "bg-[hsl(var(--wave-4)/0.03)] hover:bg-[hsl(var(--wave-4)/0.06)] dark:bg-[hsl(var(--wave-4)/0.045)] dark:hover:bg-[hsl(var(--wave-4)/0.08)]",
+    rowActive:
+      "bg-[hsl(var(--wave-4)/0.075)] dark:bg-[hsl(var(--wave-4)/0.11)]",
+    accent: "border-l-[3px] border-[hsl(var(--wave-4)/0.6)]",
     shimmer:
-      "from-amber-500/[0.05] via-amber-400/[0.015] to-transparent dark:from-amber-400/[0.08]",
+      "from-[hsl(var(--wave-4)/0.05)] via-[hsl(var(--wave-4)/0.015)] to-transparent dark:from-[hsl(var(--wave-4)/0.08)]",
   },
 };
 
@@ -198,10 +153,9 @@ function getRankCfg(rank: number): RankCfg {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RANK CHANGE BADGE
-// Fixed h-4 prevents layout shift when badge content switches states.
+// RANK CHANGE BADGE — token-driven colors
+// UP: --success token. DOWN: --error token. FLAT: muted-foreground.
 // ─────────────────────────────────────────────────────────────────────────────
-
 const RankBadge = memo(({ diff }: { diff: number }) => (
   <div
     className="h-4 flex items-center justify-center"
@@ -215,16 +169,22 @@ const RankBadge = memo(({ diff }: { diff: number }) => (
   >
     {diff > 0 ? (
       <span
-        className="flex items-center gap-[2px] text-[9px] font-bold leading-none select-none
-        text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-[2px] rounded-full"
+        className="flex items-center gap-[2px] text-[9px] font-bold leading-none select-none px-1.5 py-[2px] rounded-full"
+        style={{
+          color: "hsl(var(--success))",
+          background: "hsl(var(--success)/0.1)",
+        }}
       >
         <TrendingUp size={7} strokeWidth={3} aria-hidden="true" />
         {diff}
       </span>
     ) : diff < 0 ? (
       <span
-        className="flex items-center gap-[2px] text-[9px] font-bold leading-none select-none
-        text-rose-500 dark:text-rose-400 bg-rose-500/10 px-1.5 py-[2px] rounded-full"
+        className="flex items-center gap-[2px] text-[9px] font-bold leading-none select-none px-1.5 py-[2px] rounded-full"
+        style={{
+          color: "hsl(var(--error))",
+          background: "hsl(var(--error)/0.1)",
+        }}
       >
         <TrendingDown size={7} strokeWidth={3} aria-hidden="true" />
         {Math.abs(diff)}
@@ -233,7 +193,7 @@ const RankBadge = memo(({ diff }: { diff: number }) => (
       <Minus
         size={9}
         strokeWidth={2}
-        className="text-foreground/18 dark:text-foreground/14"
+        className="text-foreground/18"
         aria-hidden="true"
       />
     )}
@@ -242,13 +202,8 @@ const RankBadge = memo(({ diff }: { diff: number }) => (
 RankBadge.displayName = "RankBadge";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COVER OVERLAY
-//
-// Single DOM node — eliminates the double-overlay bug from the original.
-// `alwaysShow = true` overrides group-hover; transition is pure CSS.
-// AnimatePresence handles icon crossfade with spring physics.
+// COVER OVERLAY — single DOM node, AnimatePresence icon crossfade
 // ─────────────────────────────────────────────────────────────────────────────
-
 const ICON_SPRING = {
   initial: { scale: 0.58, opacity: 0 },
   animate: { scale: 1, opacity: 1 },
@@ -265,7 +220,6 @@ const CoverOverlay = memo(
     isActivePlaying: boolean;
   }) => {
     const alwaysShow = isLoading || isActivePlaying;
-
     return (
       <div
         aria-hidden="true"
@@ -280,21 +234,21 @@ const CoverOverlay = memo(
           {isLoading ? (
             <motion.span key="load" {...ICON_SPRING}>
               <Loader2
-                className="size-[18px] text-white animate-spin"
+                className="size-5 text-white animate-spin"
                 aria-hidden="true"
               />
             </motion.span>
           ) : isActivePlaying ? (
             <motion.span key="pause" {...ICON_SPRING}>
               <Pause
-                className="size-[18px] text-white fill-white"
+                className="size-5 text-white fill-white"
                 aria-hidden="true"
               />
             </motion.span>
           ) : (
             <motion.span key="play" {...ICON_SPRING}>
               <Play
-                className="size-[18px] text-white fill-white ml-0.5"
+                className="size-5 text-white fill-white ml-0.5"
                 aria-hidden="true"
               />
             </motion.span>
@@ -307,22 +261,14 @@ const CoverOverlay = memo(
 CoverOverlay.displayName = "CoverOverlay";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLAY COUNT DISPLAY
-// Formatted with fmtCount (shared util). Fades out on hover to reveal actions.
+// PLAY COUNT
 // ─────────────────────────────────────────────────────────────────────────────
-
 const PlayCount = memo(({ count }: { count: number }) => (
   <div className="hidden sm:flex flex-col items-end gap-[2px]">
-    <span
-      className="text-[12px] font-mono font-semibold tabular-nums leading-none
-        text-foreground/45 dark:text-foreground/38"
-    >
+    <span className="text-[12px] font-mono font-semibold tabular-nums leading-none text-foreground/45">
       {fmtCount(count)}
     </span>
-    <span
-      className="text-[8.5px] uppercase tracking-wider font-semibold
-        text-muted-foreground/28 dark:text-muted-foreground/22 leading-none"
-    >
+    <span className="text-[8.5px] uppercase tracking-wider font-semibold text-muted-foreground/28 leading-none">
       plays
     </span>
   </div>
@@ -330,9 +276,8 @@ const PlayCount = memo(({ count }: { count: number }) => (
 PlayCount.displayName = "PlayCount";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COMPONENT PROPS
+// PROPS
 // ─────────────────────────────────────────────────────────────────────────────
-
 export interface ChartItemProps {
   track: ChartTrack;
   rank: number;
@@ -340,36 +285,31 @@ export interface ChartItemProps {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHART ITEM — MAIN COMPONENT
+// CHART ITEM — MAIN
 // ─────────────────────────────────────────────────────────────────────────────
-
 export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-
-  // Granular selector — only 2 scalar fields, never re-renders on currentTime
   const { currentTrack, isPlaying } = useSelector(selectPlayer);
 
   const [isLoadingPlay, setIsLoadingPlay] = useState(false);
 
   const isCurrentTrack = currentTrack?._id === track._id;
   const isActivePlaying = isCurrentTrack && isPlaying;
-  const diff = prevRank - rank; // positive = climbed the chart
+  const isActive = isCurrentTrack;
+  const diff = prevRank - rank;
   const cfg = getRankCfg(rank);
   const isTop3 = rank <= 3;
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  const rowBg = isActivePlaying ? cfg.rowActive : cfg.rowIdle;
 
   const handlePlayPause = useCallback(
     async (e: React.MouseEvent | React.KeyboardEvent) => {
       e.stopPropagation();
       if (isLoadingPlay) return;
-
       if (isCurrentTrack) {
         dispatch(setIsPlaying(!isPlaying));
         return;
       }
-
       setIsLoadingPlay(true);
       try {
         dispatch(setQueue({ tracks: [track], startIndex: 0 }));
@@ -409,22 +349,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
     [handlePlayPause],
   );
 
-  // ── Row background: active state takes priority over idle ─────────────────
-  const rowBg = isActivePlaying ? cfg.rowActive : cfg.rowIdle;
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
-
   return (
-    /**
-     * Plain div — NOT motion.div.
-     * Entry stagger animation is owned by the parent AnimatePresence list.
-     * This avoids double Framer instance depth × N rows.
-     *
-     * `overflow-hidden` on the row prevents the absolute actions strip from
-     * leaking outside on narrow viewports.
-     */
     <div
       role="row"
       tabIndex={0}
@@ -433,34 +358,26 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
       onClick={handlePlayPause}
       onKeyDown={handleKeyDown}
       className={cn(
-        // Layout
         "group relative flex items-center rounded-xl cursor-pointer select-none",
         "overflow-hidden",
-        // Transition
         "transition-colors duration-150 outline-none",
-        // Focus ring — uses --ring token from design system
         "focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring)/0.5)] focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-        // Dynamic background
         rowBg,
-        // Top-3 left accent border
         isTop3 && cfg.accent,
       )}
     >
-      {/* ── Top-3 decorative shimmer overlay ──────────────────────────────── */}
+      {/* Top-3 shimmer */}
       {isTop3 && cfg.shimmer && (
         <div
           aria-hidden="true"
           className={cn(
-            "absolute inset-0 pointer-events-none",
-            "bg-gradient-to-r rounded-xl",
+            "absolute inset-0 pointer-events-none bg-gradient-to-r rounded-xl",
             cfg.shimmer,
           )}
         />
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          COLUMN 1 — RANK  (52px fixed, never shifts on WaveBars swap)
-          ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── RANK column ── */}
       <div className="relative z-10 w-[52px] shrink-0 flex flex-col items-center justify-center gap-[4px] py-3 pl-3 pr-1">
         <div
           className={cn(
@@ -476,22 +393,26 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
         <RankBadge diff={diff} />
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          COLUMN 2 — COVER ART
-          Top-3 gets larger thumbnail + scale hover effect.
-          ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── COVER ── */}
       <div
+        style={{
+          transition: "box-shadow 0.2s ease",
+          boxShadow: isActive
+            ? "0 0 0 1.5px hsl(var(--primary)/0.8), 0 0 16px hsl(var(--primary)/0.2)"
+            : "none",
+        }}
         className={cn(
           "relative shrink-0 rounded-lg overflow-hidden mr-3",
           "ring-1 ring-black/[0.06] dark:ring-white/[0.06]",
-          "shadow-sm group-hover:shadow-md dark:shadow-black/35",
+          "shadow-sm group-hover:shadow-md",
           "transition-[transform,box-shadow] duration-300 ease-out",
+
           isTop3
             ? "size-[52px] sm:size-[56px] group-hover:scale-[1.035]"
             : "size-[44px] sm:size-[48px]",
-          // Active playing: subtle ring glow using design system token
+          // Active ring — .shadow-glow-sm equivalent scoped to cover
           isActivePlaying &&
-            "ring-primary/40 dark:ring-primary/50 shadow-[0_0_12px_hsl(var(--primary)/0.28)]",
+            "ring-primary/40 [box-shadow:0_0_12px_hsl(var(--primary)/0.28)]",
         )}
       >
         <ImageWithFallback
@@ -505,24 +426,28 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
         />
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          COLUMN 3 — TITLE + ARTIST + ALBUM (inline on mobile)
-          ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── TITLE + ARTIST ── */}
       <div className="relative z-10 flex-1 min-w-0 py-2.5 pr-2">
-        {/* Track title */}
-        <p
-          className={cn(
-            "font-semibold truncate leading-snug text-[13.5px] sm:text-[14px]",
-            "transition-colors duration-150",
-            isActivePlaying
-              ? "text-primary"
-              : "text-foreground/88 dark:text-foreground/82 group-hover:text-foreground",
-          )}
-        >
-          {track.title}
-        </p>
+        {isActive && (
+          <MarqueeText
+            text={track.title}
+            className="text-sm font-medium leading-snug mb-0.5 text-[hsl(var(--primary))]"
+          />
+        )}
+        {!isActive && (
+          <p
+            title={track.title}
+            className={cn(
+              "truncate text-track-title text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
+              isActive
+                ? "text-[hsl(var(--primary))]"
+                : "text-[hsl(var(--foreground))]",
+            )}
+          >
+            {track.title}
+          </p>
+        )}
 
-        {/* Artist + album (inline row, small text) */}
         <div className="flex items-center gap-0.5 mt-[3px] min-w-0">
           <button
             type="button"
@@ -530,7 +455,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
             aria-label={`Go to artist: ${track.artist?.name}`}
             className={cn(
               "text-[11.5px] truncate font-medium leading-snug shrink min-w-0",
-              "text-muted-foreground/60 dark:text-muted-foreground/50",
+              "text-track-meta",
               "hover:text-foreground hover:underline underline-offset-2",
               "transition-colors duration-150",
               "focus-visible:outline-none focus-visible:underline",
@@ -539,7 +464,6 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
             {track.artist?.name ?? "Unknown Artist"}
           </button>
 
-          {/* Album — inline on mobile, hidden on lg+ (shown in dedicated col) */}
           {track.album?.title && (
             <button
               type="button"
@@ -547,7 +471,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
               aria-label={`Go to album: ${track.album.title}`}
               className={cn(
                 "sm:inline-block lg:hidden text-[11px] truncate shrink-0 hidden",
-                "text-muted-foreground/32 dark:text-muted-foreground/26",
+                "text-muted-foreground/32",
                 "hover:text-muted-foreground hover:underline underline-offset-2",
                 "transition-colors duration-150",
                 "before:content-['·'] before:mr-1 before:opacity-60",
@@ -560,9 +484,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          COLUMN 4 — ALBUM (lg+ desktop only, dedicated column)
-          ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── ALBUM (lg+ dedicated column) ── */}
       {track.album?.title ? (
         <button
           type="button"
@@ -571,7 +493,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
           className={cn(
             "relative z-10 hidden lg:block w-[172px] xl:w-[208px] shrink-0 px-4",
             "text-[12.5px] truncate text-left",
-            "text-muted-foreground/38 dark:text-muted-foreground/30",
+            "text-muted-foreground/38",
             "hover:text-foreground hover:underline underline-offset-2",
             "transition-colors duration-150",
             "focus-visible:outline-none focus-visible:underline",
@@ -580,54 +502,41 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
           {track.album.title}
         </button>
       ) : (
-        // Spacer preserves grid alignment when there is no album
         <div
           aria-hidden="true"
           className="hidden lg:block w-[172px] xl:w-[208px] shrink-0"
         />
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          COLUMN 5 — META + ACTIONS (right zone)
-          The meta strip (play count, duration) fades + shifts right on hover.
-          The actions strip slides in from the right to replace it.
-          overflow-hidden prevents bleed on narrow viewports.
-          ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── META + ACTIONS ── */}
       <div className="relative z-10 flex items-center pr-3 shrink-0 gap-1 overflow-hidden min-w-[80px] sm:min-w-[112px]">
-        {/* META — visible at rest, fades out on hover */}
+        {/* Meta — fades out on hover */}
         <div
           aria-hidden="true"
           className={cn(
             "flex items-center gap-3",
             "transition-[opacity,transform] duration-200 ease-out",
-            "group-hover:opacity-0 group-hover:translate-x-1",
-            "group-hover:pointer-events-none",
+            "group-hover:opacity-0 group-hover:translate-x-1 group-hover:pointer-events-none",
           )}
         >
           <PlayCount count={track.playCount ?? 0} />
-
-          <span
-            className="text-[12px] font-mono tabular-nums w-9 text-right
-              text-muted-foreground/38 dark:text-muted-foreground/30 leading-none"
-          >
+          <span className="text-[12px] font-mono tabular-nums w-9 text-right text-muted-foreground/38 leading-none">
             {formatDuration(track.duration)}
           </span>
         </div>
 
-        {/* ACTIONS — slides in on hover */}
+        {/* Actions — slides in on hover */}
         <div
           className={cn(
-            "absolute right-0 flex items-center gap-0.5",
+            "absolute right-0 flex items-center gap-1",
             "opacity-0 translate-x-2",
             "group-hover:opacity-100 group-hover:translate-x-0",
             "transition-[opacity,transform] duration-200 ease-out",
             "pointer-events-none group-hover:pointer-events-auto",
           )}
         >
-          {/* LikeButton — from shared feature module */}
           <LikeButton id={track._id} />
 
-          {/* Overflow menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -637,10 +546,9 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
                 className={cn(
                   "flex items-center justify-center size-8 rounded-full",
                   "text-muted-foreground/50 hover:text-foreground",
-                  "hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]",
+                  "hover:bg-muted/60",
                   "transition-colors duration-150",
-                  "focus-visible:outline-none focus-visible:ring-1",
-                  "focus-visible:ring-[hsl(var(--ring)/0.4)]",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring)/0.4)]",
                 )}
               >
                 <MoreHorizontal className="size-[15px]" aria-hidden="true" />
@@ -651,16 +559,17 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
               align="end"
               sideOffset={4}
               onClick={(e) => e.stopPropagation()}
-              className="w-52 rounded-xl p-1
-                shadow-floating dark:shadow-black/50
-                border border-border/50 dark:border-border/30
-                bg-popover/90 dark:bg-popover/85
-                backdrop-blur-xl"
+              className={cn(
+                "w-52 rounded-xl p-1",
+                // .glass-frosted + .shadow-floating tokens from index.css §6+§7
+                "glass-frosted shadow-floating",
+                "border border-border/50",
+              )}
             >
               {/* Play / Pause */}
               <DropdownMenuItem
                 onClick={handlePlayPause}
-                className="cursor-pointer py-2.5 gap-3 font-medium text-[13px] rounded-lg"
+                className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]"
               >
                 {isActivePlaying ? (
                   <>
@@ -681,8 +590,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
                 )}
               </DropdownMenuItem>
 
-              {/* Queue */}
-              <DropdownMenuItem className="cursor-pointer py-2.5 gap-3 font-medium text-[13px] rounded-lg">
+              <DropdownMenuItem className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]">
                 <ListMusic
                   className="size-4 text-muted-foreground"
                   aria-hidden="true"
@@ -690,8 +598,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
                 Add to queue
               </DropdownMenuItem>
 
-              {/* Playlist */}
-              <DropdownMenuItem className="cursor-pointer py-2.5 gap-3 font-medium text-[13px] rounded-lg">
+              <DropdownMenuItem className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]">
                 <PlusCircle
                   className="size-4 text-muted-foreground"
                   aria-hidden="true"
@@ -701,11 +608,10 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
 
               <DropdownMenuSeparator className="my-1 bg-border/50" />
 
-              {/* Artist */}
               <DropdownMenuItem
                 onClick={handleGoToArtist}
                 disabled={!track.artist?.slug}
-                className="cursor-pointer py-2.5 gap-3 font-medium text-[13px] rounded-lg"
+                className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]"
               >
                 <Disc3
                   className="size-4 text-muted-foreground"
@@ -714,11 +620,10 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
                 View artist
               </DropdownMenuItem>
 
-              {/* Album */}
               <DropdownMenuItem
                 onClick={handleGoToAlbum}
                 disabled={!track.album?.slug}
-                className="cursor-pointer py-2.5 gap-3 font-medium text-[13px] rounded-lg"
+                className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]"
               >
                 <Disc3
                   className="size-4 text-muted-foreground"
@@ -729,8 +634,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
 
               <DropdownMenuSeparator className="my-1 bg-border/50" />
 
-              {/* Share */}
-              <DropdownMenuItem className="cursor-pointer py-2.5 gap-3 font-medium text-[13px] rounded-lg">
+              <DropdownMenuItem className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]">
                 <Share2
                   className="size-4 text-muted-foreground"
                   aria-hidden="true"

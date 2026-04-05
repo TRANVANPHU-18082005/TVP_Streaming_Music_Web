@@ -1,23 +1,3 @@
-"use client";
-
-/**
- * @file Hero.tsx — Featured Album Slider (Refactored v3.0)
- *
- * ARCHITECTURE:
- * - Atomic sub-components, each memoized with stable prop contracts
- * - All hooks called unconditionally (guard render deferred to return)
- * - Pointer drag uses raw MotionValue pipeline — zero re-renders during drag
- * - Background layers isolated in <HeroBackground> to prevent cascade repaint
- * - Full Soundwave design-token integration via index.css CSS variables
- *
- * DESIGN:
- * - Obsidian Luxury / Neural Audio — matches Soundwave design language
- * - Glassmorphism player controls with brand glow system
- * - Waveform visualizer via .eq-bars / .eq-bar CSS classes
- * - Mood-reactive background with smooth crossfade
- * - 8pt grid spacing throughout
- */
-
 import {
   useState,
   useMemo,
@@ -59,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { setIsPlaying, setQueue } from "@/features/player/slice/playerSlice";
 import { useFeatureAlbums } from "@/features/album/hooks/useAlbumsQuery";
+import { LikeButton } from "@/features";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -517,7 +498,7 @@ const ContentText = memo(
           onClick={onNavigate}
           className={cn(
             "text-display-2xl",
-            "dark:text-foreground text-foreground",
+            "text-foreground",
             "cursor-pointer hover:text-primary transition-colors duration-300",
             "line-clamp-2 text-center lg:text-left w-full",
           )}
@@ -569,6 +550,7 @@ ContentText.displayName = "ContentText";
 // ─────────────────────────────────────────────────────────────────────────────
 const ActionBar = memo(
   ({
+    album,
     isPlaying,
     isLoading,
     isLiked,
@@ -576,6 +558,7 @@ const ActionBar = memo(
     onLike,
     onShare,
   }: {
+    album: HeroAlbum;
     isPlaying: boolean;
     isLoading: boolean;
     isLiked: boolean;
@@ -583,88 +566,109 @@ const ActionBar = memo(
     onLike: (e: React.MouseEvent) => void;
     onShare: (e: React.MouseEvent) => void;
   }) => (
-    <div className="flex items-center flex-wrap gap-2.5 pt-1 justify-center lg:justify-start">
-      {/* Primary play button */}
+    <div className="flex items-center flex-wrap gap-3 pt-1 justify-center lg:justify-start">
+      {/* ── PRIMARY PLAY — .btn-primary + .control-btn--primary from design system ── */}
       <motion.button
         onClick={onPlay}
         disabled={isLoading}
         whileHover={!isLoading ? { scale: 1.03, y: -1 } : {}}
         whileTap={!isLoading ? { scale: 0.96 } : {}}
         transition={SPRING_SNAPPY}
-        aria-label={isPlaying ? "Tạm dừng" : "Phát album"}
+        aria-label={isPlaying ? "Pause album" : "Play album"}
+        aria-pressed={isPlaying}
         className={cn(
+          // .btn-primary + .btn-lg gives gradient + glow + font-weight
           "btn-primary btn-lg relative overflow-hidden",
-          "min-w-[140px] h-12",
+          "min-w-[148px] h-12 rounded-2xl",
           "disabled:opacity-50 disabled:pointer-events-none",
         )}
       >
-        {/* Shimmer sweep on hover */}
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full"
-          whileHover={{ translateX: "200%" }}
-          transition={{ duration: 0.5, ease: EASE_OUT_EXPO }}
+        {/*
+         * Shimmer sweep — uses inset-0 + pointer-events-none so it doesn't
+         * intercept click. Opacity 0→1→0 on hover via Framer.
+         * Background is white/8 to lift off the gradient without hardcoding.
+         */}
+        <motion.span
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(105deg, transparent 30%, hsl(0 0% 100% / 0.12) 50%, transparent 70%)",
+            backgroundSize: "200% 100%",
+          }}
+          initial={{ backgroundPosition: "-100% center" }}
+          whileHover={{ backgroundPosition: "200% center" }}
+          transition={{ duration: 0.55, ease: [0, 0, 0.2, 1] }}
+          aria-hidden="true"
         />
 
         <PlayButtonIcon isLoading={isLoading} isPlaying={isPlaying} />
 
         <motion.span
           key={isLoading ? "l" : isPlaying ? "p" : "pl"}
-          initial={{ opacity: 0, y: 3 }}
+          initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -3 }}
-          transition={{ duration: 0.12 }}
-          className="relative z-10"
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 font-semibold tracking-wide"
         >
-          {isLoading ? "Đang tải..." : isPlaying ? "Tạm dừng" : "Phát ngay"}
+          {isLoading ? "Loading…" : isPlaying ? "Pause" : "Play Now"}
         </motion.span>
       </motion.button>
 
-      {/* Like button — glass-frosted variant */}
+      {/* ── LIKE — .like-btn token + token-safe liked state ── */}
       <motion.button
         onClick={onLike}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.85 }}
+        whileHover={{ scale: 1.12 }}
+        whileTap={{ scale: 0.86 }}
         transition={SPRING_SNAPPY}
-        aria-label={isLiked ? "Bỏ thích" : "Thêm vào yêu thích"}
+        aria-label={isLiked ? "Unlike album" : "Like album"}
         aria-pressed={isLiked}
         className={cn(
-          "btn-icon relative flex items-center justify-center size-12 rounded-full",
-          "border transition-all duration-200",
+          // Base: .control-btn geometry, .glass surface
+          "like-btn relative flex items-center justify-center size-12 rounded-full",
+          "glass border transition-all duration-200",
+          "focus-visible:outline-2 focus-visible:outline-offset-2",
+          "focus-visible:outline-[hsl(var(--ring))]",
           isLiked
             ? [
-                "bg-[hsl(3_88%_62%/0.12)] border-[hsl(3_88%_62%/0.3)]",
-                "text-[hsl(3_88%_62%)] shadow-[0_0_16px_hsl(3_88%_62%/0.2)]",
+                // Liked: error token — no hardcoded hsl()
+                "border-[hsl(var(--error)/0.35)] text-[hsl(var(--error))]",
+                "bg-[hsl(var(--error)/0.08)]",
+                "shadow-[0_0_18px_hsl(var(--error)/0.22)]",
+                "liked", // triggers .like-btn.liked CSS from design system
               ]
             : [
-                "glass border-border text-muted-foreground",
+                "border-border/60 text-muted-foreground",
                 "hover:border-border-strong hover:text-foreground",
               ],
         )}
       >
-        <motion.div
-          animate={isLiked ? { scale: [1, 1.5, 1] } : { scale: 1 }}
-          transition={{ duration: 0.3, ease: [0.34, 1.56, 0.64, 1] as any }}
-        >
-          <Heart className={cn("size-5", isLiked && "fill-current")} />
-        </motion.div>
+        <LikeButton id={album._id} size="md" type="album" />
       </motion.button>
 
-      {/* Share button */}
+      {/* ── SHARE — .glass + .control-btn--ghost interaction tokens ── */}
       <motion.button
         onClick={onShare}
         whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.85 }}
+        whileTap={{ scale: 0.88 }}
         transition={SPRING_SNAPPY}
-        aria-label="Chia sẻ"
-        className="btn-icon flex items-center justify-center size-12 rounded-full glass border border-border text-muted-foreground hover:border-border-strong hover:text-foreground transition-all duration-200"
+        aria-label="Share album"
+        className={cn(
+          "flex items-center justify-center size-12 rounded-full",
+          "glass border border-border/60",
+          "text-muted-foreground",
+          "hover:border-border-strong hover:text-foreground",
+          "transition-all duration-200",
+          "focus-visible:outline-2 focus-visible:outline-offset-2",
+          "focus-visible:outline-[hsl(var(--ring))]",
+        )}
       >
-        <Share2 className="size-5" />
+        <Share2 className="size-5" aria-hidden="true" />
       </motion.button>
     </div>
   ),
 );
 ActionBar.displayName = "ActionBar";
-
 // ─────────────────────────────────────────────────────────────────────────────
 // BACKGROUND LAYERS — isolated component prevents Hero re-paint on slide change
 // ─────────────────────────────────────────────────────────────────────────────
@@ -765,8 +769,8 @@ const NavArrow = memo(
         "pointer-events-auto flex items-center justify-center",
         "size-11 xl:size-12 rounded-full",
         "glass-frosted border border-border",
-        "text-muted-foreground hover:text-foreground",
-        "hover:border-border-strong",
+        "text-brand",
+        "hover:border-border-brand",
         "shadow-elevated",
         "transition-colors duration-200",
         "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-3",
@@ -1094,6 +1098,7 @@ export function Hero() {
                   isPlaying={isThisAlbumPlaying}
                   isLoading={isLoadingPlay}
                   isLiked={!!likedMap[currentAlbum._id]}
+                  album={currentAlbum}
                   onPlay={handlePlayAlbum}
                   onLike={handleLike}
                   onShare={handleShare}
@@ -1111,11 +1116,11 @@ export function Hero() {
                     current={currentIndex}
                     onChange={goTo}
                   />
-                  <span className="text-duration text-muted-foreground select-none">
+                  <span className="text-duration text-section-subtitle select-none">
                     {String(currentIndex + 1).padStart(2, "0")} /{" "}
                     {String(albums.length).padStart(2, "0")}
                   </span>
-                  <span className="text-[10px] text-muted-foreground/40 select-none hidden xl:block">
+                  <span className="text-[10px] text-section-subtitle select-none hidden xl:block">
                     · Dùng ← → để điều hướng
                   </span>
                 </motion.div>

@@ -1,359 +1,988 @@
-"use client";
-
-import { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useMemo, useCallback, memo } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Edit,
   Heart,
   Plus,
-  Play,
-  MoreHorizontal,
-  Loader2,
   Calendar,
-  Trash2,
   Camera,
   Music2,
   History,
-  Clock,
   BarChart3,
   ListMusic,
   Disc,
+  UserCircle2,
+  Disc3,
   ChevronRight,
+  Sparkles,
+  TrendingUp,
+  Shield,
+  Headphones,
 } from "lucide-react";
-import { AreaChart, Area, Tooltip, ResponsiveContainer, XAxis } from "recharts";
+import {
+  AreaChart,
+  Area,
+  Tooltip,
+  ResponsiveContainer,
+  XAxis,
+  CartesianGrid,
+} from "recharts";
 
-// UI Components
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppSelector } from "@/store/hooks";
 import { formatDate } from "@/utils/track-helper";
-
-// Feature Hooks & Components
 import { useProfileDashboard } from "@/features/profile/hooks/useProfileQuery";
-import { useProfileMutations } from "@/features/profile/hooks/useProfileMutations";
 import UserPlaylistModal from "@/features/playlist/components/UserPlaylistModal";
+import { cn } from "@/lib/utils";
+import {
+  Album,
+  Playlist,
+  PublicAlbumCard,
+  PublicPlaylistCard,
+  TrackList,
+  useMyPlaylists,
+} from "@/features";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MOTION PRESETS
+// ─────────────────────────────────────────────────────────────────────────────
+const EASE_EXPO = [0.22, 1, 0.36, 1] as const;
+
+const fadeUpVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE_EXPO } },
+  exit: { opacity: 0, y: -10, transition: { duration: 0.22, ease: EASE_EXPO } },
+};
+
+const fadeVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.35, ease: EASE_EXPO } },
+  exit: { opacity: 0, transition: { duration: 0.2 } },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AMBIENT BACKGROUND — Spotify style: nền đơn sắc + 1 accent tint nhạt
+// KHÔNG có orbs, KHÔNG có aurora, KHÔNG có floating objects
+// ─────────────────────────────────────────────────────────────────────────────
+const AmbientBackground = memo(() => (
+  <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
+    {/* 1. Base background */}
+    <div className="absolute inset-0 bg-background" />
+
+    {/* 2. Primary accent tint — chỉ ở hero area, opacity rất thấp */}
+    <div
+      className="absolute inset-x-0 top-0 h-[55vh] pointer-events-none"
+      style={{
+        background:
+          "linear-gradient(180deg, hsl(var(--primary)/0.07) 0%, hsl(var(--primary)/0.03) 40%, transparent 100%)",
+      }}
+    />
+
+    {/* 3. Grain texture — tạo depth như Spotify */}
+    <div
+      className="absolute inset-0 opacity-[0.022] mix-blend-overlay pointer-events-none"
+      style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+      }}
+    />
+
+    {/* 4. Player bar vignette */}
+    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
+  </div>
+));
+AmbientBackground.displayName = "AmbientBackground";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HERO BACKDROP — chỉ re-render khi avatar thay đổi
+// Blurred background + gradient overlay như Spotify
+// ─────────────────────────────────────────────────────────────────────────────
+const HeroBackdrop = memo(({ src }: { src?: string }) => (
+  <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+    {src && (
+      <img
+        src={src}
+        alt=""
+        className="w-full h-full object-cover opacity-[0.15] blur-[60px] scale-110 saturate-[1.4]"
+        loading="eager"
+      />
+    )}
+    {/* Multi-stop gradient — đậm phía dưới để content đọc được */}
+    <div
+      className="absolute inset-0"
+      style={{
+        background:
+          "linear-gradient(180deg, transparent 0%, hsl(var(--background)/0.6) 55%, hsl(var(--background)) 100%)",
+      }}
+    />
+  </div>
+));
+HeroBackdrop.displayName = "HeroBackdrop";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOADING SKELETON
+// ─────────────────────────────────────────────────────────────────────────────
+const LoadingState = memo(() => (
+  <div className="relative min-h-screen pb-28">
+    <AmbientBackground />
+    <div className="relative h-[40vh] min-h-[280px] flex items-end">
+      <div className="section-container pb-8 w-full">
+        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6">
+          <div className="skeleton skeleton-avatar size-32 sm:size-44 shrink-0" />
+          <div className="flex-1 space-y-3 w-full">
+            <div className="skeleton skeleton-pill w-20 h-4 mx-auto sm:mx-0" />
+            <div className="skeleton w-56 h-10 rounded-lg mx-auto sm:mx-0" />
+            <div className="skeleton w-48 h-4 rounded mx-auto sm:mx-0" />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div className="section-container mt-4">
+      <div className="flex gap-6 border-b border-border/30 pb-3 mb-8">
+        {[80, 72, 88].map((w, i) => (
+          <div
+            key={i}
+            className="skeleton skeleton-pill h-4"
+            style={{ width: w }}
+          />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-3">
+          <div className="skeleton rounded-2xl h-64 w-full" />
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="skeleton rounded-lg h-14 w-full" />
+          ))}
+        </div>
+        <div className="space-y-4">
+          <div className="skeleton rounded-2xl h-48 w-full" />
+          <div className="skeleton rounded-2xl h-36 w-full" />
+        </div>
+      </div>
+    </div>
+  </div>
+));
+LoadingState.displayName = "LoadingState";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GUEST STATE — Cải thiện layout, không floating giữa màn hình trống
+// ─────────────────────────────────────────────────────────────────────────────
+const GuestState = memo(() => (
+  <div className="relative min-h-screen pb-28">
+    <AmbientBackground />
+    {/* Hero area placeholder */}
+    <div className="relative h-[35vh] min-h-[240px] bg-gradient-to-b from-muted/30 to-transparent flex items-end">
+      <div className="section-container pb-8 w-full">
+        <div className="flex items-end gap-6">
+          <div className="size-28 sm:size-36 rounded-full bg-muted/60 border-4 border-background flex items-center justify-center shrink-0">
+            <UserCircle2
+              className="size-12 text-muted-foreground/40"
+              aria-hidden="true"
+            />
+          </div>
+          <div className="pb-2">
+            <p className="text-overline text-muted-foreground/50 mb-2">
+              Profile
+            </p>
+            <p className="text-display-lg text-muted-foreground/40">
+              Chưa đăng nhập
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    {/* CTA section */}
+    <div className="section-container mt-10">
+      <div
+        className={cn("card-base p-8 max-w-md space-y-5", "border-primary/15")}
+      >
+        <div className="space-y-2">
+          <h2 className="text-display-lg text-gradient-brand">Đăng nhập</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Đăng nhập để xem playlist, lịch sử nghe nhạc và quản lý thư viện của
+            bạn.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button type="button" className="btn-primary gap-2">
+            <Shield className="size-4" aria-hidden="true" />
+            Đăng nhập
+          </button>
+          <button type="button" className="btn-outline gap-2">
+            <Headphones className="size-4" aria-hidden="true" />
+            Khám phá nhạc
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+));
+GuestState.displayName = "GuestState";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION HEADER — eyebrow + icon + title
+// ─────────────────────────────────────────────────────────────────────────────
+const SectionHeader = memo(
+  ({
+    icon: Icon,
+    eyebrow,
+    title,
+    iconColor,
+    action,
+  }: {
+    icon: React.ElementType;
+    eyebrow: string;
+    title: string;
+    iconColor?: string;
+    action?: React.ReactNode;
+  }) => (
+    <div className="flex items-start justify-between gap-4 mb-5">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <div
+            className="flex items-center justify-center size-6 rounded-md bg-primary/10 text-primary"
+            style={
+              iconColor
+                ? { color: iconColor, background: `${iconColor}18` }
+                : undefined
+            }
+          >
+            <Icon className="size-3.5" aria-hidden="true" />
+          </div>
+          <span
+            className="text-overline text-primary"
+            style={iconColor ? { color: iconColor } : undefined}
+          >
+            {eyebrow}
+          </span>
+        </div>
+        <h2 className="text-section-title text-foreground leading-tight">
+          {title}
+        </h2>
+      </div>
+      {action}
+    </div>
+  ),
+);
+SectionHeader.displayName = "SectionHeader";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMPTY STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const EmptyState = memo(
+  ({
+    icon: Icon,
+    title,
+    description,
+  }: {
+    icon: React.ElementType;
+    title: string;
+    description?: string;
+  }) => (
+    <div className="col-span-full flex flex-col items-center justify-center min-h-[180px] gap-3 text-center animate-fade-in py-8">
+      <div className="flex items-center justify-center size-12 rounded-full bg-muted text-muted-foreground/40">
+        <Icon className="size-5" aria-hidden="true" />
+      </div>
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      {description && (
+        <p className="text-xs text-muted-foreground max-w-xs">{description}</p>
+      )}
+    </div>
+  ),
+);
+EmptyState.displayName = "EmptyState";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHART TOOLTIP
+// ─────────────────────────────────────────────────────────────────────────────
+const ChartTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="glass-frosted rounded-xl px-3 py-2.5 shadow-floating border border-border/50 text-xs font-medium">
+      <p className="text-muted-foreground mb-1">{label}</p>
+      <p className="text-foreground font-bold">{payload[0].value} lượt nghe</p>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROFILE PAGE
+// ─────────────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("overview");
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
+  const [isPending, setIsPending] = useState(false);
 
   const { user } = useAppSelector((s) => s.auth);
   const { data: dashboard, isLoading } = useProfileDashboard();
-  const { updateProfile, isUpdating } = useProfileMutations();
-
+  const { data: myPlaylists, isLoading: isMyPlaylistsLoading } =
+    useMyPlaylists();
+  console.log("My Playlists:", myPlaylists);
+  console.log("Dashboard Data:", dashboard);
   const userInitials = useMemo(
     () =>
       user?.fullName
         ?.split(" ")
-        .map((n) => n[0])
+        .map((n: string) => n[0])
         .join("")
-        .toUpperCase() || "U",
+        .toUpperCase()
+        .slice(0, 2) || "U",
     [user?.fullName],
   );
 
+  const openCreatePlaylist = useCallback(
+    () => setIsCreatePlaylistOpen(true),
+    [],
+  );
+  const closeCreatePlaylist = useCallback(
+    () => setIsCreatePlaylistOpen(false),
+    [],
+  );
+
+  const tabCounts = useMemo(
+    () => ({
+      playlists: myPlaylists?.length ?? 0,
+      likedTracks: dashboard?.library?.tracks?.length ?? 0,
+      likedAlbums: dashboard?.library?.albums?.length ?? 0,
+      likedPlaylists: dashboard?.library?.playlists?.length ?? 0,
+    }),
+    [dashboard],
+  );
+
+  const statsMax = useMemo(
+    () =>
+      Math.max(
+        tabCounts.likedTracks,
+        tabCounts.playlists,
+        dashboard?.recentlyPlayed?.length ?? 0,
+        1,
+      ),
+    [tabCounts, dashboard],
+  );
+
   if (isLoading) return <LoadingState />;
+  if (!user) return <GuestState />;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white pb-32 selection:bg-blue-500/30">
-      {/* ─── HERO SECTION ─── */}
-      <section className="relative h-[50vh] w-full flex items-end overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent z-10" />
-          <motion.img
-            initial={{ scale: 1.1 }}
-            animate={{ scale: 1 }}
-            src={user?.avatar || "/default-cover.jpg"}
-            className="w-full h-full object-cover opacity-20 blur-3xl"
-          />
-        </div>
+    <div className="relative min-h-screen pb-28">
+      <AmbientBackground />
 
-        <div className="container relative z-20 px-6 pb-12 mx-auto">
-          <div className="flex flex-col md:flex-row items-center md:items-end gap-10">
-            <div className="relative group shrink-0">
-              <Avatar className="size-44 md:size-56 border-[10px] border-[#050505] shadow-2xl ring-1 ring-white/10">
-                <AvatarImage src={user?.avatar} alt={user?.fullName} />
-                <AvatarFallback className="text-6xl font-black bg-gradient-to-br from-blue-600 to-indigo-900">
-                  {userInitials}
-                </AvatarFallback>
-              </Avatar>
-              <button
-                onClick={() => setIsEditModalOpen(true)}
-                className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all backdrop-blur-sm"
+      {/* ══ HERO — Spotify style ══════════════════════════════════════════════
+          Avatar lớn + tên bold cực lớn + stats inline text
+          Không dùng StatCard có border → quá nặng
+      ══════════════════════════════════════════════════════════════════════ */}
+      <section
+        className="relative w-full min-h-[38vh] sm:min-h-[44vh] flex items-end"
+        aria-label="Profile header"
+      >
+        <HeroBackdrop src={user?.avatar} />
+
+        <div className="section-container w-full pt-16 pb-10 sm:pt-20 sm:pb-12">
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-7 md:gap-8">
+            {/* Avatar */}
+            <motion.div
+              className="relative group shrink-0"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, ease: EASE_EXPO }}
+            >
+              <div
+                className="p-[3px] rounded-full"
+                style={{
+                  background:
+                    "linear-gradient(135deg, hsl(var(--brand-500)), hsl(var(--wave-1)) 55%, hsl(var(--wave-2)))",
+                }}
               >
-                <Camera className="size-8" />
-              </button>
-            </div>
-
-            <div className="flex-1 text-center md:text-left space-y-4">
-              <Badge className="bg-blue-600 text-white border-none px-4 py-1 font-black uppercase text-[10px] tracking-widest shadow-[0_0_20px_rgba(59,130,246,0.3)]">
-                {user?.role} ACCOUNT
-              </Badge>
-              <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-none">
-                {user?.fullName}
-              </h1>
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 text-[10px] text-white/40 font-black uppercase tracking-[0.3em]">
-                <span className="flex items-center gap-2">
-                  <Music2 className="size-4 text-blue-500" />{" "}
-                  {dashboard?.library.tracks.length} Tracks
-                </span>
-                <span className="flex items-center gap-2">
-                  <History className="size-4 text-emerald-500" />{" "}
-                  {dashboard?.recentlyPlayed.length} Recent
-                </span>
+                <Avatar className="size-32 sm:size-40 md:size-52 border-[3px] border-background shadow-floating">
+                  <AvatarImage src={user?.avatar} alt={user?.fullName} />
+                  <AvatarFallback
+                    className="text-4xl sm:text-5xl font-black text-white"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, hsl(var(--brand-500)), hsl(var(--wave-2)))",
+                    }}
+                  >
+                    {userInitials}
+                  </AvatarFallback>
+                </Avatar>
               </div>
+              <button
+                type="button"
+                aria-label="Đổi ảnh đại diện"
+                className="absolute inset-[3px] rounded-full bg-black/55 backdrop-blur-sm opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-200 focus-visible:opacity-100"
+              >
+                <Camera className="size-6 text-white" aria-hidden="true" />
+              </button>
+            </motion.div>
+
+            {/* Identity — Spotify: text thuần, không card */}
+            <div className="flex-1 text-center md:text-left min-w-0">
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, ease: EASE_EXPO, delay: 0.06 }}
+                className="space-y-3"
+              >
+                {/* Account type label — Spotify hiện "Profile" hoặc "Artist" nhỏ */}
+                <p className="text-overline text-muted-foreground/60 uppercase tracking-[0.18em]">
+                  {user?.role || "Member"}
+                </p>
+
+                {/* Tên — Spotify dùng font cực lớn, bold, sát cạnh */}
+                <h1
+                  className={cn(
+                    "font-black leading-[0.9] tracking-[-0.03em]",
+                    "text-[clamp(2.4rem,8vw,5rem)]",
+                    "text-foreground",
+                  )}
+                >
+                  {user?.fullName}
+                </h1>
+
+                {/* Stats dạng text inline — Spotify pattern */}
+                {/* "X Public Playlists  ·  Y Followers  ·  Z Following" */}
+                <p className="text-sm text-muted-foreground/70 font-medium">
+                  <span>{tabCounts.likedTracks} bài đã thích</span>
+                  <span className="mx-2 opacity-40">·</span>
+                  <span>{tabCounts.playlists} playlist</span>
+                  <span className="mx-2 opacity-40">·</span>
+                  <span>
+                    {dashboard?.recentlyPlayed?.length ?? 0} đã nghe gần đây
+                  </span>
+                </p>
+
+                {user?.bio && (
+                  <p className="text-sm text-muted-foreground/55 italic max-w-md hidden md:block line-clamp-1">
+                    {user.bio}
+                  </p>
+                )}
+              </motion.div>
             </div>
 
-            <div className="mb-2">
-              <Button
-                onClick={() => setIsEditModalOpen(true)}
-                className="rounded-full bg-white text-black hover:bg-blue-500 hover:text-white font-black px-8 h-12 transition-all shadow-xl"
+            {/* Edit CTA — right-aligned trên desktop */}
+            <motion.div
+              className="shrink-0 self-start md:self-end"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, ease: EASE_EXPO, delay: 0.15 }}
+            >
+              <button
+                type="button"
+                className="btn-secondary btn-lg gap-2 rounded-full"
               >
-                <Edit className="mr-2 size-4" /> Edit Profile
-              </Button>
-            </div>
+                <Edit className="size-4" aria-hidden="true" />
+                Chỉnh sửa
+              </button>
+            </motion.div>
           </div>
         </div>
       </section>
 
-      {/* ─── MAIN CONTENT TABS ─── */}
-      <div className="container px-6 mx-auto mt-4">
+      {/* Divider */}
+      <div className="section-container">
+        <div className="divider-fade" />
+      </div>
+
+      {/* ══ TABS ══════════════════════════════════════════════════════════════ */}
+      <div className="section-container mt-0">
         <Tabs
           defaultValue="overview"
           className="w-full"
           onValueChange={setActiveTab}
         >
-          <div className="sticky top-0 z-40 bg-[#050505]/90 backdrop-blur-2xl py-6 border-b border-white/5">
-            <TabsList className="bg-transparent w-full justify-start rounded-none h-auto p-0 gap-12">
-              <TabsTrigger value="overview" className="tab-premium">
-                Dashboard
-              </TabsTrigger>
-              <TabsTrigger value="playlists" className="tab-premium">
-                Playlists
-              </TabsTrigger>
-              <TabsTrigger value="library" className="tab-premium">
-                Collection
-              </TabsTrigger>
+          {/* Sticky tab rail — Spotify: phẳng, không glass, underline mỏng */}
+          <div className="sticky top-0 z-40 py-0 bg-background/90 backdrop-blur-2xl border-b border-border/30">
+            <TabsList className="bg-transparent w-full justify-start rounded-none h-auto p-0 gap-0">
+              {(
+                [
+                  { value: "overview", label: "Tổng quan", icon: BarChart3 },
+                  { value: "playlists", label: "Playlist", icon: ListMusic },
+                  { value: "library", label: "Bộ sưu tập", icon: Disc3 },
+                ] as const
+              ).map(({ value, label, icon: Icon }) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className={cn(
+                    "group relative px-5 sm:px-6 py-4",
+                    "rounded-none bg-transparent border-0",
+                    "text-sm font-semibold text-muted-foreground/70",
+                    "transition-colors duration-200",
+                    "data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none",
+                    "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px]",
+                    "after:bg-foreground after:scale-x-0 data-[state=active]:after:scale-x-100",
+                    "after:transition-transform after:duration-250 after:ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    "hover:text-foreground/80 hover:bg-muted/30",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "flex items-center gap-2",
+                  )}
+                >
+                  <Icon
+                    className="size-3.5 shrink-0 hidden sm:block"
+                    aria-hidden="true"
+                  />
+                  {label}
+                </TabsTrigger>
+              ))}
             </TabsList>
           </div>
 
-          <div className="mt-12">
+          <div className="mt-7 sm:mt-9">
             <AnimatePresence mode="wait">
-              {/* 1. OVERVIEW TAB */}
+              {/* ══ OVERVIEW ══════════════════════════════════════════════════ */}
               {activeTab === "overview" && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="grid grid-cols-1 lg:grid-cols-3 gap-16"
+                  key="overview"
+                  variants={fadeUpVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="grid grid-cols-1 lg:grid-cols-3 gap-8 xl:gap-10"
                 >
-                  <div className="lg:col-span-2 space-y-12">
-                    {/* Listen Stats Chart */}
-                    <div className="space-y-6">
-                      <h3 className="text-xl font-black italic flex items-center gap-3 uppercase tracking-tighter">
-                        <BarChart3 className="size-5 text-blue-500" /> Weekly
-                        Activity
-                      </h3>
-                      <div className="h-64 w-full bg-white/[0.02] border border-white/5 rounded-[2rem] p-6 shadow-inner">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={dashboard?.analytics}>
-                            <XAxis
-                              dataKey="label"
-                              axisLine={false}
-                              tickLine={false}
-                              tick={{
-                                fill: "#444",
-                                fontSize: 10,
-                                fontWeight: 900,
+                  {/* Main column */}
+                  <div className="lg:col-span-2 space-y-10">
+                    {/* Chart */}
+                    <section aria-label="Weekly listening activity">
+                      <SectionHeader
+                        icon={BarChart3}
+                        eyebrow="Analytics"
+                        title="Hoạt động tuần này"
+                        iconColor="hsl(var(--primary))"
+                        action={
+                          <span className="badge badge-muted text-[10px] font-semibold">
+                            7 ngày qua
+                          </span>
+                        }
+                      />
+                      <div className="card-base overflow-hidden">
+                        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border/30 bg-muted/8">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="size-2 rounded-full"
+                              style={{ background: "hsl(var(--primary))" }}
+                              aria-hidden="true"
+                            />
+                            <span className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                              Lượt nghe
+                            </span>
+                          </div>
+                          <TrendingUp
+                            className="size-4 text-muted-foreground/40"
+                            aria-hidden="true"
+                          />
+                        </div>
+                        <div className="h-48 sm:h-60 p-4">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart
+                              data={dashboard?.analytics}
+                              margin={{
+                                top: 4,
+                                right: 4,
+                                left: -22,
+                                bottom: 0,
                               }}
-                              dy={10}
+                            >
+                              <defs>
+                                <linearGradient
+                                  id="profileChartGrad"
+                                  x1="0"
+                                  y1="0"
+                                  x2="0"
+                                  y2="1"
+                                >
+                                  <stop
+                                    offset="5%"
+                                    stopColor="hsl(var(--primary))"
+                                    stopOpacity={0.28}
+                                  />
+                                  <stop
+                                    offset="95%"
+                                    stopColor="hsl(var(--primary))"
+                                    stopOpacity={0}
+                                  />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid
+                                strokeDasharray="3 7"
+                                vertical={false}
+                                stroke="hsl(var(--border))"
+                                opacity={0.4}
+                              />
+                              <XAxis
+                                dataKey="label"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{
+                                  fill: "hsl(var(--muted-foreground))",
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                }}
+                                dy={8}
+                              />
+                              <Tooltip content={<ChartTooltip />} />
+                              <Area
+                                type="monotone"
+                                dataKey="count"
+                                stroke="hsl(var(--primary))"
+                                strokeWidth={2}
+                                fill="url(#profileChartGrad)"
+                                dot={false}
+                                activeDot={{
+                                  r: 4,
+                                  fill: "hsl(var(--primary))",
+                                  stroke: "hsl(var(--background))",
+                                  strokeWidth: 2,
+                                }}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Recently Played */}
+                    <section aria-label="Recently played tracks">
+                      <SectionHeader
+                        icon={History}
+                        eyebrow="Lịch sử"
+                        title="Nghe gần đây"
+                        iconColor="hsl(var(--success))"
+                        action={
+                          <button
+                            type="button"
+                            className="group flex items-center gap-1 shrink-0 mt-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200"
+                          >
+                            Xem tất cả
+                            <ChevronRight
+                              className="size-4 transition-transform duration-200 group-hover:translate-x-0.5"
+                              aria-hidden="true"
                             />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: "#000",
-                                border: "none",
-                                borderRadius: "12px",
-                                fontSize: "10px",
-                              }}
-                            />
-                            <Area
-                              type="monotone"
-                              dataKey="count"
-                              stroke="#3b82f6"
-                              strokeWidth={4}
-                              fill="url(#chartGradient)"
-                            />
-                            <defs>
-                              <linearGradient
-                                id="chartGradient"
-                                x1="0"
-                                y1="0"
-                                x2="0"
-                                y2="1"
-                              >
-                                <stop
-                                  offset="5%"
-                                  stopColor="#3b82f6"
-                                  stopOpacity={0.3}
-                                />
-                                <stop
-                                  offset="95%"
-                                  stopColor="#3b82f6"
-                                  stopOpacity={0}
-                                />
-                              </linearGradient>
-                            </defs>
-                          </AreaChart>
-                        </ResponsiveContainer>
+                          </button>
+                        }
+                      />
+                      {dashboard?.recentlyPlayed?.length ? (
+                        <TrackList
+                          tracks={dashboard?.recentlyPlayed || []}
+                          isLoading={isLoading}
+                        />
+                      ) : (
+                        <EmptyState
+                          icon={History}
+                          title="Chưa có lịch sử"
+                          description="Các bài bạn nghe sẽ xuất hiện ở đây."
+                        />
+                      )}
+                    </section>
+                  </div>
+
+                  {/* Sidebar */}
+                  <aside className="space-y-5" aria-label="Thông tin profile">
+                    {/* Bio card */}
+                    <div className="card-base p-5 space-y-4">
+                      {/* Mini avatar + name */}
+                      <div className="flex items-center gap-3">
+                        <Avatar className="size-10 border border-border/40 shrink-0">
+                          <AvatarImage src={user?.avatar} />
+                          <AvatarFallback
+                            className="text-sm font-black text-white"
+                            style={{
+                              background:
+                                "linear-gradient(135deg, hsl(var(--brand-500)), hsl(var(--wave-2)))",
+                            }}
+                          >
+                            {userInitials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-foreground leading-tight truncate">
+                            {user?.fullName}
+                          </p>
+                          <p className="text-overline text-primary capitalize">
+                            {user?.role}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="divider-fade" />
+                      <div>
+                        <p className="text-overline text-muted-foreground/50 mb-2">
+                          Tiểu sử
+                        </p>
+                        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">
+                          {user?.bio || "Chưa có tiểu sử."}
+                        </p>
+                      </div>
+                      <div className="divider-fade" />
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground/50 font-medium">
+                        <Calendar
+                          className="size-3.5 shrink-0"
+                          aria-hidden="true"
+                        />
+                        Tham gia từ {formatDate(user?.createdAt || "")}
                       </div>
                     </div>
 
-                    {/* Recently Played List */}
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-black italic flex items-center gap-3 uppercase tracking-tighter">
-                          <History className="size-5 text-emerald-500" />{" "}
-                          Recently Played
-                        </h3>
-                        <Button
-                          variant="ghost"
-                          className="text-[10px] font-black uppercase tracking-widest text-white/20 hover:text-white"
-                        >
-                          View All
-                        </Button>
-                      </div>
-                      <div className="grid gap-2">
-                        {dashboard?.recentlyPlayed.map((item, i) => (
-                          <TrackRow
-                            key={`${item._id}-${i}`}
-                            track={item}
-                            index={i + 1}
-                            showTime
-                          />
+                    {/* Quick stats với proportion bars */}
+                    <div className="card-base p-5 space-y-4">
+                      <p className="text-overline text-muted-foreground/50">
+                        Thống kê
+                      </p>
+                      <div className="space-y-4">
+                        {[
+                          {
+                            icon: Music2,
+                            label: "Bài đã thích",
+                            value: tabCounts.likedTracks,
+                            color: "hsl(var(--primary))",
+                          },
+                          {
+                            icon: ListMusic,
+                            label: "Playlist",
+                            value: tabCounts.playlists,
+                            color: "hsl(var(--wave-2))",
+                          },
+                          {
+                            icon: History,
+                            label: "Nghe gần đây",
+                            value: dashboard?.recentlyPlayed?.length ?? 0,
+                            color: "hsl(var(--success))",
+                          },
+                        ].map(({ icon: Icon, label, value, color }) => (
+                          <div key={label} className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Icon
+                                  className="size-3 shrink-0"
+                                  style={{ color }}
+                                  aria-hidden="true"
+                                />
+                                {label}
+                              </div>
+                              <span className="text-counter font-bold text-foreground">
+                                {value}
+                              </span>
+                            </div>
+                            <div
+                              className="progress-track"
+                              style={{ height: "3px" }}
+                            >
+                              <div
+                                className="progress-fill transition-all duration-700 ease-out"
+                                style={{
+                                  width: `${Math.min((value / statsMax) * 100, 100)}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Sidebar Info */}
-                  <aside className="space-y-8">
-                    <div className="p-8 rounded-[2.5rem] bg-gradient-to-b from-white/[0.03] to-transparent border border-white/5 space-y-6">
-                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em]">
-                        User Biography
-                      </p>
-                      <p className="text-sm text-white/60 leading-relaxed font-medium italic">
-                        "{user?.bio || "No biography provided yet."}"
-                      </p>
-                      <div className="pt-6 border-t border-white/5 flex items-center gap-3 text-[10px] font-black text-white/20 uppercase tracking-widest">
-                        <Calendar className="size-4" /> Joined{" "}
-                        {formatDate(user?.createdAt || "")}
+                    {/* Discovery CTA */}
+                    <div className="card-base p-5 bg-gradient-to-br from-primary/8 to-transparent border-primary/15">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles
+                          className="size-3.5 text-primary"
+                          aria-hidden="true"
+                        />
+                        <p className="text-sm font-semibold text-foreground">
+                          Khám phá thêm
+                        </p>
                       </div>
+                      <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                        Tìm nhạc mới dựa trên thói quen nghe của bạn.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm w-full gap-1.5"
+                      >
+                        <TrendingUp className="size-3.5" aria-hidden="true" />
+                        Xem bảng xếp hạng
+                      </button>
                     </div>
                   </aside>
                 </motion.div>
               )}
 
-              {/* 2. PLAYLISTS TAB */}
+              {/* ══ PLAYLISTS ═════════════════════════════════════════════════ */}
               {activeTab === "playlists" && (
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="space-y-12"
+                  key="playlists"
+                  variants={fadeVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="space-y-7"
                 >
                   <div className="flex items-center justify-between">
-                    <h2 className="text-4xl font-black italic tracking-tighter uppercase">
-                      My Created Playlists
-                    </h2>
-                    <Button
-                      onClick={() => setIsCreatePlaylistOpen(true)}
-                      className="rounded-2xl h-12 px-6 bg-blue-600 hover:bg-blue-500 font-black uppercase text-[10px] tracking-widest transition-all hover:scale-105"
+                    <div>
+                      <p className="text-overline text-muted-foreground/50 mb-1">
+                        Bộ sưu tập
+                      </p>
+                      <h2 className="text-display-lg text-foreground">
+                        Playlist của tôi
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openCreatePlaylist}
+                      className="btn-primary gap-2 shrink-0"
                     >
-                      <Plus className="mr-2 size-5" /> New Playlist
-                    </Button>
+                      <Plus className="size-4" aria-hidden="true" />
+                      Tạo playlist
+                    </button>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
-                    {dashboard?.playlists.length === 0 ? (
-                      <div className="col-span-full py-20 text-center bg-white/[0.02] border border-dashed border-white/10 rounded-[2.5rem]">
-                        <ListMusic className="size-12 text-white/5 mx-auto mb-4" />
-                        <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">
-                          No playlists found
-                        </p>
-                      </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+                    {!myPlaylists?.length ? (
+                      <EmptyState
+                        icon={ListMusic}
+                        title="Chưa có playlist"
+                        description="Tạo playlist đầu tiên để bắt đầu."
+                      />
                     ) : (
-                      dashboard?.playlists.map((p) => (
-                        <PlaylistCard key={p._id} playlist={p} />
+                      myPlaylists?.map((p: Playlist, i: number) => (
+                        <motion.div
+                          key={p._id}
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{
+                            duration: 0.38,
+                            ease: EASE_EXPO,
+                            delay: Math.min(i * 45, 500),
+                          }}
+                        >
+                          <PublicPlaylistCard key={p._id} playlist={p} />
+                        </motion.div>
                       ))
                     )}
                   </div>
                 </motion.div>
               )}
 
-              {/* 3. LIBRARY TAB */}
+              {/* ══ LIBRARY ═══════════════════════════════════════════════════ */}
               {activeTab === "library" && (
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="space-y-12"
+                  key="library"
+                  variants={fadeVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="space-y-7"
                 >
+                  <div>
+                    <p className="text-overline text-muted-foreground/50 mb-1">
+                      Thư viện
+                    </p>
+                    <h2 className="text-display-lg text-foreground">
+                      Bộ sưu tập của tôi
+                    </h2>
+                  </div>
+
                   <Tabs defaultValue="liked_tracks">
-                    <TabsList className="bg-white/5 p-1 rounded-full mb-10 h-12">
-                      <TabsTrigger
-                        value="liked_tracks"
-                        className="rounded-full px-8 text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-blue-600"
-                      >
-                        Liked Tracks
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="liked_albums"
-                        className="rounded-full px-8 text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-blue-600"
-                      >
-                        Albums
-                      </TabsTrigger>
+                    {/* Inner tab — đơn giản hơn, không glass frosted phức tạp */}
+                    <TabsList className="bg-muted/50 rounded-xl p-1 h-auto mb-7 border border-border/40 inline-flex flex-wrap gap-1">
+                      {[
+                        {
+                          value: "liked_tracks",
+                          label: "Bài hát",
+                          icon: Heart,
+                          count: tabCounts.likedTracks,
+                        },
+                        {
+                          value: "liked_albums",
+                          label: "Album",
+                          icon: Disc,
+                          count: tabCounts.likedAlbums,
+                        },
+                        {
+                          value: "liked_playlists",
+                          label: "Playlist",
+                          icon: ListMusic,
+                          count: tabCounts.likedPlaylists,
+                        },
+                      ].map(({ value, label, icon: Icon, count }) => (
+                        <TabsTrigger
+                          key={value}
+                          value={value}
+                          className={cn(
+                            "rounded-lg flex items-center gap-1.5 px-4 py-2 text-xs font-semibold",
+                            "transition-all duration-200",
+                            "data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
+                            "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          <Icon className="size-3.5" aria-hidden="true" />
+                          {label}
+                          {count > 0 && (
+                            <span className="text-[10px] font-bold text-muted-foreground/60">
+                              ({count})
+                            </span>
+                          )}
+                        </TabsTrigger>
+                      ))}
                     </TabsList>
 
-                    <TabsContent
-                      value="liked_tracks"
-                      className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-0"
-                    >
-                      {dashboard?.library.tracks.map((track) => (
-                        <div
-                          key={track._id}
-                          className="group flex items-center gap-4 p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-all"
-                        >
-                          <img
-                            src={track.coverImage}
-                            className="size-14 rounded-xl object-cover shadow-lg"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-black truncate text-base">
-                              {track.title}
-                            </p>
-                            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
-                              {track.artist?.name}
-                            </p>
-                          </div>
-
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="rounded-full text-rose-500"
-                          >
-                            <Heart className="fill-rose-500 size-4" />
-                          </Button>
+                    <TabsContent value="liked_tracks" className="mt-0">
+                      {!dashboard?.library?.tracks?.length ? (
+                        <EmptyState
+                          icon={Heart}
+                          title="Chưa có bài đã thích"
+                          description="Bài hát bạn thích sẽ xuất hiện ở đây."
+                        />
+                      ) : (
+                        <div className="space-y-0.5">
+                          {dashboard?.library.tracks.length ? (
+                            <TrackList
+                              tracks={dashboard?.library.tracks || []}
+                              isLoading={isLoading}
+                            />
+                          ) : (
+                            <EmptyState
+                              icon={History}
+                              title="Chưa có lịch sử"
+                              description="Các bài bạn nghe sẽ xuất hiện ở đây."
+                            />
+                          )}
                         </div>
-                      ))}
+                      )}
                     </TabsContent>
 
-                    <TabsContent
-                      value="liked_albums"
-                      className="text-center py-20"
-                    >
-                      <Disc className="size-12 text-white/5 mx-auto mb-4" />
-                      <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">
-                        You haven't liked any albums yet
-                      </p>
+                    <TabsContent value="liked_albums" className="mt-0">
+                      {!dashboard?.library?.albums?.length ? (
+                        <EmptyState
+                          icon={Disc}
+                          title="Chưa có album đã lưu"
+                          description="Album bạn lưu sẽ xuất hiện ở đây."
+                        />
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                          {dashboard.library.albums.map((album: Album) => (
+                            <PublicAlbumCard key={album._id} album={album} />
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    {/* FIX: dùng library.playlists */}
+                    <TabsContent value="liked_playlists" className="mt-0">
+                      {!dashboard?.library?.playlists?.length ? (
+                        <EmptyState
+                          icon={ListMusic}
+                          title="Chưa có playlist đã lưu"
+                          description="Playlist bạn lưu sẽ xuất hiện ở đây."
+                        />
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                          {dashboard.library.playlists.map(
+                            (playlist: Playlist) => (
+                              <PublicPlaylistCard
+                                key={playlist._id}
+                                playlist={playlist}
+                              />
+                            ),
+                          )}
+                        </div>
+                      )}
                     </TabsContent>
                   </Tabs>
                 </motion.div>
@@ -363,113 +992,10 @@ export default function ProfilePage() {
         </Tabs>
       </div>
 
-      {/* <UserPlaylistModal
+      <UserPlaylistModal
         isOpen={isCreatePlaylistOpen}
-        onClose={() => setIsCreatePlaylistOpen(false)}
-      /> */}
-
-      {/* ─── STYLES ─── */}
-      <style jsx global>{`
-        .tab-premium {
-          @apply relative pb-6 text-[10px] font-black uppercase tracking-[0.4em] text-white/20 transition-all data-[state=active]:text-blue-500;
-        }
-        .tab-premium[data-state="active"]::after {
-          content: "";
-          @apply absolute bottom-0 left-0 right-0 h-[3px] bg-blue-500 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.8)];
-        }
-      `}</style>
-    </div>
-  );
-}
-
-function TrackRow({
-  track,
-  index,
-  showTime,
-}: {
-  track: any;
-  index: number;
-  showTime?: boolean;
-}) {
-  return (
-    <div className="group flex items-center gap-4 p-3 rounded-2xl hover:bg-white/[0.04] transition-all cursor-pointer border border-transparent hover:border-white/5">
-      <span className="w-6 text-center text-[10px] font-black text-white/10 group-hover:text-blue-500">
-        {index}
-      </span>
-      <div className="relative size-12 shrink-0 overflow-hidden rounded-xl shadow-xl">
-        <img
-          src={track.coverImage}
-          className="size-full object-cover group-hover:scale-110 transition-all duration-700"
-        />
-        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-          <Play className="size-4 fill-white" />
-        </div>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-black truncate text-sm group-hover:text-blue-400 transition-colors">
-          {track.title}
-        </p>
-        <p className="text-[9px] text-white/30 font-black uppercase tracking-[0.2em]">
-          {track.artist?.name}
-        </p>
-      </div>
-      {showTime && track.listenedAt && (
-        <div className="text-[9px] font-black text-white/10 uppercase tracking-widest hidden sm:block">
-          {new Date(track.listenedAt).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </div>
-      )}
-      <div className="flex items-center gap-4">
-        <span className="text-[10px] font-black text-white/10 uppercase tabular-nums">
-          {Math.floor(track.duration / 60)}:
-          {(track.duration % 60).toString().padStart(2, "0")}
-        </span>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-8 rounded-full opacity-0 group-hover:opacity-100"
-        >
-          <MoreHorizontal className="size-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function PlaylistCard({ playlist }: any) {
-  return (
-    <div className="relative group space-y-4 cursor-pointer">
-      <div className="aspect-square rounded-[2rem] overflow-hidden shadow-2xl relative ring-1 ring-white/5">
-        <img
-          src={playlist.coverImage || "/default-playlist.jpg"}
-          className="size-full object-cover group-hover:scale-110 transition-all duration-1000"
-        />
-        <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-all" />
-        <div className="absolute bottom-4 right-4 size-10 rounded-xl bg-blue-600 flex items-center justify-center translate-y-8 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all shadow-lg">
-          <Play className="size-4 fill-white" />
-        </div>
-      </div>
-      <div className="px-1">
-        <p className="font-black text-sm truncate uppercase tracking-tighter group-hover:text-blue-400 transition-colors">
-          {playlist.title}
-        </p>
-        <p className="text-[9px] text-white/20 font-bold uppercase tracking-widest">
-          Playlist • {playlist.tracks?.length || 0} Tracks
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center gap-6">
-      <Loader2 className="size-12 text-blue-600 animate-spin" />
-      <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.5em] animate-pulse">
-        Synchronizing Neural Profile
-      </p>
+        onClose={closeCreatePlaylist}
+      />
     </div>
   );
 }

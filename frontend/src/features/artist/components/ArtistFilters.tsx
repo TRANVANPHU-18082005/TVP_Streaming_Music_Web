@@ -188,7 +188,7 @@ const SearchInput = memo(
           "border-border/70 hover:border-border-strong",
           "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
           "rounded-xl backdrop-blur-sm",
-          "placeholder:text-muted-foreground/40",
+          "placeholder:text-muted-foreground",
           "transition-all duration-200",
         )}
       />
@@ -343,7 +343,6 @@ const ActiveTagsBar = memo(
           "animate-fade-down",
         )}
       >
-        {/* Gradient top accent line */}
         <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
 
         <div className="flex items-center gap-1.5 shrink-0">
@@ -425,7 +424,7 @@ const FilterToggleButton = memo(
             className={cn(
               "flex h-5 min-w-5 px-1 items-center justify-center",
               "rounded-full text-[10px] font-black text-white",
-              "gradient-brand shadow-glow-xs",
+              "orb-float--brand shadow-glow-xs",
             )}
             aria-label={`${activeCount} active filters`}
           >
@@ -458,7 +457,7 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
     // ── Search debounce ─────────────────────────────────────────────────────
     const [localSearch, setLocalSearch] = useState(params.keyword || "");
     const debouncedSearch = useDebounce(localSearch, 400);
-
+    const isClearingRef = useRef(false);
     // FIX 6: one-way sync URL → input only
     useEffect(() => {
       if ((params.keyword || "") === localSearch) return;
@@ -466,13 +465,19 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
     }, [params.keyword]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
+      // Nếu đang trong quá trình Clear, bỏ qua hiệu ứng Debounce này
+      if (isClearingRef.current) {
+        isClearingRef.current = false;
+        return;
+      }
+
       if (debouncedSearch !== (params.keyword || "")) {
         onSearch(debouncedSearch);
       }
     }, [debouncedSearch, params.keyword, onSearch]);
-
-    // FIX 5: immediate clear — bypasses debounce
+    // FIX 5: immediate clear bypasses debounce
     const handleClearSearch = useCallback(() => {
+      isClearingRef.current = true;
       setLocalSearch("");
       onSearch("");
     }, [onSearch]);
@@ -525,16 +530,11 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
           className={cn(
             "relative overflow-hidden",
             "rounded-2xl border border-border/60",
-            "bg-card/50 dark:bg-surface-1/50 backdrop-blur-md",
+            "bg-card/50 dark:bg-surface-1/2 backdrop-blur-md",
             "transition-shadow duration-300 hover:shadow-elevated",
             activeFiltersCount > 0 && "border-primary/20 shadow-brand",
           )}
         >
-          {/* Top accent line when filters active */}
-          {activeFiltersCount > 0 && (
-            <div className="absolute inset-x-0 top-0 h-px gradient-wave opacity-60" />
-          )}
-
           {/* ── TOP ROW ── */}
           <div className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
             <div className="flex-1 min-w-0">
@@ -601,13 +601,14 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
             role="region"
             aria-label="Artist filter options"
             className={cn(
-              "grid transition-[grid-template-rows] duration-300 ease-in-out",
+              "grid transition-[grid-template-rows] duration-300 ease-in-out relative",
               "border-t border-transparent",
               isExpanded
                 ? "grid-rows-[1fr] border-border/50"
                 : "grid-rows-[0fr]",
             )}
           >
+            <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
             {/* FIX 1: overflow toggled only after transitionend on outer el */}
             <div
               className={cn(

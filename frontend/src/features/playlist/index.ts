@@ -3,6 +3,7 @@ export * from "./api/playlistApi";
 export { default as EditPlaylistTracksModal } from "./components/EditPlaylistTracksModal";
 export { default as PlaylistCard } from "./components/PlaylistCard";
 export { default as PlaylistDetailSkeleton } from "./components/PlaylistDetailSkeleton";
+export { default as Playlistpageskeleton } from "./components/Playlistpageskeleton";
 export { default as PlaylistFilter } from "./components/PlaylistFilter";
 export { default as PlaylistModal } from "./components/PlaylistModal";
 export { default as PublicPlaylistCard } from "./components/PublicPlaylistCard";

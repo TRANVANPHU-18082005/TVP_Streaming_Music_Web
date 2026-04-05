@@ -11,6 +11,7 @@ import {
 } from "../validations/track.validation";
 
 import { getRealtimeChart } from "../services/chart.service";
+import { CreateTrackDTO, UpdateTrackDTO } from "../dtos/track.dto";
 
 // 1. UPLOAD TRACK
 export const uploadTrack = catchAsync(async (req: Request, res: Response) => {
@@ -19,7 +20,7 @@ export const uploadTrack = catchAsync(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
   // Cast Type Body từ Zod Schema (An toàn tuyệt đối nhờ middleware validate)
-  const body = req.body as CreateTrackInput;
+  const body = req.body as CreateTrackDTO;
 
   const track = await trackService.createTrack(req.user as IUser, body, files);
 
@@ -33,7 +34,7 @@ export const uploadTrack = catchAsync(async (req: Request, res: Response) => {
 // 2. UPDATE TRACK
 export const updateTrack = catchAsync(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-  const body = req.body as UpdateTrackInput;
+  const body = req.body as UpdateTrackDTO;
 
   const track = await trackService.updateTrack(
     req.params.id,

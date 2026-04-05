@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { ADMIN_PATHS } from "@/config/paths";
@@ -21,6 +21,7 @@ import {
   X,
   KeyboardMusic,
   UserCheck,
+  TvMinimalPlay,
 } from "lucide-react";
 import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
@@ -64,6 +65,11 @@ const sidebarGroups = [
         path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.GENRES}`,
         icon: KeyboardMusic,
       },
+      {
+        label: "Mood Video",
+        path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.VIDEO_MOOD}`,
+        icon: TvMinimalPlay,
+      },
     ],
   },
   {
@@ -98,7 +104,38 @@ const sidebarGroups = [
     ],
   },
 ];
-
+const Logo = memo(() => (
+  <Link
+    to="/"
+    className="group flex items-center gap-2.5 shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+    aria-label="Music — Go to home"
+  >
+    <div
+      className={cn(
+        "relative flex size-9 items-center justify-center rounded-xl shrink-0",
+        "bg-gradient-to-br from-primary/25 via-primary/10 to-transparent",
+        "border border-primary/20 shadow-sm transition-all duration-300",
+        "group-hover:scale-105 group-hover:shadow-md group-hover:shadow-primary/25",
+      )}
+    >
+      <Avatar className="size-full rounded-xl">
+        <AvatarImage
+          src="https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
+          alt=""
+          aria-hidden="true"
+          className="object-cover p-0.5"
+        />
+        <AvatarFallback className="bg-transparent font-black text-primary text-xs">
+          TVP
+        </AvatarFallback>
+      </Avatar>
+    </div>
+    <span className="hidden sm:block text-[15px] font-black tracking-tight text-foreground leading-none select-none">
+      Music<span className="text-primary">.</span>
+    </span>
+  </Link>
+));
+Logo.displayName = "Logo";
 interface SidebarProps {
   isSidebarOpen: boolean;
   setIsSidebarOpen: (value: boolean) => void;
@@ -134,30 +171,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           isCollapsed ? "justify-center" : "justify-between px-4",
         )}
       >
-        <div className="flex items-center gap-2">
-          <Link
-            to="/"
-            className="group flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
-          >
-            <div className="relative flex size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/10 border border-primary/20 shadow-sm transition-transform duration-300 group-hover:scale-105 group-hover:shadow-primary/30">
-              <Avatar className="size-full rounded-xl">
-                <AvatarImage
-                  src="https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
-                  alt="Logo"
-                  className="object-cover p-1" // Padding nhẹ để logo không bị sát viền
-                />
-                <AvatarFallback className="bg-transparent font-bold text-primary">
-                  TVP
-                </AvatarFallback>
-              </Avatar>
-            </div>
-          </Link>
-          {!isCollapsed && (
-            <span className="text-lg font-bold tracking-tight text-primary">
-              TVP Music
-            </span>
-          )}
-        </div>
+        <Logo />
         {!isCollapsed && (
           <Button
             variant="ghost"

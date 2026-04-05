@@ -137,7 +137,13 @@ import { TrackList } from "@/features/track/components/TrackList";
 import { Album } from "@/features/album/types";
 import { useArtistDetail } from "@/features/artist/hooks/useArtistsQuery";
 import { useAppDispatch } from "@/store/hooks";
-import { Genre, ITrack, setIsPlaying, setQueue } from "@/features";
+import {
+  Artistdetailskeleton,
+  Genre,
+  ITrack,
+  setIsPlaying,
+  setQueue,
+} from "@/features";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -544,7 +550,7 @@ const EmptySection = memo<{
     role="status"
   >
     <div className="size-14 rounded-full bg-background border border-border/40 shadow-sm flex items-center justify-center text-muted-foreground/30">
-      {React.cloneElement(icon, { size: 24, strokeWidth: 1.5 })}
+      {React.cloneElement(icon)}
     </div>
     <div className="space-y-1.5">
       <p className="font-black text-sm text-foreground/75 uppercase tracking-widest">
@@ -557,41 +563,6 @@ const EmptySection = memo<{
   </div>
 ));
 EmptySection.displayName = "EmptySection";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ArtistDetailSkeleton
-// ─────────────────────────────────────────────────────────────────────────────
-
-const ArtistDetailSkeleton = memo(() => (
-  <div className="w-full min-h-screen bg-background flex flex-col overflow-hidden">
-    <div className="h-[460px] sm:h-[560px] w-full bg-muted/20 animate-pulse relative">
-      <div className="absolute bottom-10 left-4 sm:left-8 flex items-end gap-7">
-        <div className="size-[160px] sm:size-[210px] rounded-full bg-muted border-[6px] border-background shadow-lg" />
-        <div className="space-y-3 mb-3">
-          <div className="h-3 w-24 bg-muted/60 rounded-full" />
-          <div className="h-14 w-72 bg-muted rounded-xl" />
-          <div className="h-4 w-44 bg-muted/50 rounded-full" />
-        </div>
-      </div>
-    </div>
-    <div className="h-[60px] w-full bg-card border-b border-border/30 mb-12 animate-pulse" />
-    <div className="container mx-auto px-4 sm:px-6 grid lg:grid-cols-12 gap-14">
-      <div className="lg:col-span-8 space-y-10">
-        <div className="h-7 bg-muted rounded-lg w-44 animate-pulse" />
-        <div className="space-y-3">
-          {Array.from({ length: 5 }, (_, i) => (
-            <div
-              key={i}
-              className="h-14 bg-muted/25 rounded-xl animate-pulse"
-            />
-          ))}
-        </div>
-      </div>
-      <div className="lg:col-span-4 h-[460px] bg-muted/15 rounded-3xl animate-pulse border border-border/30" />
-    </div>
-  </div>
-));
-ArtistDetailSkeleton.displayName = "ArtistDetailSkeleton";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ArtistNotFound
@@ -819,7 +790,7 @@ const ArtistDetailPage: React.FC<ArtistDetailPageProps> = ({
   );
 
   // ── Render states
-  if (isLoading) return <ArtistDetailSkeleton />;
+  if (isLoading) return <Artistdetailskeleton />;
   if (isError || !artist) {
     return (
       <ArtistNotFound

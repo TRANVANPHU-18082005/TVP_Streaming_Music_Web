@@ -46,6 +46,7 @@ export const ADMIN_PATHS = {
   ANALYTICS: "analytics",
   DASHBOARD: "/",
   GENRES: "genres",
+  VIDEO_MOOD: "video-mood",
   SETTINGS: "settings",
   // Track
   UPLOAD: "upload",

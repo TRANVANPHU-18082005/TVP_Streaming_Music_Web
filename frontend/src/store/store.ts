@@ -31,7 +31,7 @@ const playerPersistConfig = {
   storage,
   blacklist: ["isPlaying", "isLoading", "duration"],
 };
-export const USER_LOGOUT = "auth/logoutAll";
+export const LOGOUT_ACTION = "auth/logout";
 // 2. Root Reducer
 
 const appReducer = combineReducers({
@@ -45,19 +45,26 @@ const rootReducer = (
   state: ReturnType<typeof appReducer> | undefined,
   action: AnyAction,
 ) => {
-  // 🚀 Khi nhận lệnh logout
-  if (action.type === "auth/logout") {
-    // Xóa bộ nhớ vật lý của Redux Persist
-    storage.removeItem("persist:player");
-    storage.removeItem("persist:interaction");
-
-    // Reset State về trạng thái ban đầu
+  if (action.type === LOGOUT_ACTION) {
+    // 1. Xóa sạch các key trong LocalStorage của Redux Persist
+    // Thay vì dùng storage.removeItem thủ công, ta để Persistor tự lo hoặc xóa hết key có tiền tố persist:
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("persist:")) {
+        localStorage.removeItem(key);
+      }
+    });
+    // Xóa thủ công các rác khác của App
+    localStorage.removeItem("recentSearches");
+    // Lưu ý: Theme (vite-ui-theme) thường người dùng muốn giữ lại kể cả khi logout,
+    // nên cân nhắc có nên xóa không. Nếu muốn xóa sạch thì:
+    // localStorage.removeItem("vite-ui-theme");
+    // 2. Ép state về undefined để các reducer con (auth, player, interaction)
+    // quay về initialState ban đầu của chúng
     state = undefined;
   }
 
   return appReducer(state, action);
 };
-
 // 3. Store Initialization
 export const store = configureStore({
   reducer: rootReducer,

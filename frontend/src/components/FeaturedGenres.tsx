@@ -33,6 +33,7 @@ import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { GenreCard } from "@/features/genre/components/GenreCard";
 import { useGenresQuery } from "@/features/genre/hooks/useGenresQuery";
 import { cn } from "@/lib/utils";
+import SectionAmbient from "./SectionAmbient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — scale-first reveal suits the wide genre cards
@@ -76,13 +77,16 @@ const GenresHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         <div
           className="flex items-center justify-center size-6 rounded-md"
           style={{
-            background: "hsl(var(--wave-3) / 0.12)",
-            color: "hsl(var(--wave-3))",
+            background: "hsl(var(--wave-10) / 0.12)",
+            color: "hsl(var(--wave-10))",
           }}
         >
           <Shapes className="size-3.5" />
         </div>
-        <span className="text-overline" style={{ color: "hsl(var(--wave-3))" }}>
+        <span
+          className="text-overline"
+          style={{ color: "hsl(var(--wave-10))" }}
+        >
           Explore
         </span>
       </div>
@@ -103,8 +107,8 @@ const GenresHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
       to={viewAllHref}
       className={cn(
         "group flex items-center gap-1.5 shrink-0 mt-1",
-        "text-sm font-medium text-muted-foreground",
-        "hover:text-foreground transition-colors duration-200",
+        "text-sm font-medium text-wave-10 opacity-70",
+        "hover:text-wave-10 transition-colors duration-200 hover:opacity-100",
       )}
       aria-label="Xem tất cả thể loại âm nhạc"
     >
@@ -297,33 +301,34 @@ export function FeaturedGenres() {
       </div>
     );
   };
-
   return (
-    <section
-      className="section-block section-block--base"
-      aria-labelledby="featured-genres-heading"
-    >
-      <div className="section-container">
-        {/* Wave-3/wave-4 aurora divider — teal → gold, distinct from other sections */}
-        <div
-          className="hidden lg:block h-px mb-8"
-          style={{
-            background: `linear-gradient(
+    <>
+      <div
+        className="lg:block h-px"
+        style={{
+          background: `linear-gradient(
               to right,
               transparent,
-              hsl(var(--wave-3) / 0.32) 30%,
-              hsl(var(--wave-4) / 0.28) 70%,
+              hsl(var(--wave-10) / 0.3) 30%,
+              hsl(var(--wave-10) / 0.28) 70%,
               transparent
             )`,
-            boxShadow: "0 0 8px hsl(var(--wave-3) / 0.1)",
-          }}
-        />
+          boxShadow: "0 0 8px hsl(var(--wave-10) / 0.1)",
+        }}
+      />
+      <section
+        className="section-block section-block--base"
+        aria-labelledby="featured-genres-heading"
+      >
+        {/* <SectionAmbient /> */}
+        <SectionAmbient style="wave-10" />
+        <div className="section-container">
+          <GenresHeader viewAllHref="/genres" />
 
-        <GenresHeader viewAllHref="/genres" />
-
-        {renderContent()}
-      </div>
-    </section>
+          {renderContent()}
+        </div>
+      </section>
+    </>
   );
 }
 

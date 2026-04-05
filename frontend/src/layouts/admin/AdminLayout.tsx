@@ -18,6 +18,7 @@ const AdminLayout = () => {
         - Desktop: Nó là flex item, tự chiếm chỗ.
         - Mobile: Nó được xử lý position fixed bên trong component Sidebar.
       */}
+
       <Sidebar
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}

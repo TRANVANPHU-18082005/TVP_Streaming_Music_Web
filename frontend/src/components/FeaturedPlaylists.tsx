@@ -1,28 +1,3 @@
-"use client";
-
-/**
- * @file FeaturedPlaylists.tsx — Featured Playlists Section (Refactored v2.0)
- *
- * ARCHITECTURE:
- * - Structurally mirrors FeaturedAlbums but with distinct visual identity:
- *   section uses --section-block--alt surface + wave-2 accent palette
- * - `handlePlayPlaylist` memoized with useCallback — previously created new
- *   fn reference every render, defeating PublicPlaylistCard's React.memo
- * - Removed `throw new Error` inside catch (unhandled rejection anti-pattern)
- * - PlaylistGrid / PlaylistScroll isolated as memos — viewport observer
- *   only mounts after data resolves, preventing phantom IntersectionObserver
- *   entries during loading state transitions
- * - renderContent() replaces chained ternaries for legible state machine
- *
- * DESIGN:
- * - section-block--alt gives the section visual separation from FeaturedAlbums
- *   without a heavy border — alternating surface rhythm like Spotify's home
- * - Wave-2 (pink/fuchsia) accent instead of brand-500 purple to differentiate
- *   playlists from albums at a glance
- * - .divider-glow uses wave-2 tint via inline overrides
- * - Skeleton uses .skeleton token classes from index.css
- */
-
 import { memo, useCallback } from "react";
 import { Music2, AlertCircle, ListMusic, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
@@ -39,6 +14,7 @@ import { playlistKeys } from "@/features/playlist/utils/playlistKeys";
 import { useAppDispatch } from "@/store/hooks";
 import { setIsPlaying, setQueue } from "@/features";
 import { cn } from "@/lib/utils";
+import SectionAmbient from "./SectionAmbient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — slightly softer than Albums for tonal differentiation
@@ -82,13 +58,13 @@ const PlaylistsHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         <div
           className="flex items-center justify-center size-6 rounded-md"
           style={{
-            background: "hsl(var(--wave-2) / 0.12)",
-            color: "hsl(var(--wave-2))",
+            background: "hsl(var(--wave-8) / 0.12)",
+            color: "hsl(var(--wave-8))",
           }}
         >
           <Music2 className="size-3.5" />
         </div>
-        <span className="text-overline" style={{ color: "hsl(var(--wave-2))" }}>
+        <span className="text-overline" style={{ color: "hsl(var(--wave-8))" }}>
           Curated
         </span>
       </div>
@@ -110,8 +86,8 @@ const PlaylistsHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
       to={viewAllHref}
       className={cn(
         "group flex items-center gap-1.5 shrink-0 mt-1",
-        "text-sm font-medium text-muted-foreground",
-        "hover:text-foreground transition-colors duration-200",
+        "text-sm font-medium text-wave-8 opacity-70",
+        "hover:text-wave-8 transition-colors duration-200 hover:opacity-100",
       )}
       style={{ "--tw-text-opacity": 1 } as React.CSSProperties}
       aria-label="Xem tất cả playlist nổi bật"
@@ -352,33 +328,34 @@ export function FeaturedPlaylists() {
       </div>
     );
   };
-
   return (
-    <section
-      className="section-block section-block--alt"
-      aria-labelledby="featured-playlists-heading"
-    >
-      <div className="section-container">
-        {/* Wave-2 tinted glow divider — visual cadence between sections */}
-        <div
-          className="hidden lg:block h-px mb-8"
-          style={{
-            background: `linear-gradient(
+    <>
+      <div
+        className="lg:block h-px"
+        style={{
+          background: `linear-gradient(
               to right,
               transparent,
-              hsl(var(--wave-2) / 0.3) 30%,
-              hsl(var(--wave-1) / 0.3) 70%,
+              hsl(var(--wave-8) / 0.3) 30%,
+              hsl(var(--wave-8) / 0.28) 70%,
               transparent
             )`,
-            boxShadow: "0 0 8px hsl(var(--wave-2) / 0.1)",
-          }}
-        />
+          boxShadow: "0 0 8px hsl(var(--wave-8) / 0.1)",
+        }}
+      />
+      <section
+        className="section-block section-block--alt"
+        aria-labelledby="featured-playlists-heading"
+      >
+        {/* <SectionAmbient /> */}
+        <SectionAmbient style="wave-8" />
+        <div className="section-container">
+          <PlaylistsHeader viewAllHref="/playlists" />
 
-        <PlaylistsHeader viewAllHref="/playlists" />
-
-        {renderContent()}
-      </div>
-    </section>
+          {renderContent()}
+        </div>
+      </section>
+    </>
   );
 }
 

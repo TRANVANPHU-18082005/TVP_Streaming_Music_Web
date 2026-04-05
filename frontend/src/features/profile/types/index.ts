@@ -21,15 +21,15 @@ export interface recentlyPlayedData {
   };
 }
 
+export interface UserLibrary {
+  tracks: ITrack[];
+  albums: Album[];
+  playlists: Playlist[];
+}
 export interface ProfileDashboard {
   analytics: AnalyticsData[];
-  playlists: Playlist[];
-  recentlyPlayed: recentlyPlayedData[];
-  library: {
-    tracks: ITrack[];
-    albums: Album[];
-    playlists: Playlist[];
-  };
+  recentlyPlayed: ITrack[];
+  library: UserLibrary;
 }
 
 export interface LikedContentParams {

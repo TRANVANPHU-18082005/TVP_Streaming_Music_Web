@@ -1,31 +1,3 @@
-/**
- * MiniPlayer.tsx — Persistent footer music player
- *
- * Design: Glassmorphism capsule (mobile) / elevated full-bar (desktop)
- * Theme:  Full light + dark via CSS variables, zero hardcoded colours
- *
- * Architecture
- * ────────────
- * • Granular Redux selector — only isPlaying + duration subscribe here.
- *   currentTime is ALWAYS a prop (owned by the audio engine hook). This
- *   means zero re-renders from the 60fps progress tick on this component.
- *
- * • WaveformBars: CSS-only animation (no Framer) — zero JS after paint.
- *
- * • MobileProgressBar: extracted to named component co-located at top.
- *   Uses pointer capture for smooth scrubbing even when cursor/finger
- *   leaves the element.
- *
- * • Vinyl ring-pulse: single Framer motion.div isolated in VinylArtwork so
- *   it never causes the track info or controls to re-render.
- *
- * • Keyboard accessibility: every interactive surface has onKeyDown handler
- *   and correct ARIA attributes. The player root has role="region".
- *
- * Props contract: duration is removed from Props — it comes exclusively
- * from the Redux store. Callers no longer need to pass it.
- */
-
 import { memo, useRef, useState, useCallback, useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSelector } from "react-redux";
@@ -41,11 +13,12 @@ import { cn } from "@/lib/utils";
 import { formatTime } from "@/utils/format";
 import { useAppDispatch } from "@/store/hooks";
 import { ITrack } from "@/features/track";
+import { MarqueeText } from "./MarqueeText";
+import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
-
 export interface MiniPlayerProps {
   track: ITrack;
   currentTime: number;
@@ -55,71 +28,9 @@ export interface MiniPlayerProps {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GRANULAR SELECTOR
-// Only subscribes to isPlaying + duration — NOT currentTime.
-// Progress ticks never trigger a re-render of MiniPlayer.
+// MOBILE PROGRESS BAR — pointer-capture scrubbing, drag tooltip
+// Preserved exactly — this is custom scrubber logic not covered by index.css
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CSS-ONLY WAVEFORM VISUALIZER
-// No Framer overhead. Each bar is an independent CSS animation with a
-// distinct duration, creating organic desync.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const WAVEFORM_CSS = `
-  @keyframes mp-bar {
-    0%,100% { transform: scaleY(0.22); }
-    50%      { transform: scaleY(1); }
-  }
-`;
-
-let _waveStyleInjected = false;
-
-const WaveformBars = memo(({ active }: { active: boolean }) => {
-  // Inject once, CSS-only, no runtime cost after
-  if (!_waveStyleInjected && typeof document !== "undefined") {
-    _waveStyleInjected = true;
-    const s = document.createElement("style");
-    s.textContent = WAVEFORM_CSS;
-    document.head.appendChild(s);
-  }
-
-  const durations = [0.75, 0.95, 0.65, 1.05, 0.8];
-  const delays = [0, 0.11, 0.22, 0.08, 0.18];
-
-  return (
-    <div
-      className="flex items-end gap-[2px] h-[14px] w-[18px] shrink-0"
-      aria-hidden="true"
-    >
-      {durations.map((dur, i) => (
-        <span
-          key={i}
-          className="w-[2.5px] rounded-full origin-bottom"
-          style={{
-            height: 14,
-            background: "hsl(var(--primary))",
-            opacity: active ? 1 : 0.3,
-            transform: active ? undefined : "scaleY(0.22)",
-            animation: active
-              ? `mp-bar ${dur}s ease-in-out ${delays[i]}s infinite`
-              : "none",
-            transition: "opacity 0.3s, transform 0.3s",
-          }}
-        />
-      ))}
-    </div>
-  );
-});
-WaveformBars.displayName = "WaveformBars";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MOBILE PROGRESS BAR
-// Sits flush at the bottom of the capsule. Tall invisible hit zone (28px)
-// so thumbs can scrub easily. Pointer capture ensures smooth dragging
-// even when the finger moves outside the element.
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface MobileProgressBarProps {
   currentTime: number;
   duration: number;
@@ -205,6 +116,7 @@ const MobileProgressBar = memo(
               exit={{ opacity: 0, y: 4, scale: 0.85 }}
               transition={{ type: "spring", stiffness: 500, damping: 28 }}
             >
+              {/* Tooltip uses inverted theme — intentionally not tokenized */}
               <div
                 className="px-[7px] py-[2px] rounded-md text-[10px] font-mono font-semibold whitespace-nowrap shadow-md"
                 style={{
@@ -237,17 +149,11 @@ const MobileProgressBar = memo(
             transition: "height 0.15s ease",
           }}
         >
-          {/* Background */}
+          <div className="absolute inset-0 bg-foreground/[0.08]" />
           <div
-            className="absolute inset-0"
-            style={{ background: "hsl(var(--foreground) / 0.08)" }}
-          />
-          {/* Fill */}
-          <div
-            className="absolute left-0 top-0 h-full"
+            className="absolute left-0 top-0 h-full bg-primary"
             style={{
               width: `${displayPct * 100}%`,
-              background: "hsl(var(--primary))",
               transition: isDragging ? "none" : "width 0.1s linear",
             }}
           />
@@ -282,20 +188,14 @@ const MobileProgressBar = memo(
 MobileProgressBar.displayName = "MobileProgressBar";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VINYL ARTWORK
-// Isolated in its own memo so the pulse animation never causes track info
-// or controls to re-render. Spin is CSS class-based, pulse is Framer.
+// VINYL ARTWORK — Framer pulse ring isolated so outer tree never re-renders
+//
+// Spin animation: REMOVED CSS singleton injection.
+// Replaced with Tailwind arbitrary class `[animation:vinyl-spin_10s_linear_infinite]`
+// which uses the @keyframes vinyl-spin already defined in index.css section 2.
+// .pause-animation from index.css section 17 handles the paused state.
+// No document.createElement, no module-level _vinylStyleInjected flag.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const VINYL_CSS = `
-  @keyframes mp-vinyl-spin {
-    to { transform: rotate(360deg); }
-  }
-  .mp-vinyl-spinning { animation: mp-vinyl-spin 10s linear infinite; }
-`;
-
-let _vinylStyleInjected = false;
-
 interface VinylArtworkProps {
   src?: string;
   alt: string;
@@ -304,98 +204,79 @@ interface VinylArtworkProps {
 }
 
 const VinylArtwork = memo(
-  ({ src, alt, isPlaying, size = 40 }: VinylArtworkProps) => {
-    if (!_vinylStyleInjected && typeof document !== "undefined") {
-      _vinylStyleInjected = true;
-      const s = document.createElement("style");
-      s.textContent = VINYL_CSS;
-      document.head.appendChild(s);
-    }
+  ({ src, alt, isPlaying, size = 40 }: VinylArtworkProps) => (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      {/* Pulsing ring — Framer, isolated in this subtree */}
+      <motion.div
+        className="absolute rounded-full border"
+        style={{ inset: -3, borderColor: "hsl(var(--primary) / 0.5)" }}
+        animate={
+          isPlaying
+            ? { opacity: [0.35, 0.9, 0.35], scale: [1, 1.06, 1] }
+            : { opacity: 0.15, scale: 1 }
+        }
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+        aria-hidden="true"
+      />
 
-    return (
-      <div className="relative shrink-0" style={{ width: size, height: size }}>
-        {/* Pulsing ring — Framer, isolated */}
-        <motion.div
-          className="absolute rounded-full border"
+      {/* Disc — uses @keyframes vinyl-spin from index.css via arbitrary class */}
+      <div
+        className={cn(
+          "relative rounded-full overflow-hidden",
+          "border border-black/10 dark:border-white/10",
+          "shadow-raised dark:shadow-[0_2px_8px_hsl(0_0%_0%/0.5)]",
+          // Uses index.css @keyframes vinyl-spin (defined in @theme keyframes)
+          isPlaying ? "animate-vinyl-slow" : "pause-animation",
+        )}
+        style={{ width: size, height: size }}
+      >
+        <ImageWithFallback
+          src={src}
+          alt={alt}
+          className="size-full object-cover"
+        />
+
+        {/* Gloss overlay */}
+        <div
+          className="absolute inset-0 rounded-full"
           style={{
-            inset: -3,
-            borderColor: "hsl(var(--primary) / 0.5)",
+            background:
+              "linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 55%)",
           }}
-          animate={
-            isPlaying
-              ? { opacity: [0.35, 0.9, 0.35], scale: [1, 1.06, 1] }
-              : { opacity: 0.15, scale: 1 }
-          }
-          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
           aria-hidden="true"
         />
 
-        {/* Disc */}
+        {/* Spindle */}
         <div
-          className={cn(
-            "relative rounded-full overflow-hidden",
-            "border border-black/10 dark:border-white/10",
-            "shadow-sm dark:shadow-black/50",
-            isPlaying && "mp-vinyl-spinning",
-          )}
-          style={{ width: size, height: size }}
-        >
-          <ImageWithFallback
-            src={src}
-            alt={alt}
-            className="size-full object-cover"
-          />
-          {/* Gloss */}
-          <div
-            className="absolute inset-0 rounded-full"
-            style={{
-              background:
-                "linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 55%)",
-            }}
-            aria-hidden="true"
-          />
-          {/* Spindle */}
-          <div
-            className="absolute rounded-full z-10"
-            style={{
-              width: 7,
-              height: 7,
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%,-50%)",
-              background: "hsl(var(--background))",
-              border: "1px solid hsl(var(--border))",
-            }}
-            aria-hidden="true"
-          />
-        </div>
+          className="absolute rounded-full z-10 border border-border"
+          style={{
+            width: 7,
+            height: 7,
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%,-50%)",
+            background: "hsl(var(--background))",
+          }}
+          aria-hidden="true"
+        />
       </div>
-    );
-  },
+    </div>
+  ),
 );
 VinylArtwork.displayName = "VinylArtwork";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DESKTOP PROGRESS LINE
-// Pure CSS transition — Framer motion.div was overkill for a width transition.
+// DESKTOP PROGRESS LINE — pure CSS width transition, no Framer
 // ─────────────────────────────────────────────────────────────────────────────
-
 const DesktopProgressLine = memo(
   ({ currentTime, duration }: { currentTime: number; duration: number }) => {
     const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
     return (
       <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden z-10">
+        <div className="absolute inset-0 bg-foreground/[0.06]" />
         <div
-          className="absolute inset-0"
-          style={{ background: "hsl(var(--foreground) / 0.06)" }}
-        />
-        <div
-          className="absolute left-0 top-0 h-full"
-          style={{
-            width: `${pct}%`,
-            background: "hsl(var(--primary))",
-            transition: "width 0.1s linear",
-          }}
+          className="absolute left-0 top-0 h-full bg-primary"
+          style={{ width: `${pct}%`, transition: "width 0.1s linear" }}
         />
       </div>
     );
@@ -404,10 +285,8 @@ const DesktopProgressLine = memo(
 DesktopProgressLine.displayName = "DesktopProgressLine";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRACK INFO
-// Isolated memo — only re-renders when track changes, not on playback ticks.
+// TRACK INFO — isolated memo, only re-renders when track changes
 // ─────────────────────────────────────────────────────────────────────────────
-
 interface TrackInfoProps {
   track: ITrack;
   isPlaying: boolean;
@@ -433,35 +312,45 @@ const TrackInfo = memo(({ track, isPlaying, onExpand }: TrackInfoProps) => (
       alt={`${track.title} album art`}
       isPlaying={isPlaying}
     />
-
-    <div className="min-w-0 flex flex-col gap-0.5">
-      <div className="flex items-center gap-1.5">
-        <h4
-          className="text-[13px] font-semibold truncate leading-tight tracking-tight"
-          style={{ color: "hsl(var(--foreground))" }}
-        >
-          {track.title}
-        </h4>
-        {/* Waveform only on mobile — desktop has it on the right */}
+    <div
+      className="min-w-0 flex flex-col gap-0.5"
+      // CSS variable để dừng khi hover cả track info block
+      onMouseEnter={(e) =>
+        e.currentTarget.style.setProperty("--marquee-play-state", "paused")
+      }
+      onMouseLeave={(e) =>
+        e.currentTarget.style.setProperty("--marquee-play-state", "running")
+      }
+    >
+      <div className="flex items-center gap-1.5 min-w-0">
+        <MarqueeText
+          text={track.title}
+          className="flex-1 min-w-0 text-[13px] font-semibold tracking-tight text-foreground"
+          speed={38}
+          pauseMs={1600}
+        />
         <div className="md:hidden shrink-0">
-          <WaveformBars active={isPlaying} />
+          <PremiumMusicVisualizer active={isPlaying} barCount={7} />
         </div>
       </div>
-      <p
-        className="text-[11px] truncate font-medium leading-tight"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
-        {track.artist?.name}
-      </p>
+      <p className="text-track-meta truncate">{track.artist?.name}</p>
     </div>
   </div>
 ));
 TrackInfo.displayName = "TrackInfo";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN COMPONENT
+// MINI PLAYER — main component
+//
+// Layout:
+//   Mobile:  floating glass capsule, h-[72px], rounded-2xl
+//   Desktop: full-width sticky bar, h-[76px], no radius
+//
+// Glass system:
+//   Mobile capsule → .glass-heavy token (T3 — 52px blur, 82% bg)
+//   Desktop bar    → .player-bar token (fixed position, 52px blur, safe-area)
+//   Both: border-border/28 + inset highlight from token
 // ─────────────────────────────────────────────────────────────────────────────
-
 export const MiniPlayer = memo(
   ({
     track,
@@ -475,6 +364,7 @@ export const MiniPlayer = memo(
     const labelId = useId();
 
     const handleStop = useCallback(() => dispatch(stopPlaying()), [dispatch]);
+
     const handleExpand = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -482,6 +372,7 @@ export const MiniPlayer = memo(
       },
       [onExpand],
     );
+
     const handleStopKeyboard = useCallback(
       (e: React.KeyboardEvent) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -491,6 +382,7 @@ export const MiniPlayer = memo(
       },
       [handleStop],
     );
+
     const handleExpandKeyboard = useCallback(
       (e: React.KeyboardEvent) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -503,9 +395,9 @@ export const MiniPlayer = memo(
 
     return (
       /**
-       * Outer wrapper: pointer-events-none lets touches pass through to page
-       * content on mobile until the capsule itself is hit. On desktop the
-       * full-width bar is always pointer-interactive.
+       * Outer shell: pointer-events-none passes touches through to page
+       * content on mobile except on the capsule itself.
+       * Desktop: full-width, always interactive.
        */
       <div
         className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none md:pointer-events-auto"
@@ -513,7 +405,6 @@ export const MiniPlayer = memo(
         aria-labelledby={labelId}
         aria-label="Music player"
       >
-        {/* Hidden label for screen readers */}
         <span id={labelId} className="sr-only">
           Now playing: {track.title} by {track.artist?.name}
         </span>
@@ -526,28 +417,20 @@ export const MiniPlayer = memo(
           className={cn(
             "pointer-events-auto relative overflow-hidden select-none",
 
-            // ── Mobile: floating capsule ──
+            // ── Mobile: floating capsule with glass-heavy tier ──
             "w-[calc(100%-1.25rem)] mb-3 h-[72px] rounded-2xl",
+            // glass-heavy: bg-background/82, blur-52, saturate-210
+            "shadow-brand",
+            "glass-heavy",
 
-            // ── Desktop: full-width bar ──
+            // ── Desktop: full-width .player-bar token ──
+            // player-bar from index.css: fixed, blur-52, safe-area padding,
+            // border-top, shadow-[0_-8px_32px_hsl(228_32%_4%/0.18)]
             "md:w-full md:mb-0 md:h-[76px] md:rounded-none",
-
-            // ── Light mode glass ──
-            "bg-white/[0.97] backdrop-blur-xl",
-            "border border-black/[0.07]",
-            "shadow-[0_-1px_0_rgba(0,0,0,0.04),0_2px_18px_rgba(0,0,0,0.09),0_8px_40px_rgba(0,0,0,0.06)]",
-
-            // ── Dark mode glass ──
-            "dark:bg-[hsl(var(--background)/0.97)] dark:backdrop-blur-xl",
-            "dark:border-white/[0.07]",
-            "dark:shadow-[0_-1px_0_hsl(var(--border)),0_-6px_32px_rgba(0,0,0,0.8)]",
-
-            // ── Desktop border top only ──
-            "md:border-t md:border-x-0 md:border-b-0",
-            "md:border-black/[0.06] md:dark:border-white/[0.08]",
+            "md:player-bar",
           )}
         >
-          {/* ── Desktop: top progress line ── */}
+          {/* Desktop: top progress line */}
           <div className="hidden md:block">
             <DesktopProgressLine
               currentTime={currentTime}
@@ -555,7 +438,7 @@ export const MiniPlayer = memo(
             />
           </div>
 
-          {/* ── Mobile: bottom scrubber ── */}
+          {/* Mobile: bottom scrubber */}
           <div className="md:hidden">
             <MobileProgressBar
               currentTime={currentTime}
@@ -564,7 +447,7 @@ export const MiniPlayer = memo(
             />
           </div>
 
-          {/* ── Desktop: subtle ambient glow (dark only) ── */}
+          {/* Desktop: subtle ambient glow (dark mode only) */}
           <div
             className="hidden dark:md:block absolute left-0 top-0 bottom-0 w-48 pointer-events-none z-0"
             style={{
@@ -575,7 +458,8 @@ export const MiniPlayer = memo(
           />
 
           {/* ── MAIN CONTENT ROW ── */}
-          <div className="relative z-10 h-full px-3 md:px-6 pt-2 pb-2 flex items-center gap-2 md:gap-0">
+
+          <div className="relative z-10 h-full px-3 md:px-6 pt-2 pb-2 flex items-center gap-2 md:gap-0 ">
             {/* LEFT — artwork + track info */}
             <TrackInfo
               track={track}
@@ -583,7 +467,7 @@ export const MiniPlayer = memo(
               onExpand={onExpand}
             />
 
-            {/* CENTER — desktop: transport controls + scrubber */}
+            {/* CENTER (desktop) — transport controls + full scrubber */}
             <div
               className="hidden md:flex flex-col items-center justify-center flex-1 gap-1.5"
               onClick={(e) => e.stopPropagation()}
@@ -593,8 +477,7 @@ export const MiniPlayer = memo(
               {/* Scrubber with time labels */}
               <div className="w-full max-w-[480px] flex items-center gap-2.5">
                 <span
-                  className="text-[11px] font-mono tabular-nums w-9 text-right"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
+                  className="text-duration text-muted-foreground w-9 text-right"
                   aria-hidden="true"
                 >
                   {formatTime(currentTime)}
@@ -608,8 +491,7 @@ export const MiniPlayer = memo(
                   />
                 </div>
                 <span
-                  className="text-[11px] font-mono tabular-nums w-9"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
+                  className="text-duration text-muted-foreground w-9"
                   aria-hidden="true"
                 >
                   {formatTime(duration)}
@@ -617,7 +499,7 @@ export const MiniPlayer = memo(
               </div>
             </div>
 
-            {/* MOBILE CENTER — transport controls only */}
+            {/* CENTER (mobile) — transport controls only */}
             <div
               className="flex md:hidden items-center shrink-0"
               onClick={(e) => e.stopPropagation()}
@@ -625,14 +507,16 @@ export const MiniPlayer = memo(
               <PlayerControls variant="mini" getCurrentTime={getCurrentTime} />
             </div>
 
-            {/* MOBILE RIGHT — stop button */}
+            {/* RIGHT (mobile) — stop */}
             <button
+              type="button"
               className={cn(
                 "md:hidden shrink-0 p-1.5 rounded-full",
+                "text-muted-foreground",
+                "hover:bg-muted/70",
                 "transition-all duration-150 active:scale-90",
-                "hover:bg-[hsl(var(--muted)/0.7)]",
+                "focus-visible:outline-2 focus-visible:outline-ring",
               )}
-              style={{ color: "hsl(var(--muted-foreground))" }}
               onClick={handleStop}
               onKeyDown={handleStopKeyboard}
               aria-label="Stop playback"
@@ -640,30 +524,27 @@ export const MiniPlayer = memo(
               <X className="size-3.5" />
             </button>
 
-            {/* DESKTOP RIGHT — waveform + volume + expand + stop */}
+            {/* RIGHT (desktop) — waveform + volume + expand + stop */}
             <div
               className="hidden md:flex items-center justify-end md:w-[32%] gap-2"
               onClick={(e) => e.stopPropagation()}
             >
-              <WaveformBars active={isPlaying} />
+              <PremiumMusicVisualizer active={isPlaying} />
 
               <VolumeControl className="w-24" />
 
               {/* Separator */}
-              <div
-                className="h-5 w-px mx-0.5"
-                style={{ background: "hsl(var(--border))" }}
-                aria-hidden="true"
-              />
+              <div className="h-5 w-px mx-0.5 bg-border" aria-hidden="true" />
 
               <Button
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8 rounded-full transition-all duration-150",
-                  "hover:bg-[hsl(var(--muted)/0.7)]",
+                  "h-8 w-8 rounded-full",
+                  "text-muted-foreground",
+                  "hover:bg-muted/70",
+                  "transition-all duration-150",
                 )}
-                style={{ color: "hsl(var(--muted-foreground))" }}
                 onClick={handleExpand}
                 onKeyDown={handleExpandKeyboard}
                 title="Expand player"
@@ -672,13 +553,15 @@ export const MiniPlayer = memo(
                 <Maximize2 className="size-4" />
               </Button>
 
+              {/* Stop — uses .text-destructive design token (was hardcoded red-500) */}
               <Button
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8 rounded-full transition-all duration-150",
-                  "text-[hsl(var(--muted-foreground)/0.6)]",
-                  "hover:text-red-500 hover:bg-red-500/10",
+                  "h-8 w-8 rounded-full",
+                  "text-muted-foreground/60",
+                  "hover:text-destructive hover:bg-destructive/10",
+                  "transition-all duration-150",
                 )}
                 onClick={handleStop}
                 title="Stop playback"

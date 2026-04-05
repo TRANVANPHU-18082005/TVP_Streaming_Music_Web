@@ -1,24 +1,3 @@
-"use client";
-
-/**
- * @file AlbumFilter.tsx — Album catalog search + filter bar (v4.0 — Soundwave Premium)
- *
- * REDESIGN HIGHLIGHTS vs v3.2:
- * ─ Full Soundwave token integration: .glass-frosted, .shadow-brand, .badge-*,
- *   .btn-*, .text-overline, .card-base, .orb-float, .divider-glow
- * ─ Search bar elevated to full-width hero input with animated underline ring
- * ─ Sort control moved inline with search for single-row layout on md+
- * ─ Filter panel uses CSS grid-template-rows collapse (original kept intact)
- * ─ ActiveFilterTag redesigned with wave-color icon system from FeaturedAlbums
- * ─ Paneloverflow transitionend fix preserved (FIX 1+2)
- * ─ All FIX 3–9 from v3.2 preserved
- *
- * ARCHITECTURE:
- * ─ FilterPill extracted for animated genre/artist chips
- * ─ FilterSection extracted to reduce nesting depth in main render
- * ─ stableFilterHandlers pattern preserved from AlbumPage caller
- */
-
 import React, {
   useState,
   useEffect,
@@ -189,7 +168,7 @@ const SearchInput = memo(
           "border-border/70 hover:border-border-strong",
           "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
           "rounded-xl backdrop-blur-sm",
-          "placeholder:text-muted-foreground/40",
+          "placeholder:text-muted-foreground",
           "transition-all duration-200",
         )}
       />
@@ -344,7 +323,6 @@ const ActiveTagsBar = memo(
           "animate-fade-down",
         )}
       >
-        {/* Divider-glow accent */}
         <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
 
         <div className="flex items-center gap-1.5 shrink-0">
@@ -437,7 +415,7 @@ const FilterToggleButton = memo(
             className={cn(
               "flex h-5 min-w-5 px-1 items-center justify-center",
               "rounded-full text-[10px] font-black",
-              "gradient-brand text-white",
+              "orb-float--brand text-white",
               "shadow-glow-xs",
             )}
             aria-label={`${activeCount} active filters`}
@@ -473,7 +451,7 @@ const AlbumFilter = memo<AlbumFilterProps>(
     // ── Search debounce ─────────────────────────────────────────────────────
     const [localSearch, setLocalSearch] = useState(params.keyword || "");
     const debouncedSearch = useDebounce(localSearch, 400);
-
+    const isClearingRef = useRef(false);
     // FIX 6: one-way sync URL → input only
     useEffect(() => {
       if ((params.keyword || "") === localSearch) return;
@@ -481,17 +459,22 @@ const AlbumFilter = memo<AlbumFilterProps>(
     }, [params.keyword]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
+      // Nếu đang trong quá trình Clear, bỏ qua hiệu ứng Debounce này
+      if (isClearingRef.current) {
+        isClearingRef.current = false;
+        return;
+      }
+
       if (debouncedSearch !== (params.keyword || "")) {
         onSearch(debouncedSearch);
       }
     }, [debouncedSearch, params.keyword, onSearch]);
-
     // FIX 5: immediate clear bypasses debounce
     const handleClearSearch = useCallback(() => {
+      isClearingRef.current = true;
       setLocalSearch("");
       onSearch("");
     }, [onSearch]);
-
     // ── Panel expand — FIX 1+2 preserved ────────────────────────────────────
     const gridRef = useRef<HTMLDivElement>(null);
 
@@ -542,8 +525,8 @@ const AlbumFilter = memo<AlbumFilterProps>(
         <div
           className={cn(
             "relative overflow-hidden",
-            "rounded-2xl border border-border/60",
-            "bg-card/50 dark:bg-surface-1/50 backdrop-blur-md",
+            "rounded-2xl",
+            "bg-card/50 dark:bg-surface-1/2 backdrop-blur-md",
             "transition-shadow duration-300",
             "hover:shadow-elevated",
             activeFiltersCount > 0 && "border-primary/20 shadow-brand",
@@ -623,13 +606,15 @@ const AlbumFilter = memo<AlbumFilterProps>(
             role="region"
             aria-label="Album filter options"
             className={cn(
-              "grid transition-[grid-template-rows] duration-300 ease-in-out",
+              "grid transition-[grid-template-rows] duration-300 ease-in-out relative",
               "border-t border-transparent",
               isExpanded
                 ? "grid-rows-[1fr] border-border/50"
                 : "grid-rows-[0fr]",
             )}
           >
+            <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
+
             {/* FIX 1: overflow only enabled after transitionend */}
             <div
               className={cn(
@@ -768,18 +753,34 @@ const AlbumFilter = memo<AlbumFilterProps>(
                 </div>
 
                 {/* Year — FIX 9: z-index + isolate wrapper */}
+                {/* Year Selector — Dùng FilterDropdown để đồng bộ và chống bị che */}
                 <div className="space-y-0">
                   <FilterLabel
                     icon={Calendar}
                     text="Year"
                     iconColor="hsl(var(--success))"
                   />
-                  <div className="relative [z-index:60] isolate">
-                    <YearPicker
-                      value={params.year}
-                      onChange={(val) => onFilterChange("year", val)}
-                    />
-                  </div>
+                  <FilterDropdown
+                    isActive={!!params.year}
+                    onClear={() => onFilterChange("year", null)}
+                    label={params.year ? `Year: ${params.year}` : "Select Year"}
+                    className={cn(
+                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
+                      "justify-start shadow-raised rounded-lg border-border/70",
+                      "focus:ring-1 focus:ring-primary/30",
+                      params.year && "border-success/40 text-foreground",
+                    )}
+                    contentClassName="w-[260px] p-0" // p-0 để YearGrid khít với khung
+                  >
+                    <div className="max-h-[320px] overflow-hidden">
+                      <YearPicker
+                        variant="form" // Dùng bản inline để nó hiển thị ngay trong Dropdown
+                        value={params.year}
+                        onChange={(val) => onFilterChange("year", val)}
+                        className="border-none shadow-none" // Bỏ viền của YearPicker vì Dropdown đã có
+                      />
+                    </div>
+                  </FilterDropdown>
                 </div>
               </div>
             </div>

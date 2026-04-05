@@ -76,6 +76,7 @@ import { Link } from "react-router-dom";
 import { ITrack } from "@/features/track/types";
 import { LikeButton } from "@/features";
 import { useAppSelector } from "@/store/hooks";
+import { MarqueeText } from "@/features/player/components/MarqueeText";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -453,23 +454,32 @@ export const TrackRow = memo(
               onPlay={handlePlayClick}
             />
             <div className="min-w-0 flex-1">
-              <p
-                title={track.title}
-                className={cn(
-                  "truncate text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
-                  isActive
-                    ? "text-[hsl(var(--primary))]"
-                    : "text-[hsl(var(--foreground))]",
-                )}
-              >
-                {track.title}
-              </p>
+              {isActive && (
+                <MarqueeText
+                  text={track.title}
+                  className="text-sm font-medium leading-snug mb-0.5 text-[hsl(var(--primary))]"
+                />
+              )}
+              {!isActive && (
+                <p
+                  title={track.title}
+                  className={cn(
+                    "truncate text-track-title text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
+                    isActive
+                      ? "text-[hsl(var(--primary))]"
+                      : "text-[hsl(var(--foreground))]",
+                  )}
+                >
+                  {track.title}
+                </p>
+              )}
+
               <p className="truncate text-xs leading-snug text-[hsl(var(--muted-foreground))]">
                 {track.artist?.slug ? (
                   <Link
                     to={`/artists/${track.artist.slug}`}
                     title={track.artist.name}
-                    className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150"
+                    className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {track.artist.name}
@@ -489,7 +499,7 @@ export const TrackRow = memo(
               <Link
                 to={`/albums/${track.album.slug}`}
                 title={track.album.title}
-                className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150"
+                className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
                 onClick={(e) => e.stopPropagation()}
               >
                 {track.album.title}
@@ -499,51 +509,33 @@ export const TrackRow = memo(
             )}
           </p>
         </TableCell>
+        <TableCell className="table-cell py-0 pr-4">
+          <span
+            className={cn(
+              // Layout: fixed size prevents cell width changes during Framer scale
+              "relative flex items-center justify-center",
+              "w-8 h-8 shrink-0",
+              // Containment: clips all Framer animations to this box
+              "overflow-hidden isolate",
+              // Visibility
+              "transition-[opacity] duration-150",
+              isLiked
+                ? "opacity-100 pointer-events-auto"
+                : "pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+            )}
+            // FIX: contain layout+paint via inline style (not a Tailwind class)
+            // `contain: paint` is the critical property — clips filter:blur() overflow
+            style={{ contain: "layout paint" }}
+          >
+            <LikeButton id={track._id} size="sm" />
+          </span>
+        </TableCell>
 
         {/* COL 4 — Actions + Duration */}
         <TableCell className="py-0 pr-3" data-no-row-click="">
-          <div className="flex items-center justify-end gap-0.5">
-            {/*
-             * FIX 1 + FIX 3: LikeButton containment wrapper.
-             *
-             * The wrapper has:
-             *   • `overflow-hidden`    — clips burst ring + glow blur to button bounds
-             *   • `isolate`            — creates new stacking context, prevents z bleed
-             *   • `contain: layout paint` — tells browser paint is bounded here
-             *   • fixed size           — prevents the cell from stretching when
-             *                            Framer scale animates the button
-             *
-             * Visibility logic (FIX 3):
-             *   • `opacity-0 pointer-events-none`    — invisible and non-interactive at rest
-             *   • `isLiked`: always visible (`opacity-100 pointer-events-auto`) so a
-             *     liked track always shows the filled heart even when not hovered
-             *   • `group-hover:opacity-100 group-hover:pointer-events-auto` — visible on hover
-             *
-             * This replaces the original broken:
-             *   `opacity-100 pointer-events-none` (always visible but always unclickable)
-             */}
-            <span
-              className={cn(
-                // Layout: fixed size prevents cell width changes during Framer scale
-                "relative flex items-center justify-center",
-                "w-8 h-8 shrink-0",
-                // Containment: clips all Framer animations to this box
-                "overflow-hidden isolate",
-                // Visibility
-                "transition-[opacity] duration-150",
-                isLiked
-                  ? "opacity-100 pointer-events-auto"
-                  : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
-              )}
-              // FIX: contain layout+paint via inline style (not a Tailwind class)
-              // `contain: paint` is the critical property — clips filter:blur() overflow
-              style={{ contain: "layout paint" }}
-            >
-              <LikeButton id={track._id} size="sm" />
-            </span>
-
+          <div className="flex items-center justify-center gap-0.5">
             {/* Duration */}
-            <span className="min-w-[38px] text-right text-xs tabular-nums text-[hsl(var(--muted-foreground))] px-2">
+            <span className="min-w-[38px] text-duration text-right text-xs tabular-nums text-[hsl(var(--muted-foreground))] px-2">
               {formatDuration(track.duration)}
             </span>
 
@@ -554,7 +546,7 @@ export const TrackRow = memo(
              */}
             <span
               className={cn(
-                "transition-[opacity,transform] duration-150",
+                "transition-[opacity,transform] duration-150 hidden md:inline-flex",
                 menuOpen
                   ? "opacity-100 translate-x-0"
                   : "opacity-0 translate-x-2 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto",

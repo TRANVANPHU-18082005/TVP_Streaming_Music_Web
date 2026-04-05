@@ -2,7 +2,8 @@ export * from "./api/artistApi";
 
 export { default as ArtistCard } from "./components/ArtistCard";
 export { default as ArtistFilters } from "./components/ArtistFilters";
-export { default as ArtistGridSkeleton } from "./components/ArtistGridSkeleton";
+export { default as Artistdetailskeleton } from "./components/Artistdetailskeleton";
+export { default as Artistpageskeleton } from "./components/Artistpageskeleton";
 export { default as ArtistSelector } from "./components/ArtistSelector";
 export { default as PublicArtistCard } from "./components/PublicArtistCard";
 export { default as PublicArtistFilters } from "./components/PublicArtistFilters";

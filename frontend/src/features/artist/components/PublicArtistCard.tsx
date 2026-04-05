@@ -146,7 +146,7 @@ const PlayButton = memo(({ isLoading, onClick, label }: PlayButtonProps) => (
     aria-label={label}
     className={cn(
       "size-10 sm:size-12 rounded-full",
-      "bg-gradient-to-br from-primary via-[hsl(var(--wave-1))] to-[hsl(var(--wave-2))]",
+      "bg-primary",
       "text-primary-foreground",
       "shadow-[0_8px_24px_hsl(var(--primary)/0.45)]",
       "hover:shadow-[0_12px_32px_hsl(var(--primary)/0.55)]",

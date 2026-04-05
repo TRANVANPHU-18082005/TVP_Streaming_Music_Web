@@ -35,6 +35,7 @@ import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useSpotlightArtists } from "@/features/artist/hooks/useArtistsQuery";
 import { useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
+import SectionAmbient from "./SectionAmbient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — vertical reveal suits portrait/avatar card rhythm
@@ -79,15 +80,15 @@ const ArtistSpotlightHeader = memo(
           <div
             className="flex items-center justify-center size-6 rounded-md"
             style={{
-              background: "hsl(var(--wave-4) / 0.14)",
-              color: "hsl(var(--wave-4))",
+              background: "hsl(var(--wave-9) / 0.14)",
+              color: "hsl(var(--wave-9))",
             }}
           >
             <Users className="size-3.5" />
           </div>
           <span
             className="text-overline"
-            style={{ color: "hsl(var(--wave-4))" }}
+            style={{ color: "hsl(var(--wave-9))" }}
           >
             Spotlight
           </span>
@@ -109,8 +110,8 @@ const ArtistSpotlightHeader = memo(
         to={viewAllHref}
         className={cn(
           "group flex items-center gap-1.5 shrink-0 mt-1",
-          "text-sm font-medium text-muted-foreground",
-          "hover:text-foreground transition-colors duration-200",
+          "text-sm font-medium text-wave-9 opacity-70",
+          "hover:text-wave-9 transition-colors duration-200 hover:opacity-100",
         )}
         aria-label="Xem tất cả nghệ sĩ nổi bật"
       >
@@ -322,33 +323,34 @@ export function ArtistSpotlight() {
       </div>
     );
   };
-
   return (
-    <section
-      className="section-block section-block--alt"
-      aria-labelledby="artist-spotlight-heading"
-    >
-      <div className="section-container">
-        {/* Wave-4 → wave-1 aurora divider — gold → violet, distinct from other sections */}
-        <div
-          className="hidden lg:block h-px mb-8"
-          style={{
-            background: `linear-gradient(
+    <>
+      <div
+        className="block h-px"
+        style={{
+          background: `linear-gradient(
               to right,
               transparent,
-              hsl(var(--wave-4) / 0.3) 30%,
-              hsl(var(--wave-1) / 0.28) 70%,
+              hsl(var(--wave-9) / 0.3) 30%,
+              hsl(var(--wave-9) / 0.28) 70%,
               transparent
             )`,
-            boxShadow: "0 0 8px hsl(var(--wave-4) / 0.1)",
-          }}
-        />
+          boxShadow: "0 0 8px hsl(var(--wave-9) / 0.1)",
+        }}
+      />
+      <section
+        className="section-block section-block--alt"
+        aria-labelledby="artist-spotlight-heading"
+      >
+        {/* <SectionAmbient /> */}
+        <SectionAmbient style="wave-9" />
+        <div className="section-container">
+          <ArtistSpotlightHeader viewAllHref="/artists" />
 
-        <ArtistSpotlightHeader viewAllHref="/artists" />
-
-        {renderContent()}
-      </div>
-    </section>
+          {renderContent()}
+        </div>
+      </section>
+    </>
   );
 }
 

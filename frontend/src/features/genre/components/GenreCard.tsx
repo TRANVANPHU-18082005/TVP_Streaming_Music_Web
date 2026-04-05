@@ -1,30 +1,3 @@
-/**
- * @file GenreCard.tsx — Genre browsing card (v4.0 — Soundwave Premium)
- *
- * ALL v3.2 FIXES PRESERVED:
- * ─ FIX 1: custom memo comparator
- * ─ FIX 2: bgStyle useMemo — no new object ref per render
- * ─ FIX 3: [will-change:transform] on image (valid arbitrary property)
- * ─ FIX 4: translateZ(0) layer promotion on card
- * ─ FIX 5: max-height + opacity animation replacing grid-rows
- * ─ FIX 6: lighter overlay when no image
- * ─ FIX 7: ring-inset for light mode visibility
- * ─ FIX 8: loading="lazy" + decoding="async"
- * ─ FIX 9: responsive icon sizes
- * ─ FIX 10: aria-label on trending badge
- *
- * REDESIGN vs v3.2:
- * ─ Trending badge: .badge token classes from index.css (no raw classes)
- *   + wave-4 accent (orange-red) for genre hot signal
- * ─ Track count badge: .text-stats + .text-label tokens
- * ─ Overlay: refined gradient stack — 4-stop gradient with mid-tone for depth
- * ─ Ring overlay: adapts between light/dark correctly via border-white/18 dark:border-white/12
- * ─ Focus ring: brand ring token with correct offset
- * ─ Hover shadow: .shadow-floating token (matches album-card elevation level)
- * ─ Content padding: 8pt grid (p-3 sm:p-4) preserved
- * ─ Track count display: conditionally rendered only when non-zero
- */
-
 import { memo, useMemo } from "react";
 import { TrendingUp, Music4 } from "lucide-react";
 import { Link } from "react-router-dom";

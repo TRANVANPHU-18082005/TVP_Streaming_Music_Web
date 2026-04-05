@@ -5,7 +5,7 @@ export { default as BulkEditModal } from "./components/BulkEditModal";
 export { default as ChartItem } from "./components/ChartItem";
 export { default as ChartLine } from "./components/ChartLine";
 export { default as ModalTrackFilter } from "./components/ModalTrackFilter";
-export { default as TrackFilters } from "./components/TrackFilters";
+export { TrackFilters } from "./components/TrackFilters";
 export { default as TrackList } from "./components/TrackList";
 export { default as TrackModal } from "./components/TrackModal";
 export { default as TrackRow } from "./components/TrackRow";

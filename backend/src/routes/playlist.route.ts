@@ -27,15 +27,8 @@ const router = express.Router();
 // 1. Tạo playlist nhanh (Spotify Style)
 router.post("/me", protect, playlistController.createMyPlaylist);
 // 2. Lấy tất cả playlist của tôi (Sidebar/Profile)
-router.get(
-  "/me/all",
-  protect,
-  (req, res, next) => {
-    req.query.userId = req.user!._id.toString();
-    next();
-  },
-  playlistController.getPlaylists,
-);
+// Route này phải nằm dưới middleware protect
+router.get("/me", protect, playlistController.getMyPlaylists);
 
 // 3. Quản lý tracks (Có Smart Cover)
 router.post(

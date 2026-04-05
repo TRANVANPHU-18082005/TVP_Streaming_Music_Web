@@ -5,6 +5,39 @@ import catchAsync from "../utils/catchAsync";
 import { IUser } from "../models/User";
 import profileService from "../services/profile.service";
 
+export const getAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user as IUser;
+  const analyticsData = await profileService.getListeningAnalytics(
+    user._id.toString(),
+  );
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: analyticsData,
+  });
+});
+export const getLibrary = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user as IUser;
+  const libraryData = await profileService.getLibrary(user._id.toString());
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: libraryData,
+  });
+});
+export const getRecentlyPlayedTracks = catchAsync(
+  async (req: Request, res: Response) => {
+    const user = req.user as IUser;
+    const recentlyPlayed = await profileService.getRecentlyPlayed(
+      user._id.toString(),
+    );
+
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: recentlyPlayed,
+    });
+  },
+);
 export const getProfileDashboard = catchAsync(
   async (req: Request, res: Response) => {
     const user = req.user as IUser;
@@ -52,27 +85,3 @@ export const updateProfile = catchAsync(async (req: Request, res: Response) => {
     data: updatedUser,
   });
 });
-
-export const getAnalytics = catchAsync(async (req: Request, res: Response) => {
-  const user = req.user as IUser;
-  const analyticsData = await profileService.getListeningAnalytics(
-    user._id.toString(),
-  );
-
-  res.status(httpStatus.OK).json({
-    success: true,
-    data: analyticsData,
-  });
-});
-
-export const getMyPlaylists = catchAsync(
-  async (req: Request, res: Response) => {
-    const user = req.user as IUser;
-    const playlists = await profileService.getMyPlaylists(user._id.toString());
-
-    res.status(httpStatus.OK).json({
-      success: true,
-      data: playlists,
-    });
-  },
-);

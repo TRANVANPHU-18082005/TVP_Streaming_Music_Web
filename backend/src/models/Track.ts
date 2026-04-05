@@ -1,133 +1,125 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-// --- INTERFACE (Type Definition) ---
+// Interface cho Lyric Line Metadata (Chỉ lưu text thô để search & preview nhanh)
+interface ILyricPreview {
+  startTime: number;
+  text: string;
+}
+
 export interface ITrack extends Document {
-  // 1. Basic Info
   title: string;
   slug: string;
   description?: string;
+  artist: mongoose.Types.ObjectId;
+  featuringArtists: mongoose.Types.ObjectId[];
+  uploader: mongoose.Types.ObjectId;
+  album?: mongoose.Types.ObjectId | null;
+  genres: mongoose.Types.ObjectId[];
 
-  // 2. Relationships
-  artist: mongoose.Types.ObjectId; // Main Artist
-  featuringArtists: mongoose.Types.ObjectId[]; // Feat.
-  uploader: mongoose.Types.ObjectId; // User upload
-  album?: mongoose.Types.ObjectId | null; // Album (Optional cho Single)
-  genres: mongoose.Types.ObjectId[]; // Thể loại chính
+  // Media Files
+  trackUrl: string;
+  hlsUrl?: string;
+  coverImage: string;
 
-  // 3. Media Files
-  trackUrl: string; // File gốc (Source)
-  hlsUrl?: string; // File stream (M3U8 - Adaptive Bitrate)
-  coverImage: string; // Ảnh bìa
+  // === LYRIC & KARAOKE (UPGRADED) ===
+  // none: không lời, plain: lời thô, synced: theo dòng, karaoke: từng chữ
+  lyricType: "none" | "plain" | "synced" | "karaoke";
 
-  // 4. Album Context (Metadata)
-  trackNumber: number; // Thứ tự bài trong album
-  diskNumber: number; // Đĩa số mấy (cho album nhiều đĩa)
+  // URL dẫn đến file .json lưu trên B2 (Chứa data word-level cực chi tiết)
+  lyricUrl?: string;
 
-  // 5. Legal & Release Info
-  releaseDate: Date; // Ngày phát hành gốc
-  isExplicit: boolean; // Nhãn 18+ (Explicit Content)
-  copyright?: string; // Dòng bản quyền (℗ 2024...)
-  isrc?: string; // Mã định danh bản ghi quốc tế
+  // Lưu khoảng 5-10 câu đầu để FE hiển thị preview hoặc SEO, không lưu cả bài
+  lyricPreview: ILyricPreview[];
 
-  // 6. Content & Search
-  lyrics?: string; // Lời bài hát
-  tags: string[]; // Mood/Keywords (Chill, Sad, Workout...)
+  // Lời bài hát thô (Dùng để Search Engine của MongoDB index)
+  plainLyrics?: string;
 
-  // 7. Technical Specs (Quality Control)
-  duration: number; // Seconds
-  fileSize: number; // Bytes
-  format: string; // mp3, flac, aac...
-  bitrate: number; // 128, 320, 1411 (kbps)
+  // Visual Context
+  moodVideo?: mongoose.Types.ObjectId; // ID của TrackMoodVideo (Canvas)
 
-  // 8. Stats & Flags
+  // Technical Specs
+  trackNumber: number;
+  diskNumber: number;
+  releaseDate: Date;
+  isExplicit: boolean;
+  copyright?: string;
+  isrc?: string;
+  tags: string[];
+  duration: number;
+  fileSize: number;
+  format: string;
+  bitrate: number;
+
+  // Stats & Flags
   status: "pending" | "processing" | "ready" | "failed";
   isPublic: boolean;
-  isDeleted: boolean; // Soft Delete
+  isDeleted: boolean;
   playCount: number;
   likeCount: number;
-  // Nếu status = failed, lưu lý do lỗi ở đây
   errorReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// --- SCHEMA DEFINITION ---
+// Schema phụ cho Preview (nhẹ nhàng)
+const LyricPreviewSchema = new Schema(
+  {
+    startTime: Number,
+    text: String,
+  },
+  { _id: false },
+);
+
 const TrackSchema = new Schema<ITrack>(
   {
-    // === A. BASIC INFO ===
-    title: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 200, // Tăng nhẹ giới hạn cho các bài tên dài
-    },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
     slug: { type: String, unique: true, required: true, trim: true },
     description: { type: String, maxlength: 2000 },
 
-    // === B. RELATIONSHIPS ===
-    artist: {
-      type: Schema.Types.ObjectId,
-      ref: "Artist",
-      required: true,
-    },
-    featuringArtists: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Artist",
-      },
-    ],
-    uploader: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    // 🔥 QUAN TRỌNG: Album là Optional (cho Single)
-    album: {
-      type: Schema.Types.ObjectId,
-      ref: "Album",
-      default: null,
-      required: false,
-    },
+    artist: { type: Schema.Types.ObjectId, ref: "Artist", required: true },
+    featuringArtists: [{ type: Schema.Types.ObjectId, ref: "Artist" }],
+    uploader: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    album: { type: Schema.Types.ObjectId, ref: "Album", default: null },
     genres: [{ type: Schema.Types.ObjectId, ref: "Genre" }],
 
-    // === C. MEDIA & RESOURCES ===
     trackUrl: { type: String, required: true },
-    hlsUrl: { type: String, default: "" }, // URL Stream tối ưu
+    hlsUrl: { type: String, default: "" },
     coverImage: { type: String, default: "" },
 
-    // === D. METADATA & CONTEXT ===
-    trackNumber: { type: Number, default: 1 }, // Bài số 1
-    diskNumber: { type: Number, default: 1 }, // Đĩa 1
-
-    // === E. LEGAL & COMPLIANCE ===
-    // Ngày phát hành thực tế (VD: Bài ra năm 2000 nhưng 2024 mới upload)
-    releaseDate: { type: Date, default: Date.now },
-    // Cờ báo nội dung nhạy cảm (Bắt buộc cho App Store)
-    isExplicit: { type: Boolean, default: false },
-    copyright: { type: String, trim: true },
-    // International Standard Recording Code (Quản lý bản quyền)
-    isrc: { type: String, trim: true, uppercase: true },
-
-    // === F. CONTENT & TAGS ===
-    lyrics: { type: String }, // Có thể lưu text hoặc JSON time-synced
-    tags: [{ type: String, trim: true, lowercase: true }], // Tags tìm kiếm
-
-    // === G. TECHNICAL SPECS ===
-    // Lưu lại để hiển thị badge chất lượng (Lossless/Hi-Res)
-    duration: { type: Number, default: 0, min: 0 },
-    fileSize: { type: Number, default: 0 },
-    format: { type: String, trim: true }, // 'mp3', 'flac'
-    bitrate: { type: Number, default: 0 }, // 320
-
-    // === H. STATS & FLAGS ===
-    playCount: { type: Number, default: 0, min: 0 },
-    likeCount: { type: Number, default: 0, min: 0 },
-
-    errorReason: {
+    // === LYRICS & KARAOKE FIELDS ===
+    lyricType: {
       type: String,
-      default: "", // Mặc định là rỗng
+      enum: ["none", "plain", "synced", "karaoke"],
+      default: "none",
+      index: true,
+    },
+    lyricUrl: { type: String, default: "" }, // Đường dẫn file .json trên B2
+    lyricPreview: [LyricPreviewSchema],
+    plainLyrics: { type: String, default: "" },
+
+    moodVideo: {
+      type: Schema.Types.ObjectId,
+      ref: "TrackMoodVideo",
+      default: null,
+      index: true,
     },
 
+    trackNumber: { type: Number, default: 1 },
+    diskNumber: { type: Number, default: 1 },
+    releaseDate: { type: Date, default: Date.now },
+    isExplicit: { type: Boolean, default: false },
+    copyright: { type: String, trim: true },
+    isrc: { type: String, trim: true, uppercase: true },
+    tags: [{ type: String, trim: true, lowercase: true }],
+
+    duration: { type: Number, default: 0 },
+    fileSize: { type: Number, default: 0 },
+    format: { type: String, trim: true },
+    bitrate: { type: Number, default: 0 },
+
+    playCount: { type: Number, default: 0 },
+    likeCount: { type: Number, default: 0 },
+    errorReason: { type: String, default: "" },
     status: {
       type: String,
       enum: ["pending", "processing", "ready", "failed"],
@@ -135,36 +127,24 @@ const TrackSchema = new Schema<ITrack>(
       index: true,
     },
     isPublic: { type: Boolean, default: true },
-    // Soft Delete: Mặc định ẩn khỏi query thường (phải select: '+isDeleted' mới thấy)
     isDeleted: { type: Boolean, default: false, select: false, index: true },
   },
   {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
-// --- INDEXING STRATEGY (Chiến lược Index tối ưu) ---
+// --- INDEXING STRATEGY ---
 
-// 1. Text Search: Tìm theo Tên bài hát và Tags (Mood)
-TrackSchema.index({ title: "text", tags: "text" });
+// 1. Text Search: Bao gồm cả plainLyrics để user tìm bài hát qua lời
+TrackSchema.index({ title: "text", tags: "text", plainLyrics: "text" });
 
-// 2. Trang chủ: Lấy bài hát mới nhất (Public & Chưa xóa)
 TrackSchema.index({ isPublic: 1, isDeleted: 1, createdAt: -1 });
-
-// 3. Bảng xếp hạng: Sắp xếp theo PlayCount
 TrackSchema.index({ playCount: -1, isPublic: 1, isDeleted: 1 });
-
-// 4. Album Detail: Sắp xếp bài hát ĐÚNG THỨ TỰ trong Album
-// Sort: Album -> Đĩa 1 -> Bài 1, Bài 2...
 TrackSchema.index({ album: 1, diskNumber: 1, trackNumber: 1 });
-
-// 5. Artist Profile: Lấy bài hát của ca sĩ (Mới nhất trước)
 TrackSchema.index({ artist: 1, isPublic: 1, releaseDate: -1 });
-
-// 6. Browse Genre: Duyệt theo thể loại
-TrackSchema.index({ genres: 1, isPublic: 1 });
 
 const Track = mongoose.model<ITrack>("Track", TrackSchema);
 export default Track;

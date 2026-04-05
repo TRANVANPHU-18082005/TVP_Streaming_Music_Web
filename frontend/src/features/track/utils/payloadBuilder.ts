@@ -2,70 +2,54 @@ import { TrackFormValues } from "../schemas/track.schema";
 
 export const buildTrackPayload = (
   values: TrackFormValues,
-  dirtyFields: Partial<Record<keyof TrackFormValues, boolean | any>>,
+  dirtyFields: Partial<Record<keyof TrackFormValues, any>>,
   isEditMode: boolean,
 ): FormData => {
   const formData = new FormData();
 
-  /**
-   * 🔥 CHIẾN THUẬT: PHÂN LOẠI DATA
-   * Chúng ta sẽ gom data thành 2 nhóm: Text và File.
-   * Luôn append nhóm Text TRƯỚC nhóm File.
-   */
-  const textFieldData: Record<string, string> = {};
-  const fileFieldData: Record<string, File> = {};
-
-  // 1. DUYỆT VÀ PHÂN LOẠI
   (Object.keys(values) as Array<keyof TrackFormValues>).forEach((key) => {
     const value = values[key];
-
-    // Kiểm tra Dirty logic (Edit mode)
+    const isFile = value instanceof File;
     const isDirty = !!dirtyFields[key];
-    const isNewFile = value instanceof File;
-    const shouldSend = !isEditMode || isDirty || isNewFile;
 
-    if (!shouldSend || value === undefined || value === null) return;
+    // Gửi nếu: Tạo mới OR Có thay đổi OR Là file mới
+    const shouldSend = !isEditMode || isDirty || isFile;
 
-    // Phân loại vào nhóm File
-    if (isNewFile) {
-      fileFieldData[key] = value as File;
-      // Đặc biệt cho Audio: Gửi kèm duration (vì duration tính từ file)
-      if (key === "audio") {
-        textFieldData["duration"] = String(values.duration);
-      }
+    if (!shouldSend) return;
+
+    // 1. Xử lý Files
+    if (isFile) {
+      formData.append(key, value as File);
+      return;
     }
-    // Phân loại vào nhóm Text
+
+    // 2. Bỏ qua các URL cũ trong Edit Mode
+    if (
+      isEditMode &&
+      typeof value === "string" &&
+      (key === "audio" || key === "coverImage")
+    ) {
+      return;
+    }
+
+    // 3. Xử lý giá trị NULL/Rỗng (Để Backend xóa liên kết)
+    if (value === null || value === undefined || value === "") {
+      formData.append(key, ""); // Gửi chuỗi rỗng để chỉ định "Clear" field
+      return;
+    }
+
+    // 4. Xử lý Array (tags, genres...)
+    if (Array.isArray(value)) {
+      formData.append(key, JSON.stringify(value));
+    }
+    // 5. Xử lý Date
+    else if (key === "releaseDate") {
+      formData.append(key, new Date(value as string).toISOString());
+    }
+    // 6. Các trường còn lại
     else {
-      // Bỏ qua value cũ là string (URL ảnh/nhạc cũ) khi đang ở edit mode
-      if (
-        typeof value === "string" &&
-        (key === "audio" || key === "coverImage")
-      )
-        return;
-
-      if (Array.isArray(value)) {
-        textFieldData[key] = JSON.stringify(value);
-      } else if (key === "releaseDate" && value) {
-        textFieldData[key] = new Date(value as string).toISOString();
-      } else {
-        textFieldData[key] = String(value);
-      }
+      formData.append(key, String(value));
     }
-  });
-
-  // Ưu tiên append Title đầu tiên để Multer/S3 có slug ngay lập tức
-  if (textFieldData["title"]) {
-    formData.append("title", textFieldData["title"]);
-    delete textFieldData["title"];
-  }
-
-  Object.entries(textFieldData).forEach(([key, val]) => {
-    formData.append(key, val);
-  });
-
-  // 3. APPEND FILE FIELDS SAU CÙNG
-  Object.entries(fileFieldData).forEach(([key, file]) => {
-    formData.append(key, file);
   });
 
   return formData;

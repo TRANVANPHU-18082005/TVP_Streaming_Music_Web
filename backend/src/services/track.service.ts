@@ -20,6 +20,7 @@ import { cacheRedis } from "../config/redis";
 import { notifyQueue } from "../queue/notify.queue";
 import Follow from "../models/Follow";
 import { viewQueue } from "../queue/view.queue"; // Đảm bảo chữ q viết thường
+import { CreateTrackDTO, UpdateTrackDTO } from "../dtos/track.dto";
 
 type MulterS3File = Express.Multer.File & { location: string; key: string };
 
@@ -48,34 +49,33 @@ class TrackService {
   /**
    * 1. CREATE TRACK (Transaction + Atomic Cleanup + Notification Fan-out)
    */
+
   async createTrack(
     currentUser: IUser,
-    data: CreateTrackInput,
+    data: CreateTrackDTO, // Sử dụng DTO mới
     files: { [fieldname: string]: Express.Multer.File[] },
   ): Promise<ITrack> {
-    // A. Permission & Artist Check
+    // A. Permission & Artist Check (Giữ nguyên logic của bạn)
     let targetArtistId: Types.ObjectId;
-    let targetArtistName = ""; // Biến để lưu tên nghệ sĩ cho Notification
+    let targetArtistName = "";
 
     if (currentUser.role === "admin") {
       if (!data.artistId)
         throw new ApiError(httpStatus.BAD_REQUEST, "Admin phải chọn Artist");
-
       const artist = await Artist.findById(data.artistId).lean();
       if (!artist)
         throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy Artist");
-
       targetArtistId = artist._id as Types.ObjectId;
       targetArtistName = artist.name;
     } else {
       const artist = await Artist.findOne({ user: currentUser._id }).lean();
       if (!artist)
         throw new ApiError(httpStatus.FORBIDDEN, "Bạn chưa có Profile Nghệ sĩ");
-
       targetArtistId = artist._id as Types.ObjectId;
       targetArtistName = artist.name;
     }
 
+    // B. File Handling
     const audioFile = files["audio"]?.[0] as MulterS3File;
     if (!audioFile)
       throw new ApiError(httpStatus.BAD_REQUEST, "Thiếu file Audio");
@@ -89,6 +89,8 @@ class TrackService {
 
     const fullTrackUrl = formatUrl(audioFile.location, audioFile.key);
     const duration = Number(data.duration) || 0;
+
+    // Artwork logic
     let coverImageUrl = "";
     let coverFileKey = "";
     const coverFile = files["coverImage"]?.[0] as MulterS3File;
@@ -107,7 +109,7 @@ class TrackService {
     session.startTransaction();
 
     try {
-      // C. Create Record
+      // C. Create Record với các thuộc tính MỚI
       const track = new Track({
         ...data,
         slug: seoSlug,
@@ -115,10 +117,20 @@ class TrackService {
         uploader: currentUser._id,
         trackUrl: fullTrackUrl,
         coverImage: coverImageUrl,
+
+        // --- NEW v2.0 FIELDS ---
+        moodVideo: data.moodVideoId
+          ? new Types.ObjectId(data.moodVideoId)
+          : null,
+        lyricType: data.lyricType || "none",
+        plainLyrics: data.plainLyrics || "", // Chứa LRC hoặc Text thô
+        // -----------------------
+
         duration,
         fileSize: audioFile.size,
         format: audioFile.mimetype.split("/")[1] || "mp3",
         status: "pending",
+        // Chống lỗi khi truyền string từ FormData
         isPublic: String(data.isPublic) === "true",
         isExplicit: String(data.isExplicit) === "true",
         playCount: 0,
@@ -127,7 +139,7 @@ class TrackService {
 
       await track.save({ session });
 
-      // D. Update Counters (Atomic)
+      // D. Update Counters (Atomic) - Giữ nguyên logic Album/Artist/Genre
       await Artist.findByIdAndUpdate(targetArtistId, {
         $inc: { totalTracks: 1 },
       }).session(session);
@@ -145,24 +157,21 @@ class TrackService {
         }).session(session);
       }
 
-      // CHỐT TRANSACTION
       await session.commitTransaction();
 
       // ==========================================================
-      // E. QUEUE JOBS (NÊN GỌI SAU KHI COMMIT ĐỂ ĐẢM BẢO DATA ĐÃ CÓ TRONG DB)
+      // E. QUEUE JOBS (Trigger Worker v2.0)
       // ==========================================================
 
-      // 1. Queue Transcode (HLS)
+      // Gửi đầy đủ thông tin để Worker xử lý HLS + Lyrics + Canvas
       addTranscodeJob({
         trackId: track._id.toString(),
         fileUrl: track.trackUrl,
-        duration,
       }).catch((err) => console.error("❌ Add Transcode Queue Failed:", err));
 
-      // 2. Queue Notification (Fan-out cho Fan)
-      this.pushNewTrackNotification(track, targetArtistName).catch((err) =>
-        console.error("❌ Add Notification Queue Failed:", err),
-      );
+      // this.pushNewTrackNotification(track, targetArtistName).catch(
+      //   console.error,
+      // );
 
       return track;
     } catch (error) {
@@ -197,12 +206,12 @@ class TrackService {
   }
 
   /**
-   * 2. UPDATE TRACK (Safe Lifecycle & Folder Sync)
+   * 2. UPDATE TRACK (v2.0 - Lifecycle, Canvas & Lyric Sync)
    */
   async updateTrack(
     trackId: string,
     currentUser: IUser,
-    data: UpdateTrackInput,
+    data: UpdateTrackDTO,
     files: { [fieldname: string]: Express.Multer.File[] },
   ) {
     const track = await Track.findById(trackId);
@@ -233,12 +242,13 @@ class TrackService {
       const oldDuration = track.duration || 0;
       const oldGenreIdsStr = track.genres.map((g) => g.toString());
 
-      // Metadata & Slug Sync
+      // 1. Metadata & Slug Sync
       if (data.title && data.title !== track.title) {
         track.title = data.title;
         track.slug = await generateUniqueSlug(Track, data.title, track._id);
       }
 
+      // 2. Cập nhật các trường thông thường & Ép kiểu Boolean từ FormData
       Object.assign(track, {
         ...data,
         isExplicit:
@@ -251,10 +261,24 @@ class TrackService {
             : track.isPublic,
       });
 
+      // 3. NÂNG CẤP v2.0: Cập nhật MoodVideo & Lyrics
+      if (data.moodVideoId !== undefined) {
+        // Nếu gửi chuỗi rỗng hoặc "null" -> Chuyển về null (để AI tự match)
+        if (data.moodVideoId === "" || data.moodVideoId === "null") {
+          track.moodVideo = undefined;
+        } else {
+          track.moodVideo = new Types.ObjectId(data.moodVideoId as string);
+        }
+      }
+
+      if (data.lyricType) track.lyricType = data.lyricType;
+      if (data.plainLyrics !== undefined) track.plainLyrics = data.plainLyrics;
+
+      // 4. Đồng bộ Duration (Chỉ cập nhật nếu có gửi lên)
       const newDuration = data.duration ? Number(data.duration) : oldDuration;
       track.duration = newDuration;
 
-      // Genre Counter Sync
+      // 5. Genre Counter Sync (Giữ nguyên logic cũ rất tốt của Phú)
       if (data.genreIds) {
         const added = data.genreIds.filter(
           (id) => !oldGenreIdsStr.includes(id),
@@ -276,9 +300,10 @@ class TrackService {
         track.genres = data.genreIds.map((id) => new Types.ObjectId(id));
       }
 
-      // Album Counter Sync
+      // 6. Album Counter Sync
       if (data.albumId !== undefined) {
-        const newAlbumId = data.albumId === "" ? null : data.albumId;
+        const newAlbumId =
+          data.albumId === "" || data.albumId === "null" ? null : data.albumId;
         if (newAlbumId !== oldAlbumId) {
           if (oldAlbumId)
             await Album.findByIdAndUpdate(oldAlbumId, {
@@ -297,12 +322,12 @@ class TrackService {
         }
       }
 
-      // Media Replacement
+      // 7. Media Replacement (Audio & Cover)
       if (audioFile) {
         oldTrackFolder = this.getTrackFolderKey(track.trackUrl);
         isAudioChanged = true;
         track.trackUrl = audioFile.location;
-        track.status = "pending";
+        track.status = "pending"; // Reset để transcode lại HLS
         track.hlsUrl = "";
         track.fileSize = audioFile.size;
         track.format = audioFile.mimetype.split("/")[1] || "mp3";
@@ -310,20 +335,17 @@ class TrackService {
 
       if (coverFile) {
         if (track.coverImage) {
-          if (track.coverImage.includes("cloudinary")) {
-            const publicId = track.coverImage.split("/").pop()?.split(".")[0];
-            if (publicId)
-              coverToCleanup = { type: "cloudinary", key: publicId };
-          } else {
-            const key = this.getB2KeyFromUrl(track.coverImage);
-            if (key) coverToCleanup = { type: "s3", key };
-          }
+          const key = this.getB2KeyFromUrl(track.coverImage);
+          if (key) coverToCleanup = { type: "s3", key };
         }
         track.coverImage = coverFile.location;
       }
 
       await track.save({ session });
       await session.commitTransaction();
+
+      // Xóa cache sau khi update thành công
+      await cacheRedis.del(`track:detail:${trackId}`);
     } catch (error) {
       await session.abortTransaction();
       for (const key of filesToRollback) deleteFromB2(key).catch(console.error);
@@ -332,19 +354,18 @@ class TrackService {
       await session.endSession();
     }
 
-    // Hậu kỳ (Dọn rác & Re-queue)
+    // 8. HẬU KỲ: Dọn rác & Re-queue
     if (isAudioChanged && oldTrackFolder) {
+      // Xóa trọn bộ folder HLS cũ
       deleteFolderFromB2(oldTrackFolder).catch(console.error);
-    } else if (coverToCleanup && coverToCleanup.type === "s3") {
-      deleteFromB2(coverToCleanup.key).catch(console.error);
-    }
 
-    if (isAudioChanged) {
+      // Đẩy job mới vào Worker v2.0
       addTranscodeJob({
         trackId: track._id.toString(),
         fileUrl: track.trackUrl,
-        duration: track.duration,
-      }).catch((err) => console.error("❌ Add Queue Failed:", err));
+      }).catch((err) => console.error("❌ Re-queue Failed:", err));
+    } else if (coverToCleanup && coverToCleanup.type === "s3") {
+      deleteFromB2(coverToCleanup.key).catch(console.error);
     }
 
     return track;
@@ -410,40 +431,66 @@ class TrackService {
       status,
       sort,
     } = filter;
+
     const skip = (Number(page) - 1) * Number(limit);
+
+    // 1. KHỞI TẠO QUERY GỐC
     const query: any = { isDeleted: false };
 
+    // 2. XỬ LÝ ĐIỀU KIỆN PHÂN QUYỀN VÀ TRẠNG THÁI (Dùng $and để bảo mật)
+    const andConditions: any[] = [];
+
+    // Nếu không phải Admin, chỉ thấy nhạc Public/Ready hoặc nhạc mình tự Upload
     if (currentUser?.role !== "admin") {
-      query.$or = [
-        { isPublic: true, status: "ready" },
-        ...(currentUser ? [{ uploader: currentUser._id }] : []),
-      ];
+      const visibilityConditions: any[] = [{ isPublic: true, status: "ready" }];
+      if (currentUser) {
+        visibilityConditions.push({ uploader: currentUser._id });
+      }
+      andConditions.push({ $or: visibilityConditions });
     }
 
-    if (status) query.status = status;
+    // 3. XỬ LÝ TÌM KIẾM KEYWORD (Không ghi đè logic ở trên)
     if (keyword) {
       const safeKeyword = keyword.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-      query.$or = [
-        { title: { $regex: safeKeyword, $options: "i" } },
-        { tags: { $regex: safeKeyword, $options: "i" } },
-      ];
+      andConditions.push({
+        $or: [
+          { title: { $regex: safeKeyword, $options: "i" } },
+          { tags: { $regex: safeKeyword, $options: "i" } },
+        ],
+      });
     }
 
+    // Gộp các điều kiện phức tạp vào query chính
+    if (andConditions.length > 0) {
+      query.$and = andConditions;
+    }
+
+    // 4. CÁC FILTER ĐƠN LẺ
+    if (status) query.status = status;
     if (artistId) query.artist = artistId;
     if (albumId) query.album = albumId;
     if (genreId) query.genres = genreId;
 
+    // 5. CẤU HÌNH SORT
     let sortOption: any = { createdAt: -1 };
     if (sort === "oldest") sortOption = { createdAt: 1 };
     if (sort === "popular") sortOption = { playCount: -1 };
     if (sort === "name") sortOption = { title: 1 };
 
+    // 6. THỰC THI QUERY (FIX LỖI POPULATE MOODVIDEO)
     const [tracksDocs, total] = await Promise.all([
       Track.find(query)
         .populate("artist", "name avatar slug")
         .populate("album", "title coverImage slug")
         .populate("genres", "name slug color")
-        .select("-lyrics -description")
+        .populate("featuringArtists", "name slug avatar")
+        // FIX: Dùng đúng tên trường trong Schema (moodVideo) và chỉ định Model
+        .populate({
+          path: "moodVideo",
+          select: "title videoUrl slug",
+          model: "TrackMoodVideo",
+        })
+        .select("-lyrics -description") // Ẩn bớt data nặng để load danh sách nhanh
         .sort(sortOption)
         .skip(skip)
         .limit(Number(limit))
@@ -451,19 +498,10 @@ class TrackService {
       Track.countDocuments(query),
     ]);
 
-    const likedSet = new Set<string>();
-    if (currentUser) {
-      const user = await User.findById(currentUser._id)
-        .select("likedTracks")
-        .lean();
-      user?.likedTracks?.forEach((id) => likedSet.add(id.toString()));
-    }
-
+    // 8. MAPPING DỮ LIỆU CUỐI CÙNG
     return {
-      data: tracksDocs.map((t) => ({
-        ...t,
-        isLiked: likedSet.has(t._id.toString()),
-      })),
+      data: tracksDocs,
+
       meta: {
         totalItems: total,
         page: Number(page),
@@ -549,7 +587,6 @@ class TrackService {
       {
         trackId: track._id.toString(),
         fileUrl: track.trackUrl,
-        duration: track.duration,
       },
       {
         // 🔥 QUAN TRỌNG: Dùng trackId làm jobId để tránh trùng lặp job
@@ -560,7 +597,8 @@ class TrackService {
         removeOnFail: { count: 10 }, // Chỉ giữ lại 10 bản ghi lỗi gần nhất
       },
     );
-
+    // Sau khi đẩy vào Queue thành công
+    await cacheRedis.del(`track:detail:${trackId}`);
     return track;
   }
 

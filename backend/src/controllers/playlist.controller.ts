@@ -219,3 +219,19 @@ export const togglePlaylistPrivacy = catchAsync(
     });
   },
 );
+// Lấy tất cả playlist của tôi
+export const getMyPlaylists = catchAsync(
+  async (req: Request, res: Response) => {
+    const userId = req.user!._id; // Lấy ID từ token đã protect
+    console.log("Fetching playlists for user ID:", userId);
+    const playlists = await playlistService.getMyAllPlaylists(
+      userId.toString(),
+    );
+
+    res.status(httpStatus.OK).json({
+      success: true,
+      count: playlists.length,
+      data: playlists,
+    });
+  },
+);

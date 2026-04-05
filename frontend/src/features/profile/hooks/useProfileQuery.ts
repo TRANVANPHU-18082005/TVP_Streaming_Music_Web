@@ -1,58 +1,54 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import profileApi from "../api/profileApi";
 import { profileKeys } from "../utils/profileKeys";
-import type { LikedContentParams } from "../types";
 
 /**
- * 1. Hook Dashboard (Sử dụng cho trang chính Profile)
- * Fetch 1 lần lấy toàn bộ: Analytics, Playlists, và Preview Liked
+ * 1. Hook Dashboard (Sử dụng cho cả HomePage và ProfilePage)
+ * @param mode 'essential' (Dữ liệu nhẹ cho Home) | 'full' (Đầy đủ cho Profile)
  */
-export const useProfileDashboard = () => {
+export const useProfileDashboard = (mode: "full" | "essential" = "full") => {
   return useQuery({
-    queryKey: profileKeys.dashboard(),
-    queryFn: profileApi.getDashboard,
-    staleTime: 5 * 60 * 1000, // Dashboard ít thay đổi, cache 5 phút
+    // Thêm mode vào queryKey để React Query phân biệt cache giữa Home và Profile
+    queryKey: [...profileKeys.dashboard(), mode],
+    queryFn: () => profileApi.getDashboard({ mode }),
+    staleTime: mode === "essential" ? 1 * 60 * 1000 : 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     select: (res) => res.data,
   });
 };
 
 /**
- * 2. Hook Liked Content (Dùng cho trang "Xem tất cả" bài hát/album đã thích)
- * Hỗ trợ phân trang mượt mà với placeholderData
- */
-export const useLikedContent = (params: LikedContentParams) => {
-  return useQuery({
-    queryKey: profileKeys.liked(params),
-    queryFn: () => profileApi.getLikedContent(params),
-    placeholderData: keepPreviousData, // Tránh giật lag khi chuyển trang
-    staleTime: 2 * 60 * 1000,
-    enabled: !!params.type, // Chỉ chạy khi xác định được user muốn xem Track hay Album
-    select: (res) => ({
-      items: res.data,
-      meta: res.meta,
-    }),
-  });
-};
-
-/**
- * 3. Hook Analytics (Nếu chỉ muốn refresh biểu đồ mà không load lại cả trang)
+ * 2. Hook Analytics (Dành riêng cho tab Overview/Biểu đồ)
  */
 export const useProfileAnalytics = () => {
   return useQuery({
     queryKey: profileKeys.analytics(),
     queryFn: profileApi.getAnalytics,
-    staleTime: 15 * 60 * 1000, // Dữ liệu biểu đồ cache lâu hơn (15p)
+    staleTime: 15 * 60 * 1000, // Dữ liệu thống kê không cần làm mới liên tục
     select: (res) => res.data,
   });
 };
 
 /**
- * 4. Hook Playlists cá nhân
+ * 4. Hook Library (Lấy danh sách Playlist cá nhân)
  */
-export const useMyPlaylists = () => {
+export const useUserLibrary = () => {
   return useQuery({
-    queryKey: profileKeys.playlists(),
-    queryFn: profileApi.getMyPlaylists,
+    queryKey: [...profileKeys.all, "library"],
+    queryFn: profileApi.getLibrary,
+    staleTime: 5 * 60 * 1000,
+    select: (res) => res.data,
+  });
+};
+
+/**
+ * 5. Hook Recently Played (Lấy lịch sử nghe nhạc)
+ */
+export const useRecentlyPlayed = (limit: number = 10) => {
+  return useQuery({
+    queryKey: [...profileKeys.all, "recently-played", limit],
+    queryFn: () => profileApi.getRecentlyPlayed(limit),
+    staleTime: 30 * 1000, // Lịch sử nên được làm mới thường xuyên hơn
     select: (res) => res.data,
   });
 };

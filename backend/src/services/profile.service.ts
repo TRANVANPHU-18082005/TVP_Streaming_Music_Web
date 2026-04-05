@@ -47,15 +47,6 @@ class ProfileService {
   }
 
   /**
-   * 2. LẤY PLAYLIST CÁ NHÂN
-   */
-  async getMyPlaylists(userId: string) {
-    return await Playlist.find({ creator: userId, isSystem: false })
-      .sort({ updatedAt: -1 })
-      .lean();
-  }
-
-  /**
    * 3. LẤY NỘI DUNG ĐÃ LIKE (Nâng cấp Phân trang & Lean)
    */
   async getLikedContent(
@@ -65,26 +56,28 @@ class ProfileService {
     limit: number = 10,
   ) {
     const skip = (page - 1) * limit;
+
+    // 1. Xác định collection và bảng chứa thông tin tác giả dựa trên Type
     const targetCollection =
       type === "track" ? "tracks" : type === "album" ? "albums" : "playlists";
+    // Track/Album thì join với 'artists', Playlist thì join với 'users'
+    const authorCollection = type === "playlist" ? "users" : "artists";
+    // Track/Album dùng field 'artist', Playlist dùng field 'user'
+    const authorField = type === "playlist" ? "user" : "artist";
 
     const result = await Like.aggregate([
-      // 1. Lọc các bản ghi Like của User và đúng loại
+      // --- BƯỚC 1: LỌC BẢN GHI LIKE ---
       {
         $match: {
           userId: new mongoose.Types.ObjectId(userId),
           targetType: type,
         },
       },
-
-      // 2. Sắp xếp theo thời gian Like mới nhất
       { $sort: { createdAt: -1 } },
-
-      // 3. Phân trang ngay tại đây
       { $skip: skip },
       { $limit: limit },
 
-      // 4. JOIN (Lookup) với bảng dữ liệu thật (Track/Album/Playlist)
+      // --- BƯỚC 2: LẤY CHI TIẾT NỘI DUNG ---
       {
         $lookup: {
           from: targetCollection,
@@ -93,47 +86,69 @@ class ProfileService {
           as: "details",
         },
       },
-
-      // 5. Gỡ mảng chi tiết (Vì lookup trả về mảng)
       { $unwind: "$details" },
 
-      // 6. Lọc bỏ các dữ liệu mồ côi hoặc bị ẩn (Security & Integrity)
+      // --- BƯỚC 3: LỌC NỘI DUNG HỢP LỆ (Quan trọng nhất) ---
       {
         $match: {
-          "details.status": "ready", // Chỉ lấy bài hát đã sẵn sàng
-          "details.isDeleted": false,
+          // A. Album/Track dùng isPublic, Playlist dùng visibility
+          $and: [
+            // Lọc deleted chung
+            { "details.isDeleted": { $ne: true } },
+            // Lọc trạng thái public tùy theo type
+            type === "playlist"
+              ? { "details.visibility": "public" }
+              : { "details.isPublic": true },
+            // Lọc status ready chỉ dành riêng cho Track
+            type === "track" ? { "details.status": "ready" } : {},
+          ],
         },
       },
 
-      // 7. Thêm thông tin Artist/User (Lookup sâu nếu cần)
-      // Ví dụ cho Track: lấy Artist chi tiết
+      // --- BƯỚC 4: LẤY THÔNG TIN TÁC GIẢ (Artist/User) ---
       {
         $lookup: {
-          from: "artists", // Giả sử collection là artists
-          localField: "details.artist",
+          from: authorCollection,
+          localField: `details.${authorField}`,
           foreignField: "_id",
-          as: "details.artist",
+          as: "authorInfo",
         },
       },
       {
-        $unwind: { path: "$details.artist", preserveNullAndEmptyArrays: true },
+        $unwind: { path: "$authorInfo", preserveNullAndEmptyArrays: true },
       },
 
-      // 8. Định dạng lại Output sạch sẽ
+      // --- BƯỚC 5: ĐỊNH DẠNG ĐẦU RA ĐỒNG NHẤT ---
       {
         $project: {
-          _id: 0, // Bỏ ID của bản ghi Like
+          _id: 0,
           likedAt: "$createdAt",
-          item: "$details",
+          item: {
+            $mergeObjects: [
+              "$details",
+              {
+                // Trả về author để FE không phải check t.artist hay t.user
+                author: {
+                  _id: "$authorInfo._id",
+                  name: {
+                    $ifNull: ["$authorInfo.name", "$authorInfo.displayName"],
+                  }, // Tương thích cả User/Artist
+                  avatar: {
+                    $ifNull: ["$authorInfo.avatar", "$authorInfo.photoURL"],
+                  },
+                  slug: "$authorInfo.slug",
+                },
+              },
+            ],
+          },
         },
       },
     ]);
 
-    // Lấy tổng số để phân trang (Nên dùng count riêng hoặc Facet trong Aggregate)
     const totalItems = await Like.countDocuments({ userId, targetType: type });
 
     return {
-      data: result.map((r) => ({ ...r.item, likedAt: r.likedAt })), // Giữ cấu trúc phẳng cho FE
+      data: result.map((r) => ({ ...r.item, likedAt: r.likedAt })),
       meta: {
         totalItems,
         page,
@@ -251,14 +266,12 @@ class ProfileService {
     const [
       analytics,
       recentlyPlayed,
-      playlists,
       likedTracks,
       likedAlbums,
       likedPlaylists,
     ] = await Promise.all([
       this.getListeningAnalytics(userId),
       this.getRecentlyPlayed(userId, 10),
-      this.getMyPlaylists(userId),
       this.getLikedContent(userId, "track", 1, 8),
       this.getLikedContent(userId, "album", 1, 6),
       this.getLikedContent(userId, "playlist", 1, 6),
@@ -266,13 +279,43 @@ class ProfileService {
 
     return {
       analytics,
-      playlists,
       recentlyPlayed,
       library: {
         tracks: likedTracks.data,
         albums: likedAlbums.data,
         playlists: likedPlaylists.data,
       },
+    };
+  }
+  async getLibrary(userId: string, limit: number = 20) {
+    // Lấy 8 bài hát và 6 album mới nhất đã like làm bản xem trước (preview)
+    const [likedTracks, likedAlbums, likedPlaylists] = await Promise.all([
+      this.getLikedContent(userId, "track", 1, limit),
+      this.getLikedContent(userId, "album", 1, limit),
+      this.getLikedContent(userId, "playlist", 1, limit),
+    ]);
+
+    return {
+      tracks: likedTracks.data,
+      albums: likedAlbums.data,
+      playlists: likedPlaylists.data,
+    };
+  }
+  async getAnalytics(userId: string) {
+    // Lấy 8 bài hát và 6 album mới nhất đã like làm bản xem trước (preview)
+    const [analytics] = await Promise.all([this.getListeningAnalytics(userId)]);
+    return {
+      analytics,
+    };
+  }
+  async getRecentlyPlayedTracks(userId: string, limit: number) {
+    // Lấy 8 bài hát và 6 album mới nhất đã like làm bản xem trước (preview)
+    const [recentlyPlayed] = await Promise.all([
+      this.getRecentlyPlayed(userId, limit),
+    ]);
+
+    return {
+      recentlyPlayed,
     };
   }
 

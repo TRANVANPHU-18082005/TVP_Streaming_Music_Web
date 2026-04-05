@@ -1,33 +1,7 @@
-"use client";
-
-/**
- * @file AlbumPage.tsx — Album catalog page (v4.0 — Soundwave Premium)
- *
- * REDESIGN vs v3.2:
- * ─ Hero section elevated to match FeaturedAlbums section-block pattern with
- *   animated stat badges, eyebrow label + Disc3 icon header from FeaturedAlbums
- * ─ AmbientBackground: same multi-orb system as AlbumPage v3.2, extended with
- *   aurora-band CSS classes (matching FeaturedAlbums aesthetic direction)
- * ─ Grid layout upgraded: 2→7 column adaptive, sm gap-y-8→gap-y-10
- * ─ Card stagger: capped at 700ms (original), now also uses animate-fade-up
- *   class from index.css (not inline keyframes)
- * ─ Pagination strip: glass-frosted single wrapper (double-wrap removed)
- * ─ Empty / Error states: unified with FeaturedAlbums card style
- * ─ Login-gate layout: page never breaks without auth — no conditional
- *   full-page redirects; AmbientBackground always renders behind content
- *
- * FIXES FROM v3.2 PRESERVED:
- * ─ No throw in handlePlayAlbum catch
- * ─ No artificial 600ms delay
- * ─ stableFilterHandlers via useMemo
- * ─ GRID_LAYOUT module-scoped constant
- * ─ DEFAULT_META constant
- */
-
 import React, { useCallback, useMemo, memo } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Disc3, Library, TrendingUp } from "lucide-react";
+import { Disc3 } from "lucide-react";
 
 import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
 import MusicResult from "@/components/ui/Result";
@@ -39,9 +13,10 @@ import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
 import albumApi from "@/features/album/api/albumApi";
 import { albumKeys } from "@/features/album/utils/albumKeys";
 import { useAppDispatch } from "@/store/hooks";
-import { setIsPlaying, setQueue } from "@/features";
+import { Albumpageskeleton, setIsPlaying, setQueue } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
+import SectionAmbient from "@/components/SectionAmbient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -64,183 +39,58 @@ const GRID_LAYOUT = cn(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AMBIENT BACKGROUND — isolated memo, never re-renders on data change
-// Inherits orb-float CSS token classes from index.css for GPU compositing.
-// Reduced-motion: index.css @media rule disables all animations.
-// ─────────────────────────────────────────────────────────────────────────────
-const AmbientBackground = memo(() => (
-  <div
-    className="pointer-events-none fixed inset-0 overflow-hidden -z-10"
-    aria-hidden="true"
-  >
-    <div className="absolute inset-0 bg-background" />
-
-    {/* Brand-500 violet — top-left */}
-    <div
-      className="absolute rounded-full orb-float orb-float--brand orb-float--lg"
-      style={{ width: 640, height: 640, top: -200, left: -140, opacity: 0.32 }}
-    />
-
-    {/* Wave-2 pink — top-right */}
-    <div
-      className="absolute rounded-full orb-float orb-float--wave orb-float--slow orb-float--lg"
-      style={{
-        width: 520,
-        height: 520,
-        top: "10%",
-        right: -120,
-        opacity: 0.24,
-      }}
-    />
-
-    {/* Wave-3 cyan — bottom-center */}
-    <div
-      className="absolute rounded-full orb-float orb-float--cyan orb-float--fast"
-      style={{
-        width: 400,
-        height: 400,
-        bottom: "12%",
-        left: "38%",
-        filter: "blur(72px)",
-        opacity: 0.18,
-      }}
-    />
-
-    {/* Wave-4 gold — bottom-left */}
-    <div
-      className="absolute rounded-full orb-float orb-float--gold orb-float--slow"
-      style={{
-        width: 280,
-        height: 280,
-        bottom: "22%",
-        left: -60,
-        filter: "blur(60px)",
-        opacity: 0.15,
-      }}
-    />
-
-    {/* Aurora bands — .aurora-band CSS token */}
-    <div className="aurora-band aurora-band--1" />
-    <div className="aurora-band aurora-band--2" />
-
-    {/* Grain texture overlay */}
-    <div
-      className="absolute inset-0 opacity-[0.025] mix-blend-overlay pointer-events-none"
-      style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-      }}
-    />
-
-    {/* Hero gradient tint */}
-    <div
-      className="absolute inset-x-0 top-0 h-[55vh] pointer-events-none"
-      style={{
-        background:
-          "linear-gradient(180deg, hsl(var(--primary)/0.055) 0%, hsl(var(--wave-2)/0.025) 45%, transparent 100%)",
-      }}
-    />
-
-    {/* Player bar clearance vignette */}
-    <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-background to-transparent" />
-  </div>
-));
-AmbientBackground.displayName = "AmbientBackground";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HERO STAT BADGE — mini info chips in header, matching FeaturedAlbums style
-// ─────────────────────────────────────────────────────────────────────────────
-const StatBadge = memo(
-  ({
-    icon: Icon,
-    label,
-    className,
-  }: {
-    icon: React.ElementType;
-    label: string;
-    className?: string;
-  }) => (
-    <div
-      className={cn(
-        "inline-flex items-center gap-1.5 h-7 px-3 rounded-full",
-        "border border-border/60 bg-card/50 backdrop-blur-sm",
-        "shadow-raised",
-        "text-xs font-medium text-muted-foreground",
-        className,
-      )}
-    >
-      <Icon className="size-3 text-primary/60" aria-hidden="true" />
-      {label}
-    </div>
-  ),
-);
-StatBadge.displayName = "StatBadge";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // PAGE HERO — section header matching FeaturedAlbums pattern
 // Eyebrow + gradient title + divider-glow + stat badges
 // ─────────────────────────────────────────────────────────────────────────────
-const PageHero = memo(
-  ({ totalItems, isLoading }: { totalItems: number; isLoading: boolean }) => (
-    <header className="section-container pt-12 pb-8 sm:pt-14 sm:pb-10">
-      {/* Eyebrow — matches FeaturedAlbums */}
+const PageHero = memo(() => (
+  <header className="section-container pt-10 pb-5 sm:pt-14 sm:pb-10">
+    {/* Eyebrow — matches FeaturedAlbums */}
+    <div
+      className="flex items-center gap-2 mb-3 animate-fade-up animation-fill-both"
+      style={{ animationDelay: "40ms" }}
+    >
       <div
-        className="flex items-center gap-2 mb-3 animate-fade-up animation-fill-both"
-        style={{ animationDelay: "40ms" }}
+        className="flex items-center justify-center size-6 rounded-md"
+        style={{
+          background: "hsl(var(--brand-glow) / 0.12)",
+          color: "hsl(var(--brand-glow))",
+        }}
       >
-        <div
-          className={cn(
-            "flex items-center justify-center size-7 rounded-lg",
-            "bg-primary/10 text-primary",
-            "shadow-glow-xs",
-          )}
-        >
-          <Disc3 className="size-4" aria-hidden="true" />
-        </div>
-        <span className="text-overline text-primary">Collection</span>
+        <Disc3 className="size-4" aria-hidden="true" />
       </div>
-
-      {/* Title */}
-      <h1
-        className={cn(
-          "text-display-xl text-gradient-aurora mb-2",
-          "animate-fade-up animation-fill-both",
-        )}
-        style={{ animationDelay: "60ms" }}
-        id="album-page-heading"
+      <span
+        className="text-overline"
+        style={{ color: "hsl(var(--brand-glow))" }}
       >
-        Tuyển tập Đĩa nhạc
-      </h1>
-
-      {/* Subtitle */}
-      <p
-        className={cn(
-          "text-section-subtitle mb-5",
-          "animate-fade-up animation-fill-both",
-        )}
-        style={{ animationDelay: "90ms" }}
-      >
-        Khám phá toàn bộ thư viện âm nhạc được biên tập chọn lọc.
-      </p>
-
-      {/* Animated brand divider — .divider-glow token */}
-      <div
-        className="divider-glow mb-5 animate-fade-up animation-fill-both"
-        style={{ animationDelay: "100ms", maxWidth: "32rem" }}
-      />
-
-      {/* Stat badges */}
-      {!isLoading && totalItems > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-2 animate-fade-up animation-fill-both"
-          style={{ animationDelay: "130ms" }}
-        >
-          <StatBadge icon={Library} label={`${totalItems} Albums`} />
-          <StatBadge icon={TrendingUp} label="Cập nhật liên tục" />
-        </div>
+        Collection
+      </span>
+    </div>
+    {/* Title */}
+    <h1
+      className="text-display-xl text-gradient-wave mb-2 animate-fade-up animation-fill-both"
+      style={{ animationDelay: "60ms" }}
+      id="album-page-heading"
+    >
+      Tuyển tập Đĩa nhạc
+    </h1>
+    {/* Subtitle */}
+    <p
+      className={cn(
+        "text-section-subtitle hidden sm:block mb-5",
+        "animate-fade-up animation-fill-both",
       )}
-    </header>
-  ),
-);
+      style={{ animationDelay: "90ms" }}
+    >
+      Khám phá toàn bộ thư viện âm nhạc được biên tập chọn lọc.
+    </p>
+
+    {/* Animated brand divider — .divider-glow token */}
+    <div
+      className="divider-glow animate-fade-up animation-fill-both"
+      style={{ animationDelay: "100ms", maxWidth: "32rem" }}
+    />
+  </header>
+));
 PageHero.displayName = "PageHero";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -296,7 +146,7 @@ const PaginationStrip = memo(
   }) => (
     <div
       className={cn(
-        "glass-frosted rounded-2xl",
+        "rounded-2xl",
         "border border-border/50 dark:border-primary/15",
         "shadow-brand p-4",
         "animate-fade-up animation-fill-both",
@@ -386,7 +236,6 @@ const AlbumPage: React.FC = () => {
   if (isError) {
     return (
       <div className="relative min-h-screen flex items-center justify-center px-4 pb-28">
-        <AmbientBackground />
         <div
           className={cn(
             "card-base shadow-elevated p-8 max-w-md w-full text-center",
@@ -406,25 +255,36 @@ const AlbumPage: React.FC = () => {
       </div>
     );
   }
-
+  if (isLoading && albums.length === 0) {
+    return <Albumpageskeleton cardCount={meta.pageSize || 18} />;
+  }
   return (
     <div className="relative min-h-screen pb-28">
-      <AmbientBackground />
-
+      <SectionAmbient />
       {/* ══ HERO HEADER ══ */}
-      <PageHero totalItems={meta.totalItems} isLoading={isLoading} />
+      <PageHero />
 
       {/* ══ MAIN CONTENT ══ */}
       <main
         className="section-container space-y-6 sm:space-y-8"
         aria-labelledby="album-page-heading"
       >
-        {/* ── Filter bar — matches FeaturedAlbums glass-frosted pattern */}
         <div
-          className="animate-fade-up animation-fill-both"
+          className={cn(
+            "rounded-2xl",
+            "border border-border/50 dark:border-primary/15",
+            "shadow-brand",
+            "animate-fade-up animation-fill-both",
+          )}
           style={{ animationDelay: "80ms" }}
         >
-          <AlbumFilter params={filterParams} {...stableFilterHandlers} />
+          {/* ── Filter bar — matches FeaturedAlbums glass-frosted pattern */}
+          <div
+            className="animate-fade-up animation-fill-both"
+            style={{ animationDelay: "80ms" }}
+          >
+            <AlbumFilter params={filterParams} {...stableFilterHandlers} />
+          </div>
         </div>
 
         {/* ── Album grid — aria-busy signals loading to AT */}

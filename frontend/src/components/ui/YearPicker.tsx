@@ -443,7 +443,7 @@ export const YearPicker: React.FC<YearPickerProps> = ({
         <div
           aria-label="Select release year"
           className={cn(
-            "absolute z-50 top-full left-0 mt-1.5 w-56 rounded-2xl",
+            "absolute z-[100] top-full left-0 mt-1.5 w-56 rounded-2xl",
             "bg-popover border border-border/60 shadow-xl shadow-black/10 overflow-hidden",
             "animate-in fade-in zoom-in-95 duration-150",
           )}

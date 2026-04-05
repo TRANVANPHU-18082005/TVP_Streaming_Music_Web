@@ -32,6 +32,7 @@ import {
 } from "@/features/verification/routes";
 import { TopChartPage } from "@/pages/client/TopChartPage.tsx";
 import { GenreClientRoutes } from "@/features/genre/routes";
+import MoodVideoManagementPage from "@/pages/admin/MoodVideoManagementPage";
 
 export const router = createBrowserRouter([
   {
@@ -116,6 +117,10 @@ export const router = createBrowserRouter([
               {
                 path: ADMIN_PATHS.GENRES,
                 element: <GenreManagementPage />,
+              },
+              {
+                path: ADMIN_PATHS.VIDEO_MOOD,
+                element: <MoodVideoManagementPage />,
               },
               {
                 path: ADMIN_PATHS.SETTINGS,

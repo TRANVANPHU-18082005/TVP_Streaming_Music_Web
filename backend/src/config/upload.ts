@@ -1,7 +1,11 @@
 import multer from "multer";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
-import { b2Storage, cloudinaryStorage } from "./storage";
+import {
+  b2Storage,
+  cloudinaryStorage,
+  cloudinaryVideoStorage,
+} from "./storage";
 
 /**
  * A. UPLOAD TRACK (Hybrid: Audio + Cover -> B2)
@@ -49,8 +53,8 @@ export const uploadImages = multer({
       cb(
         new ApiError(
           httpStatus.BAD_REQUEST,
-          "Chỉ chấp nhận file ảnh (jpg, png, webp)"
-        )
+          "Chỉ chấp nhận file ảnh (jpg, png, webp)",
+        ),
       );
     }
   },
@@ -62,5 +66,11 @@ export const uploadArtistFiles = uploadImages.fields([
   { name: "coverImage", maxCount: 1 },
   { name: "gallery", maxCount: 5 },
 ]);
+
+// Trong file upload.ts, xuất thêm middleware này
+export const uploadVideoCanvas = multer({
+  storage: cloudinaryVideoStorage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // Giới hạn 20MB
+}).single("video");
 
 export const uploadUserAvatar = uploadImages.single("avatar");

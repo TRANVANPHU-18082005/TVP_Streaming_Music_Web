@@ -9,7 +9,6 @@ export const audioQueue = new Queue("audio-transcoding", {
 interface TranscodeJobData {
   trackId: string;
   fileUrl: string;
-  duration: number;
 }
 
 export const addTranscodeJob = async (data: TranscodeJobData) => {

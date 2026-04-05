@@ -18,10 +18,9 @@ const playlistApi = {
 
   // Lấy danh sách Playlist của User đang đăng nhập
   getMyPlaylists: async (params?: PlaylistFilterParams) => {
-    const response = await api.get<ApiResponse<PagedResponse<Playlist>>>(
-      "/playlists/me",
-      { params },
-    );
+    const response = await api.get<ApiResponse<Playlist[]>>("/playlists/me", {
+      params,
+    });
     return response.data;
   },
 

@@ -43,6 +43,7 @@ import { useRealtimeChart } from "@/features/track/hooks/useRealtimeChart";
 import { ChartItem } from "@/features/track/components/ChartItem";
 import { ChartTrack } from "@/features/track/types";
 import { cn } from "@/lib/utils";
+import SectionAmbient from "./SectionAmbient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -98,13 +99,16 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         <div
           className="flex items-center justify-center size-6 rounded-md"
           style={{
-            background: "hsl(var(--wave-1) / 0.12)",
-            color: "hsl(var(--wave-1))",
+            background: "hsl(var(--brand-glow) / 0.12)",
+            color: "hsl(var(--brand-glow))",
           }}
         >
           <BarChart3 className="size-3.5" aria-hidden="true" />
         </div>
-        <span className="text-overline" style={{ color: "hsl(var(--wave-1))" }}>
+        <span
+          className="text-overline"
+          style={{ color: "hsl(var(--brand-glow))" }}
+        >
           Top Charts
         </span>
       </div>
@@ -126,8 +130,8 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
       to={viewAllHref}
       className={cn(
         "group flex items-center gap-1.5 shrink-0 mt-1",
-        "text-sm font-medium text-muted-foreground",
-        "hover:text-foreground transition-colors duration-200",
+        "text-sm font-medium text-brand opacity-70",
+        "hover:text-brand transition-colors duration-200 hover:opacity-100",
       )}
       aria-label="Xem tất cả bảng xếp hạng"
     >
@@ -347,18 +351,6 @@ UpdatingIndicator.displayName = "UpdatingIndicator";
 // Matches FeaturedPlaylists orb palette — wave-1 (brand violet) primary
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SectionAmbient = memo(() => (
-  <div
-    className="absolute inset-0 overflow-hidden pointer-events-none"
-    aria-hidden="true"
-  >
-    <div className="orb-float orb-float--brand orb-float--lg absolute -top-32 -left-24 w-80 h-80 opacity-[0.07]" />
-    <div className="orb-float orb-float--wave orb-float--slow absolute -bottom-24 -right-16 w-64 h-64 opacity-[0.06]" />
-    <div className="divider-glow absolute top-0 left-8 right-8" />
-  </div>
-));
-SectionAmbient.displayName = "SectionAmbient";
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CHART ROW — memo'd wrapper, only re-renders when its own data changes
 // ─────────────────────────────────────────────────────────────────────────────
@@ -472,82 +464,81 @@ export const TopFeaturedTracks = () => {
   }
 
   // ── Populated / Empty ──────────────────────────────────────────────────────
-
   return (
-    <section
-      className="section-block section-block--alt relative overflow-hidden transition-colors duration-300"
-      aria-labelledby="top-featured-tracks-heading"
-    >
-      {/* Ambient orbs — decorative depth layer */}
-      <SectionAmbient />
-
-      <div className="section-container relative z-[1]">
-        {/* Wave-1 tinted glow divider — visual cadence between sections */}
-        <div
-          className="hidden lg:block h-px mb-8"
-          style={{
-            background: `linear-gradient(
+    <>
+      <div
+        className="block h-px"
+        style={{
+          background: `linear-gradient(
               to right,
               transparent,
-              hsl(var(--wave-1) / 0.3) 30%,
-              hsl(var(--brand-500) / 0.3) 70%,
+              hsl(var(--brand-glow) / 0.3) 30%,
+              hsl(var(--brand-glow) / 0.28) 70%,
               transparent
             )`,
-            boxShadow: "0 0 8px hsl(var(--wave-1) / 0.1)",
-          }}
-        />
+          boxShadow: "0 0 8px hsl(var(--brand-glow) / 0.1)",
+        }}
+      />
+      <section
+        className="section-block section-block--alt relative overflow-hidden transition-colors duration-300"
+        aria-labelledby="top-featured-tracks-heading"
+      >
+        {/* Ambient orbs — decorative depth layer */}
+        <SectionAmbient />
 
-        {/* Section header — same anatomy as PlaylistsHeader */}
-        <ChartHeader viewAllHref="/charts" />
+        <div className="section-container relative z-[1]">
+          {/* Section header — same anatomy as PlaylistsHeader */}
+          <ChartHeader viewAllHref="/chart-top" />
 
-        {/* Track list + live-update overlay */}
-        <div className="relative">
-          {/* Live-update pill — only this node re-renders on isUpdating */}
-          <UpdatingIndicator visible={isUpdating} />
+          {/* Track list + live-update overlay */}
+          <div className="relative">
+            {/* Live-update pill — only this node re-renders on isUpdating */}
+            <UpdatingIndicator visible={isUpdating} />
 
-          {/*
-           * aria-busy signals live-region refresh to assistive tech.
-           * opacity + pointer-events prevent accidental triggers mid-refresh.
-           * Duration aligned to --duration-slow (350ms) design token.
-           */}
-          <div
-            className={cn(
-              "flex flex-col gap-0.5 transition-opacity duration-[350ms]",
-              isUpdating && "opacity-50 pointer-events-none select-none",
-            )}
-            aria-busy={isUpdating}
-          >
             {/*
-             * mode="popLayout" — exiting items measured before unmount,
-             * list doesn't collapse during rank-swap animations.
-             * initial={false} — no entry animation on first render.
+             * aria-busy signals live-region refresh to assistive tech.
+             * opacity + pointer-events prevent accidental triggers mid-refresh.
+             * Duration aligned to --duration-slow (350ms) design token.
              */}
-            <AnimatePresence mode="popLayout" initial={false}>
-              {top10.length === 0 ? (
-                <motion.div key="empty" {...slideUpVariants}>
-                  <EmptyState />
-                </motion.div>
-              ) : (
-                top10.map((track: ChartTrack, index: number) => {
-                  const rank = index + 1;
-                  const prevRank = prevRankMap[track._id] ?? rank;
-                  return (
-                    <ChartRow
-                      key={track._id}
-                      track={track}
-                      rank={rank}
-                      prevRank={prevRank}
-                      index={index}
-                      reduced={reduced}
-                    />
-                  );
-                })
+            <div
+              className={cn(
+                "flex flex-col gap-0.5 transition-opacity duration-[350ms]",
+                isUpdating && "opacity-50 pointer-events-none select-none",
               )}
-            </AnimatePresence>
+              aria-busy={isUpdating}
+            >
+              {/*
+               * mode="popLayout" — exiting items measured before unmount,
+               * list doesn't collapse during rank-swap animations.
+               * initial={false} — no entry animation on first render.
+               */}
+              <AnimatePresence mode="popLayout" initial={false}>
+                {top10.length === 0 ? (
+                  <motion.div key="empty" {...slideUpVariants}>
+                    <EmptyState />
+                  </motion.div>
+                ) : (
+                  top10.map((track: ChartTrack, index: number) => {
+                    const rank = index + 1;
+                    const prevRank = prevRankMap[track._id] ?? rank;
+                    return (
+                      <ChartRow
+                        key={track._id}
+                        track={track}
+                        rank={rank}
+                        prevRank={prevRank}
+                        index={index}
+                        reduced={reduced}
+                      />
+                    );
+                  })
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 };
 

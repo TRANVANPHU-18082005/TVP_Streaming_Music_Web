@@ -82,6 +82,28 @@ const cloudinaryStorage = new CloudinaryStorage({
   },
 });
 
+// Thêm vào file storage.ts của Phú
+const cloudinaryVideoStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    return {
+      resource_type: "video",
+      folder: "mood_videos",
+      // BỎ gravity: "auto" ở đây
+      transformation: [
+        {
+          width: 720,
+          height: 1280,
+          crop: "limit", // Sử dụng "limit" hoặc "fit" thay vì "fill" có g_auto
+          fetch_format: "mp4",
+          quality: "auto",
+        },
+      ],
+      public_id: `mood-${Date.now()}`,
+    };
+  },
+});
+
 const b2Storage = multerS3({
   s3: s3,
   bucket: process.env.B2_BUCKET_NAME as string,
@@ -118,4 +140,4 @@ const b2Storage = multerS3({
   },
 });
 
-export { s3, cloudinary, cloudinaryStorage, b2Storage };
+export { s3, cloudinary, cloudinaryStorage, cloudinaryVideoStorage, b2Storage };

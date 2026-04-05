@@ -14,29 +14,37 @@ import {
 // --- 1. CREATE TRACK SCHEMA ---
 export const createTrackSchema = z.object({
   body: z.object({
-    title: z.string().trim().min(1, "Tiêu đề là bắt buộc").max(150),
+    title: z.string().trim().min(1, "Tiêu đề là bắt buộc").max(200),
     description: z.string().max(2000).optional(),
 
     artistId: objectIdSchema,
-    featuringArtistIds: featuringArtistsSchema.optional(), // Đã là array helper
+    featuringArtistIds: featuringArtistsSchema.optional(),
     albumId: nullableObjectIdSchema,
     genreIds: genreIdsSchema,
+
+    // === UPGRADE v2.0: VISUAL CANVAS ===
+    // moodVideoId có thể là ID cụ thể hoặc null (để Worker tự khớp)
+    moodVideoId: nullableObjectIdSchema.optional(),
+
+    // === UPGRADE v2.0: LYRICS ===
+    lyricType: z.enum(["none", "plain", "synced", "karaoke"]).default("none"),
+    plainLyrics: z.string().max(15000).optional(), // Chứa cả text thô hoặc mã LRC
 
     trackNumber: z.coerce.number().min(1).default(1),
     diskNumber: z.coerce.number().min(1).default(1),
 
-    // Fix lỗi Invalid Date khi rỗng
     releaseDate: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
-
     isExplicit: booleanSchema.default(false),
+    isPublic: booleanSchema.default(true),
 
-    copyright: z.string().trim().max(200).optional(),
-    isrc: z.string().trim().max(20).optional(),
-    lyrics: z.string().optional(),
-    tags: tagsSchema.optional(),
+    copyright: z.string().trim().max(500).optional(),
+    isrc: z.string().trim().max(30).optional(),
 
+    // Tags cực kỳ quan trọng cho Worker Matching
+    tags: tagsSchema,
+
+    // Duration sẽ được Worker tính lại, nhưng FE gửi lên để hiển thị tạm thời
     duration: z.coerce.number().min(0).default(0),
-    isPublic: booleanSchema.default(true), // Bắt buộc hoặc có default
   }),
 });
 
@@ -44,13 +52,19 @@ export const createTrackSchema = z.object({
 export const updateTrackSchema = z.object({
   params: z.object({ id: objectIdSchema }),
   body: z.object({
-    title: z.string().trim().min(1).max(150).optional(),
+    title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(2000).optional(),
     isPublic: booleanSchema.optional(),
 
-    albumId: nullableObjectIdSchema,
+    albumId: nullableObjectIdSchema.optional(),
     genreIds: genreIdsSchema.optional(),
     featuringArtistIds: featuringArtistsSchema.optional(),
+
+    // Nâng cấp update Canvas & Lyrics
+    moodVideoId: nullableObjectIdSchema.optional(),
+    lyricType: z.enum(["none", "plain", "synced", "karaoke"]).optional(),
+    plainLyrics: z.string().max(15000).optional(),
+
     tags: tagsSchema.optional(),
 
     trackNumber: z.coerce.number().min(1).optional(),
@@ -58,9 +72,8 @@ export const updateTrackSchema = z.object({
     releaseDate: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
 
     isExplicit: booleanSchema.optional(),
-    copyright: z.string().trim().max(200).optional(),
-    isrc: z.string().trim().max(20).optional(),
-    lyrics: z.string().optional(),
+    copyright: z.string().trim().max(500).optional(),
+    isrc: z.string().trim().max(30).optional(),
     duration: z.coerce.number().min(0).optional(),
   }),
 });
@@ -70,19 +83,17 @@ export const changeStatusSchema = z.object({
   params: z.object({ id: objectIdSchema }),
   body: z.object({
     status: z.enum(["pending", "ready", "failed", "processing"]),
+    errorReason: z.string().optional(), // Lưu lý do nếu failed
   }),
 });
 
 // --- 4. BULK UPDATE SCHEMA ---
 export const bulkUpdateTracksSchema = z.object({
   body: z.object({
-    trackIds: formDataArrayHelper(objectIdSchema)
-      .refine((ids) => ids.length >= 1, {
-        message: "Vui lòng chọn ít nhất 1 bài hát",
-      })
-      .refine((ids) => ids.length <= 100, {
-        message: "Giới hạn chỉnh sửa tối đa 100 bài",
-      }),
+    trackIds: formDataArrayHelper(objectIdSchema).refine(
+      (ids) => ids.length >= 1,
+      "Vui lòng chọn ít nhất 1 bài hát",
+    ),
 
     updates: z
       .object({
@@ -90,16 +101,17 @@ export const bulkUpdateTracksSchema = z.object({
         genreIds: genreIdsSchema.optional(),
         tags: tagsSchema.optional(),
         isPublic: booleanSchema.optional(),
+        moodVideoId: nullableObjectIdSchema.optional(), // Cập nhật Canvas hàng loạt
         status: z.enum(["pending", "ready", "failed", "processing"]).optional(),
       })
       .refine(
-        (data) => Object.values(data).some((value) => value !== undefined),
-        { message: "Phải chọn ít nhất một thông tin để cập nhật" },
+        (data) => Object.values(data).some((val) => val !== undefined),
+        "Phải chọn ít nhất một thông tin để cập nhật",
       ),
   }),
 });
 
-// --- 5. GET TRACKS SCHEMA (Filter) ---
+// --- 5. GET TRACKS SCHEMA (Filter nâng cao) ---
 export const getTracksSchema = z.object({
   query: z.object({
     page: z.coerce.number().min(1).default(1),
@@ -109,9 +121,13 @@ export const getTracksSchema = z.object({
     artistId: optionalObjectIdSchema,
     albumId: optionalObjectIdSchema,
     genreId: optionalObjectIdSchema,
+    moodVideoId: optionalObjectIdSchema, // Lọc theo Canvas
 
+    lyricType: z.enum(["none", "plain", "synced", "karaoke"]).optional(),
     status: z.enum(["pending", "ready", "failed", "processing"]).optional(),
-    sort: z.enum(["newest", "oldest", "popular", "name"]).default("newest"),
+    sort: z
+      .enum(["newest", "oldest", "popular", "name", "trending"])
+      .default("newest"),
   }),
 });
 

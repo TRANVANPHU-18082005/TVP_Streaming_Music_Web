@@ -1,16 +1,15 @@
-
-
 /* --- 0. FONT IMPORTS --- */
 @import url("https://api.fontshare.com/v2/css?f[]=syne@400,500,600,700,800&f[]=cabinet-grotesk@300,400,500,600,700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
 
-
 @import "tailwindcss";
 
 /* ================================================================
-   SOUNDWAVE — Production CSS v2.1 (Fixed)
+   SOUNDWAVE — Production CSS v3.0 (Refactored)
    Design Language: Obsidian Luxury / Neural Audio Experience
-   Typography: Syne (display) + Cabinet Grotesk (body) + Geist Mono (metadata)
+   Philosophy:
+     Light — Off-white cool base, pure-white cards, depth via shadows
+     Dark  — Obsidian Abyss, glow-layered surfaces, opacity depth
    ================================================================ */
 
 
@@ -26,8 +25,8 @@
 
   /* -- Font Families -- */
   --font-display: "Space Grotesk", sans-serif;
-  --font-body: "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-body:    "Inter", sans-serif;
+  --font-mono:    "JetBrains Mono", monospace;
 
   /* -- Radius Scale -- */
   --radius-2xs:  2px;
@@ -103,31 +102,56 @@
   --color-sidebar-border:             hsl(var(--sidebar-border));
   --color-sidebar-ring:               hsl(var(--sidebar-ring));
 
-  /* -- Easing Curves -- */
-  --ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-snappy:    cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-smooth:    cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-overshoot: cubic-bezier(0.47, 1.64, 0.41, 0.8);
-  --ease-decelerate:cubic-bezier(0, 0, 0.2, 1);
-  --ease-accelerate:cubic-bezier(0.4, 0, 1, 1);
+  /* ============================================================
+     EASING CURVES — Refactored v3
+     Nguyên tắc: Fast in, slow out. Theme transitions "tan chảy".
+     ============================================================ */
+  --ease-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-snappy:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth:      cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-overshoot:   cubic-bezier(0.47, 1.64, 0.41, 0.8);
+  --ease-decelerate:  cubic-bezier(0, 0, 0.2, 1);
+  --ease-accelerate:  cubic-bezier(0.4, 0, 1, 1);
+  /* Mới: theme morph — cực kỳ mượt cho color transitions */
+  --ease-theme:       cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  /* Mới: glass breathe — cho backdrop transitions */
+  --ease-breath:      cubic-bezier(0.37, 0, 0.63, 1);
 
-  /* -- Duration Scale -- */
-  --duration-instant:  60ms;
-  --duration-fast:    120ms;
-  --duration-normal:  220ms;
-  --duration-slow:    350ms;
-  --duration-slower:  500ms;
-  --duration-sluggish:800ms;
+  /* ============================================================
+     DURATION SCALE — Refactored
+     Micro-interactions nhanh hơn, theme transitions dài hơn.
+     ============================================================ */
+  --duration-instant:  50ms;
+  --duration-fast:    100ms;
+  --duration-normal:  200ms;
+  --duration-slow:    320ms;
+  --duration-slower:  480ms;
+  --duration-sluggish:720ms;
+  /* Mới: theme-specific duration */
+  --duration-theme:   380ms;
+  --duration-morph:   560ms;
 
-  /* -- Transition Presets -- */
+  /* ============================================================
+     TRANSITION PRESETS — Refactored
+     Áp dụng --ease-theme cho color properties.
+     ============================================================ */
   --transition-base:   all var(--duration-normal) var(--ease-smooth);
   --transition-fast:   all var(--duration-fast)   var(--ease-smooth);
   --transition-spring: all var(--duration-slow)   var(--ease-spring);
   --transition-snappy: all var(--duration-slow)   var(--ease-snappy);
+  /* Refactored: theme-aware color transitions */
   --transition-color:
-    color            var(--duration-fast) var(--ease-smooth),
-    background-color var(--duration-fast) var(--ease-smooth),
-    border-color     var(--duration-fast) var(--ease-smooth);
+    color            var(--duration-theme) var(--ease-theme),
+    background-color var(--duration-theme) var(--ease-theme),
+    border-color     var(--duration-theme) var(--ease-theme),
+    box-shadow       var(--duration-theme) var(--ease-theme),
+    opacity          var(--duration-normal) var(--ease-smooth);
+  /* Mới: glass morph transition */
+  --transition-glass:
+    background       var(--duration-theme)  var(--ease-theme),
+    backdrop-filter  var(--duration-morph)  var(--ease-breath),
+    border-color     var(--duration-theme)  var(--ease-theme),
+    box-shadow       var(--duration-theme)  var(--ease-theme);
 
   /* -- Animations -- */
   --animate-accordion-down: accordion-down 0.22s var(--ease-snappy);
@@ -179,7 +203,7 @@
 
   /* Vinyl */
   --animate-vinyl:      vinyl-spin 3.8s linear infinite;
-  --animate-vinyl-slow: vinyl-spin 7.5s linear infinite;
+  --animate-vinyl-slow: vinyl-spin 20s linear infinite;
 
   /* -- Keyframes -- */
   @keyframes accordion-down {
@@ -307,137 +331,392 @@
 }
 
 /* ================================================================
-   3. COLOR PALETTE & SEMANTIC TOKENS
+   3. COLOR PALETTE & SEMANTIC TOKENS — REFACTORED v3
+   ================================================================
+   LIGHT MODE PHILOSOPHY:
+   - Background: Off-white với tint lạnh (hue 220–230) để tạo cảm
+     giác sạch sẽ, không chói — không phải #FFFFFF thuần.
+   - Card/Popover: Trắng tinh khôi (#FFFFFF) để nổi bật khỏi background.
+   - Depth bằng SHADOWS chứ không phải borders.
+   - Primary: Bão hòa cao (saturation 90%+) để contrast tốt trên nền sáng.
+   - Borders: Gần như vô hình (opacity thấp) — chỉ hints.
+
+   DARK MODE PHILOSOPHY:
+   - Background: Obsidian sâu (hsl 228 35% 3.5%) — đen xanh, không phải đen thuần.
+   - Surfaces: Layered bằng opacity & hue shift, không phải lightness.
+   - Depth bằng GLOW và opacity gradients.
+   - Primary: Brightness cao + glow effect để sáng trên nền tối.
+   - Borders: Mảnh như sợi chỉ (0.5px feel), chỉ white-alpha.
    ================================================================ */
 @layer base {
   :root {
     --radius: 0.75rem;
 
-    /* === LIGHT MODE === */
-    --background:      220 22% 98%;
-    --foreground:      220 25% 9%;
-    --surface-1:       220 20% 97%;
-    --surface-2:       220 18% 94%;
-    --surface-3:       220 15% 90%;
+    /* ============================================================
+       LIGHT MODE — "Cool Ivory" System
+       Nền: Off-white lạnh (220° hue, độ bão hòa thấp, độ sáng 97%)
+       Card: Trắng tinh (0 0% 100%) — nổi bật qua bóng đổ
+       ============================================================ */
+
+    /* Core surfaces */
+    --background:      222 30% 96.5%;   /* Off-white lạnh, không phải xám trung tính */
+    --foreground:      222 32% 8%;      /* Gần đen, tint xanh nhẹ */
+    --surface-1:       224 28% 98%;     /* Gần trắng, hơi lạnh */
+    --surface-2:       222 25% 95%;     /* Layer giữa */
+    --surface-3:       220 22% 91%;     /* Layer dưới cùng */
+
+    /* Cards = trắng tinh để shadow tạo chiều sâu */
     --card:            0 0% 100%;
-    --card-foreground: 220 25% 9%;
+    --card-foreground: 222 32% 8%;
     --popover:         0 0% 100%;
-    --popover-foreground: 220 25% 9%;
-    --primary:         255 85% 60%;
+    --popover-foreground: 222 32% 8%;
+
+    /* Primary — saturated violet-indigo, dễ đọc trên nền sáng */
+    --primary:            258 90% 56%;   /* Bão hòa cao hơn v2 (85→90%), tối hơn 1 stop */
     --primary-foreground: 0 0% 100%;
-    --secondary:       220 15% 94%;
-    --secondary-foreground: 220 20% 22%;
-    --muted:           220 15% 93%;
-    --muted-foreground: 220 12% 52%;
-    --accent:          220 15% 90%;
-    --accent-foreground: 220 20% 16%;
-    --destructive:     3 88% 58%;
-    --destructive-foreground: 0 0% 100%;
-    --border:          220 15% 88%;
-    --border-strong:   220 15% 75%;
-    --input:           220 15% 88%;
-    --ring:            255 85% 60%;
-    --overlay:         220 25% 9%;
 
-    /* Brand */
-    --brand-25:   255 80% 98%;
-    --brand-50:   255 80% 96%;
-    --brand-100:  255 78% 91%;
-    --brand-200:  255 75% 82%;
-    --brand-300:  255 72% 72%;
-    --brand-400:  255 78% 65%;
-    --brand-500:  255 85% 60%;
-    --brand-600:  255 82% 52%;
-    --brand-700:  255 80% 44%;
-    --brand-800:  255 78% 36%;
-    --brand-glow: 255 100% 68%;
-    --brand-halo: 255 100% 80%;
-
-    /* Chromatic */
-    --wave-1: 255 85% 67%;
-    --wave-2: 318 78% 64%;
-    --wave-3: 186 92% 52%;
-    --wave-4: 38  92% 60%;
+    /* Secondary & Muted */
+    --secondary:            220 20% 94%;
+    --secondary-foreground: 222 25% 20%;
+    --muted:                220 20% 93%;
+    --muted-foreground:     220 14% 48%;  /* Rõ hơn một chút */
+    --accent:               220 18% 90%;
+    --accent-foreground:    222 25% 14%;
 
     /* Functional */
-    --success: 152 72% 40%;
-    --warning: 38  90% 54%;
-    --error:   3   88% 58%;
-    --info:    210 90% 54%;
+    --destructive:            4 86% 54%;
+    --destructive-foreground: 0 0% 100%;
 
-    /* Sidebar Light */
-    --sidebar-background:         220 22% 97%;
-    --sidebar-foreground:         220 20% 28%;
-    --sidebar-primary:            255 85% 60%;
+    /* Borders — gần như vô hình, depth từ shadow */
+    --border:        220 18% 90%;         /* Rất nhẹ */
+    --border-strong: 220 18% 78%;
+    --input:         0 0% 100%;           /* Input = trắng trên nền off-white */
+    --ring:          258 90% 56%;
+    --overlay:       222 32% 8%;
+
+    /* Brand Spectrum — Light saturation boost */
+    --brand-25:   258 85% 98%;
+    --brand-50:   258 85% 96%;
+    --brand-100:  258 82% 91%;
+    --brand-200:  258 80% 82%;
+    --brand-300:  258 78% 72%;
+    --brand-400:  258 84% 63%;
+    --brand-500:  258 90% 56%;   /* = --primary light */
+    --brand-600:  258 88% 48%;
+    --brand-700:  258 85% 40%;
+    --brand-800:  258 82% 32%;
+    --brand-glow: 258 100% 66%;
+    --brand-halo: 258 100% 78%;
+
+    /* Chromatic */
+    --wave-1: 258 88% 65%;  /* Tím xanh */
+    --wave-2: 320 76% 62%;  /* Hồng tím */
+    --wave-3: 188 90% 48%;  /* Xanh lơ */
+    --wave-4: 36 90% 58%;   /* Cam */
+    --wave-5: 142 70% 50%;  /* Xanh lá lục bảo */
+    --wave-6: 200 95% 60%;  /* Xanh bầu trời */
+    --wave-7: 48 95% 60%;   /* Vàng nắng */
+    --wave-8: 0 85% 65%;    /* Đỏ san hô */
+    --wave-9: 280 80% 60%;  /* Tím đậm */
+    --wave-10: 160 85% 45%; /* Xanh ngọc biển */
+
+    /* Functional */
+    --success: 152 72% 36%;
+    --warning: 36  88% 50%;
+    --error:   4   86% 54%;
+    --info:    210 88% 52%;
+
+    /* Sidebar — tông ấm hơn background để phân biệt subtly */
+    --sidebar-background:         224 28% 98%;
+    --sidebar-foreground:         222 25% 25%;
+    --sidebar-primary:            258 90% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent:             220 15% 90%;
-    --sidebar-accent-foreground:  220 20% 18%;
-    --sidebar-border:             220 15% 88%;
-    --sidebar-ring:               255 85% 60%;
+    --sidebar-accent:             220 18% 92%;
+    --sidebar-accent-foreground:  222 25% 16%;
+    --sidebar-border:             220 18% 90%;
+    --sidebar-ring:               258 90% 56%;
+
+    /* ============================================================
+       LIGHT MODE — Shadow Multipliers
+       CSS custom props cho hệ thống shadow scale theo theme.
+       ============================================================ */
+    --shadow-color:      222 30% 15%;
+    --shadow-alpha-xs:   0.04;
+    --shadow-alpha-sm:   0.06;
+    --shadow-alpha-md:   0.09;
+    --shadow-alpha-lg:   0.13;
+    --shadow-alpha-xl:   0.18;
+    --shadow-brand-alpha: 0.22;
+
+    /* ============================================================
+       LIGHT MODE — Glass opacity values
+       Light glass = opacity cao (80%+), blur mịn nhẹ.
+       ============================================================ */
+    --glass-bg-alpha:       0.82;
+    --glass-frosted-alpha:  0.88;
+    --glass-heavy-alpha:    0.94;
+    --glass-ultra-alpha:    0.97;
+    --glass-blur-subtle:    blur(12px) saturate(140%);
+    --glass-blur-mid:       blur(20px) saturate(160%);
+    --glass-blur-heavy:     blur(32px) saturate(180%) brightness(1.02);
+    --glass-blur-ultra:     blur(48px) saturate(200%) brightness(1.01);
+    --glass-border-alpha:   0.55;
+    --glass-inset-alpha:    0.10;  /* White inner highlight, nhẹ hơn dark mode */
   }
 
+  /* ============================================================
+     DARK MODE — "Obsidian Abyss" System
+     ============================================================
+     Nền: Đen xanh sâu (228° hue, 35% sat, 3.5% light)
+     Surfaces: Tăng brightness từng layer (~1.5% mỗi bước)
+     Depth: Glow radiants + opacity masks, không phải solid borders
+     Primary: Brightness cao (76%+) + auto-glow
+     ============================================================ */
   .dark {
-    /* === DARK MODE — Obsidian Abyss === */
-    --background:      228 32% 4%;
-    --foreground:      215 28% 94%;
-    --surface-1:       228 28% 6%;
-    --surface-2:       228 25% 8%;
-    --surface-3:       228 22% 11%;
-    --card:            228 28% 6%;
-    --card-foreground: 215 28% 94%;
-    --popover:         228 28% 5%;
-    --popover-foreground: 215 28% 94%;
-    --primary:         255 82% 72%;
-    --primary-foreground: 228 32% 4%;
-    --secondary:       228 22% 12%;
-    --secondary-foreground: 215 22% 82%;
-    --muted:           228 22% 10%;
-    --muted-foreground: 218 18% 50%;
-    --accent:          228 22% 14%;
-    --accent-foreground: 215 24% 88%;
-    --destructive:     3 65% 38%;
-    --destructive-foreground: 215 28% 94%;
-    --border:          228 22% 12%;
-    --border-strong:   228 22% 20%;
-    --input:           228 22% 12%;
-    --ring:            255 75% 65%;
-    --overlay:         228 32% 4%;
+    /* Core surfaces — Obsidian layering */
+    --background:      228 36% 3.5%;    /* Obsidian sâu: #060810 feel */
+    --foreground:      215 30% 93%;     /* Gần trắng, tint lạnh */
+    --surface-1:       228 32% 5.5%;    /* +2% light */
+    --surface-2:       228 28% 7.5%;    /* +2% light */
+    --surface-3:       228 25% 10%;     /* +2.5% light */
 
-    /* Brand Dark */
-    --brand-25:   255 50% 8%;
-    --brand-50:   255 55% 12%;
-    --brand-100:  255 60% 18%;
-    --brand-200:  255 65% 28%;
-    --brand-300:  255 70% 45%;
-    --brand-400:  255 75% 60%;
-    --brand-500:  255 82% 72%;
-    --brand-600:  255 85% 78%;
-    --brand-700:  255 88% 83%;
-    --brand-800:  255 90% 88%;
-    --brand-glow: 255 100% 78%;
-    --brand-halo: 255 100% 88%;
+    /* Cards — không phải đen thuần, có blue tint tinh tế */
+    --card:            228 30% 6%;
+    --card-foreground: 215 28% 92%;
+    --popover:         228 32% 4.5%;
+    --popover-foreground: 215 28% 93%;
 
-    /* Chromatic Dark */
-    --wave-1: 255 85% 76%;
-    --wave-2: 318 80% 72%;
-    --wave-3: 186 95% 62%;
-    --wave-4: 38  95% 68%;
+    /* Primary — luminous trong tối, tự phát sáng */
+    --primary:            258 80% 74%;   /* Sáng hơn (60→74%), bão hòa hơi thấp hơn */
+    --primary-foreground: 228 36% 4%;
+
+    /* Secondary & Muted */
+    --secondary:            228 22% 11%;
+    --secondary-foreground: 215 22% 80%;
+    --muted:                228 22% 9%;
+    --muted-foreground:     218 18% 48%;  /* Readable but subtle */
+    --accent:               228 22% 13%;
+    --accent-foreground:    215 24% 86%;
+
+    /* Functional */
+    --destructive:            4 62% 36%;
+    --destructive-foreground: 215 28% 93%;
+
+    /* Borders — mỏng như sợi chỉ, white-alpha only */
+    --border:        228 25% 11%;
+    --border-strong: 228 22% 18%;
+    --input:         228 25% 10%;
+    --ring:          258 72% 66%;
+    --overlay:       228 36% 3.5%;
+
+    /* Brand Dark — luminous, glow-ready */
+    --brand-25:   258 45% 7%;
+    --brand-50:   258 48% 11%;
+    --brand-100:  258 52% 17%;
+    --brand-200:  258 58% 27%;
+    --brand-300:  258 65% 44%;
+    --brand-400:  258 72% 60%;
+    --brand-500:  258 80% 74%;   /* = --primary dark */
+    --brand-600:  258 82% 79%;
+    --brand-700:  258 85% 83%;
+    --brand-800:  258 88% 88%;
+    --brand-glow: 258 100% 80%;  /* Glow mạnh hơn light mode */
+    --brand-halo: 258 100% 88%;
+
+    /* Chromatic Dark — vivid on dark */
+   --wave-1: 258 84% 76%;  /* Tím xanh nhạt hơn */
+    --wave-2: 320 78% 70%;  /* Hồng tím sáng */
+    --wave-3: 188 92% 60%;  /* Xanh lơ dịu */
+    --wave-4: 36 92% 65%;   /* Cam rực rỡ */
+    --wave-5: 142 70% 65%;  /* Xanh lá lục bảo sáng */
+    --wave-6: 200 95% 70%;  /* Xanh bầu trời pastel */
+    --wave-7: 48 95% 72%;   /* Vàng nắng sáng */
+    --wave-8: 0 85% 75%;    /* Đỏ san hô nhạt */
+    --wave-9: 280 80% 72%;  /* Tím sáng */
+    --wave-10: 160 85% 60%; /* Xanh ngọc biển sáng */
 
     /* Functional Dark */
-    --success: 152 68% 52%;
-    --warning: 38  88% 62%;
-    --error:   3   75% 62%;
-    --info:    210 88% 66%;
+    --success: 152 65% 50%;
+    --warning: 36  86% 60%;
+    --error:   4   72% 60%;
+    --info:    210 86% 64%;
 
     /* Sidebar Dark */
-    --sidebar-background:         228 32% 3%;
-    --sidebar-foreground:         215 24% 88%;
-    --sidebar-primary:            255 82% 72%;
+    --sidebar-background:         228 36% 3%;
+    --sidebar-foreground:         215 25% 86%;
+    --sidebar-primary:            258 80% 74%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent:             228 22% 10%;
-    --sidebar-accent-foreground:  215 24% 88%;
-    --sidebar-border:             228 22% 9%;
-    --sidebar-ring:               255 75% 65%;
+    --sidebar-accent:             228 22% 9%;
+    --sidebar-accent-foreground:  215 24% 86%;
+    --sidebar-border:             228 25% 8%;
+    --sidebar-ring:               258 72% 66%;
+
+    /* ============================================================
+       DARK MODE — Shadow Multipliers
+       Dark shadows = deeper, more blue-tinted
+       ============================================================ */
+    --shadow-color:      228 40% 2%;
+    --shadow-alpha-xs:   0.20;
+    --shadow-alpha-sm:   0.28;
+    --shadow-alpha-md:   0.38;
+    --shadow-alpha-lg:   0.50;
+    --shadow-alpha-xl:   0.62;
+    --shadow-brand-alpha: 0.30;
+
+    /* ============================================================
+       DARK MODE — Glass opacity values
+       Dark glass = opacity thấp (50-65%), focus on backdrop-filter.
+       Border = 1px white-alpha chỉ, không fill.
+       ============================================================ */
+    --glass-bg-alpha:       0.52;
+    --glass-frosted-alpha:  0.42;
+    --glass-heavy-alpha:    0.72;
+    --glass-ultra-alpha:    0.88;
+    --glass-blur-subtle:    blur(16px) saturate(180%);
+    --glass-blur-mid:       blur(28px) saturate(200%);
+    --glass-blur-heavy:     blur(48px) saturate(220%) brightness(0.96);
+    --glass-blur-ultra:     blur(72px) saturate(250%) brightness(0.94);
+    --glass-border-alpha:   0.08;   /* White border rất mỏng */
+    --glass-inset-alpha:    0.06;   /* Inner white highlight */
+  }
+
+  /* ============================================================
+     THEME OPTIONS — Skin System v3
+     Tất cả skin chỉ override --primary, --brand-*, --wave-*, --ring.
+     Light/Dark glass, shadow, surface được tính tự động từ mode.
+     ============================================================ */
+  /* 1. TOKYO NIGHT — Neon Cyberpunk */
+  [data-theme='tokyo'] {
+    --primary: 340 75% 50%; --brand-glow: 340 80% 60%;
+    --wave-1: 340 70% 55%; --wave-2: 280 60% 55%; --wave-3: 195 80% 50%;
+    --background: 340 15% 98%; /* Tint hồng nhạt */
+  }
+  .dark [data-theme='tokyo'], [data-theme='tokyo'].dark {
+    --primary: 340 90% 68%; --brand-glow: 340 100% 75%;
+    --background: 250 28% 4%;
+  }
+
+  /* 2. SAHARA GOLD — Luxury Amber */
+  [data-theme='sahara'] {
+    --primary: 36 85% 42%; --brand-glow: 36 90% 52%;
+    --wave-1: 36 80% 48%; --wave-2: 22 75% 45%; --wave-3: 48 85% 55%;
+    --background: 36 15% 97.5%; /* Tint vàng cát */
+  }
+  .dark [data-theme='sahara'], [data-theme='sahara'].dark {
+    --primary: 36 95% 56%; --brand-glow: 36 100% 66%;
+    --background: 20 22% 4%;
+  }
+
+  /* 3. NORDIC ICE — Arctic Minimalist */
+  [data-theme='nordic'] {
+    --primary: 210 85% 45%; --brand-glow: 210 90% 55%;
+    --wave-1: 210 80% 55%; --wave-2: 225 65% 50%; --wave-3: 185 75% 55%;
+    --background: 210 15% 97.5%; /* Tint xanh biển */
+  }
+  .dark [data-theme='nordic'], [data-theme='nordic'].dark {
+    --primary: 199 92% 66%; --brand-glow: 199 100% 76%;
+    --background: 220 28% 5%;
+  }
+
+  /* 4. FOREST ZEN — Deep Organic */
+  [data-theme='amazon'] {
+    --primary: 162 75% 32%; --brand-glow: 162 70% 42%;
+    --wave-1: 162 65% 38%; --wave-2: 140 60% 35%; --wave-3: 180 65% 45%;
+    --background: 162 12% 97.5%;
+  }
+  .dark [data-theme='amazon'], [data-theme='amazon'].dark {
+    --primary: 152 68% 56%; --brand-glow: 152 82% 64%;
+    --background: 160 22% 3.5%;
+  }
+
+  /* 5. CRIMSON ABYSS — Passion Ruby */
+  [data-theme='crimson'] {
+    --primary: 0 80% 48%; --brand-glow: 0 85% 58%;
+    --wave-1: 0 75% 50%; --wave-2: 340 70% 45%; --wave-3: 18 85% 55%;
+    --background: 0 10% 98%;
+  }
+  .dark [data-theme='crimson'], [data-theme='crimson'].dark {
+    --primary: 356 88% 56%; --brand-glow: 356 100% 65%;
+    --background: 0 18% 4%;
+  }
+
+  /* 6. VAPORWAVE — 80s Dream */
+  [data-theme='vapor'] {
+    --primary: 275 65% 55%; --brand-glow: 275 70% 65%;
+    --wave-1: 275 60% 60%; --wave-2: 200 75% 55%; --wave-3: 320 70% 62%;
+    --background: 275 12% 98%;
+  }
+  .dark [data-theme='vapor'], [data-theme='vapor'].dark {
+    --primary: 286 92% 72%; --brand-glow: 286 100% 80%;
+    --background: 276 32% 5%;
+  }
+
+  /* 7. MIDNIGHT SLATE — Steel Professional */
+  [data-theme='slate'] {
+    --primary: 215 25% 45%; --brand-glow: 215 30% 55%;
+    --wave-1: 215 20% 50%; --wave-2: 222 15% 40%; --wave-3: 200 25% 55%;
+    --background: 215 10% 98%;
+  }
+  .dark [data-theme='slate'], [data-theme='slate'].dark {
+    --primary: 215 28% 76%; --brand-glow: 215 32% 86%;
+    --background: 220 18% 6%;
+  }
+
+  /* 8. ARCTIC LIGHT — Pure Obsidian Contrast */
+  [data-theme='arctic'] {
+    --primary: 258 85% 50%; --brand-glow: 258 90% 60%;
+    --wave-1: 258 80% 55%; --wave-2: 232 65% 48%; --wave-3: 282 75% 65%;
+    --background: 222 35% 98.5%;
+  }
+  .dark [data-theme='arctic'], [data-theme='arctic'].dark {
+    --primary: 258 80% 70%;
+    --background: 222 35% 5%;
+  }
+
+  /* === NEW SKINS === */
+
+  /* 9. DEEP OCEAN — Mysterious & Bold */
+  [data-theme='ocean'] {
+    --primary: 220 90% 45%; --brand-glow: 220 95% 55%;
+    --wave-1: 220 85% 50%; --wave-2: 200 80% 45%; --wave-3: 240 70% 55%;
+    --background: 220 20% 97%;
+  }
+  .dark [data-theme='ocean'], [data-theme='ocean'].dark {
+    --primary: 210 100% 60%; --brand-glow: 210 100% 70%;
+    --background: 222 45% 3%;
+  }
+
+  /* 10. ROSE GOLD — Elegant & Feminine */
+  [data-theme='rose'] {
+    --primary: 350 65% 55%; --brand-glow: 350 70% 65%;
+    --wave-1: 350 60% 60%; --wave-2: 10 60% 65%; --wave-3: 330 50% 60%;
+    --background: 350 20% 98%;
+  }
+  .dark [data-theme='rose'], [data-theme='rose'].dark {
+    --primary: 350 80% 72%; --brand-glow: 350 90% 80%;
+    --background: 350 30% 4%;
+  }
+
+  /* 11. NEON LIME — High Energy */
+  [data-theme='lime'] {
+    --primary: 85 90% 35%; --brand-glow: 85 95% 45%;
+    --wave-1: 85 80% 40%; --wave-2: 110 70% 35%; --wave-3: 65 90% 45%;
+    --background: 85 20% 97%;
+  }
+  .dark [data-theme='lime'], [data-theme='lime'].dark {
+    --primary: 82 90% 60%; --brand-glow: 82 100% 70%;
+    --background: 100 25% 3%;
+  }
+
+  /* 12. OBSIDIAN MONO — Ghostly Minimalist */
+  [data-theme='mono'] {
+    --primary: 0 0% 20%; --brand-glow: 0 0% 40%;
+    --wave-1: 0 0% 30%; --wave-2: 0 0% 15%; --wave-3: 0 0% 50%;
+    --background: 0 0% 97%;
+  }
+  .dark [data-theme='mono'], [data-theme='mono'].dark {
+    --primary: 0 0% 90%; --brand-glow: 0 0% 100%;
+    --background: 0 0% 2%;
   }
 }
 
@@ -450,6 +729,21 @@
     box-sizing: border-box;
     border-color: hsl(var(--border));
     margin: 0;
+    /* Áp dụng theme transition cho toàn bộ elements */
+    transition:
+      color            var(--duration-theme) var(--ease-theme),
+      background-color var(--duration-theme) var(--ease-theme),
+      border-color     var(--duration-theme) var(--ease-theme),
+      box-shadow       var(--duration-theme) var(--ease-theme);
+  }
+
+  /* Override transition cho elements không nên transition (performance) */
+  img, video, svg, canvas,
+  [data-no-transition],
+  .vinyl-disc,
+  .eq-bar,
+  .waveform-line {
+    transition: none;
   }
 
   html {
@@ -477,7 +771,7 @@
   }
 
   ::selection {
-    background-color: hsl(var(--primary) / 0.22);
+    background-color: hsl(var(--primary) / 0.18);
     color: hsl(var(--primary));
   }
 
@@ -585,7 +879,6 @@
     background: hsl(var(--primary) / 0.5);
   }
 
-  /* Alias */
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--muted-foreground) / 0.18) transparent;
@@ -602,124 +895,172 @@
 }
 
 /* ================================================================
-   6. GLASSMORPHISM SYSTEM
+   6. GLASSMORPHISM 2.0 — REFACTORED
+   ================================================================
+   CORE PRINCIPLE:
+   Sử dụng CSS custom properties từ :root / .dark để tự động
+   điều chỉnh opacity, blur, và border theo theme.
+
+   LIGHT: Opacity cao (82–97%), blur nhẹ-vừa, border nhìn thấy.
+   DARK:  Opacity thấp (42–72%), blur mạnh, border = white-alpha mỏng.
+
+   Thêm transition cho glass morph khi đổi theme.
    ================================================================ */
 @layer utilities {
 
-  /* T1 — Subtle */
+  /* T1 — Subtle: Panel backgrounds, sidebar sections */
   .glass {
-    background: hsl(var(--card) / 0.55);
-    backdrop-filter: blur(18px) saturate(155%);
-    -webkit-backdrop-filter: blur(18px) saturate(155%);
-    border: 1px solid hsl(var(--border) / 0.5);
+    background: hsl(var(--card) / var(--glass-bg-alpha));
+    backdrop-filter: var(--glass-blur-subtle);
+    -webkit-backdrop-filter: var(--glass-blur-subtle);
+    border: 1px solid hsl(var(--border) / var(--glass-border-alpha));
+    transition: var(--transition-glass);
   }
 
-  /* T2 — Frosted */
+  /* T2 — Frosted: Cards, modals, popovers */
   .glass-frosted {
-    background: hsl(var(--card) / 0.42);
-    backdrop-filter: blur(28px) saturate(175%) brightness(1.04);
-    -webkit-backdrop-filter: blur(28px) saturate(175%) brightness(1.04);
-    border: 1px solid hsl(var(--border) / 0.38);
-    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.07);
-  }
-
-  /* T3 — Heavy */
-  .glass-heavy {
-    background: hsl(var(--background) / 0.82);
-    backdrop-filter: blur(52px) saturate(210%) brightness(0.96);
-    -webkit-backdrop-filter: blur(52px) saturate(210%) brightness(0.96);
-    border: 1px solid hsl(var(--border) / 0.28);
+    background: hsl(var(--card) / var(--glass-frosted-alpha));
+    backdrop-filter: var(--glass-blur-mid);
+    -webkit-backdrop-filter: var(--glass-blur-mid);
+    border: 1px solid hsl(var(--border) / calc(var(--glass-border-alpha) * 0.7));
     box-shadow:
-      inset 0 1px 0 hsl(0 0% 100% / 0.06),
-      inset 0 -1px 0 hsl(0 0% 0% / 0.06);
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha)),
+      /* Light mode: soft drop shadow. Dark mode: glow hint. */
+      0 4px 24px hsl(var(--shadow-color) / calc(var(--shadow-alpha-md) * 0.6));
+    transition: var(--transition-glass);
   }
 
-  /* T4 — Ultra */
+  /* T3 — Heavy: Player bar, nav bars, overlays */
+  .glass-heavy {
+    background: hsl(var(--background) / var(--glass-heavy-alpha));
+    backdrop-filter: var(--glass-blur-heavy);
+    -webkit-backdrop-filter: var(--glass-blur-heavy);
+    border: 1px solid hsl(var(--border) / calc(var(--glass-border-alpha) * 0.5));
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha)),
+      inset 0 -1px 0 hsl(0 0% 0% / calc(var(--glass-inset-alpha) * 0.7));
+    transition: var(--transition-glass);
+  }
+
+  /* T4 — Ultra: Top navigation, fullscreen overlays */
   .glass-ultra {
-    background: hsl(var(--background) / 0.92);
-    backdrop-filter: blur(72px) saturate(250%) brightness(0.94);
-    -webkit-backdrop-filter: blur(72px) saturate(250%) brightness(0.94);
-    border: 1px solid hsl(var(--border) / 0.2);
+    background: hsl(var(--background) / var(--glass-ultra-alpha));
+    backdrop-filter: var(--glass-blur-ultra);
+    -webkit-backdrop-filter: var(--glass-blur-ultra);
+    border: 1px solid hsl(var(--border) / calc(var(--glass-border-alpha) * 0.35));
+    transition: var(--transition-glass);
   }
 
-  /* T5 — Dark overlay */
+  /* T5 — Dark: Explicit dark overlay (không phụ thuộc theme) */
   .glass-dark {
-    background: hsl(228 32% 3% / 0.72);
-    backdrop-filter: blur(26px) saturate(130%);
-    -webkit-backdrop-filter: blur(26px) saturate(130%);
-    border: 1px solid hsl(0 0% 100% / 0.05);
+    background: hsl(228 36% 4% / 0.76);
+    backdrop-filter: blur(28px) saturate(150%);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    border: 1px solid hsl(0 0% 100% / 0.06);
     box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04);
   }
 
   /* Brand tint */
   .glass-brand {
-    background: hsl(var(--brand-50) / 0.6);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    border: 1px solid hsl(var(--brand-200) / 0.4);
+    background: hsl(var(--brand-50) / 0.65);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    border: 1px solid hsl(var(--brand-200) / 0.45);
+    transition: var(--transition-glass);
   }
   .dark .glass-brand {
-    background: hsl(var(--brand-50) / 0.25);
-    border-color: hsl(var(--brand-200) / 0.2);
+    background: hsl(var(--brand-50) / 0.22);
+    border-color: hsl(var(--brand-100) / 0.18);
   }
+
+  /* ============================================================
+     DARK MODE — Enhanced glass glow effect
+     Thêm subtle primary glow vào glass components khi dark.
+     ============================================================ */
+  .dark .glass-frosted {
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha)),
+      0 0 0 1px hsl(var(--primary) / 0.04),
+      0 8px 32px hsl(var(--shadow-color) / var(--shadow-alpha-md));
+  }
+
+  /* .dark .glass-heavy {
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha)),
+      inset 0 -1px 0 hsl(0 0% 0% / 0.12),
+      0 0 0 1px hsl(var(--primary) / 0.05),
+      0 12px 40px hsl(var(--shadow-color) / var(--shadow-alpha-lg));
+  } */
 }
 
 /* ================================================================
-   7. ELEVATION & SHADOW SYSTEM
+   7. ELEVATION & SHADOW SYSTEM — REFACTORED v3
+   ================================================================
+   Sử dụng --shadow-color và --shadow-alpha-* variables để
+   tự động điều chỉnh cường độ shadow theo mode.
+
+   Light: shadows nhẹ, warm-neutral.
+   Dark: shadows sâu hơn, blue-tinted.
    ================================================================ */
 @layer utilities {
 
+  /* Flat: chỉ border, không shadow */
   .shadow-flat { box-shadow: 0 0 0 1px hsl(var(--border)); }
 
+  /* Raised: +1 elevation (cards trên surface) */
   .shadow-raised {
     box-shadow:
-      0 1px 2px hsl(228 32% 4% / 0.06),
-      0 3px 8px hsl(228 32% 4% / 0.07),
-      inset 0 1px 0 hsl(0 0% 100% / 0.07);
+      0 1px 2px  hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      0 2px 6px  hsl(var(--shadow-color) / calc(var(--shadow-alpha-xs) * 0.7)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
   }
 
+  /* Elevated: standard card depth */
   .shadow-elevated {
     box-shadow:
-      0 2px 4px  hsl(228 32% 4% / 0.06),
-      0 8px 20px hsl(228 32% 4% / 0.1),
-      0 24px 48px hsl(228 32% 4% / 0.08),
-      inset 0 1px 0 hsl(0 0% 100% / 0.07);
+      0 1px 2px  hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      0 4px 12px hsl(var(--shadow-color) / var(--shadow-alpha-sm)),
+      0 16px 36px hsl(var(--shadow-color) / calc(var(--shadow-alpha-sm) * 0.75)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
   }
 
+  /* Floating: dropdowns, popovers */
   .shadow-floating {
     box-shadow:
-      0 4px 8px   hsl(228 32% 4% / 0.08),
-      0 16px 40px hsl(228 32% 4% / 0.14),
-      0 40px 80px hsl(228 32% 4% / 0.1),
-      inset 0 1px 0 hsl(0 0% 100% / 0.08);
+      0 2px 4px   hsl(var(--shadow-color) / var(--shadow-alpha-sm)),
+      0 8px 24px  hsl(var(--shadow-color) / var(--shadow-alpha-md)),
+      0 28px 60px hsl(var(--shadow-color) / calc(var(--shadow-alpha-md) * 0.7)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
   }
 
+  /* Brand: primary-tinted shadows (skin-aware) */
   .shadow-brand {
     box-shadow:
-      0 0 0 1px hsl(var(--primary) / 0.18),
-      0 4px 16px hsl(var(--primary) / 0.18),
-      0 20px 44px hsl(var(--primary) / 0.1);
+      0 0 0 1px     hsl(var(--primary) / 0.14),
+      0 3px 12px    hsl(var(--primary) / var(--shadow-brand-alpha)),
+      0 12px 36px   hsl(var(--primary) / calc(var(--shadow-brand-alpha) * 0.5));
   }
 
   .shadow-brand-lg {
     box-shadow:
-      0 0 0 1px hsl(var(--primary) / 0.22),
-      0 8px 24px hsl(var(--primary) / 0.22),
-      0 32px 64px hsl(var(--primary) / 0.14),
-      0 0 80px hsl(var(--brand-glow) / 0.1);
+      0 0 0 1px     hsl(var(--primary) / 0.18),
+      0 6px 20px    hsl(var(--primary) / var(--shadow-brand-alpha)),
+      0 24px 56px   hsl(var(--primary) / calc(var(--shadow-brand-alpha) * 0.55)),
+      0 0 80px      hsl(var(--brand-glow) / calc(var(--shadow-brand-alpha) * 0.4));
   }
 
-  .shadow-glow-xs { box-shadow: 0 0 10px hsl(var(--brand-glow) / 0.25); }
-  .shadow-glow-sm { box-shadow: 0 0 16px hsl(var(--brand-glow) / 0.32); }
+  /* Glow system — dark-mode primary */
+  .shadow-glow-xs { box-shadow: 0 0 10px  hsl(var(--brand-glow) / 0.22); }
+  .shadow-glow-sm { box-shadow: 0 0 18px  hsl(var(--brand-glow) / 0.28); }
   .shadow-glow-md {
     box-shadow:
-      0 0 24px hsl(var(--brand-glow) / 0.28),
-      0 0 56px hsl(var(--brand-glow) / 0.1);
+      0 0 24px hsl(var(--brand-glow) / 0.30),
+      0 0 60px hsl(var(--brand-glow) / 0.10);
   }
   .shadow-glow-lg {
     box-shadow:
-      0 0 40px hsl(var(--brand-glow) / 0.35),
-      0 0 80px hsl(var(--brand-glow) / 0.14),
+      0 0 36px  hsl(var(--brand-glow) / 0.38),
+      0 0 80px  hsl(var(--brand-glow) / 0.15),
       0 0 120px hsl(var(--brand-glow) / 0.06);
   }
   .shadow-glow-wave {
@@ -729,60 +1070,50 @@
       0 0 80px hsl(var(--wave-3) / 0.06);
   }
 
-  .shadow-inset-top {
-    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.09);
-  }
+  .shadow-inset-top    { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.09); }
   .shadow-inset-border {
     box-shadow:
       inset 0 1px 0 hsl(0 0% 100% / 0.09),
       inset 0 -1px 0 hsl(0 0% 0% / 0.07);
   }
-  .shadow-inset-brand {
-    box-shadow: inset 0 0 24px hsl(var(--primary) / 0.07);
-  }
+  .shadow-inset-brand  { box-shadow: inset 0 0 24px hsl(var(--primary) / 0.07); }
 
   .shadow-depth {
     box-shadow:
-      0 1px 1px hsl(228 32% 4% / 0.06),
-      0 2px 4px hsl(228 32% 4% / 0.06),
-      0 8px 16px hsl(228 32% 4% / 0.08),
-      0 24px 48px hsl(228 32% 4% / 0.06),
-      inset 0 1px 0 hsl(0 0% 100% / 0.07);
+      0 1px 1px   hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      0 2px 4px   hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      0 8px 16px  hsl(var(--shadow-color) / var(--shadow-alpha-sm)),
+      0 24px 48px hsl(var(--shadow-color) / calc(var(--shadow-alpha-xs) * 0.8)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
   }
 
-  /* Backward compat aliases — plain CSS, no @apply */
+  /* ============================================================
+     Light mode: card shadows mang tính "vật lý" hơn
+     — soft, multi-layer, ấm
+     Dark mode: shadows sâu hơn, lạnh hơn (tự động qua variables)
+     ============================================================ */
   .shadow-card {
     box-shadow:
-      0 1px 2px hsl(228 32% 4% / 0.06),
-      0 3px 8px hsl(228 32% 4% / 0.07),
-      inset 0 1px 0 hsl(0 0% 100% / 0.07);
+      0 1px 2px  hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      0 2px 8px  hsl(var(--shadow-color) / var(--shadow-alpha-sm)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
   }
   .shadow-card-md {
     box-shadow:
-      0 2px 4px  hsl(228 32% 4% / 0.06),
-      0 8px 20px hsl(228 32% 4% / 0.1),
-      0 24px 48px hsl(228 32% 4% / 0.08),
-      inset 0 1px 0 hsl(0 0% 100% / 0.07);
+      0 2px 4px   hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      0 8px 20px  hsl(var(--shadow-color) / var(--shadow-alpha-sm)),
+      0 20px 44px hsl(var(--shadow-color) / calc(var(--shadow-alpha-sm) * 0.65)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
   }
   .shadow-card-lg {
     box-shadow:
-      0 4px 8px   hsl(228 32% 4% / 0.08),
-      0 16px 40px hsl(228 32% 4% / 0.14),
-      0 40px 80px hsl(228 32% 4% / 0.1),
-      inset 0 1px 0 hsl(0 0% 100% / 0.08);
+      0 4px 8px   hsl(var(--shadow-color) / var(--shadow-alpha-sm)),
+      0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha-md)),
+      0 40px 80px hsl(var(--shadow-color) / calc(var(--shadow-alpha-md) * 0.6)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
   }
-  .shadow-auto {
-    box-shadow:
-      0 1px 2px hsl(228 32% 4% / 0.06),
-      0 3px 8px hsl(228 32% 4% / 0.07),
-      inset 0 1px 0 hsl(0 0% 100% / 0.07);
-  }
-  .shadow-wave {
-    box-shadow:
-      0 0 24px hsl(var(--wave-1) / 0.28),
-      0 0 56px hsl(var(--wave-2) / 0.12),
-      0 0 80px hsl(var(--wave-3) / 0.06);
-  }
+  .shadow-auto { box-shadow: 0 1px 2px hsl(var(--shadow-color) / var(--shadow-alpha-xs)), 0 2px 8px hsl(var(--shadow-color) / var(--shadow-alpha-sm)), inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha)); }
+  .shadow-wave { box-shadow: 0 0 24px hsl(var(--wave-1) / 0.28), 0 0 56px hsl(var(--wave-2) / 0.12), 0 0 80px hsl(var(--wave-3) / 0.06); }
 }
 
 /* ================================================================
@@ -825,8 +1156,8 @@
   }
   .gradient-brand-soft {
     background: linear-gradient(135deg,
-      hsl(var(--brand-500) / 0.14) 0%,
-      hsl(var(--wave-2) / 0.08) 100%
+      hsl(var(--brand-500) / 0.12) 0%,
+      hsl(var(--wave-2) / 0.06) 100%
     );
   }
 
@@ -869,26 +1200,26 @@
     background-color: hsl(var(--background));
     background-image:
       radial-gradient(ellipse 90% 70% at 15% 15%,
-        hsl(var(--brand-500) / 0.09) 0%, transparent 65%),
+        hsl(var(--brand-400) / 0.08) 0%, transparent 65%),
       radial-gradient(ellipse 70% 60% at 85% 82%,
-        hsl(var(--wave-2) / 0.07) 0%, transparent 65%),
+        hsl(var(--brand-200) / 0.06) 0%, transparent 65%),
       radial-gradient(ellipse 50% 45% at 52% 5%,
-        hsl(var(--wave-3) / 0.05) 0%, transparent 55%),
+        hsl(var(--brand-100) / 0.04) 0%, transparent 55%),
       radial-gradient(ellipse 40% 35% at 95% 5%,
-        hsl(var(--wave-4) / 0.04) 0%, transparent 50%);
+        hsl(var(--brand-25) / 0.03) 0%, transparent 50%);
   }
 
   .bg-mesh-deep {
     background-color: hsl(var(--background));
     background-image:
       radial-gradient(ellipse 110% 90% at 8% 5%,
-        hsl(255 75% 62% / 0.14) 0%, transparent 58%),
+        hsl(var(--brand-500) / 0.14) 0%, transparent 58%),
       radial-gradient(ellipse 90% 80% at 92% 92%,
-        hsl(318 72% 62% / 0.09) 0%, transparent 58%),
+        hsl(var(--wave-2) / 0.09) 0%, transparent 58%),
       radial-gradient(ellipse 70% 70% at 50% 50%,
-        hsl(186 88% 58% / 0.04) 0%, transparent 52%),
+        hsl(var(--wave-3) / 0.04) 0%, transparent 52%),
       radial-gradient(ellipse 50% 40% at 60% 10%,
-        hsl(255 80% 70% / 0.06) 0%, transparent 48%);
+        hsl(var(--brand-500) / 0.06) 0%, transparent 48%);
   }
 
   .bg-mesh-warm {
@@ -897,7 +1228,7 @@
       radial-gradient(ellipse 80% 60% at 20% 80%,
         hsl(var(--wave-4) / 0.08) 0%, transparent 60%),
       radial-gradient(ellipse 70% 55% at 80% 15%,
-        hsl(var(--wave-2) / 0.07) 0%, transparent 60%);
+        hsl(var(--wave-2) / 0.06) 0%, transparent 60%);
   }
 
   /* Shimmer skeleton */
@@ -915,23 +1246,19 @@
   }
 
   /* Overlay gradients */
-  .overlay-bottom {
-    background: linear-gradient(to top, hsl(var(--background)) 0%, transparent 100%);
-  }
-  .overlay-top {
-    background: linear-gradient(to bottom, hsl(var(--background)) 0%, transparent 100%);
-  }
+  .overlay-bottom { background: linear-gradient(to top, hsl(var(--background)) 0%, transparent 100%); }
+  .overlay-top    { background: linear-gradient(to bottom, hsl(var(--background)) 0%, transparent 100%); }
   .overlay-album {
     background: linear-gradient(to top,
-      hsl(228 32% 4% / 0.95) 0%,
-      hsl(228 32% 4% / 0.6) 40%,
+      hsl(228 36% 4% / 0.95) 0%,
+      hsl(228 36% 4% / 0.6) 40%,
       transparent 100%
     );
   }
   .overlay-vignette {
     background: radial-gradient(ellipse at center,
       transparent 55%,
-      hsl(228 32% 4% / 0.5) 100%
+      hsl(228 36% 4% / 0.5) 100%
     );
   }
 }
@@ -941,7 +1268,6 @@
    ================================================================ */
 @layer utilities {
 
-  /* Equalizer Bars */
   .eq-bars {
     display: flex;
     align-items: flex-end;
@@ -954,6 +1280,7 @@
     transform-origin: bottom center;
     background: hsl(var(--primary));
     will-change: height;
+    transition: none; /* Override global transition */
   }
   .eq-bar:nth-child(1) { animation: var(--animate-bar-1); }
   .eq-bar:nth-child(2) { animation: var(--animate-bar-2); }
@@ -981,19 +1308,15 @@
   .eq-bars--lg .eq-bar { width: 4px; }
 
   /* Waveform */
-  .waveform {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    height: 24px;
-  }
+  .waveform { display: flex; align-items: center; gap: 2px; height: 24px; }
   .waveform-line {
     flex: 1;
-    background: hsl(var(--primary) / 0.58);
+    background: hsl(var(--primary) / 0.55);
     border-radius: var(--radius-pill);
     transform-origin: center;
     animation: var(--animate-wave-pulse);
     will-change: transform, opacity;
+    transition: none;
   }
   .waveform-line:nth-child(odd)  { animation-delay: -1.1s;  }
   .waveform-line:nth-child(3n)   { animation-delay: -0.55s; }
@@ -1012,6 +1335,7 @@
     background: hsl(var(--success));
     animation: var(--animate-vu-meter);
     transform-origin: bottom;
+    transition: none;
   }
   .vu-bar:nth-child(n+7)  { background: hsl(var(--warning)); }
   .vu-bar:nth-child(n+10) { background: hsl(var(--error)); }
@@ -1040,6 +1364,7 @@
       0 0 0 2px hsl(0 0% 0% / 0.45),
       0 4px 24px hsl(0 0% 0% / 0.4),
       inset 0 0 60px hsl(0 0% 0% / 0.28);
+    transition: none;
   }
   .vinyl-disc::after {
     content: "";
@@ -1058,6 +1383,27 @@
   }
   .vinyl-disc.paused { animation-play-state: paused; }
   .vinyl-disc--slow  { animation: var(--animate-vinyl-slow); }
+  .sw-animate-eq {
+      animation: sw-eq 0.6s ease-in-out infinite alternate;
+    }
+    @keyframes sw-eq {
+      0% { height: 20%; }
+      100% { height: 100%; }
+    }
+
+    /* Animation cho Waveform (co giãn từ tâm - cinematic) */
+    .sw-animate-wave {
+      animation: sw-wave 1.2s ease-in-out infinite;
+    }
+    @keyframes sw-wave {
+      0%, 100% { transform: scaleY(1); opacity: 1; }
+      50% { transform: scaleY(0.3); opacity: 0.5; }
+    }
+
+    /* Utility để dừng animation */
+    .paused {
+      animation-play-state: paused !important;
+    }
 }
 
 /* ================================================================
@@ -1095,7 +1441,7 @@
     height: 100%;
     border-radius: var(--radius-pill);
     background: linear-gradient(90deg,
-      hsl(var(--brand-500)),
+      hsl(var(--primary)),
       hsl(var(--wave-1)) 60%,
       hsl(var(--wave-2))
     );
@@ -1158,7 +1504,7 @@
 }
 
 /* ================================================================
-   11. INTERACTIVE STATES & MICRO-INTERACTIONS
+   11. INTERACTIVE STATES & MICRO-INTERACTIONS — REFACTORED v3
    ================================================================ */
 @layer utilities {
 
@@ -1179,6 +1525,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
+    background: hsl(var(--primary));
     transition:
       color      var(--duration-fast) var(--ease-smooth),
       background var(--duration-normal) var(--ease-smooth),
@@ -1186,37 +1533,57 @@
       box-shadow var(--duration-normal) var(--ease-smooth);
     will-change: transform;
   }
-  .control-btn:hover {
-    background: hsl(var(--muted));
-    transform: scale(1.1);
-  }
+  .control-btn:hover  { transform: scale(1.1); }
   .control-btn:active { transform: scale(0.92); }
   .control-btn:focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 3px;
   }
 
+  /* ============================================================
+     .control-btn--primary — REFACTORED
+     Light: gradient + soft brand shadow
+     Dark: gradient + luminous glow (auto via --brand-glow)
+     ============================================================ */
   .control-btn--primary {
-    background: linear-gradient(135deg,
-      hsl(var(--brand-500)),
-      hsl(var(--wave-1)) 60%,
-      hsl(var(--wave-2))
-    );
+    background: hsl(var(--brand-glow));
     color: hsl(var(--primary-foreground));
     box-shadow:
-      0 4px 14px hsl(var(--brand-glow) / 0.35),
-      inset 0 1px 0 hsl(0 0% 100% / 0.15);
+      0 4px 14px hsl(var(--brand-glow) / 0.32),
+      0 1px 4px  hsl(var(--brand-glow) / 0.18),
+      inset 0 1px 0 hsl(0 0% 100% / 0.18);
+    transition:
+      transform  var(--duration-fast) var(--ease-spring),
+      box-shadow var(--duration-normal) var(--ease-smooth),
+      filter     var(--duration-fast) var(--ease-smooth);
   }
   .control-btn--primary:hover {
     box-shadow:
-      0 8px 24px hsl(var(--brand-glow) / 0.5),
-      inset 0 1px 0 hsl(0 0% 100% / 0.15);
-    transform: scale(1.06);
-    filter: brightness(1.06);
+      0 8px 28px hsl(var(--brand-glow) / 0.48),
+      0 2px 8px  hsl(var(--brand-glow) / 0.24),
+      inset 0 1px 0 hsl(0 0% 100% / 0.18);
+    transform: scale(1.07);
+    filter: brightness(1.08);
   }
   .control-btn--primary:active {
-    transform: scale(0.96);
-    filter: brightness(0.95);
+    transform: scale(0.95);
+    filter: brightness(0.94);
+    box-shadow:
+      0 2px 8px hsl(var(--brand-glow) / 0.22),
+      inset 0 1px 0 hsl(0 0% 100% / 0.14);
+  }
+  /* Dark: amplify glow */
+  .dark .control-btn--primary {
+    box-shadow:
+      0 4px 18px hsl(var(--brand-glow) / 0.40),
+      0 0 40px   hsl(var(--brand-glow) / 0.15),
+      inset 0 1px 0 hsl(0 0% 100% / 0.16);
+  }
+  .dark .control-btn--primary:hover {
+    box-shadow:
+      0 8px 30px hsl(var(--brand-glow) / 0.55),
+      0 0 60px   hsl(var(--brand-glow) / 0.22),
+      inset 0 1px 0 hsl(0 0% 100% / 0.16);
   }
 
   .control-btn--ghost { color: hsl(var(--muted-foreground)); }
@@ -1224,30 +1591,45 @@
     color: hsl(var(--foreground));
     background: hsl(var(--muted) / 0.7);
   }
-
   .control-btn--active { color: hsl(var(--primary)) !important; }
   .control-btn--active:hover { background: hsl(var(--primary) / 0.1); }
 
-  /* Track Row */
+  /* ============================================================
+     .track-row — REFACTORED v3
+     Active state: skin-aware gradient accent bar + glow
+     Light: soft primary tint bg
+     Dark: deeper tint + subtle glow
+     ============================================================ */
   .track-row {
     position: relative;
     border-radius: var(--radius-xl);
     padding: 0.5rem 0.75rem;
+    cursor: pointer;
     transition:
       background var(--duration-fast) var(--ease-smooth),
       box-shadow var(--duration-fast) var(--ease-smooth);
-    cursor: pointer;
   }
   .track-row:hover {
     background: hsl(var(--muted) / 0.55);
     box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04);
   }
+
+  /* Active: skin-aware — dùng --primary tự động từ skin */
   .track-row.active {
-    background: hsl(var(--primary) / 0.08);
+    background: hsl(var(--primary) / 0.07);
     box-shadow:
-      inset 0 1px 0 hsl(var(--primary) / 0.1),
-      inset 0 -1px 0 hsl(var(--primary) / 0.05);
+      inset 0 1px 0 hsl(var(--primary) / 0.10),
+      inset 0 -1px 0 hsl(var(--primary) / 0.04);
   }
+  .dark .track-row.active {
+    background: hsl(var(--primary) / 0.10);
+    box-shadow:
+      inset 0 1px 0 hsl(var(--primary) / 0.12),
+      inset 0 -1px 0 hsl(var(--primary) / 0.05),
+      0 0 20px hsl(var(--brand-glow) / 0.06);  /* Subtle glow halo dark only */
+  }
+
+  /* Accent bar — gradient từ wave-1 → wave-2 (skin-aware) */
   .track-row.active::before {
     content: "";
     position: absolute;
@@ -1255,14 +1637,20 @@
     top: 50%;
     transform: translateY(-50%);
     width: 3px;
-    height: 56%;
+    height: 52%;
     border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
-    background: linear-gradient(to bottom, hsl(var(--wave-1)), hsl(var(--wave-2)));
-    box-shadow: 0 0 8px hsl(var(--brand-glow) / 0.4);
+    background: linear-gradient(to bottom,
+      hsl(var(--wave-1)),
+      hsl(var(--wave-2))
+    );
+    box-shadow:
+      0 0 6px hsl(var(--brand-glow) / 0.35),
+      0 0 12px hsl(var(--brand-glow) / 0.15);
+    transition: height var(--duration-slow) var(--ease-spring);
   }
   .track-row:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.6);
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.55);
   }
 
   /* Album Card */
@@ -1279,8 +1667,8 @@
   .album-card:hover {
     transform: translateY(-5px) scale(1.015);
     box-shadow:
-      0 16px 40px hsl(228 32% 4% / 0.22),
-      0 4px 12px  hsl(228 32% 4% / 0.12),
+      0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha-lg)),
+      0 4px 12px  hsl(var(--shadow-color) / var(--shadow-alpha-sm)),
       0 0 0 1px   hsl(var(--border) / 0.4);
   }
   .album-card:active { transform: translateY(-2px) scale(1.005); }
@@ -1291,7 +1679,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: hsl(228 32% 4% / 0.52);
+    background: hsl(228 36% 4% / 0.52);
     opacity: 0;
     transition: opacity 0.22s var(--ease-smooth);
     backdrop-filter: blur(3px);
@@ -1316,8 +1704,8 @@
   .like-btn:hover  { transform: scale(1.22); }
   .like-btn:active { transform: scale(0.88); }
   .like-btn.liked {
-    color: hsl(3 88% 62%);
-    filter: drop-shadow(0 0 6px hsl(3 88% 62% / 0.45));
+    color: hsl(4 86% 62%);
+    filter: drop-shadow(0 0 6px hsl(4 86% 62% / 0.45));
     animation: var(--animate-pop-in);
   }
 
@@ -1369,9 +1757,9 @@
     color: hsl(var(--foreground));
   }
   .chip.active {
-    background: hsl(var(--primary) / 0.15);
+    background: hsl(var(--primary) / 0.14);
     color: hsl(var(--primary));
-    border-color: hsl(var(--primary) / 0.3);
+    border-color: hsl(var(--primary) / 0.28);
   }
 }
 
@@ -1463,21 +1851,18 @@
     left: 0;
     right: 0;
     z-index: 50;
-    /* glass-heavy inline */
-    background: hsl(var(--background) / 0.82);
-    backdrop-filter: blur(52px) saturate(210%) brightness(0.96);
-    -webkit-backdrop-filter: blur(52px) saturate(210%) brightness(0.96);
-    border: 1px solid hsl(var(--border) / 0.28);
+    /* glass-heavy values baked in — consistent with --glass-heavy */
+    background: hsl(var(--background) / var(--glass-heavy-alpha));
+    backdrop-filter: var(--glass-blur-heavy);
+    -webkit-backdrop-filter: var(--glass-blur-heavy);
+    border-top: 1px solid hsl(var(--border) / calc(var(--glass-border-alpha) * 0.45));
     box-shadow:
-      inset 0 1px 0 hsl(0 0% 100% / 0.06),
-      inset 0 -1px 0 hsl(0 0% 0% / 0.06);
-    border-top: 1px solid hsl(var(--border) / 0.35);
+      0 -1px 0 hsl(0 0% 100% / 0.05),
+      0 -8px 32px hsl(var(--shadow-color) / var(--shadow-alpha-md));
     padding-bottom: env(safe-area-inset-bottom, 0px);
     padding-left:   env(safe-area-inset-left, 0px);
     padding-right:  env(safe-area-inset-right, 0px);
-    box-shadow:
-      0 -1px 0 hsl(0 0% 100% / 0.05),
-      0 -8px 32px hsl(228 32% 4% / 0.18);
+    transition: var(--transition-glass);
   }
 
   /* Top Nav */
@@ -1485,13 +1870,12 @@
     position: sticky;
     top: 0;
     z-index: 40;
-    /* glass-ultra inline */
-    background: hsl(var(--background) / 0.92);
-    backdrop-filter: blur(72px) saturate(250%) brightness(0.94);
-    -webkit-backdrop-filter: blur(72px) saturate(250%) brightness(0.94);
-    border: 1px solid hsl(var(--border) / 0.2);
-    border-bottom: 1px solid hsl(var(--border) / 0.3);
+    background: hsl(var(--background) / var(--glass-ultra-alpha));
+    backdrop-filter: var(--glass-blur-ultra);
+    -webkit-backdrop-filter: var(--glass-blur-ultra);
+    border-bottom: 1px solid hsl(var(--border) / calc(var(--glass-border-alpha) * 0.4));
     box-shadow: 0 1px 0 hsl(0 0% 100% / 0.04);
+    transition: var(--transition-glass);
   }
 
   /* Sidebar */
@@ -1500,12 +1884,14 @@
     top: 0;
     height: 100vh;
     overflow-y: auto;
-    /* no-scrollbar inline */
     -ms-overflow-style: none;
     scrollbar-width: none;
     border-right: 1px solid hsl(var(--sidebar-border));
     background: hsl(var(--sidebar-background));
     box-shadow: 1px 0 0 hsl(var(--sidebar-border));
+    transition:
+      background var(--duration-theme) var(--ease-theme),
+      border-color var(--duration-theme) var(--ease-theme);
   }
   .sidebar-nav::-webkit-scrollbar { display: none; }
 
@@ -1562,65 +1948,28 @@
     letter-spacing: -0.026em;
     font-weight: 600;
   }
+  
+  .text-brand { color: hsl(var(--brand-glow)); }
+  .text-wave-1  { color: hsl(var(--wave-1)); }
+  .text-wave-2  { color: hsl(var(--wave-2)); }
+  .text-wave-3  { color: hsl(var(--wave-3)); }
+  .text-wave-4  { color: hsl(var(--wave-4)); }
+  .text-wave-5  { color: hsl(var(--wave-5)); }
+  .text-wave-6  { color: hsl(var(--wave-6)); }
+  .text-wave-7  { color: hsl(var(--wave-7)); }
+  .text-wave-8  { color: hsl(var(--wave-8)); }
+  .text-wave-9  { color: hsl(var(--wave-9)); }
+  .text-wave-10 { color: hsl(var(--wave-10)); }
+  .text-section-title   { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
+  .text-section-subtitle { font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; color: hsl(var(--muted-foreground)); }
 
-  .text-section-title {
-    font-family: var(--font-display);
-    font-size: 1.25rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-  }
-  .text-section-subtitle {
-    font-family: var(--font-body);
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .text-track-title {
-    font-family: var(--font-body);
-    font-size: 0.875rem;
-    font-weight: 500;
-    line-height: 1.25;
-    letter-spacing: -0.005em;
-  }
-  .text-track-meta {
-    font-family: var(--font-body);
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-    line-height: 1.375;
-  }
-  .text-duration {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-variant-numeric: tabular-nums;
-    color: hsl(var(--muted-foreground));
-    letter-spacing: 0.02em;
-  }
-  .text-counter {
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.01em;
-  }
-  .text-stats {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-variant-numeric: tabular-nums;
-  }
-  .text-label {
-    font-family: var(--font-body);
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-  .text-overline {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: hsl(var(--muted-foreground));
-  }
+  .text-track-title  { font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; line-height: 1.25; letter-spacing: -0.005em; }
+  .text-track-meta   { font-family: var(--font-body); font-size: 0.75rem; color: hsl(var(--muted-foreground)); line-height: 1.375; }
+  .text-duration     { font-family: var(--font-mono); font-size: 0.75rem; font-variant-numeric: tabular-nums; color: hsl(var(--muted-foreground)); letter-spacing: 0.02em; }
+  .text-counter      { font-family: var(--font-mono); font-size: 0.875rem; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+  .text-stats        { font-family: var(--font-mono); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+  .text-label        { font-family: var(--font-body); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; }
+  .text-overline     { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: hsl(var(--muted-foreground)); }
 }
 
 /* ================================================================
@@ -1641,21 +1990,22 @@
   }
 
   .badge-brand {
-    background: hsl(var(--brand-100));
-    color: hsl(var(--brand-700));
-    border: 1px solid hsl(var(--brand-200) / 0.5);
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
   }
   .dark .badge-brand {
-    background: hsl(var(--brand-50));
-    color: hsl(var(--brand-400));
-    border-color: hsl(var(--brand-100) / 0.4);
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
   }
 
   .badge-playing {
-    background: hsl(var(--primary) / 0.12);
+    background: hsl(var(--primary) / 0.11);
     color: hsl(var(--primary));
-    border: 1px solid hsl(var(--primary) / 0.22);
-    box-shadow: 0 0 8px hsl(var(--brand-glow) / 0.18);
+    border: 1px solid hsl(var(--primary) / 0.20);
+    box-shadow: 0 0 8px hsl(var(--brand-glow) / 0.16);
+  }
+  .dark .badge-playing {
+    box-shadow: 0 0 12px hsl(var(--brand-glow) / 0.24);
   }
 
   .badge-new {
@@ -1746,33 +2096,21 @@
     animation: shimmer 1.8s linear infinite;
   }
 
-  .skeleton-text    { height: 0.8125rem; border-radius: var(--radius-pill); }
-  .skeleton-title   { height: 1.25rem;   border-radius: var(--radius-pill); }
-  .skeleton-avatar  { border-radius: 50%; }
-  .skeleton-cover   { border-radius: var(--radius-xl); aspect-ratio: 1; }
-  .skeleton-pill    { height: 1.75rem; border-radius: var(--radius-pill); }
-  .skeleton-btn     { height: 2.25rem; border-radius: var(--radius-lg); }
-  .skeleton-bar     { height: 3px; border-radius: var(--radius-pill); }
+  .skeleton-text   { height: 0.8125rem; border-radius: var(--radius-pill); }
+  .skeleton-title  { height: 1.25rem;   border-radius: var(--radius-pill); }
+  .skeleton-avatar { border-radius: 50%; }
+  .skeleton-cover  { border-radius: var(--radius-xl); aspect-ratio: 1; }
+  .skeleton-pill   { height: 1.75rem; border-radius: var(--radius-pill); }
+  .skeleton-btn    { height: 2.25rem; border-radius: var(--radius-lg); }
+  .skeleton-bar    { height: 3px; border-radius: var(--radius-pill); }
 
   /* Spinner */
-  .spinner {
-    width: 1.5rem;
-    height: 1.5rem;
-    border: 2px solid hsl(var(--muted));
-    border-top-color: hsl(var(--primary));
-    border-radius: 50%;
-    animation: var(--animate-spinner);
-    will-change: transform;
-  }
-  .spinner-xs { width: 0.875rem; height: 0.875rem; border-width: 1.5px; }
-  .spinner-sm { width: 1.125rem; height: 1.125rem; border-width: 1.5px; }
-  .spinner-lg { width: 2rem;     height: 2rem;     border-width: 2.5px; }
-  .spinner-xl { width: 2.75rem;  height: 2.75rem;  border-width: 3px;   }
-
-  .spinner--brand {
-    border-top-color: hsl(var(--brand-500));
-    border-right-color: hsl(var(--wave-2) / 0.3);
-  }
+  .spinner      { width: 1.5rem;    height: 1.5rem;    border: 2px solid hsl(var(--muted)); border-top-color: hsl(var(--primary)); border-radius: 50%; animation: var(--animate-spinner); will-change: transform; }
+  .spinner-xs   { width: 0.875rem; height: 0.875rem; border-width: 1.5px; }
+  .spinner-sm   { width: 1.125rem; height: 1.125rem; border-width: 1.5px; }
+  .spinner-lg   { width: 2rem;     height: 2rem;     border-width: 2.5px; }
+  .spinner-xl   { width: 2.75rem;  height: 2.75rem;  border-width: 3px;   }
+  .spinner--brand { border-top-color: hsl(var(--brand-500)); border-right-color: hsl(var(--wave-2) / 0.3); }
 
   .spinner-dots { display: flex; gap: 4px; align-items: center; }
   .spinner-dots span {
@@ -1792,18 +2130,18 @@
     gap: 0.75rem;
     padding: 1rem;
     border-radius: var(--radius-2xl);
-    /* glass-frosted inline */
-    background: hsl(var(--card) / 0.42);
-    backdrop-filter: blur(28px) saturate(175%) brightness(1.04);
-    -webkit-backdrop-filter: blur(28px) saturate(175%) brightness(1.04);
-    border: 1px solid hsl(var(--border) / 0.38);
+    background: hsl(var(--card) / var(--glass-frosted-alpha));
+    backdrop-filter: var(--glass-blur-mid);
+    -webkit-backdrop-filter: var(--glass-blur-mid);
+    border: 1px solid hsl(var(--border) / calc(var(--glass-border-alpha) * 0.7));
     box-shadow:
-      0 2px 4px  hsl(228 32% 4% / 0.06),
-      0 8px 20px hsl(228 32% 4% / 0.1),
-      0 24px 48px hsl(228 32% 4% / 0.08),
-      inset 0 1px 0 hsl(0 0% 100% / 0.07);
+      0 2px 4px   hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      0 8px 24px  hsl(var(--shadow-color) / var(--shadow-alpha-md)),
+      0 24px 48px hsl(var(--shadow-color) / calc(var(--shadow-alpha-md) * 0.6)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
     animation: var(--animate-slide-in-right);
     max-width: 360px;
+    transition: var(--transition-glass);
   }
   .toast--success { border-left: 3px solid hsl(var(--success)); }
   .toast--error   { border-left: 3px solid hsl(var(--error)); }
@@ -1848,14 +2186,24 @@
     animation: var(--animate-float-slow);
     will-change: transform;
   }
-  .orb-float--brand { background: hsl(var(--brand-500)); }
-  .orb-float--wave  { background: hsl(var(--wave-2)); }
-  .orb-float--cyan  { background: hsl(var(--wave-3)); }
-  .orb-float--gold  { background: hsl(var(--wave-4)); }
+  
+
+  .orb-float--brand { background: hsl(var(--brand-glow)); }
+  .orb-float--wave-1  { background: hsl(var(--wave-1)); }
+  .orb-float--wave-2  { background: hsl(var(--wave-2)); }
+  .orb-float--wave-3  { background: hsl(var(--wave-3)); }
+  .orb-float--wave-4  { background: hsl(var(--wave-4)); }
+  .orb-float--wave-5  { background: hsl(var(--wave-5)); }
+  .orb-float--wave-6  { background: hsl(var(--wave-6)); }
+  .orb-float--wave-7  { background: hsl(var(--wave-7)); }
+  .orb-float--wave-8  { background: hsl(var(--wave-8)); }
+  .orb-float--wave-9  { background: hsl(var(--wave-9)); }
+  .orb-float--wave-10 { background: hsl(var(--wave-10)); }
+
   .orb-float--slow  { animation: var(--animate-float-slower); }
   .orb-float--fast  { animation: var(--animate-float-fast); }
   .orb-float--sm    { filter: blur(40px); opacity: 0.18; }
-  .orb-float--lg    { filter: blur(100px); opacity: 0.1; }
+  .orb-float--lg    { filter: blur(100px); opacity: 0.10; }
 
   /* Aurora */
   .aurora-band {
@@ -1898,6 +2246,10 @@
   .animate-slide-up    { animation: var(--animate-slide-in-up); }
   .animate-slide-down  { animation: var(--animate-slide-out-down); }
   .animate-text-reveal { animation: var(--animate-text-reveal); }
+  .mask-fade-edge {
+    mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
+  }
 
   /* Stagger delays */
   .delay-0   { animation-delay:   0ms; }
@@ -1933,6 +2285,7 @@
   .transition-bounce    { transition: all 0.35s var(--ease-overshoot); }
   .transition-fast      { transition: all var(--duration-fast) var(--ease-smooth); }
   .transition-colors    { transition: var(--transition-color); }
+  .transition-glass     { transition: var(--transition-glass); }
   .transition-opacity   { transition: opacity var(--duration-normal) var(--ease-smooth); }
   .transition-transform { transition: transform var(--duration-normal) var(--ease-smooth); }
   .transition-none      { transition: none !important; }
@@ -1972,24 +2325,9 @@
    ================================================================ */
 @layer utilities {
 
-  .truncate-1 {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    display: block;
-  }
-  .truncate-2 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-  .truncate-3 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-  }
+  .truncate-1 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
+  .truncate-2 { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .truncate-3 { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 
   .img-cover   { width: 100%; height: 100%; object-fit: cover;   object-position: center; }
   .img-contain { width: 100%; height: 100%; object-fit: contain; }
@@ -2018,16 +2356,11 @@
     box-shadow: 0 0 8px hsl(var(--primary) / 0.12);
   }
 
-  .icon-inline {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: middle;
-    flex-shrink: 0;
-  }
+  .icon-inline   { display: inline-flex; align-items: center; vertical-align: middle; flex-shrink: 0; }
   .dot-sep::before { content: "·"; margin: 0 0.3em; opacity: 0.4; }
 
   .text-highlight {
-    background: hsl(var(--primary) / 0.14);
+    background: hsl(var(--primary) / 0.13);
     color: hsl(var(--primary));
     border-radius: var(--radius-xs);
     padding: 0.05em 0.25em;
@@ -2056,7 +2389,7 @@
 }
 
 /* ================================================================
-   20. COMPOUND COMPONENT PATTERNS
+   20. COMPOUND COMPONENT PATTERNS — REFACTORED v3
    ================================================================ */
 @layer utilities {
 
@@ -2066,18 +2399,23 @@
     overflow: hidden;
     background: hsl(var(--card));
     border-radius: var(--radius-xl);
-    border: 1px solid hsl(var(--border));
-    box-shadow: 0 1px 2px hsl(228 32% 4% / 0.05);
+    /* Light: very subtle border hint; Dark: practically invisible */
+    border: 1px solid hsl(var(--border) / 0.5);
+    /* Light: soft multi-layer shadow for depth; Dark: deeper */
+    box-shadow:
+      0 1px 2px  hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      0 2px 8px  hsl(var(--shadow-color) / calc(var(--shadow-alpha-xs) * 0.6));
     transition:
       box-shadow   0.28s var(--ease-smooth),
-      border-color 0.22s var(--ease-smooth);
+      border-color 0.22s var(--ease-smooth),
+      background   var(--duration-theme) var(--ease-theme);
   }
   .card-base--hover:hover {
-    border-color: hsl(var(--border-strong));
+    border-color: hsl(var(--border-strong) / 0.7);
     box-shadow:
-      0 4px 16px hsl(228 32% 4% / 0.1),
-      0 1px 4px  hsl(228 32% 4% / 0.06),
-      inset 0 1px 0 hsl(0 0% 100% / 0.06);
+      0 4px 16px hsl(var(--shadow-color) / var(--shadow-alpha-md)),
+      0 1px 4px  hsl(var(--shadow-color) / var(--shadow-alpha-xs)),
+      inset 0 1px 0 hsl(0 0% 100% / var(--glass-inset-alpha));
   }
 
   /* Input Base */
@@ -2093,23 +2431,22 @@
     transition:
       border-color var(--duration-fast) var(--ease-smooth),
       box-shadow   var(--duration-fast) var(--ease-smooth),
-      background   var(--duration-fast) var(--ease-smooth);
+      background   var(--duration-theme) var(--ease-theme);
     outline: none;
   }
-  .input-base::placeholder { color: hsl(var(--muted-foreground) / 0.65); }
+  .input-base::placeholder { color: hsl(var(--muted-foreground) / 0.6); }
   .input-base:hover  { border-color: hsl(var(--border-strong)); }
   .input-base:focus  {
     border-color: hsl(var(--ring));
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.16);
     background: hsl(var(--card));
   }
 
-  /* ----------------------------------------------------------------
-     BUTTON SYSTEM — All @apply replaced with plain CSS
-     All btn-* variants share the same base properties inline.
-  ---------------------------------------------------------------- */
+  /* ============================================================
+     BUTTON SYSTEM — Refactored v3
+     .btn-primary: skin-aware gradient + mode-aware glow
+     ============================================================ */
 
-  /* Shared btn foundation (DRY via CSS custom properties) */
   .btn-base,
   .btn-primary,
   .btn-secondary,
@@ -2172,27 +2509,51 @@
     outline-offset: 3px;
   }
 
-  /* btn-base is the foundation — no extra styles */
-
-  /* Primary */
+  /* ============================================================
+     .btn-primary — REFACTORED v3
+     Skin-aware gradient, mode-aware glow intensity.
+     Light: crisp shadow, moderate glow.
+     Dark: amplified glow, luminous presence.
+     ============================================================ */
   .btn-primary {
-    background: linear-gradient(135deg,
-      hsl(var(--brand-500)),
-      hsl(var(--wave-1)) 60%,
-      hsl(var(--wave-2))
-    );
+    background: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
     border-color: transparent;
     box-shadow:
-      0 2px 10px hsl(var(--brand-glow) / 0.28),
-      inset 0 1px 0 hsl(0 0% 100% / 0.14);
+      0 1px 2px  hsl(var(--brand-glow) / 0.20),
+      0 3px 12px hsl(var(--brand-glow) / 0.28),
+      inset 0 1px 0 hsl(0 0% 100% / 0.16);
   }
   .btn-primary:hover {
     box-shadow:
-      0 4px 20px hsl(var(--brand-glow) / 0.44),
+      0 2px 4px  hsl(var(--brand-glow) / 0.24),
+      0 6px 22px hsl(var(--brand-glow) / 0.42),
+      inset 0 1px 0 hsl(0 0% 100% / 0.16);
+    transform: translateY(-1.5px) scale(1.015);
+    filter: brightness(1.07);
+  }
+  .btn-primary:active {
+    transform: translateY(0) scale(0.97);
+    filter: brightness(0.95);
+    box-shadow:
+      0 1px 4px hsl(var(--brand-glow) / 0.18),
+      inset 0 1px 0 hsl(0 0% 100% / 0.12);
+  }
+
+  /* Dark: luminous glow amplified */
+  .dark .btn-primary {
+    box-shadow:
+      0 1px 2px  hsl(var(--brand-glow) / 0.28),
+      0 4px 16px hsl(var(--brand-glow) / 0.36),
+      0 0 40px   hsl(var(--brand-glow) / 0.14),
       inset 0 1px 0 hsl(0 0% 100% / 0.14);
-    transform: translateY(-1px) scale(1.01);
-    filter: brightness(1.06);
+  }
+  .dark .btn-primary:hover {
+    box-shadow:
+      0 2px 4px  hsl(var(--brand-glow) / 0.32),
+      0 8px 28px hsl(var(--brand-glow) / 0.50),
+      0 0 60px   hsl(var(--brand-glow) / 0.20),
+      inset 0 1px 0 hsl(0 0% 100% / 0.14);
   }
 
   /* Secondary */
@@ -2218,16 +2579,20 @@
     color: hsl(var(--foreground));
   }
 
-  /* Outline */
+  /* Outline — skin-aware border & text */
   .btn-outline {
     background: transparent;
     color: hsl(var(--primary));
-    border-color: hsl(var(--primary) / 0.45);
+    border-color: hsl(var(--primary) / 0.40);
   }
   .btn-outline:hover {
-    background: hsl(var(--primary) / 0.08);
-    border-color: hsl(var(--primary) / 0.7);
+    background: hsl(var(--primary) / 0.07);
+    border-color: hsl(var(--primary) / 0.65);
     transform: translateY(-1px);
+  }
+  .dark .btn-outline:hover {
+    background: hsl(var(--primary) / 0.10);
+    box-shadow: 0 0 14px hsl(var(--brand-glow) / 0.14);
   }
 
   /* Danger */
@@ -2242,30 +2607,10 @@
     border-color: hsl(var(--error));
   }
 
-  /* Size modifiers — override padding / font-size / radius only */
-  .btn-sm {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.8125rem;
-    border-radius: var(--radius-md);
-  }
-  .btn-lg {
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
-    border-radius: var(--radius-xl);
-  }
-  .btn-xl {
-    padding: 0.9375rem 2rem;
-    font-size: 1.0625rem;
-    border-radius: var(--radius-2xl);
-  }
-  .btn-icon {
-    padding: 0.5rem;
-    border-radius: var(--radius-lg);
-    aspect-ratio: 1 / 1;
-  }
-  .btn-icon-sm {
-    padding: 0.375rem;
-    border-radius: var(--radius-md);
-    aspect-ratio: 1 / 1;
-  }
+  /* Size modifiers */
+  .btn-sm  { padding: 0.375rem 0.75rem;  font-size: 0.8125rem; border-radius: var(--radius-md); }
+  .btn-lg  { padding: 0.75rem 1.5rem;    font-size: 1rem;      border-radius: var(--radius-xl); }
+  .btn-xl  { padding: 0.9375rem 2rem;    font-size: 1.0625rem; border-radius: var(--radius-2xl); }
+  .btn-icon    { padding: 0.5rem;   border-radius: var(--radius-lg); aspect-ratio: 1 / 1; }
+  .btn-icon-sm { padding: 0.375rem; border-radius: var(--radius-md); aspect-ratio: 1 / 1; }
 }

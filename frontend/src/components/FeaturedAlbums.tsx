@@ -34,6 +34,7 @@ import { albumKeys } from "@/features/album/utils/albumKeys";
 import { useAppDispatch } from "@/store/hooks";
 import { setIsPlaying, setQueue } from "@/features";
 import { cn } from "@/lib/utils";
+import SectionAmbient from "./SectionAmbient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
@@ -76,14 +77,17 @@ const FeaturedHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
       {/* Eyebrow */}
       <div className="flex items-center gap-2">
         <div
-          className={cn(
-            "flex items-center justify-center size-6 rounded-md",
-            "bg-primary/10 text-primary",
-          )}
+          className="flex items-center justify-center size-6 rounded-md"
+          style={{
+            background: "hsl(var(--wave-7) / 0.14)",
+            color: "hsl(var(--wave-7))",
+          }}
         >
           <Disc3 className="size-3.5" />
         </div>
-        <span className="text-overline text-primary">Selection</span>
+        <span className="text-overline" style={{ color: "hsl(var(--wave-7))" }}>
+          Selection
+        </span>
       </div>
 
       {/* Title */}
@@ -102,8 +106,8 @@ const FeaturedHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
       to={viewAllHref}
       className={cn(
         "group flex items-center gap-1.5 shrink-0 mt-1",
-        "text-sm font-medium text-muted-foreground",
-        "hover:text-primary transition-colors duration-200",
+        "text-sm font-medium text-wave-7 opacity-70",
+        "hover:text-wave-7 transition-colors duration-200 hover:opacity-100",
       )}
       aria-label="Xem tất cả album nổi bật"
     >
@@ -335,21 +339,35 @@ export function FeaturedAlbums() {
       </div>
     );
   };
-
+  if (!albums || albums.length === 0) return null;
   return (
-    <section
-      className="section-block section-block--base"
-      aria-labelledby="featured-albums-heading"
-    >
-      <div className="section-container">
-        {/* Decorative top accent line */}
-        <div className="divider-glow mb-8 hidden lg:block" />
+    <>
+      <div
+        className="lg:block h-px"
+        style={{
+          background: `linear-gradient(
+              to right,
+              transparent,
+              hsl(var(--wave-7) / 0.3) 30%,
+              hsl(var(--wave-7) / 0.28) 70%,
+              transparent
+            )`,
+          boxShadow: "0 0 8px hsl(var(--wave-7) / 0.1)",
+        }}
+      />
+      <section
+        className="section-block section-block--base"
+        aria-labelledby="featured-albums-heading"
+      >
+        {/* <SectionAmbient /> */}
+        <SectionAmbient style="wave-7" />
+        <div className="section-container">
+          <FeaturedHeader viewAllHref="/albums" />
 
-        <FeaturedHeader viewAllHref="/albums" />
-
-        {renderContent()}
-      </div>
-    </section>
+          {renderContent()}
+        </div>
+      </section>
+    </>
   );
 }
 

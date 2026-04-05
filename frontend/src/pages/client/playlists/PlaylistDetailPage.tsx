@@ -997,7 +997,7 @@ const PlaylistDetailPage: React.FC<PlaylistDetailPageProps> = ({
   );
 
   // ── Render states
-  if (isLoading) return <PlaylistDetailSkeleton />;
+  if (isLoading) return <PlaylistDetailSkeleton variant={variant} />;
 
   if (isError || !playlist) {
     return (

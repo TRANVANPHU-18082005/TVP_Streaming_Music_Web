@@ -1,35 +1,3 @@
-"use client";
-
-/**
- * @file PlaylistFilter.tsx — Playlist catalog search + filter bar (v4.0 — Soundwave Premium)
- *
- * REDESIGN vs v4.0-prev — full alignment with AlbumFilter + ArtistFilters + GenreFilters v4.0:
- * ─ SearchInput: ambient focus glow (wave-4/wave-2 gold-pink spectrum = playlist identity)
- * ─ FilterToggleButton: extracted memo, gradient-brand counter badge
- * ─ ActiveFilterTag: colored icon-bubble per filter (wave-spectrum system)
- * ─ ActiveTagsBar: divider-glow accent line + Sparkles eyebrow icon
- * ─ Card wrapper: border-primary/20 + shadow-brand + gradient-wave top line when active
- * ─ FilterLabel: iconColor prop per section (wave-spectrum)
- * ─ Playlist identity: wave-4 (gold) primary = consistent with PlaylistPage AmbientBackground
- *
- * ALL BUG FIXES FROM v4.0-prev PRESERVED:
- * ─ FIX 1+2: transitionend on outer grid div, target+propertyName guard
- * ─ FIX 3: React.memo applied
- * ─ FIX 4: removeFilter sends null not undefined
- * ─ FIX 5: handleClearSearch bypasses debounce
- * ─ FIX 6: URL→input one-way sync guard
- * ─ FIX 7: sort value toLowerCase()
- * ─ FIX 9: null for "all" select values
- * ─ FIX 10: stable toggleExpanded ref
- * ─ FIX 11: aria-expanded + aria-controls on filter toggle
- * ─ FIX 12: id + role + aria-label on expandable region
- * ─ FIX 13: type="button" + aria-label on all X buttons
- * ─ FIX 14: sort toLowerCase()
- * ─ FIX 15: memo on all sub-components
- * ─ FIX 16: null removal sentinel
- * ─ FIX 17: aria-hidden on decorative icons
- */
-
 import React, {
   useState,
   useEffect,
@@ -203,7 +171,7 @@ const SearchInput = memo(
           "border-border/70 hover:border-border-strong",
           "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
           "rounded-xl backdrop-blur-sm",
-          "placeholder:text-muted-foreground/40",
+          "placeholder:text-muted-foreground",
           "transition-all duration-200",
         )}
       />
@@ -464,7 +432,7 @@ const FilterToggleButton = memo(
             className={cn(
               "flex h-5 min-w-5 px-1 items-center justify-center",
               "rounded-full text-[10px] font-black text-white",
-              "gradient-brand shadow-glow-xs",
+              "orb-float--brand shadow-glow-xs",
             )}
             aria-label={`${activeCount} active filters`}
           >
@@ -526,7 +494,7 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
     // ── Search debounce ─────────────────────────────────────────────────────
     const [localSearch, setLocalSearch] = useState(params.keyword || "");
     const debouncedSearch = useDebounce(localSearch, 400);
-
+    const isClearingRef = useRef(false);
     // FIX 6: one-way sync URL → input only
     useEffect(() => {
       if ((params.keyword || "") === localSearch) return;
@@ -534,13 +502,19 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
     }, [params.keyword]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
+      // Nếu đang trong quá trình Clear, bỏ qua hiệu ứng Debounce này
+      if (isClearingRef.current) {
+        isClearingRef.current = false;
+        return;
+      }
+
       if (debouncedSearch !== (params.keyword || "")) {
         onSearch(debouncedSearch);
       }
     }, [debouncedSearch, params.keyword, onSearch]);
-
     // FIX 5: immediate clear bypasses debounce
     const handleClearSearch = useCallback(() => {
+      isClearingRef.current = true;
       setLocalSearch("");
       onSearch("");
     }, [onSearch]);
@@ -586,17 +560,12 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
         <div
           className={cn(
             "relative overflow-hidden",
-            "rounded-2xl border border-border/60",
-            "bg-card/50 dark:bg-surface-1/50 backdrop-blur-md",
+            "rounded-2xl",
+            "bg-card/50 dark:bg-surface-1/2 backdrop-blur-md",
             "transition-shadow duration-300 hover:shadow-elevated",
             activeFiltersCount > 0 && "border-primary/20 shadow-brand",
           )}
         >
-          {/* Top accent line when filters active */}
-          {activeFiltersCount > 0 && (
-            <div className="absolute inset-x-0 top-0 h-px gradient-wave opacity-60" />
-          )}
-
           {/* ── TOP ROW ── */}
           <div className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
             <div className="flex-1 min-w-0">
@@ -662,13 +631,14 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
             role="region"
             aria-label="Playlist filter options"
             className={cn(
-              "grid transition-[grid-template-rows] duration-300 ease-in-out",
+              "grid transition-[grid-template-rows] duration-300 ease-in-out relative",
               "border-t border-transparent",
               isExpanded
                 ? "grid-rows-[1fr] border-border/50"
                 : "grid-rows-[0fr]",
             )}
           >
+            <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
             {/* FIX 1: overflow only after transitionend on outer el */}
             <div
               className={cn(

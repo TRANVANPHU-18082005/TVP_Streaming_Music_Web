@@ -1,32 +1,26 @@
-// src/features/profile/api/profileApi.ts
 import api from "@/lib/axios";
-import { ApiResponse, PagedResponse } from "@/types";
-import { ProfileDashboard, AnalyticsData, LikedContentParams } from "../types";
+import { ApiResponse } from "@/types";
+import { ProfileDashboard, AnalyticsData, UserLibrary } from "../types";
+import { ITrack } from "@/features/track";
 
 const profileApi = {
   /**
    * 1. Lấy Dashboard tổng quát
-   * Trả về: analytics, playlists, library (tracks preview, albums preview)
+   * @param params { mode: 'essential' | 'full' }
+   * 'essential' dùng cho HomePage (không lấy analytics nặng)
    */
-  getDashboard: async () => {
-    const response =
-      await api.get<ApiResponse<ProfileDashboard>>("/profile/dashboard");
-    return response.data; // Trả về ApiResponse chứa ProfileDashboard
+  getDashboard: async (params?: { mode?: "full" | "essential" }) => {
+    const response = await api.get<ApiResponse<ProfileDashboard>>(
+      "/profile/dashboard",
+      {
+        params,
+      },
+    );
+    return response.data;
   },
 
   /**
-   * 2. Lấy danh sách Liked Content chi tiết (Có phân trang)
-   * Trả về: { success: true, data: [...], meta: {...} }
-   */
-  getLikedContent: async (params: LikedContentParams) => {
-    const response = await api.get<ApiResponse<any>>("/profile/liked", {
-      params,
-    });
-    return response.data; // Trả về ApiResponse chứa data (mảng) và meta
-  },
-
-  /**
-   * 3. Lấy dữ liệu Chart riêng lẻ
+   * 3. Lấy dữ liệu Chart riêng lẻ (7 ngày qua)
    */
   getAnalytics: async () => {
     const response =
@@ -35,15 +29,42 @@ const profileApi = {
   },
 
   /**
-   * 4. Cập nhật hồ sơ (Hỗ trợ upload ảnh qua FormData)
+   * 4. Lấy danh sách Playlist cá nhân (Library)
+   * Trả về các playlist mà user là chủ sở hữu hoặc cộng tác viên
    */
-  update: async (data: FormData) => {
+  getLibrary: async () => {
+    const response =
+      await api.get<ApiResponse<UserLibrary>>("/profile/library");
+    return response.data;
+  },
+
+  /**
+   * 5. Lấy lịch sử nghe nhạc gần đây
+   * Mặc định lấy 10-20 bài để hiển thị nhanh
+   */
+  getRecentlyPlayed: async (limit: number = 10) => {
+    const response = await api.get<ApiResponse<ITrack[]>>(
+      "/profile/recently-played",
+      {
+        params: { limit },
+      },
+    );
+    return response.data;
+  },
+
+  /**
+   * 6. Cập nhật hồ sơ (Hỗ trợ upload ảnh qua FormData)
+   */
+  updateProfile: async (data: FormData | any) => {
+    const isFormData = data instanceof FormData;
     const response = await api.patch<ApiResponse<any>>(
       "/profile/update",
       data,
       {
         headers: {
-          "Content-Type": "multipart/form-data",
+          "Content-Type": isFormData
+            ? "multipart/form-data"
+            : "application/json",
         },
       },
     );

@@ -15,13 +15,15 @@ router.use(protect);
 
 router.get("/dashboard", profileController.getProfileDashboard);
 router.get("/analytics", profileController.getAnalytics);
-router.get("/playlists", profileController.getMyPlaylists);
-
+router.get("/library", profileController.getLibrary);
+router.get("/recently-played", profileController.getRecentlyPlayedTracks);
+// Favourite Album
 router.get(
   "/liked",
   validate(getLikedContentSchema),
   profileController.getLikedContent,
 );
+
 router.patch(
   "/update",
   validate(updateProfileSchema),

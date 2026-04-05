@@ -1,6 +1,4 @@
-/**
- * FullPlayer.tsx — Production-grade full-screen music player
- */
+"use client";
 
 import {
   useState,
@@ -39,6 +37,7 @@ import {
   X,
   GripVertical,
   Loader2,
+  Focus,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 
@@ -55,9 +54,14 @@ import {
   toggleRepeat,
 } from "@/features/player/slice/playerSlice";
 import { ProgressBar } from "./ProgressBar";
-import { ITrack } from "@/features/track";
+import { ILyricLine, ITrack } from "@/features/track";
 import { formatTime } from "@/utils/format";
 import { LikeButton } from "@/features";
+import { MoodFocusView } from "./MoodFocusView";
+import KaraokeView from "./LyricEngine";
+import { useLyrics } from "../hooks/useLyrics";
+import { WaveformBars } from "@/components/MusicVisualizer";
+import { MarqueeText } from "./MarqueeText";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -71,25 +75,19 @@ const QUEUE_COLLAPSE_Y = 72;
 const QUEUE_COLLAPSE_VY = 400;
 const SWIPE_THRESHOLD = 48;
 
-const VIEWS = ["lyrics", "artwork", "info"] as const;
+// VIEWS order matches swipe direction: left = forward, right = backward
+const VIEWS = ["mood", "lyrics", "artwork", "info"] as const;
 type PlayerView = (typeof VIEWS)[number];
 
 const VIEW_LABEL: Record<PlayerView, string> = {
+  mood: "Mood",
   artwork: "Đang phát",
   lyrics: "Lời bài hát",
   info: "Thông tin",
 };
 
-// FIX 19: module-scope constant — no new array allocation per render
-const PLACEHOLDER_LYRICS = [
-  { text: "Thôi nói ra làm gì", opacity: "text-white" },
-  { text: "Lại càng thêm đau", opacity: "text-white/55" },
-  { text: "Nếu quay thời gian đến lúc đầu...", opacity: "text-white/35" },
-  { text: "Mọi thứ có còn như xưa", opacity: "text-white/20" },
-] as const;
-
 // ─────────────────────────────────────────────────────────────────────────────
-// SPRING PRESETS — module scope
+// SPRING PRESETS — module scope (unchanged from v1)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SP = {
@@ -100,19 +98,11 @@ const SP = {
   swipe: { type: "spring", stiffness: 280, damping: 30, mass: 0.8 } as const,
   sheet: { type: "spring", stiffness: 300, damping: 28, mass: 0.65 } as const,
   pill: { type: "spring", stiffness: 500, damping: 30 } as const,
+  tab: { type: "spring", stiffness: 380, damping: 30 } as const,
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GLOBAL STYLES — FIX 1
-//
-// Original used a module-level `_cssInjected` boolean. In React StrictMode
-// the component body runs twice but the DOM commit happens only once on the
-// second run. The boolean is set to true on the first (discarded) run,
-// so the second (real) run sees `true` and returns null — but the <style>
-// from the first run was already discarded. Result: no styles.
-//
-// Fix: DOM ID guard — idempotent regardless of how many times React calls
-// the render function before committing. Same pattern as MiniPlayer.
+// STYLE INJECTION — DOM ID guard
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PLAYER_STYLE_ID = "__fp-styles__";
@@ -155,17 +145,21 @@ const PLAYER_CSS = `
   .fp-stagger > *:nth-child(4) { animation: fp-stagger-up 240ms ease both 120ms; }
   .fp-stagger > *:nth-child(5) { animation: fp-stagger-up 240ms ease both 160ms; }
 
-  /* FIX 10: CSS-only queue visualizer bars */
   @keyframes fp-qbar {
     0%,100% { transform: scaleY(0.2); }
     50%      { transform: scaleY(1); }
+  }
+
+  /* Tab pill shimmer on first render */
+  @keyframes fp-tab-enter {
+    from { opacity: 0; transform: scaleX(0.6); }
+    to   { opacity: 1; transform: scaleX(1); }
   }
 
   .custom-scrollbar::-webkit-scrollbar { display: none; }
   .custom-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 `;
 
-// FIX 1: DOM ID guard replaces module-level boolean
 const PlayerStyles = memo(() => {
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -174,7 +168,7 @@ const PlayerStyles = memo(() => {
     s.id = PLAYER_STYLE_ID;
     s.textContent = PLAYER_CSS;
     document.head.appendChild(s);
-  }, []); // runs once after real DOM commit — StrictMode safe
+  }, []);
   return null;
 });
 PlayerStyles.displayName = "PlayerStyles";
@@ -237,7 +231,6 @@ function useHorizontalSwipe(onSwipe: (dir: "left" | "right") => void) {
   return { onTouchStart, onTouchMove, onTouchEnd };
 }
 
-// FIX 4: Focus trap only active for mobile queue sheet (not desktop panel)
 function useFocusTrap(
   active: boolean,
   containerRef: React.RefObject<HTMLElement | null>,
@@ -251,7 +244,6 @@ function useFocusTrap(
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     first?.focus();
-
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Tab") {
         if (
@@ -269,7 +261,6 @@ function useFocusTrap(
   }, [active, containerRef]);
 }
 
-// FIX 18: Set --vh CSS variable once for Safari dvh fallback
 function useViewportHeight() {
   useEffect(() => {
     const setVh = () => {
@@ -285,80 +276,7 @@ function useViewportHeight() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLAYING VISUALIZER
-// FIX 10: `cssOnly` prop — uses CSS keyframes in QueueItem to avoid
-// 4 concurrent Framer instances per visible queue row during scroll.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const VIZ_DURS = [0.72, 0.88, 0.58, 0.95] as const;
-const VIZ_DELS = [0, 0.1, 0.22, 0.06] as const;
-
-const PlayingVisualizer = memo(
-  ({
-    paused = false,
-    cssOnly = false,
-  }: {
-    paused?: boolean;
-    cssOnly?: boolean;
-  }) => {
-    if (cssOnly) {
-      // FIX 10: CSS-only variant for queue items — zero Framer overhead
-      return (
-        <div className="flex items-end gap-[2.5px] h-[14px]" aria-hidden="true">
-          {VIZ_DURS.map((dur, i) => (
-            <span
-              key={i}
-              className="w-[3px] rounded-[2px] origin-bottom"
-              style={{
-                height: 14,
-                background: "hsl(var(--primary))",
-                transform: paused ? "scaleY(0.22)" : undefined,
-                animation: paused
-                  ? "none"
-                  : `fp-qbar ${dur}s ease-in-out ${VIZ_DELS[i]}s infinite`,
-                transition: "transform 0.28s ease-out",
-              }}
-            />
-          ))}
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex items-end gap-[2.5px] h-[14px]" aria-hidden="true">
-        {[0.85, 1, 0.5, 0.9].map((amp, i) => (
-          <motion.span
-            key={i}
-            className="w-[3px] rounded-[2px] origin-bottom"
-            style={{ height: 14, background: "hsl(var(--primary))" }}
-            animate={
-              paused
-                ? { scaleY: 0.22 }
-                : { scaleY: [0.3, amp, 0.45, amp * 0.9, 0.3] }
-            }
-            transition={
-              paused
-                ? { duration: 0.28, ease: "easeOut" }
-                : {
-                    duration: 0.8 + i * 0.14,
-                    repeat: Infinity,
-                    repeatType: "mirror",
-                    ease: "easeInOut",
-                    delay: i * 0.1,
-                  }
-            }
-          />
-        ))}
-      </div>
-    );
-  },
-);
-PlayingVisualizer.displayName = "PlayingVisualizer";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VINYL DISK
-// FIX 16: `will-change: transform` on wrapper before spin starts
-// eliminates first-frame composite jank.
+// VINYL DISK — unchanged
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VinylDisk = memo(
@@ -368,10 +286,9 @@ const VinylDisk = memo(
         "relative aspect-square w-full max-w-[280px] lg:max-w-[320px]",
         "rounded-full overflow-hidden",
         "border-[5px] border-[#191919]",
-        "shadow-[0_32px_88px_rgba(0,0,0,0.95),0_0_0_1px_rgba(255,255,255,0.04)]",
-        isPlaying ? "fp-vinyl-spin fp-vinyl-playing" : "fp-vinyl-paused",
+        "shadow-brand",
+        isPlaying ? "animate-vinyl-slow" : "pause-animation",
       )}
-      // FIX 16: promote compositing layer before animation starts
       style={{ willChange: "transform" }}
       role="img"
       aria-label="Album artwork"
@@ -379,7 +296,6 @@ const VinylDisk = memo(
       <ImageWithFallback
         src={src}
         className="size-full object-cover"
-        // FIX 16: LCP image — tell browser to prioritize
         fetchPriority="high"
       />
       <div
@@ -423,7 +339,7 @@ const VinylDisk = memo(
 VinylDisk.displayName = "VinylDisk";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLAY BUTTON — unchanged, isolated memo
+// PLAY BUTTON — unchanged
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PlayButtonProps {
@@ -447,7 +363,7 @@ const PlayButton = memo(
     const dim = size === "lg" ? 76 : 64;
     const iconSize = size === "lg" ? 38 : 32;
     const sharedCls = cn(
-      "relative flex items-center justify-center rounded-full bg-white text-black",
+      "control-btn relative flex items-center justify-center rounded-full bg-white text-background shadow-lg",
       "shadow-[0_8px_36px_rgba(255,255,255,0.18)]",
       "disabled:opacity-40 disabled:pointer-events-none",
     );
@@ -533,8 +449,7 @@ const PlayButton = memo(
 PlayButton.displayName = "PlayButton";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SIDE BUTTON — FIX 2: hoisted to module scope
-// Was defined inside ControlsRow render body — caused remount on every render.
+// SIDE BUTTON / SKIP BUTTON — unchanged from v1
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SideButtonProps {
@@ -543,7 +458,7 @@ interface SideButtonProps {
   disabled: boolean;
   label: string;
   delay: number;
-  phase: number; // FIX 2: receives phase as prop instead of closing over it
+  phase: number;
   isLg: boolean;
   children: ReactNode;
 }
@@ -556,7 +471,6 @@ const SideButton = memo(
     label,
     delay,
     phase,
-
     children,
   }: SideButtonProps) => {
     const baseCls = cn(
@@ -565,7 +479,6 @@ const SideButton = memo(
       active ? "text-[hsl(var(--primary))]" : "text-white/50 hover:text-white",
     );
     if (phase < 1) return null;
-
     return (
       <motion.button
         onClick={onClick}
@@ -596,10 +509,6 @@ const SideButton = memo(
   },
 );
 SideButton.displayName = "SideButton";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SKIP BUTTON — FIX 2: hoisted to module scope
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface SkipBtnProps {
   onClick: (e: React.MouseEvent) => void;
@@ -643,7 +552,7 @@ const SkipBtn = memo(
 SkipBtn.displayName = "SkipBtn";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONTROLS ROW — FIX 2: uses hoisted SideButton and SkipBtn
+// CONTROLS ROW — unchanged
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ControlsRowProps {
@@ -724,7 +633,6 @@ const ControlsRow = memo(
         role="group"
         aria-label="Playback controls"
       >
-        {/* Shuffle */}
         <div
           className="relative flex items-center justify-center"
           style={sideSlotStyle}
@@ -741,8 +649,6 @@ const ControlsRow = memo(
             <Shuffle className={isLg ? "size-6" : "size-5"} />
           </SideButton>
         </div>
-
-        {/* Prev */}
         <SkipBtn
           onClick={handlePrev}
           disabled={!canPrev}
@@ -751,8 +657,6 @@ const ControlsRow = memo(
         >
           <SkipBack className={cn(skipCls, "fill-current")} />
         </SkipBtn>
-
-        {/* Play/Pause */}
         <PlayButton
           isPlaying={isPlaying}
           isLoading={isLoading}
@@ -761,8 +665,6 @@ const ControlsRow = memo(
           size={size}
           onToggle={handleToggle}
         />
-
-        {/* Next */}
         <SkipBtn
           onClick={handleNext}
           disabled={!canNext}
@@ -771,8 +673,6 @@ const ControlsRow = memo(
         >
           <SkipForward className={cn(skipCls, "fill-current")} />
         </SkipBtn>
-
-        {/* Repeat */}
         <div
           className="relative flex items-center justify-center"
           style={sideSlotStyle}
@@ -818,84 +718,93 @@ const ControlsRow = memo(
 ControlsRow.displayName = "ControlsRow";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TOOLBAR — unchanged
+// TOOLBAR — now includes Focus Mode toggle
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ToolbarProps {
   showQueue: boolean;
   onToggleQueue: () => void;
+  focusMode: boolean;
+  onToggleFocus: () => void;
 }
 
-const Toolbar = memo(({ showQueue, onToggleQueue }: ToolbarProps) => (
-  <div
-    className="fp-stagger flex items-center justify-between pt-2 border-t border-white/[0.06]"
-    role="toolbar"
-    aria-label="Player tools"
-  >
-    {[
-      {
-        icon: <Clock className="size-5" />,
-        label: "Sleep timer",
-        active: false,
-        onClick: undefined,
-      },
-      {
-        icon: <Gem className="size-5" />,
-        label: "Audio quality",
-        active: false,
-        onClick: undefined,
-      },
-      {
-        icon: (
-          <div className="px-3 py-1 bg-white/8 rounded-lg border border-white/10">
-            <span className="text-[10px] font-black text-white/65 tracking-wide">
-              320K
-            </span>
-          </div>
-        ),
-        label: "Bitrate",
-        active: false,
-        onClick: undefined,
-      },
-      {
-        icon: <Download className="size-5" />,
-        label: "Download",
-        active: false,
-        onClick: undefined,
-      },
-      {
-        icon: <ListMusic className="size-5" />,
-        label: showQueue ? "Hide queue" : "Show queue",
-        active: showQueue,
-        onClick: onToggleQueue,
-      },
-    ].map(({ icon, label, active, onClick }) => (
-      <motion.button
-        key={label}
-        whileHover={{ scale: 1.14 }}
-        whileTap={{ scale: 0.86 }}
-        transition={SP.snappy}
-        onClick={onClick}
-        title={label}
-        aria-label={label}
-        aria-pressed={active}
-        className={cn(
-          "p-2 rounded-xl transition-colors",
-          active
-            ? "text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.12)]"
-            : "text-white/40 hover:text-white/75 hover:bg-white/[0.06]",
-        )}
-      >
-        {icon}
-      </motion.button>
-    ))}
-  </div>
-));
+const Toolbar = memo(
+  ({ showQueue, onToggleQueue, focusMode, onToggleFocus }: ToolbarProps) => (
+    <div
+      className="fp-stagger flex items-center justify-between pt-2 border-t border-white/[0.06]"
+      role="toolbar"
+      aria-label="Player tools"
+    >
+      {[
+        {
+          icon: <Clock className="size-5" />,
+          label: "Sleep timer",
+          active: false,
+          onClick: undefined,
+        },
+        {
+          icon: <Gem className="size-5" />,
+          label: "Audio quality",
+          active: false,
+          onClick: undefined,
+        },
+        {
+          icon: (
+            <div className="px-3 py-1 bg-white/8 rounded-lg border border-white/10">
+              <span className="text-[10px] font-black text-white/65 tracking-wide">
+                320K
+              </span>
+            </div>
+          ),
+          label: "Bitrate",
+          active: false,
+          onClick: undefined,
+        },
+        {
+          icon: <Download className="size-5" />,
+          label: "Download",
+          active: false,
+          onClick: undefined,
+        },
+        {
+          icon: <Focus className="size-5" />,
+          label: focusMode ? "Exit focus" : "Focus mode",
+          active: focusMode,
+          onClick: onToggleFocus,
+        },
+        {
+          icon: <ListMusic className="size-5" />,
+          label: showQueue ? "Hide queue" : "Show queue",
+          active: showQueue,
+          onClick: onToggleQueue,
+        },
+      ].map(({ icon, label, active, onClick }) => (
+        <motion.button
+          key={label}
+          whileHover={{ scale: 1.14 }}
+          whileTap={{ scale: 0.86 }}
+          transition={SP.snappy}
+          onClick={onClick}
+          title={label}
+          aria-label={label}
+          aria-pressed={active}
+          className={cn(
+            "p-2 rounded-xl transition-colors",
+            active
+              ? "text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.12)]"
+              : "text-white/40 hover:text-white/75 hover:bg-white/[0.06]",
+          )}
+        >
+          {icon}
+        </motion.button>
+      ))}
+    </div>
+  ),
+);
 Toolbar.displayName = "Toolbar";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MOBILE PROGRESS — FIX 17: isolated memo to prevent ControlsRow re-renders
-// from 60fps currentTime updates propagating up to the full mobile controls div
+// MOBILE PROGRESS — isolated memo
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MobileProgress = memo(
@@ -918,7 +827,7 @@ const MobileProgress = memo(
 MobileProgress.displayName = "MobileProgress";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QUEUE ITEM — FIX 10: uses cssOnly PlayingVisualizer
+// QUEUE ITEM — unchanged from v1
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface QueueItemProps {
@@ -968,14 +877,12 @@ const QueueItem = memo(
           transition={SP.queue}
         />
       )}
-
       <div
         className="w-7 flex justify-center items-center shrink-0"
         aria-hidden="true"
       >
         {isCurrent ? (
-          // FIX 10: cssOnly variant avoids 4 Framer instances per row during scroll
-          <PlayingVisualizer paused={!isPlaying} cssOnly />
+          <WaveformBars active={isPlaying} bars={4} />
         ) : (
           <div className="relative flex justify-center items-center w-full h-full">
             <span className="text-xs font-mono text-white/30 group-hover:opacity-0 transition-opacity">
@@ -985,7 +892,6 @@ const QueueItem = memo(
           </div>
         )}
       </div>
-
       <div className="relative size-9 shrink-0 rounded-md overflow-hidden bg-white/10">
         <ImageWithFallback
           src={track.coverImage}
@@ -998,23 +904,20 @@ const QueueItem = memo(
           )}
         />
       </div>
-
       <div className="flex-1 min-w-0">
-        <p
+        <MarqueeText
+          text={track.title}
           className={cn(
-            "text-[13px] font-medium truncate leading-tight transition-colors duration-150",
-            isCurrent
-              ? "text-[hsl(var(--primary))]"
-              : "text-white/80 group-hover:text-white",
+            "flex-1 min-w-0 text-[13px] font-semibold tracking-tight text-foreground",
+            isCurrent ? "text-brand" : "",
           )}
-        >
-          {track.title}
-        </p>
+          speed={38}
+          pauseMs={1600}
+        />
         <p className="text-[11px] text-white/35 truncate leading-snug mt-0.5">
           {track.artist?.name}
         </p>
       </div>
-
       <span className="text-[10px] text-white/25 font-mono shrink-0 group-hover:opacity-0 transition-opacity">
         {formatTime(track.duration ?? 0)}
       </span>
@@ -1025,7 +928,7 @@ const QueueItem = memo(
 QueueItem.displayName = "QueueItem";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION LABEL — unchanged
+// SECTION LABEL
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SectionLabel({
@@ -1050,7 +953,7 @@ function SectionLabel({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QUEUE PANEL — unchanged logic, uses updated QueueItem
+// QUEUE PANEL — unchanged from v1
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface QueuePanelProps {
@@ -1148,7 +1051,6 @@ const QueuePanel = memo(({ onClose, showCloseButton }: QueuePanelProps) => {
           )}
         </div>
       </header>
-
       <div
         ref={scrollRef}
         className="custom-scrollbar flex-1 overflow-y-auto overscroll-contain"
@@ -1234,22 +1136,22 @@ const QueuePanel = memo(({ onClose, showCloseButton }: QueuePanelProps) => {
 QueuePanel.displayName = "QueuePanel";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VIEW HEADER — FIX 8
+// VIEW HEADER — NEW: replaced dot + label with a full glassmorphic tab bar
 //
-// Original: received `onViewChange` callback recreated on every view change
-// (because `changeView` closes over `currentView` in `useCallback`).
-// This caused ViewHeader — a memo'd component — to re-render on every swipe.
-//
-// Fix: ViewHeader receives stable `setCurrentView` and `setSwipeDir` setState
-// functions (stable identity across all renders) + `currentView` for direction
-// calculation. No callback prop needed.
+// Design decisions:
+//   - `layoutId="fp-tab-pill"` on the background pill creates a smooth
+//     Framer shared-layout transition as tabs change — no JS animation loop.
+//   - Tab bar has `glass-frosted` (from design system) + blur backdrop.
+//   - Active tab text brightens; inactive dims to 40% opacity.
+//   - Collapse + More buttons remain flanking the tab bar.
+//   - `aria-live="polite"` on label for screen readers (retained from v1).
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ViewHeaderProps {
   currentView: PlayerView;
   phase: number;
-  setView: Dispatch<SetStateAction<PlayerView>>; // FIX 8: stable setter
-  setSwipeDir: Dispatch<SetStateAction<number>>; // FIX 8: stable setter
+  setView: Dispatch<SetStateAction<PlayerView>>;
+  setSwipeDir: Dispatch<SetStateAction<number>>;
   onCollapse: () => void;
 }
 
@@ -1338,9 +1240,9 @@ const ViewHeader = memo(
   },
 );
 ViewHeader.displayName = "ViewHeader";
-
 // ─────────────────────────────────────────────────────────────────────────────
-// SWIPEABLE VIEWS — FIX 19: uses module-scope PLACEHOLDER_LYRICS
+// SWIPEABLE VIEWS
+// Changed: lyrics view now passes onSeek + focusRadius + accentColor to KaraokeView
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SWIPE_VARIANTS: Variants = {
@@ -1350,28 +1252,39 @@ const SWIPE_VARIANTS: Variants = {
 };
 
 interface SwipeableViewsProps {
+  lyrics: ILyricLine[] | null;
+  loadingLyrics: boolean;
+  currentTime: number;
   currentView: PlayerView;
   direction: number;
   track: ITrack;
   isPlaying: boolean;
   phase: number;
   swipeHandlers: ReturnType<typeof useHorizontalSwipe>;
+  onSeek: (t: number) => void;
+  focusMode: boolean;
 }
 
 const SwipeableViews = memo(
   ({
+    lyrics,
+    loadingLyrics,
+    currentTime,
     currentView,
     direction,
     track,
     isPlaying,
     phase,
     swipeHandlers,
+    onSeek,
+    focusMode,
   }: SwipeableViewsProps) => (
     <main
       className="relative flex-1 overflow-hidden touch-pan-y"
       {...swipeHandlers}
     >
       <AnimatePresence mode="wait" initial={false} custom={direction}>
+        {/* ARTWORK */}
         {currentView === "artwork" && (
           <motion.div
             key="artwork"
@@ -1401,6 +1314,7 @@ const SwipeableViews = memo(
           </motion.div>
         )}
 
+        {/* LYRICS — now wired with onSeek + focusRadius */}
         {currentView === "lyrics" && (
           <motion.div
             key="lyrics"
@@ -1410,23 +1324,42 @@ const SwipeableViews = memo(
             animate="center"
             exit="exit"
             transition={SP.swipe}
-            className="absolute inset-0 flex flex-col justify-center px-8 gap-5 overflow-y-auto"
+            className="absolute inset-0"
           >
-            {/* FIX 19: module-scope constant, no new array per render */}
-            {PLACEHOLDER_LYRICS.map((line, i) => (
-              <motion.p
-                key={i}
-                initial={{ opacity: 0, x: 24, filter: "blur(6px)" }}
-                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-                transition={{ delay: i * 0.07, ...SP.gentle }}
-                className={cn("text-2xl font-bold leading-snug", line.opacity)}
-              >
-                {line.text}
-              </motion.p>
-            ))}
+            <KaraokeView
+              lyrics={lyrics ?? []}
+              loading={loadingLyrics}
+              currentTime={currentTime}
+              onSeek={onSeek}
+              focusRadius={focusMode ? 3 : 0}
+              duetMode={false}
+            />
           </motion.div>
         )}
 
+        {/* MOOD */}
+        {currentView === "mood" && (
+          <motion.div
+            key="mood"
+            custom={direction}
+            variants={SWIPE_VARIANTS}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={SP.swipe}
+            className="absolute inset-0"
+          >
+            <MoodFocusView
+              lyrics={lyrics ?? []}
+              loading={loadingLyrics}
+              track={track}
+              currentTimeMs={currentTime * 1000}
+              isPlaying={isPlaying}
+            />
+          </motion.div>
+        )}
+
+        {/* INFO */}
         {currentView === "info" && (
           <motion.div
             key="info"
@@ -1568,23 +1501,18 @@ export const FullPlayer = ({
   const [swipeDir, setSwipeDir] = useState(0);
   const [showQueue, setShowQueue] = useState(false);
   const [queueMounted, setQueueMounted] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
 
   const phase = usePhase();
-
-  // FIX 18: Safari dvh fallback
   useViewportHeight();
 
-  // FIX 3: correct ref type — HTMLElement (not RefObject<HTMLElement>)
   const queueSheetRef = useRef<HTMLElement>(null);
-
-  // FIX 5: documented — lazy mount + never unmount is intentional
+  const { lyrics, loading } = useLyrics(track.lyricUrl);
   useEffect(() => {
     if (showQueue && !queueMounted) setQueueMounted(true);
   }, [showQueue, queueMounted]);
 
-  // FIX 4: focus trap only for mobile bottom sheet
-  const isMobileQueue = showQueue; // on desktop it's inline, lg:hidden handles visibility
-  useFocusTrap(isMobileQueue, queueSheetRef as React.RefObject<HTMLElement>);
+  useFocusTrap(showQueue, queueSheetRef as React.RefObject<HTMLElement>);
 
   useEffect(() => {
     if (!showQueue) return;
@@ -1600,7 +1528,6 @@ export const FullPlayer = ({
   const rimOpacity = useTransform(dragY, [0, 80, 300], [0, 0, 0.45]);
   const bgOpacity = useTransform(dragY, [0, 300], [1, 0.5]);
 
-  // FIX 6 + 7: documented — these are correct
   const handleViewSwipe = useCallback((dir: "left" | "right") => {
     setCurrentView((cur) => {
       const i = VIEWS.indexOf(cur);
@@ -1618,6 +1545,7 @@ export const FullPlayer = ({
 
   const swipeHandlers = useHorizontalSwipe(handleViewSwipe);
   const toggleQueue = useCallback(() => setShowQueue((v) => !v), []);
+  const toggleFocus = useCallback(() => setFocusMode((v) => !v), []);
   const isArtwork = currentView === "artwork";
 
   return (
@@ -1642,7 +1570,7 @@ export const FullPlayer = ({
         aria-modal="true"
         aria-label={`Now playing: ${track.title}`}
       >
-        {/* Ambient orbs — phase 2 */}
+        {/* Ambient orbs */}
         {phase >= 2 && (
           <motion.div
             className="absolute inset-0 -z-10 pointer-events-none overflow-hidden"
@@ -1679,7 +1607,7 @@ export const FullPlayer = ({
         >
           {/* ══ LEFT / MAIN PANEL ═══════════════════════════════════ */}
           <div className="flex flex-col flex-1 min-h-0 lg:flex-initial lg:w-[50%] xl:w-[55%]">
-            {/* FIX 8: pass stable setters instead of unstable callback */}
+            {/* NEW: glassmorphic tab bar header */}
             <ViewHeader
               currentView={currentView}
               phase={phase}
@@ -1689,12 +1617,17 @@ export const FullPlayer = ({
             />
 
             <SwipeableViews
+              lyrics={lyrics}
+              loadingLyrics={loading}
+              currentTime={currentTime}
               currentView={currentView}
               direction={swipeDir}
               track={track}
               isPlaying={isPlaying}
               phase={phase}
               swipeHandlers={swipeHandlers}
+              onSeek={onSeek}
+              focusMode={focusMode}
             />
 
             {/* ── MOBILE CONTROLS ─────────────────────────────── */}
@@ -1702,7 +1635,6 @@ export const FullPlayer = ({
               {isArtwork ? (
                 <div className="px-6 pb-5 space-y-5 shrink-0">
                   <TrackInfoRow track={track} phase={phase} />
-                  {/* FIX 17: isolated memo prevents ControlsRow re-render at 60fps */}
                   <MobileProgress
                     currentTime={currentTime}
                     duration={duration}
@@ -1717,6 +1649,8 @@ export const FullPlayer = ({
                     <Toolbar
                       showQueue={showQueue}
                       onToggleQueue={toggleQueue}
+                      focusMode={focusMode}
+                      onToggleFocus={toggleFocus}
                     />
                   )}
                 </div>
@@ -1785,7 +1719,12 @@ export const FullPlayer = ({
 
               {phase >= 1 && (
                 <div className="mt-8">
-                  <Toolbar showQueue={showQueue} onToggleQueue={toggleQueue} />
+                  <Toolbar
+                    showQueue={showQueue}
+                    onToggleQueue={toggleQueue}
+                    focusMode={focusMode}
+                    onToggleFocus={toggleFocus}
+                  />
                 </div>
               )}
             </div>
@@ -1820,7 +1759,6 @@ export const FullPlayer = ({
                 onClick={() => setShowQueue(false)}
                 aria-hidden="true"
               />
-
               <motion.div
                 ref={queueSheetRef as React.RefObject<HTMLDivElement>}
                 initial={{ y: "100%" }}
@@ -1828,7 +1766,6 @@ export const FullPlayer = ({
                 exit={{ y: "100%" }}
                 transition={SP.sheet}
                 className="lg:hidden absolute bottom-0 left-0 right-0 z-[80] bg-[#0f0f0f] border-t border-white/[0.08] rounded-t-3xl flex flex-col"
-                // FIX 18: dvh with Safari calc fallback
                 style={{ maxHeight: "calc(var(--vh, 1vh) * 76)" }}
                 drag="y"
                 dragConstraints={{ top: 0, bottom: 0 }}

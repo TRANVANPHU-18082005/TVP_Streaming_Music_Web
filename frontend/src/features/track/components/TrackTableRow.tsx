@@ -1,4 +1,10 @@
-import React, { memo, useState } from "react";
+/**
+ * TrackTableRow — Production-grade row component
+ * Design: Obsidian Luxury / Glassmorphism (matches SOUNDWAVE design system)
+ * Optimized: React.memo + stable callbacks, zero unnecessary re-renders
+ */
+
+import React, { memo, useState, useCallback } from "react";
 import {
   MoreHorizontal,
   Edit,
@@ -7,8 +13,10 @@ import {
   Pause,
   Loader2,
   Copy,
-  Disc,
+  Disc3,
   RefreshCcw,
+  Music2,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,12 +34,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { formatDuration, STATUS_CONFIG } from "@/utils/track-helper";
 import { toast } from "sonner";
 import { ITrack } from "@/features/track/types";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Link } from "react-router-dom";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TrackTableRowProps {
   track: ITrack;
@@ -45,6 +55,166 @@ interface TrackTableRowProps {
   onDelete: (track: ITrack) => void;
   onRetry: (track: ITrack) => Promise<void>;
 }
+
+// ─── Equalizer animation (CSS-in-JS for isolation) ───────────────────────────
+
+const EqBars = memo(() => (
+  <div className="eq-bars eq-bars--gradient" aria-label="Now playing">
+    {Array.from({ length: 5 }).map((_, i) => (
+      <span key={i} className="eq-bar" />
+    ))}
+  </div>
+));
+EqBars.displayName = "EqBars";
+
+// ─── Cover image with play overlay ───────────────────────────────────────────
+
+interface CoverProps {
+  src: string;
+  title: string;
+  isActive: boolean;
+  isPlaying: boolean;
+  canPlay: boolean;
+  onClick: () => void;
+}
+
+const TrackCover = memo(
+  ({ src, title, isActive, isPlaying, canPlay, onClick }: CoverProps) => (
+    <div
+      role={canPlay ? "button" : undefined}
+      aria-label={
+        canPlay
+          ? isActive && isPlaying
+            ? `Pause ${title}`
+            : `Play ${title}`
+          : undefined
+      }
+      tabIndex={canPlay ? 0 : -1}
+      onKeyDown={(e) => e.key === "Enter" && canPlay && onClick()}
+      onClick={canPlay ? onClick : undefined}
+      className={cn(
+        "relative size-10 rounded-lg overflow-hidden flex-shrink-0 group/cover",
+        "ring-1 ring-white/5 shadow-md",
+        canPlay && "cursor-pointer",
+      )}
+    >
+      {/* Fallback background */}
+      <div className="absolute inset-0 bg-muted flex items-center justify-center">
+        <Music2 className="size-4 text-muted-foreground/40" />
+      </div>
+
+      {/* Cover */}
+      {src && (
+        <img
+          src={src}
+          alt={title}
+          loading="lazy"
+          decoding="async"
+          className={cn(
+            "size-full object-cover transition-all duration-300",
+            isActive ? "brightness-50 scale-105" : "brightness-100",
+            canPlay &&
+              "group-hover/cover:brightness-50 group-hover/cover:scale-105",
+          )}
+        />
+      )}
+
+      {/* Play overlay */}
+      {canPlay && (
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/cover:opacity-100 transition-opacity duration-200">
+          {isActive && isPlaying ? (
+            <Pause className="size-3.5 text-white fill-white drop-shadow-md" />
+          ) : (
+            <Play className="size-3.5 text-white fill-white drop-shadow-md translate-x-0.5" />
+          )}
+        </div>
+      )}
+
+      {/* Active indicator ring */}
+      {isActive && (
+        <div className="absolute inset-0 ring-2 ring-primary/70 rounded-lg pointer-events-none" />
+      )}
+    </div>
+  ),
+);
+TrackCover.displayName = "TrackCover";
+
+// ─── Status badge with retry ──────────────────────────────────────────────────
+
+interface StatusCellProps {
+  track: ITrack;
+  isRetrying: boolean;
+  onRetry: (e: React.MouseEvent) => void;
+}
+
+const StatusCell = memo(({ track, isRetrying, onRetry }: StatusCellProps) => {
+  const statusKey = isRetrying ? "processing" : track.status;
+  const statusConfig = STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG];
+  const showRetry = track.status === "failed" || track.status === "pending";
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              className={cn(
+                "text-[10px] font-semibold tracking-wide h-5 px-2 gap-1 select-none",
+                "transition-all duration-200",
+                statusConfig.className,
+              )}
+            >
+              {(statusConfig.animate || isRetrying) && (
+                <Loader2 className="size-2.5 animate-spin" />
+              )}
+              {statusConfig.label}
+            </Badge>
+          </TooltipTrigger>
+          {track.status === "failed" && track.errorReason && (
+            <TooltipContent
+              side="bottom"
+              className="max-w-[220px] text-xs flex items-start gap-1.5"
+            >
+              <AlertCircle className="size-3 text-destructive mt-0.5 flex-shrink-0" />
+              {track.errorReason}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
+
+      {showRetry && (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={onRetry}
+                disabled={isRetrying}
+                aria-label="Retry processing"
+                className={cn(
+                  "size-6 rounded-md",
+                  "text-muted-foreground hover:text-foreground",
+                  "hover:bg-muted/80 transition-colors",
+                )}
+              >
+                <RefreshCcw
+                  className={cn("size-3", isRetrying && "animate-spin")}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Retry processing
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </div>
+  );
+});
+StatusCell.displayName = "StatusCell";
+
+// ─── Main Row Component ───────────────────────────────────────────────────────
 
 export const TrackTableRow = memo(
   ({
@@ -60,217 +230,263 @@ export const TrackTableRow = memo(
     onRetry,
   }: TrackTableRowProps) => {
     const [isRetrying, setIsRetrying] = useState(false);
-    console.log("Rendering TrackTableRow:", track);
-    const handleRetry = async (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (isRetrying) return;
-      setIsRetrying(true);
-      try {
-        await onRetry(track);
-        toast.success("Retry queued");
-      } catch {
-        toast.error("Retry failed");
-        setIsRetrying(false);
-      }
-    };
 
-    const handleCopyId = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      navigator.clipboard.writeText(track._id);
-      toast.success("Copied ID");
-    };
+    const handleRetry = useCallback(
+      async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isRetrying) return;
+        setIsRetrying(true);
+        try {
+          await onRetry(track);
+          toast.success("Track queued for reprocessing");
+        } catch {
+          toast.error("Retry failed — please try again");
+          setIsRetrying(false);
+        }
+      },
+      [isRetrying, onRetry, track],
+    );
 
-    const statusKey = isRetrying ? "processing" : track.status;
-    const statusConfig = STATUS_CONFIG[statusKey as keyof typeof STATUS_CONFIG];
+    const handleCopyId = useCallback(
+      (e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(track._id);
+        toast.success("Track ID copied");
+      },
+      [track._id],
+    );
+
+    const handleSelect = useCallback(
+      (checked: boolean) => onSelect(track._id, checked),
+      [onSelect, track._id],
+    );
+
+    const handleEdit = useCallback(
+      (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onEdit(track);
+      },
+      [onEdit, track],
+    );
+
+    const handleDelete = useCallback(
+      (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onDelete(track);
+      },
+      [onDelete, track],
+    );
+
+    const canPlay = track.status === "ready";
+    const isFailed = track.status === "failed";
 
     return (
       <TableRow
         className={cn(
-          "group transition-colors border-b hover:bg-muted/40",
-          isActive && "bg-primary/5 hover:bg-primary/10",
-          isSelected && "bg-secondary/40",
-          track.status === "failed" &&
-            "bg-destructive/5 hover:bg-destructive/10",
+          // Base
+          "group/row relative border-b border-border/30 transition-all duration-150",
+          "hover:bg-muted/30",
+          // States
+          isActive &&
+            !isFailed && [
+              "bg-primary/[0.04] hover:bg-primary/[0.07]",
+              "border-b-primary/10",
+            ],
+          isSelected && "bg-secondary/20 hover:bg-secondary/30",
+          isFailed && "bg-destructive/[0.03] hover:bg-destructive/[0.06]",
+          // Active left accent via pseudo — achieved via shadow trick
+          isActive && "shadow-[inset_3px_0_0_hsl(var(--primary)/0.7)]",
         )}
+        aria-selected={isSelected}
       >
-        {/* Checkbox */}
+        {/* ── Col 1: Checkbox ── */}
         <TableCell
-          className="w-10 text-center"
+          className="w-10 pl-3 pr-1"
           onClick={(e) => e.stopPropagation()}
         >
           <Checkbox
             checked={isSelected}
-            onCheckedChange={(checked) =>
-              onSelect(track._id, checked as boolean)
-            }
+            onCheckedChange={handleSelect}
+            aria-label={`Select ${track.title}`}
+            className="transition-transform active:scale-90"
           />
         </TableCell>
 
-        {/* Index / Playing */}
-        <TableCell className="w-12 text-center">
+        {/* ── Col 2: Index / EQ ── */}
+        <TableCell className="w-10 text-center px-0">
           {isActive && isPlaying ? (
-            <div className="flex items-end justify-center gap-0.5 h-4">
-              <span className="w-0.5 bg-primary animate-music-bar-1" />
-              <span className="w-0.5 bg-primary animate-music-bar-2" />
-              <span className="w-0.5 bg-primary animate-music-bar-3" />
-              <span className="w-0.5 bg-primary animate-music-bar-4" />
-              <span className="w-0.5 bg-primary animate-music-bar-5" />
-            </div>
+            <EqBars />
           ) : (
-            <span className="text-xs font-mono text-muted-foreground">
-              {(index + 1).toString().padStart(2, "0")}
+            <span
+              className={cn(
+                "text-[11px] font-mono tabular-nums transition-colors",
+                isActive
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground/60",
+                "group-hover/row:text-muted-foreground",
+              )}
+            >
+              {String(index + 1).padStart(2, "0")}
             </span>
           )}
         </TableCell>
 
-        {/* Track Info */}
-        <TableCell className="py-2">
-          <div className="flex items-center gap-3">
-            <div
-              className="relative size-10 rounded-md overflow-hidden cursor-pointer"
+        {/* ── Col 3: Cover + Title + Mobile Artist ── */}
+        <TableCell className="py-2.5 pl-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <TrackCover
+              src={track.coverImage}
+              title={track.title}
+              isActive={isActive}
+              isPlaying={isPlaying}
+              canPlay={canPlay}
               onClick={onPlay}
-            >
-              <img
-                src={track.coverImage}
-                className={cn(
-                  "size-full object-cover transition",
-                  isActive && "opacity-60",
-                )}
-              />
-              {track.status === "ready" && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition">
-                  {isActive && isPlaying ? (
-                    <Pause className="size-4 text-white fill-white" />
-                  ) : (
-                    <Play className="size-4 text-white fill-white" />
-                  )}
-                </div>
-              )}
-            </div>
+            />
 
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p
                 className={cn(
-                  "font-bold truncate",
+                  "text-sm font-semibold truncate leading-tight transition-colors",
                   isActive ? "text-primary" : "text-foreground",
                 )}
+                title={track.title}
               >
                 {track.title}
               </p>
+
+              {/* Artist — visible only on mobile (hidden sm+) */}
               <Link
                 to={`/artist/${track.artist?.slug}`}
-                className="text-xs text-muted-foreground sm:hidden"
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                  "text-[11px] text-muted-foreground truncate mt-0.5 block sm:hidden",
+                  "hover:text-foreground hover:underline transition-colors",
+                )}
               >
                 {track.artist?.name}
+                {track.featuringArtists?.length > 0 && (
+                  <span className="opacity-70">
+                    {" "}
+                    ft. {track.featuringArtists.map((a) => a.name).join(", ")}
+                  </span>
+                )}
               </Link>
             </div>
           </div>
         </TableCell>
 
-        {/* Artist */}
-        <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
+        {/* ── Col 4: Artist (sm+) ── */}
+        <TableCell className="hidden sm:table-cell text-sm text-muted-foreground py-2.5">
           <Link
             to={`/artist/${track.artist?.slug}`}
-            className="hover:underline"
+            onClick={(e) => e.stopPropagation()}
+            className="hover:text-foreground hover:underline transition-colors truncate block max-w-[180px]"
+            title={track.artist?.name}
           >
             {track.artist?.name}
           </Link>
-          {track.featuringArtists.length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {" "}
-              (ft.{" "}
-              {track.featuringArtists
-                .map((artist) => (
+          {track.featuringArtists?.length > 0 && (
+            <span className="text-[11px] text-muted-foreground/60 block truncate mt-0.5">
+              ft.{" "}
+              {track.featuringArtists.map((a, i) => (
+                <React.Fragment key={a._id}>
+                  {i > 0 && ", "}
                   <Link
-                    key={artist._id}
-                    to={`/artist/${artist.slug}`}
-                    className="hover:underline"
+                    to={`/artist/${a.slug}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="hover:text-foreground hover:underline transition-colors"
                   >
-                    {artist.name}
+                    {a.name}
                   </Link>
-                ))
-                .join(", ")}
-              )
+                </React.Fragment>
+              ))}
             </span>
           )}
         </TableCell>
 
-        {/* Album */}
-        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Disc className="size-3 opacity-50" />
+        {/* ── Col 5: Album (md+) ── */}
+        <TableCell className="hidden md:table-cell text-sm text-muted-foreground py-2.5">
+          <div className="flex items-center gap-1.5 min-w-0 max-w-[200px]">
+            <Disc3 className="size-3 opacity-40 flex-shrink-0" />
             {track.album ? (
               <Link
                 to={`/albums/${track.album.slug}`}
                 onClick={(e) => e.stopPropagation()}
-                className="hover:underline"
+                className="truncate hover:text-foreground hover:underline transition-colors"
+                title={track.album.title}
               >
                 {track.album.title}
               </Link>
             ) : (
-              "Single"
+              <span className="text-muted-foreground/50 italic text-xs">
+                Single
+              </span>
             )}
           </div>
         </TableCell>
 
-        {/* Status */}
-        <TableCell>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge className={cn("text-[10px]", statusConfig.className)}>
-                  {(statusConfig.animate || isRetrying) && (
-                    <Loader2 className="size-3 mr-1 animate-spin" />
-                  )}
-                  {statusConfig.label}
-                </Badge>
-              </TooltipTrigger>
-              {track.status === "failed" && track.errorReason && (
-                <TooltipContent className="max-w-xs text-xs">
-                  {track.errorReason}
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-
-          {(track.status === "failed" || track.status === "pending") && (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={handleRetry}
-              className="ml-1"
-            >
-              <RefreshCcw className="size-4" />
-            </Button>
-          )}
+        {/* ── Col 6: Status ── */}
+        <TableCell className="py-2.5">
+          <StatusCell
+            track={track}
+            isRetrying={isRetrying}
+            onRetry={handleRetry}
+          />
         </TableCell>
 
-        {/* Duration */}
-        <TableCell className="hidden lg:table-cell text-xs font-mono">
-          {formatDuration(track.duration)}
+        {/* ── Col 7: Duration (lg+) ── */}
+        <TableCell className="hidden lg:table-cell w-16 text-center py-2.5">
+          <span className="text-[11px] font-mono tabular-nums text-muted-foreground/70">
+            {formatDuration(track.duration)}
+          </span>
         </TableCell>
 
-        {/* Actions */}
-        <TableCell className="text-right">
+        {/* ── Col 8: Actions ── */}
+        <TableCell className="pr-3 py-2.5 text-right">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
-                <MoreHorizontal className="size-4" />
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Track options"
+                className={cn(
+                  "size-7 rounded-md opacity-0 group-hover/row:opacity-100",
+                  "focus-visible:opacity-100 transition-all duration-150",
+                  "hover:bg-muted text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <MoreHorizontal className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit(track)}>
-                <Edit className="size-4 mr-2" /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleCopyId}>
-                <Copy className="size-4 mr-2" /> Copy ID
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+            <DropdownMenuContent
+              align="end"
+              sideOffset={4}
+              className="w-44 rounded-xl shadow-elevated border-border/50 bg-popover/95 backdrop-blur-md"
+            >
               <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => onDelete(track)}
+                onClick={handleEdit}
+                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
               >
-                <Trash2 className="size-4 mr-2" /> Delete
+                <Edit className="size-3.5 opacity-70" />
+                Edit track
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleCopyId}
+                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+              >
+                <Copy className="size-3.5 opacity-70" />
+                Copy ID
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-border/40" />
+              <DropdownMenuItem
+                onClick={handleDelete}
+                className={cn(
+                  "gap-2 text-sm cursor-pointer rounded-lg",
+                  "text-destructive focus:text-destructive focus:bg-destructive/10",
+                )}
+              >
+                <Trash2 className="size-3.5" />
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -279,5 +495,6 @@ export const TrackTableRow = memo(
     );
   },
 );
-export default TrackTableRow;
+
 TrackTableRow.displayName = "TrackTableRow";
+export default TrackTableRow;

@@ -2,15 +2,32 @@
 import { createContext, useContext } from "react";
 
 export type Theme = "dark" | "light" | "system";
-
+export type Skin =
+  | "obsidian" // Mặc định
+  | "tokyo" // Neon Cyberpunk
+  | "sahara" // Luxury Gold
+  | "nordic" // Arctic Blue
+  | "amazon" // Forest Zen
+  | "crimson" // Passion Red
+  | "vapor" // 80s Dream
+  | "slate" // Midnight Slate
+  | "ocean" // Deep Ocean (New)
+  | "rose" // Rose Gold (New)
+  | "lime" // Neon Lime (New)
+  | "mono" // Obsidian Mono (New)
+  | "arctic"; // Arctic Light (New)
 export type ThemeProviderState = {
   theme: Theme;
+  skin: Skin;
   setTheme: (theme: Theme) => void;
+  setSkin: (skin: Skin) => void; // Thêm dòng này
 };
 
 export const initialState: ThemeProviderState = {
   theme: "system",
+  skin: "obsidian",
   setTheme: () => null,
+  setSkin: () => null,
 };
 
 export const ThemeProviderContext =

@@ -1,5 +1,13 @@
 import { Album } from "@/features/album/types";
 import { Artist } from "@/features/artist/types";
+import { MoodVideo } from "@/features/mood-video/types";
+
+// 1. Cấu trúc câu Lyric để hiển thị Preview hoặc Search nhanh
+export interface ILyricLine {
+  startTime: number;
+  endTime: number;
+  text: string;
+}
 
 export interface ITrack {
   _id: string;
@@ -16,10 +24,27 @@ export interface ITrack {
 
   // Resources
   trackUrl: string;
-  hlsUrl?: string; // 🔥 Cực kỳ quan trọng cho Streaming player
+  hlsUrl?: string;
   coverImage: string;
 
-  // Context
+  // === UPGRADE: LYRICS & KARAOKE ===
+  // none: không lời, plain: lời thô, synced: theo dòng (.lrc), karaoke: từng chữ
+  lyricType: "none" | "plain" | "synced" | "karaoke";
+
+  // URL dẫn đến file .json chứa data lyrics đầy đủ trên B2
+  lyricUrl?: string;
+
+  // Lưu 5-10 câu đầu để Preview/SEO (không cần fetch file JSON)
+  lyricPreview: ILyricLine[];
+
+  // Lời bài hát thô để Search Engine (MongoDB Full-text search)
+  plainLyrics?: string;
+
+  // === UPGRADE: VISUAL CONTEXT ===
+  // Gán trực tiếp Object MoodVideo hoặc ID (Canvas)
+  moodVideo?: MoodVideo | null;
+
+  // Context & Metadata
   trackNumber: number;
   diskNumber: number;
   releaseDate: string;
@@ -27,18 +52,17 @@ export interface ITrack {
   copyright?: string;
   isrc?: string;
 
-  // Content
-  lyrics?: string;
+  // Tags (Cực kỳ quan trọng để Worker tự động khớp Canvas)
   tags: string[];
 
-  // Technical Specs (Backend trả về sau khi xử lý file)
+  // Technical Specs (Enriched by Worker)
   duration: number;
   fileSize: number;
   format: string;
   bitrate: number;
 
-  // Stats
-  isLiked?: boolean; // 🔥 Quan trọng để hiển thị trạng thái Like
+  // Stats & States
+  isLiked?: boolean;
   playCount: number;
   likeCount: number;
   status: "pending" | "processing" | "ready" | "failed";
@@ -48,6 +72,7 @@ export interface ITrack {
   updatedAt: string;
 }
 
+// 2. Cập nhật Filter Params (Bổ sung lọc theo Mood/Lyric)
 export interface TrackFilterParams {
   page?: number;
   limit?: number;
@@ -55,26 +80,14 @@ export interface TrackFilterParams {
   artistId?: string;
   albumId?: string;
   genreId?: string;
+  moodVideoId?: string; // Lọc các bài cùng Canvas
+  lyricType?: "none" | "plain" | "synced" | "karaoke";
   status?: "pending" | "processing" | "ready" | "failed";
-  sort?: "newest" | "popular" | "alphabetical";
+  sort?: "newest" | "popular" | "alphabetical" | "trending";
   isPublic?: boolean;
 }
 
-// 1. Dữ liệu 1 điểm trên biểu đồ (Time Series)
-export interface ChartDataPoint {
-  time: string;
-  top1: number;
-  top2: number;
-  top3: number;
-}
-
-export interface IChartDataPoint {
-  time: string;
-  top1: number;
-  top2: number;
-  top3: number;
-}
-
+// 3. Chart Interfaces (Giữ nguyên cấu trúc nhưng đồng bộ technical fields)
 export interface IChartItem {
   _id: string;
   title: string;
@@ -96,6 +109,23 @@ export interface IChartItem {
     slug: string;
   };
   featuringArtists: Artist[];
+  moodVideo?: string | null; // Cho phép hiển thị Canvas ngay trên Chart
+}
+
+// ... Các interface Chart khác giữ nguyên cấu trúc bạn đã gửi
+// 1. Dữ liệu 1 điểm trên biểu đồ (Time Series)
+export interface ChartDataPoint {
+  time: string;
+  top1: number;
+  top2: number;
+  top3: number;
+}
+
+export interface IChartDataPoint {
+  time: string;
+  top1: number;
+  top2: number;
+  top3: number;
 }
 
 export interface IRealtimeChartData {

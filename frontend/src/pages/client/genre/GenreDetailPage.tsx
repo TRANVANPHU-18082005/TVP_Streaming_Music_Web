@@ -128,7 +128,12 @@ import { SubGenreGrid } from "@/features/genre/components/SubGenreGrid";
 import { TrackList } from "@/features/track/components/TrackList";
 import { usePublicTracks } from "@/features/track/hooks/useTracksQuery";
 import { useAppDispatch } from "@/store/hooks";
-import { ITrack, setIsPlaying, setQueue } from "@/features";
+import {
+  Genredetailskeleton,
+  ITrack,
+  setIsPlaying,
+  setQueue,
+} from "@/features";
 import { useGenreDetailQuery } from "@/features/genre/hooks/useGenresQuery";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 
@@ -514,35 +519,6 @@ const TrackListSkeleton = memo<{ count?: number }>(({ count = 5 }) => (
 TrackListSkeleton.displayName = "TrackListSkeleton";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GenreDetailSkeleton
-// ─────────────────────────────────────────────────────────────────────────────
-
-const GenreDetailSkeleton = memo(() => (
-  <div className="min-h-screen bg-background pb-32">
-    <div className="h-[58vh] w-full bg-muted/15 animate-pulse relative">
-      <div className="absolute bottom-10 w-full px-4 sm:px-8 container mx-auto flex flex-col md:flex-row items-center md:items-end gap-8">
-        <div className="size-[180px] sm:size-[220px] md:size-[260px] rounded-2xl shrink-0 bg-muted/50 shadow-xl" />
-        <div className="flex-1 w-full space-y-4">
-          <div className="h-4 w-24 bg-muted/50 rounded-full" />
-          <div className="h-16 sm:h-20 w-full max-w-lg bg-muted/50 rounded-xl" />
-          <div className="h-4 w-2/3 max-w-sm bg-muted/35 rounded-full" />
-          <div className="h-4 w-36 bg-muted/25 rounded-full" />
-        </div>
-      </div>
-    </div>
-    <div className="container mx-auto mt-8 space-y-6 px-4 sm:px-8">
-      <div className="flex items-center gap-3">
-        <div className="size-16 rounded-full bg-muted/40 animate-pulse" />
-        <div className="size-11 rounded-full bg-muted/25 animate-pulse" />
-        <div className="size-11 rounded-full bg-muted/25 animate-pulse" />
-      </div>
-      <div className="h-80 w-full rounded-2xl bg-muted/20 animate-pulse" />
-    </div>
-  </div>
-));
-GenreDetailSkeleton.displayName = "GenreDetailSkeleton";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // GenreNotFound — memo'd (FIX 3, 11, 17)
 // FIX 11: bg-primary/8 → bg-primary/[0.08], blur-[80px] → blur-3xl
 // FIX 17: focus-visible rings added
@@ -761,7 +737,7 @@ export const GenreDetailPage: React.FC<GenreDetailPageProps> = ({
   );
 
   // ── Render states
-  if (loadingGenre) return <GenreDetailSkeleton />;
+  if (loadingGenre) return <Genredetailskeleton />;
   if (isError || !genre) {
     return (
       <GenreNotFound

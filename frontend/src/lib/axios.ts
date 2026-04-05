@@ -1,6 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { env } from "@/config/env";
 import type { Store } from "@reduxjs/toolkit"; // Import Type
+import { LOGOUT_ACTION } from "@/store/store";
 
 // Định nghĩa Interface
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
@@ -91,7 +92,7 @@ api.interceptors.response.use(
       if (window.location.pathname === "/login") return Promise.reject(error);
 
       // 1. Xóa Redux/Local data
-      store?.dispatch({ type: "auth/logout" });
+      store?.dispatch({ type: LOGOUT_ACTION });
       setGlobalAccessToken(null);
 
       // 2. Đá về Login kèm tín hiệu trên URL
@@ -105,7 +106,7 @@ api.interceptors.response.use(
       // 1. Nếu lỗi 401 đến từ chính API refresh hoặc login -> Logout luôn
       if (originalRequest.url?.includes("/auth/")) {
         // Dispatch action Logout (Dùng type string để an toàn dependency)
-        store?.dispatch({ type: "auth/logout" });
+        store?.dispatch({ type: LOGOUT_ACTION });
         return Promise.reject(error);
       }
 
@@ -160,13 +161,15 @@ api.interceptors.response.use(
         if (status === 400 || status === 401 || status === 403) {
           // Lúc này mới chắc chắn là phiên đăng nhập hết hạn thật sự
           // 1. Dọn dẹp Redux (Kích hoạt Cầu chì tổng)
-          store?.dispatch({ type: "auth/logout" });
+          store?.dispatch({ type: LOGOUT_ACTION });
           setGlobalAccessToken(null);
 
           // 2. Điều hướng kèm theo query string để trang Login biết lý do
           // Thay vì 'locked', ta dùng 'expired'
           if (window.location.pathname !== "/login") {
-            window.location.href = "/login?reason=session_expired";
+            setTimeout(() => {
+              window.location.href = "/login?reason=session_expired";
+            }, 100);
           }
         }
 

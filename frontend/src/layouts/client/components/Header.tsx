@@ -1,56 +1,3 @@
-/**
- * Header.tsx — Global navigation header
- *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * FULL CHANGELOG (all sessions combined)
- *
- * ── FIX 1: Breakpoint alignment (laptop layout break) ────────────────────────
- *   Root cause: 3-way breakpoint mismatch at md (768–1023px):
- *     - DesktopNav was lg:flex (1024px+) but Search/Login were md:flex (768px+)
- *     - Hamburger was lg:hidden, so it showed at md alongside login button
- *     - Result: no nav + hamburger + login all visible simultaneously → overflow
- *   Fix: unified all elements to single md cutover:
- *     < md  → mobile mode (hamburger + drawer)
- *     ≥ md  → desktop mode (nav + auth + search icon)
- *     ≥ lg  → desktop+ mode (full search bar replaces search icon)
- *
- * ── FIX 2: Adaptive nav — Vietnamese labels too long ─────────────────────────
- *   Root cause: 6 labels ("Bảng xếp hạng", "Thể loại", etc.) = ~560px wide.
- *   Combined with auth buttons + logo at md = overflow.
- *   Fix: ResizeObserver-driven 2-tier nav:
- *     ≥ 520px nav width → FULL (icon + full label)
- *     <  520px nav width → ICON (icon only + native title tooltip)
- *   Why ResizeObserver not breakpoints: nav width depends on how much space
- *   other header elements consume — viewport width alone is insufficient.
- *
- * ── FIX 3: Search bar strategy ───────────────────────────────────────────────
- *   DesktopSearchBar: hidden md:flex → hidden lg:flex (full bar only at lg+)
- *   SearchIconButton: new, md:flex lg:hidden (icon at md, replaced by bar at lg)
- *   MobileSearchOverlay: md:hidden → lg:hidden (shared by mobile + md icon tap)
- *
- * ── FIX 4: allItems spread in MobileDrawer ───────────────────────────────────
- *   Original [...items] in useMemo body produced a new array every render
- *   (spread = new reference). Replaced with direct items reference.
- *
- * ── FIX 5: ModeToggle + separator at sm (640px) ──────────────────────────────
- *   Was hidden sm:block → hidden md:block. Prevents half-desktop UI at
- *   640–767px where toggle appeared but nav did not.
- *
- * ── FIX 6: LEFT column layout ────────────────────────────────────────────────
- *   flex-1 min-w-0 overflow-hidden → nav shrinks before logo is affected.
- *   Nav has flex-shrink internally. RIGHT column is shrink-0.
- *
- * SPACE BUDGET SUMMARY
- * ─────────────────────────────────────────────────────────────────────────────
- *   < 768px  : Logo(96) + SearchIcon(36) + Hamburger(36) + gaps ≈ 200px ✓
- *   768–1023 : Logo(96) + Nav-icon(216) + SearchIcon(36) + Sep+Toggle(52)
- *              + Login(88) + Register(80) + gaps ≈ 610px ✓ (fits in 720px container)
- *   1024px+  : Logo(96) + Nav-full(~540) + SearchBar(220) + Sep+Toggle(52)
- *              + Login(88) + Register(80) + gaps ≈ 1040px ✓ (fits in 976px container)
- */
-
 import React, {
   useState,
   useEffect,
@@ -249,7 +196,7 @@ const Logo = memo(() => (
         </AvatarFallback>
       </Avatar>
     </div>
-    <span className="hidden sm:block text-[15px] font-black tracking-tight text-foreground leading-none select-none">
+    <span className="hidden sm:block text-[15px] font-black tracking-tight text-brand leading-none select-none">
       Music<span className="text-primary">.</span>
     </span>
   </Link>
