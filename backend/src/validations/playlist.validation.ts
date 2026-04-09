@@ -67,41 +67,79 @@ export const updatePlaylistTracksSchema = z.object({
   params: z.object({ id: objectIdSchema }),
   body: z.object({
     trackIds: formDataArrayHelper(objectIdSchema).pipe(
-      z.array(objectIdSchema).max(
-        500,
-        "Playlist giới hạn tối đa 500 bài hát",
-      ),
+      z.array(objectIdSchema).max(500, "Playlist giới hạn tối đa 500 bài hát"),
     ),
   }),
 });
 
-// --- 4. GET LIST (FILTER) ---
+// --- 4. GET LIST PLAYLISTS (Advanced Validation) ---
 export const getPlaylistsSchema = z.object({
-  query: z.object({
-    page: z.coerce.number().min(1).default(1),
-    limit: z.coerce.number().min(1).max(50).default(10),
+  query: z
+    .object({
+      // 1. Phân trang: Kiểm soát chặt chẽ limit để tránh Overload RAM khi serialize
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(50, "Limit too high")
+        .default(12),
 
-    keyword: z.preprocess(emptyToUndefined, z.string().trim().optional()),
-    tags: z.preprocess(emptyToUndefined, z.string().trim().optional()),
+      // 2. Keyword & Tags: Chống ReDoS bằng cách giới hạn độ dài chuỗi tối đa
+      // Người dùng bình thường không bao giờ search 1 keyword dài hơn 100 ký tự
+      keyword: z.preprocess(
+        emptyToUndefined,
+        z.string().trim().min(1).max(100, "Keyword too long").optional(),
+      ),
 
-    userId: optionalObjectIdSchema,
-    type: z.preprocess(emptyToUndefined, playlistTypeSchema.optional()),
-    visibility: z.preprocess(emptyToUndefined, visibilitySchema.optional()),
+      // Tag search: Hỗ trợ lọc theo tag đơn lẻ
+      tag: z.preprocess(
+        emptyToUndefined,
+        z.string().trim().min(1).max(30, "Tag too long").optional(),
+      ),
 
-    isSystem: booleanSchema.optional(),
+      // 3. IDs: Sử dụng Schema ObjectId dùng chung để đảm bảo Hex 24 ký tự
+      userId: optionalObjectIdSchema,
 
-    sort: z
-      .enum(["newest", "popular", "followers", "name", "oldest"])
-      .default("newest"),
+      // 4. Enums & Types: Chỉ chấp nhận các giá trị nghiệp vụ hợp lệ
+      // Tránh việc user gửi type="hacker" gây lỗi logic ở Service
+      type: z.preprocess(
+        emptyToUndefined,
+        z.enum(["playlist", "radio", "mix", "album"]).optional(),
+      ),
+
+      // Privacy Control: Enum thay vì Boolean để hỗ trợ Unlisted/Private
+      visibility: z.preprocess(
+        emptyToUndefined,
+        z.enum(["public", "private", "unlisted"]).optional(),
+      ),
+
+      // 5. System Flag: Sử dụng preprocess để ép kiểu từ String URL sang Boolean
+      isSystem: z.preprocess((val) => {
+        if (val === "true" || val === true) return true;
+        if (val === "false" || val === false) return false;
+        return undefined;
+      }, z.boolean().optional()),
+
+      // 6. Sorting: Các tiêu chí sắp xếp đã được index trong MongoDB
+      sort: z
+        .enum(["newest", "popular", "followers", "name", "oldest", "trending"])
+        .default("newest"),
+    })
+    .strict(), // 🔥 CHIÊU CUỐI: Chặn đứng các tham số lạ (SQL Injection / Parameter Tampering)
+});
+export const getPlaylistTracksSchema = getPlaylistsSchema.extend({
+  query: getPlaylistsSchema.shape.query.omit({
+    userId: true,
   }),
 });
-
 // --- 5. TRACK MANAGEMENT ---
 export const addTracksToPlaylistSchema = z.object({
   params: z.object({ playlistId: objectIdSchema }),
   body: z.object({
     trackIds: formDataArrayHelper(objectIdSchema).pipe(
-      z.array(objectIdSchema)
+      z
+        .array(objectIdSchema)
         .min(1, "Vui lòng chọn ít nhất 1 bài hát")
         .max(100, "Không thể thêm quá 100 bài cùng lúc"),
     ),
@@ -112,10 +150,7 @@ export const removeTracksToPlaylistSchema = z.object({
   params: z.object({ playlistId: objectIdSchema }),
   body: z.object({
     trackIds: formDataArrayHelper(objectIdSchema).pipe(
-      z.array(objectIdSchema).min(
-        1,
-        "Vui lòng chọn ít nhất 1 bài hát để xóa",
-      ),
+      z.array(objectIdSchema).min(1, "Vui lòng chọn ít nhất 1 bài hát để xóa"),
     ),
   }),
 });

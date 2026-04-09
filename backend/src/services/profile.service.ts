@@ -7,6 +7,7 @@ import Like from "../models/Like";
 import User from "../models/User";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
+import logger from "../utils/logger";
 
 class ProfileService {
   /**
@@ -154,6 +155,7 @@ class ProfileService {
         page,
         pageSize: limit,
         totalPages: Math.ceil(totalItems / limit),
+        hasNextPage: skip + limit < totalItems,
       },
     };
   }
@@ -170,116 +172,29 @@ class ProfileService {
       throw new ApiError(httpStatus.NOT_FOUND, "Người dùng không tồn tại");
     return user;
   }
-  /**
-   * 6. LẤY LỊCH SỬ NGHE NHẠC (Recently Played)
-   * Lấy danh sách các bài hát user đã nghe gần đây, không trùng lặp (Unique)
-   */
-  async getRecentlyPlayed(userId: string, limit: number = 20) {
-    const result = await PlayLog.aggregate([
-      // 1. Lọc theo User
-      {
-        $match: {
-          userId: new mongoose.Types.ObjectId(userId),
-        },
-      },
-
-      // 2. Sắp xếp log mới nhất lên đầu
-      { $sort: { listenedAt: -1 } },
-
-      // 3. Nhóm theo trackId để tránh 1 bài hiện nhiều lần nếu user nghe đi nghe lại
-      {
-        $group: {
-          _id: "$trackId",
-          lastListenedAt: { $first: "$listenedAt" }, // Lấy thời điểm nghe gần nhất
-        },
-      },
-
-      // 4. Sắp xếp lại sau khi group để đảm bảo tính thời gian
-      { $sort: { lastListenedAt: -1 } },
-
-      // 5. Giới hạn số lượng
-      { $limit: limit },
-
-      // 6. JOIN với bảng Track để lấy thông tin chi tiết
-      {
-        $lookup: {
-          from: "tracks", // Tên collection của Track
-          localField: "_id",
-          foreignField: "_id",
-          as: "trackDetails",
-        },
-      },
-
-      // 7. Gỡ mảng lookup
-      { $unwind: "$trackDetails" },
-
-      // 8. Lọc bài hát còn hoạt động (Security)
-      {
-        $match: {
-          "trackDetails.status": "ready",
-          "trackDetails.isDeleted": false,
-        },
-      },
-
-      // 9. JOIN với bảng Artist để lấy tên nghệ sĩ
-      {
-        $lookup: {
-          from: "artists",
-          localField: "trackDetails.artist",
-          foreignField: "_id",
-          as: "trackDetails.artist",
-        },
-      },
-      {
-        $unwind: {
-          path: "$trackDetails.artist",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      // 10. Định dạng output sạch sẽ
-      {
-        $project: {
-          _id: "$_id",
-          listenedAt: "$lastListenedAt",
-          title: "$trackDetails.title",
-          slug: "$trackDetails.slug",
-          hlsUrl: "$trackDetails.hlsUrl",
-          coverImage: "$trackDetails.coverImage",
-          duration: "$trackDetails.duration",
-          artist: {
-            _id: "$trackDetails.artist._id",
-            name: "$trackDetails.artist.name",
-            slug: "$trackDetails.artist.slug",
-          },
-        },
-      },
+  async getLikedTracks(userId: string, query: any) {
+    const { page = 1, limit = 20 } = query;
+    const [likedTracks] = await Promise.all([
+      this.getLikedContent(userId, "track", page, limit),
     ]);
-
-    return result;
+    logger.debug("Favourite Track: " + likedTracks);
+    return likedTracks;
   }
   /**
    * 5. TỔNG HỢP DASHBOARD
    */
   async getFullProfileDashboard(userId: string) {
     // Lấy 8 bài hát và 6 album mới nhất đã like làm bản xem trước (preview)
-    const [
-      analytics,
-      recentlyPlayed,
-      likedTracks,
-      likedAlbums,
-      likedPlaylists,
-    ] = await Promise.all([
-      this.getListeningAnalytics(userId),
-      this.getRecentlyPlayed(userId, 10),
-      this.getLikedContent(userId, "track", 1, 8),
-      this.getLikedContent(userId, "album", 1, 6),
-      this.getLikedContent(userId, "playlist", 1, 6),
-    ]);
-
+    const [analytics, likedTracks, likedAlbums, likedPlaylists] =
+      await Promise.all([
+        this.getListeningAnalytics(userId),
+        this.getLikedContent(userId, "track", 1, 8),
+        this.getLikedContent(userId, "album", 1, 6),
+        this.getLikedContent(userId, "playlist", 1, 6),
+      ]);
+    logger.debug("Favourite Track content: " + likedTracks);
     return {
       analytics,
-      recentlyPlayed,
       library: {
         tracks: likedTracks.data,
         albums: likedAlbums.data,
@@ -294,7 +209,6 @@ class ProfileService {
       this.getLikedContent(userId, "album", 1, limit),
       this.getLikedContent(userId, "playlist", 1, limit),
     ]);
-
     return {
       tracks: likedTracks.data,
       albums: likedAlbums.data,
@@ -308,17 +222,115 @@ class ProfileService {
       analytics,
     };
   }
-  async getRecentlyPlayedTracks(userId: string, limit: number) {
-    // Lấy 8 bài hát và 6 album mới nhất đã like làm bản xem trước (preview)
-    const [recentlyPlayed] = await Promise.all([
-      this.getRecentlyPlayed(userId, limit),
+  //
+  async getRecentlyPlayed(
+    userId: string,
+    query: { page?: number; limit?: number } = {},
+  ) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // Sử dụng Facet để lấy cả DATA và TOTAL COUNT trong 1 lần query duy nhất (Tối ưu nhất cho Aggregate)
+    const results = await PlayLog.aggregate([
+      // 1. Lọc theo User (Cần có Index: { userId: 1, listenedAt: -1 })
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId),
+        },
+      },
+
+      // 2. Sắp xếp log mới nhất lên đầu để lấy đúng bản ghi 'vừa nghe'
+      { $sort: { listenedAt: -1 } },
+
+      // 3. Nhóm để tránh trùng bài hát
+      {
+        $group: {
+          _id: "$trackId",
+          lastListenedAt: { $first: "$listenedAt" },
+        },
+      },
+
+      // 4. Sắp xếp lại danh sách sau khi đã loại bỏ trùng lặp
+      { $sort: { lastListenedAt: -1 } },
+
+      // 5. PHÂN TRANG & ĐẾM TỔNG (Sử dụng $facet)
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            // 6. JOIN lấy thông tin chi tiết
+            {
+              $lookup: {
+                from: "tracks",
+                localField: "_id",
+                foreignField: "_id",
+                as: "trackDetails",
+              },
+            },
+            { $unwind: "$trackDetails" },
+            // 7. Security Match
+            // {
+            //   $match: {
+            //     "trackDetails.status": "ready",
+            //     "trackDetails.isDeleted": false,
+            //   },
+            // },
+            // 8. JOIN lấy Artist
+            {
+              $lookup: {
+                from: "artists",
+                localField: "trackDetails.artist",
+                foreignField: "_id",
+                as: "artistInfo",
+              },
+            },
+            {
+              $unwind: {
+                path: "$artistInfo",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            // 9. Format Output
+            {
+              $project: {
+                _id: "$_id",
+                listenedAt: "$lastListenedAt",
+                title: "$trackDetails.title",
+                slug: "$trackDetails.slug",
+                hlsUrl: "$trackDetails.hlsUrl",
+                coverImage: "$trackDetails.coverImage",
+                duration: "$trackDetails.duration",
+                playCount: "$trackDetails.playCount",
+                isExplicit: "$trackDetails.isExplicit",
+                artist: {
+                  _id: "$artistInfo._id",
+                  name: "$artistInfo.name",
+                  slug: "$artistInfo.slug",
+                },
+              },
+            },
+          ],
+        },
+      },
     ]);
 
+    const total = results[0]?.metadata[0]?.total || 0;
+    const tracks = results[0]?.data || [];
+
     return {
-      recentlyPlayed,
+      data: tracks,
+      meta: {
+        totalItems: total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: skip + limit < total,
+      },
     };
   }
-
   private _fillMissingDates(stats: any[], days: number) {
     const result = [];
     const now = new Date();

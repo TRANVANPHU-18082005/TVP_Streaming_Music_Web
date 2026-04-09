@@ -1,30 +1,3 @@
-"use client";
-
-/**
- * @file ArtistFilters.tsx — Artist catalog search + filter bar (v4.0 — Soundwave Premium)
- *
- * REDESIGN vs v3.2 — aligned with FeaturedAlbums + AlbumFilter v4.0:
- * ─ SearchInput: ambient glow on focus-within, brand-colored icon state
- * ─ FilterToggleButton extracted as memo with gradient-brand counter badge
- * ─ ActiveFilterTag: colored icon-bubble per filter (wave-spectrum system)
- * ─ ActiveTagsBar: gradient-wave top accent line + Sparkles eyebrow
- * ─ Card wrapper: border shifts to primary/20 + shadow-brand when active
- * ─ FilterLabel accepts iconColor prop — all sections get wave-spectrum colors
- * ─ FilterToggle: shadow-brand active, shadow-raised idle
- * ─ AmbientBackground layout fix: position fixed (not absolute) — prevents
- *   layout void on short pages (not-logged-in state)
- *
- * ALL v3.2 FIXES PRESERVED (FIX 1–7, 10–11):
- * ─ FIX 1+2: panelRef on grid wrapper + transitionend target/property guard
- * ─ FIX 3: React.memo applied
- * ─ FIX 4: removeFilter sends null not undefined
- * ─ FIX 5: handleClearSearch bypasses debounce
- * ─ FIX 6: URL→input one-way sync guard
- * ─ FIX 7: sort value toLowerCase()
- * ─ FIX 10: FilterDropdown onClear → null
- * ─ FIX 11: isActive/isVerified "all" → null
- */
-
 import React, {
   useState,
   useEffect,
@@ -49,7 +22,6 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { ArtistFilterParams } from "@/features/artist/types";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Input } from "@/components/ui/input";
 import FilterDropdown from "@/components/ui/FilterDropdown";
@@ -65,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAppSelector } from "@/store/hooks";
+import { ArtistFilterParams } from "../schemas/artist.schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES

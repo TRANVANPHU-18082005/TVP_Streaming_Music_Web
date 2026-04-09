@@ -2,55 +2,84 @@ import { useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Artist } from "../types";
-import { artistSchema, type ArtistFormValues } from "../schemas/artist.schema";
+import {
+  artistCreateSchema,
+  artistEditSchema,
+  type ArtistCreateFormValues,
+  type ArtistEditFormValues,
+} from "../schemas/artist.schema";
 import { mapEntityToForm } from "../utils/formMapper";
 import { buildArtistPayload } from "../utils/payloadBuilder";
 
-interface UseArtistFormProps {
-  artistToEdit?: Artist | null;
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface UseArtistFormCreateProps {
+  mode: "create";
+  artistToEdit?: never;
   onSubmit: (formData: FormData) => Promise<void>;
 }
 
+interface UseArtistFormEditProps {
+  mode: "edit";
+  artistToEdit: Artist;
+  onSubmit: (formData: FormData) => Promise<void>;
+}
+
+type UseArtistFormProps = UseArtistFormCreateProps | UseArtistFormEditProps;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOOK
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const useArtistForm = ({
+  mode,
   artistToEdit,
   onSubmit,
 }: UseArtistFormProps) => {
-  const defaultValues = useMemo(() => {
-    return mapEntityToForm(artistToEdit);
-  }, [artistToEdit]);
+  const isEditMode = mode === "edit";
+  const schema = isEditMode ? artistEditSchema : artistCreateSchema;
 
-  const form = useForm<ArtistFormValues>({
-    resolver: zodResolver(artistSchema),
+  const defaultValues = useMemo(
+    () => mapEntityToForm(isEditMode ? artistToEdit : undefined),
+    [artistToEdit?._id, isEditMode],
+  );
+
+  const form = useForm<ArtistCreateFormValues | ArtistEditFormValues>({
+    resolver: zodResolver(schema),
     defaultValues,
     mode: "onSubmit",
+    reValidateMode: "onChange",
   });
 
-  // Reset form khi thay đổi artistToEdit (ví dụ mở modal edit khác)
   useEffect(() => {
     form.reset(defaultValues);
   }, [defaultValues, form]);
 
   const handleSubmit = form.handleSubmit(async (values) => {
     const { dirtyFields } = form.formState;
-    const isEditMode = !!artistToEdit;
 
     // --- OPTIMIZATION: DIRTY CHECKING ---
-    // Kiểm tra xem có file nào mới được chọn không
-    const hasFiles =
-      values.avatar instanceof File ||
-      values.coverImage instanceof File ||
-      values.images.some((img) => img instanceof File);
+    if (isEditMode) {
+      // Kiểm tra có file mới ở Avatar, Cover hoặc bất kỳ ảnh nào trong Gallery
+      const hasNewFiles =
+        values.avatar instanceof File ||
+        values.coverImage instanceof File ||
+        values.images.some((img) => img instanceof File);
 
-    const hasChanges = Object.keys(dirtyFields).length > 0;
+      const hasChanges = Object.keys(dirtyFields).length > 0;
 
-    // Nếu không có thay đổi gì cả -> Return ngay
-    if (isEditMode && !hasChanges && !hasFiles) {
-      return;
+      // Nếu không có thay đổi field text và không có file mới -> Skip
+      if (!hasChanges && !hasNewFiles) {
+        console.warn("[ArtistForm] No changes detected.");
+        return;
+      }
     }
-    console.log("Dirty fields (Các trường đã sửa):", dirtyFields);
-    // Build Payload
+
+    // Build Payload - Payload builder sẽ xử lý việc lọc dirtyFields cho Phú
     const payload = buildArtistPayload(values, dirtyFields, isEditMode);
-    console.log("🚀 Submitting Artist Payload:", values);
+
     await onSubmit(payload);
   });
 
@@ -59,5 +88,6 @@ export const useArtistForm = ({
     handleSubmit,
     isSubmitting: form.formState.isSubmitting,
     isDirty: form.formState.isDirty,
+    isEditMode,
   };
 };

@@ -2,6 +2,8 @@ import { useEffect, memo, useCallback, useMemo } from "react";
 import { VideoMoodEngine } from "./VideoMoodEngine";
 import { MoodLyricLine } from "./MoodLyricLine";
 import { ILyricLine, ITrack } from "@/features/track";
+import { motion } from "framer-motion";
+import { RealWaveform } from "@/components/MusicVisualizer";
 
 // ── CSS ──────────────────────────────────────────────────────────────────────
 
@@ -72,8 +74,6 @@ export const MoodFocusView = memo(
       injectMFVStyles();
     }, []);
 
-    const accentColor = "#7c3aed";
-
     const currentIndex = useMemo(
       () => findCurrentIndex(lyrics || [], currentTimeMs),
       [lyrics, currentTimeMs],
@@ -88,55 +88,52 @@ export const MoodFocusView = memo(
       [onSeek],
     );
 
-    if (loading && !lyrics?.length) {
+    if (!lyrics || lyrics.length === 0 || loading) {
       return (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100%",
-            color: "rgba(255,255,255,0.3)",
-            fontSize: 14,
-          }}
+        <motion.div
+          className="h-full flex flex-col items-center justify-center gap-4 select-none"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
         >
-          Loading...
-        </div>
+          <>
+            <RealWaveform active lines={17} />
+          </>
+        </motion.div>
       );
     }
 
     return (
-      <div
-        className={isPlaying ? "mfv-breathing" : ""}
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "100%",
-          overflow: "hidden",
-          background: "#000",
-          // Tăng nhẹ border-radius nếu dùng trong card
-          borderRadius: "inherit",
-          willChange: "transform",
-        }}
-        aria-label="Mood focus view"
-      >
-        {/* LAYER 1 — Video (Ken Burns + grain + vignette + accent breath bên trong) */}
-        <VideoMoodEngine
-          src={track.moodVideo?.videoUrl}
-          isPlaying={isPlaying}
-          accentColor={accentColor}
-          opacity={0.78}
-        />
+      <>
+        <div
+          className={isPlaying ? "mfv-breathing" : ""}
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            overflow: "hidden",
+            background: "transparent",
+            borderRadius: "inherit",
+            willChange: "transform",
+          }}
+          aria-label="Mood focus view"
+        >
+          {/* LAYER 1 — Video (Ken Burns + grain + vignette + accent breath bên trong) */}
+          <VideoMoodEngine
+            src={track.moodVideo?.videoUrl}
+            isPlaying={isPlaying}
+            opacity={0.78}
+          />
 
-        {/* LAYER 2 — Lyric: 1 line duy nhất, position absolute bottom */}
-        <MoodLyricLine
-          currentText={currentLine?.text ?? ""}
-          accentColor={accentColor}
-          onSeek={onSeek ? handleSeek : undefined}
-          currentStartTimeMs={currentLine?.startTime}
-          currentIndex={currentIndex}
-        />
-      </div>
+          {/* LAYER 2 — Lyric: 1 line duy nhất, position absolute bottom */}
+          <MoodLyricLine
+            currentText={currentLine?.text ?? ""}
+            onSeek={onSeek ? handleSeek : undefined}
+            currentStartTimeMs={currentLine?.startTime}
+            currentIndex={currentIndex}
+          />
+        </div>
+      </>
     );
   },
 );

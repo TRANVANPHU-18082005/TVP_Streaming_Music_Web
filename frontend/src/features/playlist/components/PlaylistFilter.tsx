@@ -23,7 +23,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { PlaylistFilterParams } from "@/features/playlist/types";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -35,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAppSelector } from "@/store/hooks";
+import { PlaylistFilterParams } from "../schemas/playlist.schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -85,39 +85,11 @@ function getTagDisplayValue(
           : "User"
         : null;
     case "visibility":
-      return params.visibility && params.visibility !== "all"
+      return params.visibility
         ? params.visibility.charAt(0).toUpperCase() + params.visibility.slice(1)
         : null;
     default:
       return null;
-  }
-}
-
-/** Context-aware icon + color for visibility chips */
-function getVisibilityMeta(visibility: string): {
-  icon: React.ElementType;
-  iconColor: string;
-  bgClass: string;
-} {
-  switch (visibility) {
-    case "public":
-      return {
-        icon: Globe,
-        iconColor: "hsl(var(--success))",
-        bgClass: "bg-success/10",
-      };
-    case "private":
-      return {
-        icon: Lock,
-        iconColor: "hsl(var(--warning))",
-        bgClass: "bg-warning/10",
-      };
-    default:
-      return {
-        icon: Link,
-        iconColor: "hsl(var(--info))",
-        bgClass: "bg-info/10",
-      };
   }
 }
 
@@ -334,35 +306,14 @@ const ActiveTagsBar = memo(
         {FILTER_TAG_DEFS.map((def) => {
           const displayValue = getTagDisplayValue(def.key, params);
           if (!displayValue) return null;
-
-          // Context-aware icon overrides
-          let icon = def.icon as React.ElementType;
-          let iconColor = def.iconColor;
-          let bgClass = def.bgClass;
-
-          if (def.key === "isSystem") {
-            icon = params.isSystem ? Server : User;
-            iconColor = params.isSystem
-              ? "hsl(var(--info))"
-              : "hsl(var(--wave-2))";
-            bgClass = params.isSystem ? "bg-info/10" : "bg-pink-500/10";
-          }
-
-          if (def.key === "visibility" && params.visibility) {
-            const meta = getVisibilityMeta(params.visibility);
-            icon = meta.icon;
-            iconColor = meta.iconColor;
-            bgClass = meta.bgClass;
-          }
-
           return (
             <ActiveFilterTag
               key={def.key}
               label={def.label}
               displayValue={displayValue}
-              icon={icon}
-              iconColor={iconColor}
-              bgClass={bgClass}
+              icon={def.icon}
+              iconColor={def.iconColor}
+              bgClass={def.bgClass}
               onRemove={() => onRemoveFilter(def.key)}
             />
           );
@@ -542,7 +493,7 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
     const activeFiltersCount = useMemo(() => {
       let n = 0;
       if (params.isSystem !== undefined) n++;
-      if (params.visibility && params.visibility !== "all") n++;
+      if (params.visibility) n++;
       return n;
     }, [params.isSystem, params.visibility]);
 

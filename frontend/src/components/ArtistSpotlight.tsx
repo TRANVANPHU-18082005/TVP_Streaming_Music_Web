@@ -1,39 +1,12 @@
-"use client";
-
-/**
- * @file ArtistSpotlight.tsx — Artist Spotlight Section (Refactored v2.0)
- *
- * ARCHITECTURE:
- * - `useSyncInteractions` call preserved exactly — hook must run unconditionally,
- *   so artistIds useMemo + enabled guard pattern is kept intact
- * - ArtistGrid / ArtistScroll extracted as isolated memos; viewport observer
- *   only mounts after data resolves, not during skeleton phase
- * - Skeleton uses circular aspect-square divs with .skeleton token (not
- *   <Skeleton className="rounded-full"> which bypasses index.css shimmer)
- * - renderContent() state machine replaces chained ternaries
- * - No play handler — artist cards navigate; zero dispatch/queryClient deps
- *
- * DESIGN:
- * - Wave-4 (gold/amber) accent — completes the home page section palette:
- *     Albums    → brand-500 (purple)
- *     Playlists → wave-2   (fuchsia)
- *     Genres    → wave-3   (cyan)
- *     Artists   → wave-4   (gold)   ← this file
- * - section-block--alt for surface rhythm (base→alt→base→alt alternation)
- * - Circular skeleton with shimmer preserves perceived layout of avatar grid
- * - Gold/amber glow divider with wave-4 → wave-1 gradient
- */
-
 import { memo, useMemo } from "react";
 import { Users, AlertCircle, UserRound, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 
 import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
-import { Artist } from "@/features/artist/types";
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useSpotlightArtists } from "@/features/artist/hooks/useArtistsQuery";
-import { useSyncInteractions } from "@/features";
+import { IArtist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "./SectionAmbient";
 
@@ -233,7 +206,7 @@ EmptyState.displayName = "EmptyState";
 // ARTIST GRID — desktop 5-col whileInView stagger
 // Isolated memo so IntersectionObserver only attaches post-data-resolve
 // ─────────────────────────────────────────────────────────────────────────────
-const ArtistGrid = memo(({ artists }: { artists: Artist[] }) => (
+const ArtistGrid = memo(({ artists }: { artists: IArtist[] }) => (
   <motion.div
     variants={containerVariants}
     initial="hidden"
@@ -255,7 +228,7 @@ ArtistGrid.displayName = "ArtistGrid";
 // ─────────────────────────────────────────────────────────────────────────────
 // ARTIST SCROLL — mobile snap-x horizontal strip
 // ─────────────────────────────────────────────────────────────────────────────
-const ArtistScroll = memo(({ artists }: { artists: Artist[] }) => (
+const ArtistScroll = memo(({ artists }: { artists: IArtist[] }) => (
   <div
     className="lg:hidden scroll-overflow-mask -mx-4 px-4"
     role="list"
@@ -294,19 +267,15 @@ ArtistScroll.displayName = "ArtistScroll";
 export function ArtistSpotlight() {
   const { data: artists, isLoading, isError } = useSpotlightArtists(5);
 
-  // Stable ID array — avoids new array reference on every render
   const artistIds = useMemo(
-    () => artists?.map((a: Artist) => a._id) ?? [],
+    () => artists?.map((a: IArtist) => a._id),
     [artists],
   );
-
-  // Sync follow state for all visible artists in one batch request
-  // Must run unconditionally — `enabled` guard is passed into the hook
   useSyncInteractions(
-    artistIds,
+    artistIds || [],
     "follow",
     "artist",
-    !isLoading && artistIds.length > 0,
+    !isLoading && artistIds && artistIds?.length > 0,
   );
 
   const renderContent = () => {

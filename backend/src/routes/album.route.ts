@@ -21,41 +21,48 @@ const router = express.Router();
 // 🟢 PUBLIC / OPTIONAL AUTH ROUTES
 // ==========================================
 
-// Get List (Có validate query params)
-router.get("/", validate(getAlbumsSchema), albumController.getAlbums);
+// (Get) api/albums?isPublic=?&page=?&type=?&genreId=?&artistId=?&year=? (Lấy danh sách album với phân trang, lọc, sắp xếp)
+router.get(
+  "/",
+  optionalAuth,
+  validate(getAlbumsSchema),
+  albumController.getAlbums,
+);
 
-// Get Detail
-// 🔥 Cần optionalAuth để biết ai đang xem (check quyền Private Album)
+// (Get Detail Album) api/albums/:id
 router.get("/:id", optionalAuth, albumController.getAlbumDetail);
+// (Get Album Tracks) api/albums/:id/tracks?page=?&limit=?
+router.get("/:id/tracks", optionalAuth, albumController.getAlbumTracks);
 
 // ==========================================
 // 🔴 PROTECTED ROUTES (Artist & Admin)
 // ==========================================
+
 router.use(protect);
 
-// Create Album
+// (Post) api/albums
 router.post(
   "/",
-  authorize("artist", "admin"), // Chỉ Artist hoặc Admin
+  authorize("artist", "admin"),
   uploadImages.single("coverImage"),
-  validate(createAlbumSchema), // Validate Body sau khi Multer xử lý xong
-  albumController.createAlbum
+  validate(createAlbumSchema),
+  albumController.createAlbum,
 );
 
-// Update Album
+// (Patch) api/albums/:id
 router.patch(
   "/:id",
   authorize("artist", "admin"),
   uploadImages.single("coverImage"),
   validate(updateAlbumSchema),
-  albumController.updateAlbum
+  albumController.updateAlbum,
 );
 
-// Delete Album
+// (Delete) api/albums/:id
 router.delete(
   "/:id",
   authorize("artist", "admin"),
-  albumController.deleteAlbum
+  albumController.deleteAlbum,
 );
 
 export default router;

@@ -1,94 +1,148 @@
 /**
  * @file playerSlice.ts
- * @description Quản lý toàn bộ State của trình phát nhạc.
- * @features Smart Shuffle, Dual Queue, Seek Checkpointing.
+ * @description Quản lý State trình phát nhạc theo kiến trúc "ID-First & Lazy Metadata".
+ * @architecture
+ *   - Queue chỉ lưu string[] IDs → Redux nhẹ, DevTools mượt
+ *   - trackMetadataCache: Record<string, ITrack> → O(1) lookup
+ *   - Tương thích hoàn hảo với Virtual Scroll & Infinite Loading
+ * @features Smart Shuffle, Dual Queue, Seek Checkpointing, Gapless Preload
  */
 
-import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import {
+  createSelector,
+  createSlice,
+  type PayloadAction,
+} from "@reduxjs/toolkit";
 import type { RootState } from "@/store/store";
 import { ITrack } from "@/features/track/types";
 
 // ============================================================================
-// 1. HELPER: SMART SHUFFLE (Spotify Style)
+// 1. HELPER: SMART SHUFFLE (ID-based, Spotify Style)
 // ============================================================================
 
 /**
- * Thuật toán Shuffle thông minh: Tránh xếp 2 bài cùng ca sĩ cạnh nhau.
+ * Shuffle thông minh dựa trên artistId trong cache.
+ * Tránh xếp 2 bài cùng ca sĩ liền kề.
+ *
+ * @fix Trước đây vòng lặp `attempts` không đảm bảo thử đúng 3 candidate
+ *      khác nhau — chỉ chạy tối đa 3 iteration bất kể kết quả.
+ *      Nay dùng Fisher-Yates shuffle trên pool copy, sau đó linear scan
+ *      → đảm bảo thử TẤT CẢ candidate theo thứ tự ngẫu nhiên trước khi fallback.
  */
-const smartShuffle = (tracks: ITrack[], currentTrack: ITrack): ITrack[] => {
-  const result = [currentTrack];
-  const pool = tracks.filter((t) => t._id !== currentTrack._id);
+const smartShuffleIds = (
+  ids: string[],
+  currentId: string,
+  cache: Record<string, ITrack>,
+): string[] => {
+  const result: string[] = [currentId];
+  // Fisher-Yates shuffle trên pool để random không bị bias
+  const pool = ids.filter((id) => id !== currentId);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
 
   while (pool.length > 0) {
-    let attempts = 0;
-    let chosen: ITrack | null = null;
+    const lastArtistId = cache[result[result.length - 1]]?.artist?._id;
 
-    // Thử tìm bài khác ca sĩ với bài trước đó
-    while (attempts < 3 && pool.length > 0) {
-      const idx = Math.floor(Math.random() * pool.length);
-      const candidate = pool[idx];
+    // Tìm candidate đầu tiên trong pool (đã shuffle) không cùng artist
+    const preferredIdx = pool.findIndex(
+      (id) => cache[id]?.artist?._id !== lastArtistId,
+    );
 
-      if (result[result.length - 1].artist?._id !== candidate.artist?._id) {
-        chosen = candidate;
-        pool.splice(idx, 1);
-        break;
-      }
-      attempts++;
-    }
-
-    // Nếu không tìm được (hoặc pool còn ít), lấy random
-    if (!chosen && pool.length > 0) {
-      const idx = Math.floor(Math.random() * pool.length);
-      chosen = pool.splice(idx, 1)[0];
-    }
-
-    if (chosen) result.push(chosen);
+    // Nếu tìm được → dùng, không thì lấy phần tử đầu pool (fallback)
+    const pickIdx = preferredIdx !== -1 ? preferredIdx : 0;
+    const [chosen] = pool.splice(pickIdx, 1);
+    result.push(chosen);
   }
 
   return result;
 };
+// Trong playerSlice.ts
+export type QueueSourceType =
+  | "album"
+  | "playlist"
+  | "artist"
+  | "genre"
+  | "single"
+  | "chart"
+  | "collection";
+
+interface QueueSource {
+  id: string;
+  type: QueueSourceType;
+  title?: string; // Tên để hiển thị trên Playbar (ví dụ: "Top 100 Việt Nam")
+  url?: string; // Đường dẫn để khi click vào tên nguồn sẽ quay lại trang đó
+}
 
 // ============================================================================
 // 2. STATE INTERFACE
 // ============================================================================
 
 interface PlayerState {
-  currentTrack: ITrack | null;
-
-  // Dual Queue: Giữ danh sách gốc để khi tắt Shuffle có thể khôi phục
-  originalQueue: ITrack[];
-  activeQueue: ITrack[];
+  // --- ID-First Queue ---
+  /** Danh sách ID gốc (thứ tự album/playlist). Dùng để khôi phục khi tắt Shuffle. */
+  originalQueueIds: string[];
+  /** Danh sách ID thực tế đang phát (đã Shuffle hoặc giữ nguyên). */
+  activeQueueIds: string[];
+  /** ID bài đang phát. */
+  currentTrackId: string | null;
+  /** Vị trí hiện tại trong activeQueueIds. */
   currentIndex: number;
+  /** Source */
+  currentSource: QueueSource | null;
+  // --- Metadata Cache ---
+  /**
+   * Lưu Metadata của các bài đã được tải.
+   * Key = trackId, Value = ITrack object.
+   * Truy xuất O(1), không cần duyệt mảng.
+   */
+  trackMetadataCache: Record<string, ITrack>;
 
-  // Playback Status
+  // --- Playback Status ---
   isPlaying: boolean;
-  isLoading: boolean;
+  /**
+   * "idle"      : Chưa có bài nào được phát.
+   * "loading"   : Đang chờ metadata hoặc audio buffer.
+   * "buffering" : Metadata có nhưng audio đang buffer giữa chừng.
+   * "ready"     : Sẵn sàng phát.
+   */
+  loadingState: "idle" | "loading" | "buffering" | "ready";
+  /**
+   * Duration tính bằng giây của bài đang phát.
+   * Reset về 0 mỗi khi chuyển bài để tránh UI hiển thị duration sai
+   * trong khoảng thời gian chờ audio metadata.
+   */
   duration: number;
 
+  // --- Seek Checkpointing ---
   /**
-   * Seek Checkpoint: Chỉ lưu vị trí khi user tua hoặc pause.
-   * KHÔNG lưu liên tục mỗi giây để tối ưu hiệu năng ghi LocalStorage.
+   * Chỉ cập nhật khi user tua, pause, hoặc tắt tab.
+   * KHÔNG cập nhật mỗi giây → giảm tải Redux & LocalStorage.
    */
-  lastSeekTime: number; // Timestamp trigger
-  seekPosition: number; // Seconds
+  lastSeekTime: number;
+  seekPosition: number;
 
-  // Audio Settings
+  // --- Audio Settings ---
   volume: number;
   isMuted: boolean;
   repeatMode: "off" | "all" | "one";
   isShuffling: boolean;
 
-  // Gapless Playback (Preload bài tiếp theo)
-  nextTrackPreloaded: ITrack | null;
+  // --- Gapless Preload ---
+  /** ID bài tiếp theo đã được preload metadata. */
+  nextTrackIdPreloaded: string | null;
 }
 
 const initialState: PlayerState = {
-  currentTrack: null,
-  originalQueue: [],
-  activeQueue: [],
+  originalQueueIds: [],
+  activeQueueIds: [],
+  currentTrackId: null,
   currentIndex: -1,
+  currentSource: null,
+  trackMetadataCache: {},
   isPlaying: false,
-  isLoading: false,
+  loadingState: "idle",
   duration: 0,
   lastSeekTime: 0,
   seekPosition: 0,
@@ -96,75 +150,249 @@ const initialState: PlayerState = {
   isMuted: false,
   repeatMode: "off",
   isShuffling: false,
-  nextTrackPreloaded: null,
+  nextTrackIdPreloaded: null,
 };
 
 // ============================================================================
-// 3. SLICE DEFINITION
+// 3. INTERNAL HELPERS
+// ============================================================================
+
+/** Tính nextTrackIdPreloaded dựa trên index hiện tại. */
+const resolveNextPreload = (
+  activeQueueIds: string[],
+  currentIndex: number,
+  repeatMode: PlayerState["repeatMode"],
+): string | null => {
+  if (activeQueueIds.length === 0) return null;
+  const nextIdx = currentIndex + 1;
+  if (nextIdx < activeQueueIds.length) return activeQueueIds[nextIdx];
+  if (repeatMode === "all") return activeQueueIds[0];
+  return null;
+};
+
+/**
+ * Áp dụng chuyển bài — tập trung tất cả logic "chuyển track" vào 1 chỗ.
+ * Dùng cho nextTrack, prevTrack, jumpToIndex để tránh drift logic.
+ */
+const applyTrackChange = (state: PlayerState, newIndex: number): void => {
+  state.currentIndex = newIndex;
+  state.currentTrackId = state.activeQueueIds[newIndex];
+  state.seekPosition = 0;
+  state.lastSeekTime = Date.now();
+  state.duration = 0; // @fix: reset duration để UI không hiển thị duration bài cũ
+  state.isPlaying = true;
+  state.loadingState = state.trackMetadataCache[state.currentTrackId]
+    ? "buffering"
+    : "loading";
+  state.nextTrackIdPreloaded = resolveNextPreload(
+    state.activeQueueIds,
+    newIndex,
+    state.repeatMode,
+  );
+};
+
+// ============================================================================
+// 4. SLICE DEFINITION
 // ============================================================================
 
 const playerSlice = createSlice({
   name: "player",
   initialState,
   reducers: {
-    // --- Queue Management ---
+    // -------------------------------------------------------------------------
+    // QUEUE MANAGEMENT
+    // -------------------------------------------------------------------------
+
+    /**
+     * Khởi tạo queue với danh sách IDs + metadata batch đầu tiên.
+     *
+     * @example
+     * dispatch(setQueue({
+     *   trackIds: album.trackIds,          // 100 IDs
+     *   initialMetadata: first20Tracks,    // 20 bài đầu từ Infinite Query
+     *   startIndex: 3,
+     * }))
+     */
     setQueue: (
       state,
-      action: PayloadAction<{ tracks: ITrack[]; startIndex: number }>,
+      action: PayloadAction<{
+        trackIds: string[];
+        initialMetadata: ITrack[];
+        startIndex: number;
+        source: QueueSource;
+        isShuffling?: boolean;
+      }>,
     ) => {
-      const { tracks, startIndex } = action.payload;
-      state.originalQueue = tracks;
-      state.currentTrack = tracks[startIndex];
+      const { trackIds, initialMetadata, startIndex, source, isShuffling } =
+        action.payload;
 
-      if (state.isShuffling) {
-        state.activeQueue = smartShuffle(tracks, tracks[startIndex]);
-        state.currentIndex = 0;
-      } else {
-        state.activeQueue = tracks;
-        state.currentIndex = startIndex;
+      // 1. Cập nhật Metadata Cache (O(n))
+      for (const track of initialMetadata) {
+        if (track?._id) {
+          state.trackMetadataCache[track._id] = track;
+        }
       }
 
-      // Preload logic
-      const nextIdx = state.currentIndex + 1;
-      state.nextTrackPreloaded =
-        nextIdx < state.activeQueue.length ? state.activeQueue[nextIdx] : null;
+      // 2. Thiết lập thông tin nguồn phát
+      state.currentSource = source;
+      state.originalQueueIds = trackIds;
+      state.isShuffling = !!isShuffling;
 
+      // 3. Xử lý Logic xác định bài hát bắt đầu (Target Track)
+      let targetTrackId: string | null = null;
+      let targetIndex = 0;
+
+      if (state.isShuffling) {
+        /**
+         * Nếu là Shuffle:
+         * - Nếu startIndex > 0 (user chọn 1 bài cụ thể): Lấy bài đó làm gốc.
+         * - Nếu startIndex <= 0 (user bấm nút Shuffle tổng): Chọn 1 bài ngẫu nhiên hoàn toàn.
+         */
+        const randomIndex =
+          startIndex > 0
+            ? startIndex
+            : Math.floor(Math.random() * trackIds.length);
+
+        targetTrackId = trackIds[randomIndex] ?? null;
+
+        if (targetTrackId) {
+          state.activeQueueIds = smartShuffleIds(
+            trackIds,
+            targetTrackId,
+            state.trackMetadataCache,
+          );
+          targetIndex = 0; // Trong mảng đã shuffle, bài mục tiêu luôn ở đầu
+        } else {
+          state.activeQueueIds = trackIds;
+        }
+      } else {
+        /**
+         * Nếu không Shuffle: Phát bình thường theo thứ tự Album/Playlist
+         */
+        targetIndex =
+          startIndex >= 0 && startIndex < trackIds.length ? startIndex : 0;
+        targetTrackId = trackIds[targetIndex] ?? null;
+        state.activeQueueIds = [...trackIds];
+      }
+
+      // 4. Cập nhật trạng thái Playback
+      state.currentTrackId = targetTrackId;
+      state.currentIndex = targetIndex;
       state.isPlaying = true;
-      state.isLoading = true;
-      state.seekPosition = 0; // Reset seek khi đổi bài
+      state.duration = 0;
+      state.seekPosition = 0;
       state.lastSeekTime = Date.now();
+
+      // Xác định trạng thái load (Nếu có trong cache thì buffer ngay, ko thì chờ loading)
+      state.loadingState =
+        targetTrackId && state.trackMetadataCache[targetTrackId]
+          ? "buffering"
+          : "loading";
+
+      // 5. Cập nhật bài preload cho tính năng Gapless
+      state.nextTrackIdPreloaded = resolveNextPreload(
+        state.activeQueueIds,
+        state.currentIndex,
+        state.repeatMode,
+      );
+    },
+    /**
+     * Thêm metadata vào cache theo batch (lazy loading khi Virtual Scroll).
+     * Gọi khi Infinite Query trả về trang mới hoặc getTrackDetail thành công.
+     *
+     * @note Chỉ upgrade loadingState từ "loading" → "buffering".
+     *       Không động vào "ready" / "buffering" hiện tại để tránh regression.
+     */
+    upsertMetadataCache: (state, action: PayloadAction<ITrack[]>) => {
+      for (const track of action.payload) {
+        state.trackMetadataCache[track._id] = track;
+      }
+      if (
+        state.currentTrackId &&
+        state.trackMetadataCache[state.currentTrackId] &&
+        state.loadingState === "loading"
+      ) {
+        state.loadingState = "buffering";
+      }
     },
 
-    // --- Controls ---
+    /**
+     * Thêm IDs vào cuối queue (Infinite Scroll load thêm bài).
+     *
+     * @fix Trước đây dùng Array.includes() → O(n²) với queue lớn.
+     *      Nay dùng Set → O(n) tổng.
+     */
+    appendQueueIds: (state, action: PayloadAction<string[]>) => {
+      const existingSet = new Set(state.originalQueueIds);
+      const newIds = action.payload.filter((id) => !existingSet.has(id));
+      if (newIds.length === 0) return;
+
+      state.originalQueueIds.push(...newIds);
+
+      // Nếu không shuffle, append thẳng vào activeQueue
+      if (!state.isShuffling) {
+        state.activeQueueIds.push(...newIds);
+        // Cập nhật preload vì queue vừa dài thêm (edge case: đang ở bài cuối)
+        state.nextTrackIdPreloaded = resolveNextPreload(
+          state.activeQueueIds,
+          state.currentIndex,
+          state.repeatMode,
+        );
+      }
+      // Nếu shuffle, KHÔNG tự shuffle lại — giữ UX mượt.
+      // Dispatch toggleShuffle 2 lần nếu muốn re-shuffle toàn bộ.
+    },
+
+    /**
+     * Xóa một track khỏi queue (Remove from queue).
+     * Tự động điều chỉnh currentIndex nếu item bị xóa đứng trước bài đang phát.
+     */
+    removeFromQueue: (state, action: PayloadAction<string>) => {
+      const id = action.payload;
+
+      // Không cho phép xóa bài đang phát
+      if (id === state.currentTrackId) return;
+
+      state.originalQueueIds = state.originalQueueIds.filter((i) => i !== id);
+
+      const removedActiveIdx = state.activeQueueIds.indexOf(id);
+      if (removedActiveIdx === -1) return;
+
+      state.activeQueueIds = state.activeQueueIds.filter((i) => i !== id);
+
+      // Nếu item bị xóa đứng trước currentIndex → index dịch lùi 1
+      if (removedActiveIdx < state.currentIndex) {
+        state.currentIndex -= 1;
+      }
+
+      state.nextTrackIdPreloaded = resolveNextPreload(
+        state.activeQueueIds,
+        state.currentIndex,
+        state.repeatMode,
+      );
+    },
+
+    // -------------------------------------------------------------------------
+    // CONTROLS
+    // -------------------------------------------------------------------------
+
     setIsPlaying: (state, action: PayloadAction<boolean>) => {
       state.isPlaying = action.payload;
     },
-    stopPlaying: (state) => {
-      state.currentTrack = null;
-      state.originalQueue = [];
-      state.activeQueue = [];
-      state.currentIndex = -1;
-      state.isPlaying = false;
-      state.isLoading = false;
-      state.duration = 0;
-      state.lastSeekTime = 0;
-      state.seekPosition = 0;
-      state.volume = 1;
-      state.isMuted = false;
-      state.repeatMode = "off";
-      state.isShuffling = false;
-      state.nextTrackPreloaded = null;
+
+    setLoadingState: (
+      state,
+      action: PayloadAction<PlayerState["loadingState"]>,
+    ) => {
+      state.loadingState = action.payload;
     },
-    setIsLoading: (state, action: PayloadAction<boolean>) => {
-      state.isLoading = action.payload;
-    },
+
     setDuration: (state, action: PayloadAction<number>) => {
       state.duration = action.payload;
     },
 
     /**
-     * Action này lưu lại vị trí bài hát vào Redux.
-     * Được gọi khi: User kéo thanh tua, Pause nhạc, hoặc Tắt tab.
+     * Lưu checkpoint vị trí. Gọi khi: tua, pause, beforeunload.
      */
     seekTo: (state, action: PayloadAction<number>) => {
       state.seekPosition = action.payload;
@@ -175,126 +403,217 @@ const playerSlice = createSlice({
       state.volume = Math.max(0, Math.min(1, action.payload));
       if (state.volume > 0) state.isMuted = false;
     },
+
     toggleMute: (state) => {
       state.isMuted = !state.isMuted;
     },
 
-    // --- Navigation (Shuffle/Repeat/Next/Prev) ---
+    stopPlaying: (state) => {
+      Object.assign(state, {
+        ...initialState,
+        // Giữ lại cache & volume settings giữa các phiên
+        trackMetadataCache: state.trackMetadataCache,
+        volume: state.volume,
+        isMuted: state.isMuted,
+      });
+    },
+
+    // -------------------------------------------------------------------------
+    // NAVIGATION
+    // -------------------------------------------------------------------------
+
     toggleShuffle: (state) => {
       state.isShuffling = !state.isShuffling;
-      if (!state.currentTrack) return;
+
+      // Nếu không có bài nào đang phát, chỉ đổi trạng thái rồi thoát
+      if (!state.currentTrackId) return;
 
       if (state.isShuffling) {
-        state.activeQueue = smartShuffle(
-          state.originalQueue,
-          state.currentTrack,
+        /**
+         * KỊCH BẢN: BẬT SHUFFLE
+         * Chúng ta sử dụng hàm smartShuffleIds đã có của Phú.
+         * Thuật toán này sẽ:
+         * 1. Giữ bài hiện tại ở vị trí đầu tiên (Index 0).
+         * 2. Xáo trộn tất cả các bài còn lại trong originalQueueIds.
+         * 3. Đảm bảo tránh trùng nghệ sĩ liền kề (Smart Shuffle).
+         */
+        state.activeQueueIds = smartShuffleIds(
+          state.originalQueueIds,
+          state.currentTrackId,
+          state.trackMetadataCache,
         );
+
+        // Sau khi shuffle, bài hiện tại LUÔN nằm ở index 0
         state.currentIndex = 0;
       } else {
-        state.activeQueue = state.originalQueue;
-        state.currentIndex = state.originalQueue.findIndex(
-          (t) => t._id === state.currentTrack?._id,
+        /**
+         * KỊCH BẢN: TẮT SHUFFLE
+         * 1. Khôi phục lại danh sách phát theo đúng thứ tự của Album/Playlist.
+         * 2. Tìm vị trí của bài hiện tại trong danh sách gốc để duy trì currentIndex.
+         */
+        state.activeQueueIds = [...state.originalQueueIds];
+
+        const originalIdx = state.originalQueueIds.indexOf(
+          state.currentTrackId,
         );
+        state.currentIndex = originalIdx !== -1 ? originalIdx : 0;
       }
 
-      // Update preload
-      const nextIdx = state.currentIndex + 1;
-      state.nextTrackPreloaded =
-        nextIdx < state.activeQueue.length ? state.activeQueue[nextIdx] : null;
+      // QUAN TRỌNG: Cập nhật lại bài hát Preload cho tính năng Gapless
+      state.nextTrackIdPreloaded = resolveNextPreload(
+        state.activeQueueIds,
+        state.currentIndex,
+        state.repeatMode,
+      );
     },
 
     toggleRepeat: (state) => {
-      const modes: ("off" | "all" | "one")[] = ["off", "all", "one"];
+      const modes: PlayerState["repeatMode"][] = ["off", "all", "one"];
       const idx = modes.indexOf(state.repeatMode);
       state.repeatMode = modes[(idx + 1) % 3];
+
+      state.nextTrackIdPreloaded = resolveNextPreload(
+        state.activeQueueIds,
+        state.currentIndex,
+        state.repeatMode,
+      );
     },
 
     nextTrack: (state) => {
-      if (state.activeQueue.length === 0) return;
+      if (state.activeQueueIds.length === 0) return;
 
+      // repeatMode "one": replay bài hiện tại
       if (state.repeatMode === "one") {
         state.seekPosition = 0;
         state.lastSeekTime = Date.now();
+        state.duration = 0;
         state.isPlaying = true;
         return;
       }
 
-      let nextIndex = state.currentIndex + 1;
-      if (nextIndex >= state.activeQueue.length) {
+      const nextIndex = state.currentIndex + 1;
+
+      if (nextIndex >= state.activeQueueIds.length) {
         if (state.repeatMode === "all") {
-          nextIndex = 0;
+          // @fix: explicit set isPlaying = true thay vì dựa vào giá trị cũ
+          applyTrackChange(state, 0);
         } else {
-          // End of queue -> Stop & Reset to first track
+          // End of queue → dừng, reset về đầu (không phát)
           state.isPlaying = false;
           state.currentIndex = 0;
-          state.currentTrack = state.activeQueue[0];
+          state.currentTrackId = state.activeQueueIds[0] ?? null;
+          state.seekPosition = 0;
+          state.lastSeekTime = Date.now();
+          state.duration = 0;
+          state.nextTrackIdPreloaded = resolveNextPreload(
+            state.activeQueueIds,
+            0,
+            state.repeatMode,
+          );
+        }
+        return;
+      }
+
+      applyTrackChange(state, nextIndex);
+    },
+
+    prevTrack: (state, action: PayloadAction<number | undefined>) => {
+      if (state.activeQueueIds.length === 0) return;
+      const currentTime = action.payload ?? 0;
+
+      // Nghe > 3s → replay bài hiện tại
+      if (currentTime > 3) {
+        state.seekPosition = 0;
+        state.lastSeekTime = Date.now();
+        // @fix: không reset duration ở đây vì bài không đổi,
+        //       audio element sẽ seek về 0 và duration vẫn hợp lệ.
+        return;
+      }
+
+      let prevIndex = state.currentIndex - 1;
+
+      if (prevIndex < 0) {
+        if (state.repeatMode === "all") {
+          prevIndex = state.activeQueueIds.length - 1;
+        } else {
+          // @fix: đang ở đầu queue & repeatMode off → replay bài đầu (index 0),
+          //       không nhảy index âm hay để behavior mơ hồ.
           state.seekPosition = 0;
           state.lastSeekTime = Date.now();
           return;
         }
       }
 
-      state.currentIndex = nextIndex;
-      state.currentTrack = state.activeQueue[nextIndex];
-      state.seekPosition = 0;
-      state.lastSeekTime = Date.now();
-      state.isPlaying = true;
-
-      const preloadIdx = nextIndex + 1;
-      state.nextTrackPreloaded =
-        preloadIdx < state.activeQueue.length
-          ? state.activeQueue[preloadIdx]
-          : null;
+      applyTrackChange(state, prevIndex);
     },
 
-    prevTrack: (state, action: PayloadAction<number | undefined>) => {
-      if (state.activeQueue.length === 0) return;
-      const currentTime = action.payload || 0;
-
-      // Rule: Nếu nghe > 3s thì replay, ngược lại thì back bài trước
-      if (currentTime > 3) {
-        state.seekPosition = 0;
-        state.lastSeekTime = Date.now();
-        return;
-      }
-
-      let prevIndex = state.currentIndex - 1;
-      if (prevIndex < 0) {
-        prevIndex =
-          state.repeatMode === "all" ? state.activeQueue.length - 1 : 0;
-      }
-
-      state.currentIndex = prevIndex;
-      state.currentTrack = state.activeQueue[prevIndex];
-      state.seekPosition = 0;
-      state.lastSeekTime = Date.now();
-      state.isPlaying = true;
-
-      const nextIdx = prevIndex + 1;
-      state.nextTrackPreloaded =
-        nextIdx < state.activeQueue.length ? state.activeQueue[nextIdx] : null;
+    /**
+     * Jump trực tiếp đến một track theo index trong activeQueue.
+     * Dùng cho Virtual Scroll list khi user click vào bài bất kỳ.
+     */
+    jumpToIndex: (state, action: PayloadAction<number>) => {
+      const idx = action.payload;
+      if (idx < 0 || idx >= state.activeQueueIds.length) return;
+      applyTrackChange(state, idx);
     },
   },
 });
 
+// ============================================================================
+// 5. EXPORTS
+// ============================================================================
+
 export const {
   setQueue,
+  upsertMetadataCache,
+  appendQueueIds,
+  removeFromQueue,
   setIsPlaying,
-  stopPlaying,
-  setIsLoading,
+  setLoadingState,
   setDuration,
   seekTo,
   setVolume,
   toggleMute,
+  stopPlaying,
   toggleShuffle,
   toggleRepeat,
   nextTrack,
   prevTrack,
+  jumpToIndex,
 } = playerSlice.actions;
 
-// Selectors
+// --- Selectors ---
+
 export const selectPlayer = (state: RootState) => state.player;
-export const selectNextTrack = (state: RootState) =>
-  state.player.nextTrackPreloaded;
+
+/**
+ * Trả về ITrack của bài đang phát (từ cache). Null nếu chưa có metadata.
+ * @fix Memoized bằng createSelector để tránh re-render không cần thiết.
+ */
+export const selectCurrentTrack = createSelector(
+  (state: RootState) => state.player.currentTrackId,
+  (state: RootState) => state.player.trackMetadataCache,
+  (id, cache): ITrack | null => (id ? (cache[id] ?? null) : null),
+);
+
+/**
+ * Trả về ITrack của bài kế tiếp đã preload.
+ * @fix Memoized bằng createSelector.
+ */
+export const selectNextTrack = createSelector(
+  (state: RootState) => state.player.nextTrackIdPreloaded,
+  (state: RootState) => state.player.trackMetadataCache,
+  (id, cache): ITrack | null => (id ? (cache[id] ?? null) : null),
+);
+
+/** Kiểm tra nhanh metadata của một trackId có trong cache chưa. */
+export const selectIsTrackCached =
+  (trackId: string) =>
+  (state: RootState): boolean =>
+    Boolean(state.player.trackMetadataCache[trackId]);
+
+/** Tổng số bài trong queue (dùng cho Virtual Scroll totalCount). */
+export const selectQueueLength = (state: RootState): number =>
+  state.player.activeQueueIds.length;
 
 export default playerSlice.reducer;

@@ -44,3 +44,101 @@ export function fmtCount(n: number): string {
   if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
   return n.toString();
 }
+const FALLBACK_COLOR = "primary";
+
+export async function extractDominantColor(imageUrl?: string): Promise<string> {
+  if (!imageUrl) return FALLBACK_COLOR;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    let settled = false;
+
+    const settle = (color: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(color);
+    };
+
+    // Timeout phòng ảnh load quá lâu
+    const timer = setTimeout(() => settle(FALLBACK_COLOR), 5000);
+
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      clearTimeout(timer);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 40;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          settle(FALLBACK_COLOR);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, 40, 40);
+
+        // Sẽ throw SecurityError nếu CORS không được phép
+        const data = ctx.getImageData(0, 0, 40, 40).data;
+
+        let r = 0,
+          g = 0,
+          b = 0,
+          count = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          if (brightness > 20 && brightness < 220) {
+            r += data[i];
+            g += data[i + 1];
+            b += data[i + 2];
+            count++;
+          }
+        }
+
+        if (!count) {
+          settle(FALLBACK_COLOR);
+          return;
+        }
+
+        r = Math.round(r / count);
+        g = Math.round(g / count);
+        b = Math.round(b / count);
+
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const delta = max - min;
+
+        // Lightness — darken xuống ≤40% để dùng làm background
+        const l = Math.round(((max + min) / 2 / 255) * 100 * 0.4);
+
+        // Saturation — giảm 30% để không quá chói
+        const s =
+          delta === 0
+            ? 0
+            : Math.round(
+                (delta / (255 - Math.abs(max + min - 255))) * 60 * 0.7,
+              );
+
+        // Hue
+        let h = 0;
+        if (delta !== 0) {
+          if (max === r) h = (((g - b) / delta) * 60 + 360) % 360;
+          else if (max === g) h = ((b - r) / delta) * 60 + 120;
+          else h = ((r - g) / delta) * 60 + 240;
+        }
+
+        settle(`hsl(${Math.round(h)} ${s}% ${l}%)`);
+      } catch {
+        // CORS bị block → canvas tainted → getImageData throw
+        // Fallback im lặng, không crash app
+        settle(FALLBACK_COLOR);
+      }
+    };
+
+    img.onerror = () => {
+      clearTimeout(timer);
+      settle(FALLBACK_COLOR);
+    };
+
+    img.src = imageUrl;
+  });
+}

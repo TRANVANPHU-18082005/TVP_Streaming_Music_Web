@@ -17,7 +17,7 @@ export const EqualizerBars = memo(
       {Array.from({ length: bars }).map((_, i) => (
         <span
           key={i}
-          className="eq-bar w-[3px] bg-primary rounded-full sw-animate-eq"
+          className={cn("eq-bar w-[3px] bg-primary rounded-full sw-animate-eq")}
           style={{ animationDelay: `${i * 0.12}s` }}
         />
       ))}

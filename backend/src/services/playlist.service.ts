@@ -12,6 +12,9 @@ import {
   UpdatePlaylistInput,
   PlaylistFilterInput,
 } from "../validations/playlist.validation";
+import escapeStringRegexp from "escape-string-regexp";
+import { buildCacheKey, withCacheTimeout } from "../utils/cacheHelper";
+import { cacheRedis } from "../config/redis";
 
 class PlaylistService {
   // ==========================================
@@ -396,104 +399,169 @@ class PlaylistService {
    * 7. GET LIST PLAYLISTS
    */
   async getPlaylists(filter: PlaylistFilterInput, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
+    const currentUserId = currentUser?._id?.toString();
+    const isAdmin = userRole === "admin";
+
+    // 1. STABLE CACHE KEY - Phân đoạn theo quyền truy cập
+    // Nếu query theo userId cụ thể, cache key phải gắn với người đang xem
+    // vì kết quả trả về có thể chứa playlist Private/Shared của họ.
+    const isQueryingSelf =
+      filter.userId && currentUserId === filter.userId.toString();
+    const cacheKey = buildCacheKey(
+      "playlist:list",
+      isQueryingSelf ? `owner:${currentUserId}` : userRole,
+      filter,
+    );
+
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
     const {
       page = 1,
       limit = 12,
       keyword,
-      userId,
-      isSystem,
-      visibility,
+      userId: targetUserId,
       type,
+      visibility,
+      isSystem,
       sort,
+      tag, // Thêm lọc theo 1 tag cụ thể
     } = filter;
-    const skip = (page - 1) * limit;
-    const query: any = {};
 
-    // 🔥 Chống ReDOS Attack cho tính năng Search
-    if (keyword) {
-      const escapeRegex = (text: string) =>
-        text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-      query.title = { $regex: escapeRegex(keyword), $options: "i" };
+    const skip = (page - 1) * limit;
+    const query: Record<string, any> = {};
+
+    // --- 2. SECURITY & PRIVACY LAYER (Phức tạp & Thực tế) ---
+
+    if (isAdmin) {
+      // Admin: Full access, lọc theo bất kỳ trạng thái nào
+      if (visibility) query.visibility = visibility;
+    } else if (currentUserId) {
+      // User đã đăng nhập:
+      if (isQueryingSelf) {
+        // Xem danh sách của chính mình: Thấy hết (Public, Private, Unlisted)
+        if (visibility) query.visibility = visibility;
+      } else {
+        // Xem danh sách của người khác:
+        // Chỉ lấy Public HOẶC những playlist mà mình là Collaborator (Đồng sở hữu)
+        query.$or = [
+          { visibility: "public", user: targetUserId || { $ne: null } },
+          { collaborators: currentUserId }, // 🔥 TÍNH NĂNG COLLAB: Thấy playlist bạn bè cho phép sửa
+        ];
+        // Nếu filter yêu cầu cụ thể Unlisted (phải có link mới thấy), thường không hiện ở List
+        // ngoại trừ trường hợp đặc biệt. Ở đây ta mặc định ẩn Unlisted khỏi Discovery.
+      }
+    } else {
+      // Khách (Guest): Chỉ thấy Public
+      query.visibility = "public";
     }
 
-    if (type) query.type = type;
-    if (isSystem !== undefined) query.isSystem = isSystem;
-    if (userId) query.user = userId;
-
-    const isOwner = userId && currentUser?._id.toString() === userId.toString();
-    const isAdmin = currentUser?.role === "admin";
-    const canViewAll = isAdmin || isOwner;
-    console.log("canViewAll", canViewAll, "visibility filter:", visibility);
-    if (canViewAll) {
-      if (visibility) query.visibility = visibility;
-    } else {
-      // User thường: Bắt buộc Public và đã đến giờ hẹn
-      query.visibility = "public";
+    // Luôn lọc theo ngày phát hành để hỗ trợ tính năng Schedule
+    if (!isAdmin && !isQueryingSelf) {
       query.publishAt = { $lte: new Date() };
     }
 
-    let sortOption: any = { publishAt: -1 };
-    if (sort === "popular") sortOption = { playCount: -1 };
-    if (sort === "followers") sortOption = { followersCount: -1 };
-    if (sort === "name") sortOption = { title: 1 };
-    if (sort === "oldest") sortOption = { createdAt: 1 };
+    // --- 3. FILTERING LOGIC ---
+    if (keyword) {
+      const safeKeyword = escapeStringRegexp(keyword.substring(0, 100));
+      // Sử dụng Text Index đã định nghĩa trong Schema ({ title: "text", tags: "text" })
+      // Nếu có keyword, MongoDB sẽ dùng trọng số (Score) để trả về kết quả liên quan nhất
+      query.$text = { $search: safeKeyword };
+    }
 
+    if (targetUserId && !query.$or) query.user = targetUserId;
+    if (type) query.type = type;
+    if (isSystem !== undefined) query.isSystem = isSystem;
+    if (tag) query.tags = tag; // Lọc theo mảng tags
+
+    // --- 4. ADVANCED SORTING ---
+    const SORT_MAP: Record<string, any> = {
+      popular: { playCount: -1, followersCount: -1 },
+      followers: { followersCount: -1 },
+      trending: { playCount: -1, createdAt: -1 }, // Mới và nhiều lượt nghe
+      newest: { createdAt: -1 },
+      name: { title: 1 },
+      duration: { totalDuration: -1 }, // Playlist dài nhất
+    };
+
+    // Nếu dùng Text Search, mặc định sort theo độ liên quan (textScore)
+    let sortOption = SORT_MAP[sort ?? "newest"] ?? SORT_MAP.newest;
+    const projection = keyword ? { score: { $meta: "textScore" } } : {};
+    if (keyword && !sort) sortOption = { score: { $meta: "textScore" } };
+
+    // --- 5. EXECUTION ---
     const [playlists, total] = await Promise.all([
-      Playlist.find(query)
-        .populate("user", "fullName avatar slug")
-        .select("-tracks") // Giấu mảng nặng
-        .skip(skip)
-        .limit(Number(limit))
+      Playlist.find(query, projection)
+        .populate("user", "fullName avatar slug isVerified")
+        .populate("collaborators", "fullName avatar slug") // Lấy thông tin bạn bè cùng edit
+        .select("-tracks") // TUYỆT ĐỐI KHÔNG lấy mảng tracks ở bản list
         .sort(sortOption)
+        .skip(skip)
+        .limit(limit)
         .lean(),
       Playlist.countDocuments(query),
     ]);
 
-    return {
+    const result = {
       data: playlists,
       meta: {
         totalItems: total,
         page: Number(page),
         pageSize: Number(limit),
         totalPages: Math.ceil(total / Number(limit)),
+        hasNextPage: page * limit < total,
       },
     };
-  }
 
+    // --- 6. INTELLIGENT CACHING ---
+    // Không cache quá lâu cho Owner/Collab để họ thấy thay đổi nhanh
+    const isSensitive =
+      isQueryingSelf ||
+      (currentUserId &&
+        playlists.some((p) =>
+          p.collaborators?.some((c) => c.toString() === currentUserId),
+        ));
+    const ttl = isSensitive ? 30 : 600 + Math.floor(Math.random() * 120);
+
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Playlist List SET error:", err));
+
+    return result;
+  }
   /**
    * 8. GET PLAYLIST DETAIL
    */
-  async getPlaylistDetail(slugOrId: string, currentUser?: IUser) {
+  async getPlaylistDetail(
+    slugOrId: string,
+    currentUserId?: string,
+    userRole?: string,
+  ) {
     const isId = mongoose.isValidObjectId(slugOrId);
     const query = isId ? { _id: slugOrId } : { slug: slugOrId };
 
+    // 1. Lấy toàn bộ Playlist.
+    // Lưu ý: Ta KHÔNG .populate("tracks") vì ta chỉ cần mảng ID để làm Virtual Scroll
     const playlist = await Playlist.findOne(query)
-      .populate("user", "fullName avatar slug")
+      .populate("user", "fullName avatar slug isVerified")
       .populate("collaborators", "fullName avatar slug")
-      .populate({
-        path: "tracks",
-        match: { status: "ready", isDeleted: false },
-        select: "-audioFile -status", // 🔥 BẢO MẬT: Giấu file MP3 gốc đi
-        populate: [
-          { path: "artist", select: "name slug" },
-          { path: "album", select: "title slug coverImage type" },
-        ],
-      })
       .lean();
 
     if (!playlist) {
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
     }
 
-    const isAdmin = currentUser?.role === "admin";
+    // 2. Kiểm tra quyền truy cập (Giữ nguyên logic bảo mật của Phú)
+    const isAdmin = userRole === "admin";
     const isOwner =
-      currentUser &&
-      playlist.user._id.toString() === currentUser._id.toString();
+      currentUserId && playlist.user._id.toString() === currentUserId;
     const isCollaborator =
-      currentUser &&
+      currentUserId &&
       playlist.collaborators.some(
-        (c: any) => c._id.toString() === currentUser._id.toString(),
+        (c: any) => c._id.toString() === currentUserId,
       );
+
     const hasAccess = isAdmin || isOwner || isCollaborator;
 
     if (!hasAccess) {
@@ -508,7 +576,104 @@ class PlaylistService {
       }
     }
 
-    return playlist;
+    // 3. XỬ LÝ TRẢ VỀ
+    // Vì trong Schema 'tracks' là mảng ID, nên playlist.tracks chính là trackIds
+    const trackIds = playlist.tracks || [];
+
+    // Để an toàn và sạch data, ta có thể xóa field tracks gốc hoặc rename nó
+    const { tracks, ...metadata } = playlist;
+
+    return {
+      ...metadata,
+      trackIds, // Mảng ID "nhẹ hều" để FE làm Skeleton
+    };
+  }
+  /**
+   * 9. GET PLAYLIST TRACKS (Infinite Loading)
+   * Tải chi tiết bài hát theo từng trang (Page/Limit)
+   */
+  async getPlaylistTracks(
+    playlistId: string,
+    filter: any, // { page, limit }
+    currentUserId?: string,
+    userRole?: string,
+  ) {
+    const { page = 1, limit = 20 } = filter;
+    const skip = (page - 1) * limit;
+
+    // 1. Check quyền truy cập nhanh (chỉ lấy field cần thiết)
+    const playlist = await Playlist.findById(playlistId)
+      .select("visibility user collaborators tracks")
+      .lean();
+
+    if (!playlist)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy Playlist");
+
+    const isAdmin = userRole === "admin";
+    const isOwner = currentUserId && playlist.user.toString() === currentUserId;
+    const isCollab =
+      currentUserId &&
+      playlist.collaborators.some((id: any) => id.toString() === currentUserId);
+
+    if (
+      !isAdmin &&
+      !isOwner &&
+      !isCollab &&
+      playlist.visibility === "private"
+    ) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "Bạn không có quyền xem danh sách này",
+      );
+    }
+
+    // 2. Xử lý CACHE (Playlist hay thay đổi hơn Album nên TTL thấp hơn tí)
+    const cacheKey = buildCacheKey(
+      `playlist:tracks:${playlistId}`,
+      userRole || "guest",
+      { page, limit },
+    );
+    const cached = await cacheRedis.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    // 3. Lấy sub-set ID bài hát theo phân trang từ mảng playlist.tracks
+    // Vì Playlist lưu thứ tự bài hát trong mảng, nên ta cắt mảng ID trước
+    const pagedTrackIds = playlist.tracks.slice(skip, skip + limit);
+
+    // 4. Query chi tiết các bài hát trong trang hiện tại
+    const tracks = await Track.find({
+      _id: { $in: pagedTrackIds },
+      status: "ready",
+    })
+      .populate("artist", "name slug")
+      .populate("album", "title slug coverImage")
+      .select(
+        "title slug duration playCount coverImage isPublic isExplicit hlsUrl",
+      )
+      .lean();
+
+    // Sắp xếp lại kết quả trả về đúng thứ tự trong mảng ID (vì $in không bảo toàn thứ tự)
+    const sortedTracks = pagedTrackIds
+      .map((id) => tracks.find((t) => t._id.toString() === id.toString()))
+      .filter(Boolean);
+
+    const result = {
+      data: sortedTracks,
+      meta: {
+        totalItems: playlist.tracks.length,
+        page: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(playlist.tracks.length / limit),
+        hasNextPage: skip + limit < playlist.tracks.length,
+      },
+    };
+
+    // 5. Lưu Cache 5-10 phút
+    const ttl = 600 + Math.floor(Math.random() * 60);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Set Album Tracks Error:", err));
+    return result;
   }
   /**
    * 🚀 1. CREATE QUICK PLAYLIST (Luồng Spotify)

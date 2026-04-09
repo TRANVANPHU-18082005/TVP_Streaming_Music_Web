@@ -539,18 +539,7 @@ class TrackService {
       );
     }
 
-    let isLiked = false;
-    if (currentUser) {
-      const user = await User.findById(currentUser._id)
-        .select("likedTracks")
-        .lean();
-      isLiked =
-        user?.likedTracks?.some(
-          (id) => id.toString() === track._id.toString(),
-        ) || false;
-    }
-
-    return { ...track, isLiked };
+    return { ...track };
   }
 
   /**

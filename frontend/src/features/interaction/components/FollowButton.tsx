@@ -1,57 +1,3 @@
-/**
- * FollowButton.tsx — Premium artist follow toggle
- *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * SHARED ARCHITECTURE PRINCIPLES
- *
- * Both buttons are self-contained interaction units that:
- *   1. Subscribe to their own slice of the interaction store (via useIsLiked /
- *      useIsFollowed). Only the specific button whose entity ID matches a
- *      store change re-renders — no parent re-render required.
- *   2. Use Framer Motion for spring physics. All transition objects are at
- *      MODULE SCOPE (not inline) — prevents new object allocation per render
- *      and prevents Framer from re-evaluating animation definitions.
- *   3. Use `useCallback` on all handlers — stable references so memo'd
- *      children that receive these as props don't needlessly re-render.
- *   4. Have complete ARIA — `aria-pressed`, `aria-label` (state-aware),
- *      `aria-busy`, `role="button"`.
- *
- * ─────────────────────────────────────────────────────────────────────────────
- *
-
- * FOLLOW BUTTON — KEY IMPROVEMENTS
- *
- *   • Shine animation: original used `motion.div` with `animate={{ x: "100%" }}`
- *     repeating infinitely. This runs a JS-driven animation on the main thread
- *     forever. Replaced with a pure CSS `animate-shimmer` class from the
- *     Soundwave system — compositor-thread only, zero JS per frame.
- *
- *   • `layoutId="follow-glow"` removed. The original's glow used `layoutId`
- *     which is for shared layout transitions between different components.
- *     Using it for a local state toggle causes Framer to register a global
- *     layout projection tree — unnecessary overhead for a background blur div.
- *     Replaced with simple `initial/animate/exit` opacity transition.
- *
- *   • Burst animation: same fix as LikeButton — `burstKey` counter for
- *     re-triggering on every follow action.
- *
- *   • Follow state: `bg-secondary/50` → `bg-muted/60` + `border-border/60`
- *     in the followed state. The original's `bg-secondary/50 border-primary/20`
- *     combination produced a muddy purple tint in dark mode. The new palette
- *     reads as "confirmed / neutral" which is the correct semantic for "already
- *     following" (Spotify pattern).
- *
- *   • Hover-to-unfollow hint: on hover while followed, the button transitions
- *     to a subtle destructive state (`hover:text-destructive hover:border-destructive/30`)
- *     — the "hover reveals intent" pattern from Spotify/Twitter.
- *
- *   • `handleFollow` wrapped in `useCallback`.
- *
- *   • `aria-pressed` + `aria-label` state-switching + `aria-busy`.
- */
-
 import React, { memo, useCallback, useState } from "react";
 import { UserPlus, UserCheck, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -193,7 +139,7 @@ export const FollowButton = memo(
               className="flex items-center gap-[inherit]"
             >
               <UserCheck className="size-4 text-primary" />
-              <span>Following</span>
+              <span className="hidden md:flex">Following</span>
             </motion.div>
           ) : (
             <motion.div
@@ -202,7 +148,7 @@ export const FollowButton = memo(
               className="flex items-center gap-[inherit]"
             >
               <UserPlus className="size-4" />
-              <span>Follow</span>
+              <span className="hidden md:flex">Follow</span>
             </motion.div>
           )}
         </AnimatePresence>

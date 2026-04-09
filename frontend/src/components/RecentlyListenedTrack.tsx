@@ -1,33 +1,6 @@
-/**
- * TopFeaturedTracks.tsx — Home-page chart widget (Refactored v3.0)
- *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * ALIGNMENT WITH FeaturedPlaylists.tsx:
- * - section-block--alt surface for visual alternation rhythm (Spotify pattern)
- * - Wave-1 (violet/brand) accent palette — differentiates charts from playlists
- * - Same header anatomy: eyebrow icon + overline + title + subtitle + view-all link
- * - Same divider-glow treatment at section top (wave-1 tint)
- * - Same section-container / section-container spacing
- * - SkeletonGrid mirrors FeaturedPlaylists skeleton structure
- * - ErrorState / EmptyState use same rounded-2xl card pattern
- * - SectionAmbient orbs align to brand + wave-1 palette
- *
- * ARCHITECTURE:
- * - All animation variants at module scope (stable refs, zero GC pressure)
- * - top10 memoized on tracks ref — AnimatePresence never sees phantom diffs
- * - ChartRow memo'd — only re-renders when its own track/rank data changes
- * - ChartRankBadge memo'd on (rank, prevRank) — isolated from list shuffles
- * - UpdatingIndicator extracted — toggling isUpdating re-renders only this node
- * - makeRowVariants factory returns pre-typed stable variant shapes
- * - WCAG 2.1 AA: aria-busy, aria-live, role=status/alert, aria-label throughout
- */
-
 import { memo, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  BarChart3,
   Loader2,
   Music2,
   AlertCircle,
@@ -44,8 +17,9 @@ import { ChartItem } from "@/features/track/components/ChartItem";
 import { ChartTrack } from "@/features/track/types";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "./SectionAmbient";
-import { useProfileDashboard } from "@/features/profile/hooks/useProfileQuery";
-import { TrackList } from "@/features";
+import { useFavouriteTracksInfinite } from "@/features/profile/hooks/useProfileQuery";
+import { ITrack, TrackList } from "@/features";
+import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -390,17 +364,60 @@ ChartRow.displayName = "ChartRow";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const RecentlyListenedTrack = () => {
-  const { data: dashboard, isLoading, error, refetch } = useProfileDashboard();
-  const tracks = useMemo(() => dashboard?.recentlyPlayed || [], [dashboard]);
+  const {
+    data: tracksData,
+    isLoading: isLoadingTracks,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error: tracksError,
+    refetch: refetchTracks,
+  } = useFavouriteTracksInfinite();
 
+  const allTracks = useMemo<ITrack[]>(
+    () => tracksData?.allTracks ?? [],
+    [tracksData?.allTracks],
+  );
+  const totalItems = useMemo(
+    () => tracksData?.totalItems ?? 0,
+    [tracksData?.totalItems],
+  );
+  const TrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
   /** Read prefers-reduced-motion once at orchestrator level, pass down */
 
-  /** Stable retry — prevents ErrorState from re-rendering on unrelated state */
-  const handleRetry = useCallback(() => refetch?.(), [refetch]);
+  const syncEnabled = useMemo(() => !isLoadingTracks, [isLoadingTracks]);
 
+  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", syncEnabled);
+
+  /** Stable retry — prevents ErrorState from re-rendering on unrelated state */
+  const handleRetry = useCallback(() => refetchTracks?.(), [refetchTracks]);
+  const trackListProps = useMemo(
+    () => ({
+      allTrackIds: TrackIds,
+      tracks: allTracks,
+      totalItems,
+      isLoading: isLoadingTracks,
+      error: tracksError as Error | null,
+      isFetchingNextPage,
+      hasNextPage: hasNextPage ?? false,
+      onFetchNextPage: fetchNextPage,
+      onRetry: refetchTracks,
+    }),
+    [
+      TrackIds,
+      allTracks,
+      totalItems,
+      isLoadingTracks,
+      tracksError,
+      isFetchingNextPage,
+      hasNextPage,
+      fetchNextPage,
+      refetchTracks,
+    ],
+  );
   // ── Loading ────────────────────────────────────────────────────────────────
 
-  if (isLoading) {
+  if (isLoadingTracks) {
     return (
       <section
         className="section-block section-block--alt"
@@ -431,7 +448,7 @@ export const RecentlyListenedTrack = () => {
 
   // ── Error ──────────────────────────────────────────────────────────────────
 
-  if (error) {
+  if (tracksError) {
     return (
       <section
         className="section-block section-block--alt"
@@ -463,7 +480,7 @@ export const RecentlyListenedTrack = () => {
   }
 
   // ── Populated / Empty ──────────────────────────────────────────────────────
-  if (!tracks || tracks.length === 0) return null; // Don't render section at all if no data (can happen on new accounts)
+  if (!allTracks || totalItems === 0) return null; // Don't render section at all if no data (can happen on new accounts)
   return (
     <>
       <div
@@ -493,13 +510,13 @@ export const RecentlyListenedTrack = () => {
           {/* Track list + live-update overlay */}
           <div className="relative">
             <AnimatePresence mode="popLayout" initial={false}>
-              {tracks.length === 0 ? (
-                <motion.div key="empty" {...slideUpVariants}>
-                  <EmptyState />
-                </motion.div>
-              ) : (
-                <TrackList tracks={tracks} isLoading={isLoading} />
-              )}
+              <TrackList
+                {...trackListProps}
+                maxHeight={400} // page tự scroll, không giới hạn height
+                moodColor={`var(--wave-2)`}
+                skeletonCount={12} // nhiều hơn để fill viewport lúc đầu
+                staggerAnimation={true}
+              />
             </AnimatePresence>
           </div>
         </div>

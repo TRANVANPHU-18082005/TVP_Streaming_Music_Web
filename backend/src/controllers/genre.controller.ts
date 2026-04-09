@@ -2,14 +2,19 @@ import { Request, Response } from "express";
 import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
 import genreService from "../services/genre.service";
-import { GenreFilterInput } from "../validations/genre.validation";
+import {
+  GenreFilterInput,
+  getGenreTracksSchema,
+} from "../validations/genre.validation";
+import { IUser } from "../models/User";
 
 // 1. GET LIST
 export const getGenres = catchAsync(async (req: Request, res: Response) => {
   // TypeScript sẽ tự infer từ Schema Validation ở Route, nhưng cast tay cho chắc chắn
   const query = req.query as unknown as GenreFilterInput;
+  const currentUser = req.user as IUser | undefined;
 
-  const result = await genreService.getAllGenres(query);
+  const result = await genreService.getAllGenres(query, currentUser);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -70,11 +75,18 @@ export const deleteGenre = catchAsync(async (req: Request, res: Response) => {
 });
 export const getGenreDetail = catchAsync(
   async (req: Request, res: Response) => {
-    const genre = await genreService.getGenreBySlug(req.params.slug);
+    const currentUser = req.user as IUser | undefined;
+
+    const userRole = currentUser ? currentUser.role : undefined;
+
+    const genreDetailResult = await genreService.getGenreBySlug(
+      req.params.id,
+      userRole,
+    );
 
     res.status(httpStatus.OK).json({
       success: true,
-      data: genre,
+      data: genreDetailResult,
     });
   },
 );
@@ -87,4 +99,22 @@ export const getTree = catchAsync(async (req, res) => {
   });
 });
 
-// genre.route.ts
+// 6. GET ALBUM TRACKS
+export const getGenreTracks = catchAsync(async (req, res) => {
+  // 1. Parse query - Đảm bảo dữ liệu sạch
+  const { query } = getGenreTracksSchema.parse({ query: req.query });
+  const currentUser = req.user as IUser | undefined;
+
+  const userRole = currentUser ? currentUser.role : undefined;
+  console.log("id" + req.params.id);
+  const result = await genreService.getGenreTracks(
+    req.params.id,
+    query,
+    userRole,
+  );
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: result,
+  });
+});

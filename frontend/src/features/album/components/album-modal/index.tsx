@@ -30,11 +30,19 @@ const AlbumModal: React.FC<AlbumModalProps> = ({
   onSubmit,
   isPending,
 }) => {
-  const { form, handleSubmit, isSubmitting } = useAlbumForm({
-    albumToEdit,
-    onSubmit,
-  });
-
+  // AlbumFormModal.tsx
+  const { form, handleSubmit, isSubmitting } = useAlbumForm(
+    albumToEdit
+      ? {
+          mode: "edit",
+          albumToEdit,
+          onSubmit,
+        }
+      : {
+          mode: "create",
+          onSubmit,
+        },
+  );
   const isPublic = form.watch("isPublic");
   const isBusy = isPending || isSubmitting;
 

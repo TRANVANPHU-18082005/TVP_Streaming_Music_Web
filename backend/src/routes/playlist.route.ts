@@ -26,8 +26,8 @@ const router = express.Router();
 
 // 1. Tạo playlist nhanh (Spotify Style)
 router.post("/me", protect, playlistController.createMyPlaylist);
+
 // 2. Lấy tất cả playlist của tôi (Sidebar/Profile)
-// Route này phải nằm dưới middleware protect
 router.get("/me", protect, playlistController.getMyPlaylists);
 
 // 3. Quản lý tracks (Có Smart Cover)
@@ -37,6 +37,7 @@ router.post(
   validate(addTracksToPlaylistSchema),
   playlistController.userAddTracks,
 );
+// 4.
 router.delete(
   "/me/:playlistId/tracks",
   protect,
@@ -94,6 +95,8 @@ router.delete(
 
 // 3. DYNAMIC ROUTES
 router.get("/:id", optionalAuth, playlistController.getPlaylistDetail);
+// (Get Album Tracks) api/playlists/:id/tracks?page=?&limit=?
+router.get("/:id/tracks", optionalAuth, playlistController.getPlaylistTracks);
 
 router.patch(
   "/:id",

@@ -1,24 +1,46 @@
 import api from "@/lib/axios";
-import type { Album, AlbumFilterParams } from "@/features/album/types";
+import type {
+  AlbumDetailResponse,
+  AlbumFilterParams,
+  CreateAlbumInput,
+  IAlbum,
+  UpdateAlbumInput,
+} from "@/features/album/types";
 import type { ApiResponse, PagedResponse } from "@/types";
+import { ITrack } from "@/features";
 
 const albumApi = {
-  // 1. Lấy danh sách
-  getAll: async (params: AlbumFilterParams) => {
-    const response = await api.get<ApiResponse<PagedResponse<Album>>>(
+  // Lấy list
+  getAlbums: async (params?: AlbumFilterParams) => {
+    const response = await api.get<ApiResponse<PagedResponse<IAlbum>>>(
       "/albums",
       { params },
     );
     return response.data;
   },
 
-  // 2. Lấy chi tiết
-  getById: async (id: string) => {
-    const response = await api.get<ApiResponse<Album>>(`/albums/${id}`);
+  // Lấy chi tiết
+  getDetail: async (slugOrId: string) => {
+    const response = await api.get<ApiResponse<AlbumDetailResponse>>(
+      `/albums/${slugOrId}`,
+    );
     return response.data;
   },
 
-  create: async (data: FormData) => {
+  // Lấy danh sách bài hát trong Album
+  getAlbumTracks: async (
+    idOrSlug: string,
+    params?: { page?: number; limit?: number },
+  ) => {
+    const response = await api.get<ApiResponse<PagedResponse<ITrack>>>(
+      `/albums/${idOrSlug}/tracks`,
+      { params },
+    );
+    return response.data;
+  },
+
+  // Tạo
+  create: async (data: CreateAlbumInput) => {
     const response = await api.post("/albums", data, {
       headers: {
         "Content-Type": "multipart/form-data",
@@ -27,7 +49,8 @@ const albumApi = {
     return response.data;
   },
 
-  update: async (id: string, data: FormData | Partial<Album>) => {
+  // Cập nhật
+  update: async (id: string, data: UpdateAlbumInput) => {
     const isFormData = data instanceof FormData;
     const response = await api.patch(`/albums/${id}`, data, {
       headers: {
@@ -37,7 +60,7 @@ const albumApi = {
     return response.data;
   },
 
-  // 5. Xóa
+  // Xóa
   delete: async (id: string) => {
     const response = await api.delete(`/albums/${id}`);
     return response.data;

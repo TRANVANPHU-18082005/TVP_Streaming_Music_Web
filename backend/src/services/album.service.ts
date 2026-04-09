@@ -6,6 +6,7 @@ import User, { IUser } from "../models/User";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 import { generateSafeSlug, generateUniqueSlug } from "../utils/slug";
+import escapeStringRegexp from "escape-string-regexp";
 import { deleteFileFromCloud } from "../utils/cloudinary";
 import {
   AlbumFilterInput,
@@ -15,12 +16,12 @@ import {
 import { parseGenreIds, parseTags } from "../utils/helper";
 import Genre from "../models/Genre";
 import { console } from "inspector";
+import { cacheRedis } from "../config/redis";
+import { buildCacheKey, withCacheTimeout } from "../utils/cacheHelper";
 
 class AlbumService {
   /**
-   * ==========================================
-   * 1. CREATE ALBUM (Chuẩn Transaction)
-   * ==========================================
+   * 1. CREATE ALBUM
    */
   async createAlbum(
     currentUser: IUser,
@@ -114,7 +115,6 @@ class AlbumService {
       session.endSession();
     }
   }
-
   /**
    * 2. UPDATE ALBUM
    */
@@ -231,17 +231,25 @@ class AlbumService {
     await album.save();
     return album;
   }
-
   /**
    * 3. GET LIST (Advanced Sort)
    */
-  /**
-   * 3. GET LIST (Advanced Sort & ReDoS Protection)
-   */
-  async getAlbums(filter: AlbumFilterInput) {
+  async getAlbums(filter: AlbumFilterInput, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
+    const isAdmin = userRole === "admin";
+
+    // 1. Chuẩn hóa filter để Cache Key luôn ổn định (Stable Key)
+    const cleanFilter = Object.fromEntries(
+      Object.entries(filter).filter(([_, v]) => v !== undefined && v !== ""),
+    );
+    const cacheKey = buildCacheKey("album:list", userRole, cleanFilter);
+
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
     const {
-      page,
-      limit,
+      page = 1,
+      limit = 10,
       keyword,
       artistId,
       year,
@@ -250,53 +258,77 @@ class AlbumService {
       sort,
       isPublic,
     } = filter;
-    const skip = (page - 1) * limit;
-    const query: any = {};
 
+    const skip = (page - 1) * limit;
+    const query: Record<string, any> = {};
+
+    // Security: Guest/User chỉ thấy Public. Admin thấy theo filter hoặc tất cả.
+    if (!isAdmin) {
+      query.isPublic = true;
+    } else if (isPublic !== undefined) {
+      query.isPublic = isPublic;
+    }
+
+    // Search Logic
     if (keyword) {
-      // 🔥 BẢO MẬT: Escape các ký tự đặc biệt của Regex trước khi query
-      const safeKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      query.title = { $regex: safeKeyword, $options: "i" };
+      const safeKeyword = escapeStringRegexp(keyword.substring(0, 100));
+      query.title = { $regex: `^${safeKeyword}`, $options: "" }; // prefix match, có dùng index
     }
 
     if (artistId) query.artist = artistId;
     if (year) query.releaseYear = year;
-    if (genreId) query.genres = genreId;
+    if (genreId) query.genres = genreId; // MongoDB tự hiểu genreId nằm trong mảng genres
     if (type) query.type = type;
-    if (isPublic !== undefined) query.isPublic = isPublic;
 
-    let sortOption: any = { releaseDate: -1 };
-    if (sort === "popular") sortOption = { playCount: -1 };
-    if (sort === "oldest") sortOption = { releaseDate: 1 };
-    if (sort === "name") sortOption = { title: 1 };
+    // Sort Map
+    const SORT_MAP: Record<string, any> = {
+      popular: { playCount: -1, _id: 1 },
+      oldest: { releaseDate: 1, _id: 1 },
+      name: { title: 1, _id: 1 },
+      newest: { releaseDate: -1, _id: 1 },
+    };
+
+    // Nếu có keyword, ưu tiên sort theo độ liên quan (Score) của MongoDB Text Search
+    let sortOption = SORT_MAP[sort ?? "newest"] ?? SORT_MAP.newest;
+    if (keyword && !sort) {
+      sortOption = { score: { $meta: "textScore" } };
+    }
 
     const [albums, total] = await Promise.all([
-      Album.find(query)
-        .populate("artist", "name avatar slug isVerified") // Thêm isVerified để UI có dấu tích xanh
-        .select("-tracks")
+      Album.find(query, keyword ? { score: { $meta: "textScore" } } : {})
+        .populate("artist", "name avatar slug isVerified")
+        .populate("genres", "name slug color") // 🔥 FIX: Phải lấy thêm genres
+        .select(
+          "title coverImage artist releaseYear type playCount slug isPublic genres themeColor",
+        )
+        .sort(sortOption)
         .skip(skip)
         .limit(limit)
-        .sort(sortOption)
         .lean(),
       Album.countDocuments(query),
     ]);
 
-    return {
+    const result = {
       data: albums,
       meta: {
         totalItems: total,
         page: Number(page),
         pageSize: Number(limit),
         totalPages: Math.ceil(total / Number(limit)),
+        hasNextPage: page * limit < total,
       },
     };
-  }
 
+    // Cache SET - 10 phút + Random jitter
+    const ttl = 600 + Math.floor(Math.random() * 120);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] SET error:", err));
+
+    return result;
+  }
   /**
-   * 3. DELETE ALBUM (Fix: Giảm Counter & Unlink Tracks)
-   */
-  /**
-   * 3. DELETE ALBUM (Chuẩn Transaction & An toàn file)
+   * 4. DELETE ALBUM (Chuẩn Transaction & An toàn file)
    */
   async deleteAlbum(id: string, currentUser: IUser) {
     const album = await Album.findById(id);
@@ -364,12 +396,8 @@ class AlbumService {
       session.endSession();
     }
   }
-
   /**
-   * 4. GET DETAIL
-   */
-  /**
-   * 4. GET DETAIL (Optimized Payload)
+   * 5. GET DETAIL
    */
   async getAlbumDetail(
     slugOrId: string,
@@ -379,23 +407,15 @@ class AlbumService {
     const isId = /^[0-9a-fA-F]{24}$/.test(slugOrId);
     const query = isId ? { _id: slugOrId } : { slug: slugOrId };
 
+    // 1. Chỉ lấy thông tin Album + Mảng ID của Track
     const album = await Album.findOne(query)
       .populate("artist", "name avatar slug isVerified")
-      .populate("genres", "name slug color") // Lấy thêm color để UI hiển thị đẹp hơn
-      .populate({
-        path: "tracks",
-        match: { status: "ready" },
-        // Chỉ lấy những trường cần thiết nhất của Track
-        select:
-          "title slug duration playCount coverImage trackUrl isPublic explicit",
-        options: { sort: { trackNumber: 1, createdAt: 1 } },
-        populate: [
-          {
-            path: "artist",
-            select: "name slug",
-          },
-        ],
-      });
+      .populate("genres", "name slug color")
+      .select("-tracks") // Tạm thời bỏ field tracks gốc nếu nó là mảng Object lớn
+      .lean();
+
+    if (!album)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy đĩa nhạc");
 
     if (!album)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy đĩa nhạc");
@@ -421,7 +441,105 @@ class AlbumService {
       }
     }
 
-    return album;
+    // 3. Lấy mảng ID bài hát đã được sắp xếp
+    const trackIds = await Track.find({ album: album._id, status: "ready" })
+      .sort({ trackNumber: 1, createdAt: 1 })
+      .select("_id")
+      .lean();
+
+    // Trả về Album kèm theo mảng ID để Frontend làm Virtual Scroll
+    return {
+      ...album,
+      trackIds: trackIds.map((t) => t._id),
+    };
+  }
+  /**
+   * 6. GET ALBUM TRACKS
+   */
+
+  async getAlbumTracks(
+    albumId: string,
+    filter: AlbumFilterInput,
+    currentUser?: IUser,
+  ) {
+    const userRole = currentUser?.role ?? "guest";
+    const userId = currentUser?._id?.toString();
+    const isAdmin = userRole === "admin";
+
+    // 1. KIỂM TRA BẢO MẬT (Authorization)
+    // Lấy cái "vỏ" album để check quyền trước
+    const album = await Album.findById(albumId)
+      .select("isPublic artist")
+      .lean();
+    if (!album)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy Album");
+
+    if (!album.isPublic && !isAdmin) {
+      const isOwner = userId && album.artist?.toString() === userId;
+      if (!isOwner) {
+        throw new ApiError(
+          httpStatus.FORBIDDEN,
+          "Bạn không có quyền xem danh sách này",
+        );
+      }
+    }
+
+    // 2. XỬ LÝ CACHE
+    const { page = 1, limit = 20 } = filter;
+    const cacheKey = buildCacheKey(`album:tracks:${albumId}`, userRole, {
+      page,
+      limit,
+    });
+
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
+    // 3. TRUY VẤN DATABASE
+    const skip = (page - 1) * limit;
+    // Guest/User thông thường chỉ thấy bài hát Public trong Album
+    const trackQuery: Record<string, any> = {
+      album: albumId,
+      status: "ready",
+    };
+
+    if (!isAdmin) {
+      trackQuery.isPublic = true;
+    }
+
+    const [tracks, total] = await Promise.all([
+      Track.find(trackQuery)
+        .sort({ trackNumber: 1, createdAt: 1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("artist", "name slug")
+        .select(
+          // Những trường bạn đã có
+          "title slug duration playCount coverImage hlsUrl isPublic bitrate" +
+            // Những trường CẦN THÊM
+            "artist trackNumber isExplicit lyricPreview lyricUrl",
+        )
+        .lean(),
+      Track.countDocuments(trackQuery),
+    ]);
+
+    const result = {
+      data: tracks,
+      meta: {
+        totalItems: total,
+        page: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+        hasNextPage: page * limit < total,
+      },
+    };
+
+    // 4. LƯU CACHE (Thời gian sống lâu hơn list chung vì ít thay đổi)
+    const ttl = 1800 + Math.floor(Math.random() * 300); // 30-35 phút
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Set Album Tracks Error:", err));
+
+    return result;
   }
 }
 export default new AlbumService();

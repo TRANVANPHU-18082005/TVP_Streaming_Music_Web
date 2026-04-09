@@ -1,43 +1,35 @@
-export interface Genre {
+export type GenreStatus = "active" | "inactive" | "all";
+export type GenreSort = "popular" | "priority" | "newest" | "oldest" | "name";
+
+// Entity chính
+export interface IGenre {
   _id: string;
   name: string;
   slug: string;
   description?: string;
 
-  // 🔥 New Visual & Hierarchy Fields
+  // Visuals & Hierarchy
   image?: string;
-  color?: string; // Hex (#ff0000)
-  gradient?: string; // CSS String ("linear-gradient(...)")
-  parentId?: Genre | null; // Thể loại cha
+  color?: string; // Hex (#1db954)
+  gradient?: string; // CSS Gradient string
+  parentId?: IGenre | string | null; // Có thể là object (Populated) hoặc ID
 
-  // 🔥 New Curation Fields
-  priority: number; // Độ ưu tiên sắp xếp
-  isTrending: boolean; // Cờ báo Hot
+  // Curation & Status
+  priority: number; // Càng cao càng ưu tiên lên đầu
+  isTrending: boolean;
   isActive: boolean;
 
-  // 🔥 New Stats (Read-only)
+  // Stats (Denormalized)
   trackCount: number;
   albumCount: number;
   artistCount: number;
 
   createdAt: string;
-}
-export interface GenreDetail extends Genre {
-  subGenres: Genre[]; // List con
-  breadcrumbs: Array<{ _id: string; name: string; slug: string }>; // Đường dẫn cha
-}
-export interface GenreFilterParams {
-  page: number;
-  limit: number;
-  status?: "active" | "inactive" | "all";
-  keyword?: string;
-  isTrending?: boolean; // Filter theo trending
-  parentId?: string | "root"; // Filter theo cha
-  sort: "popular" | "priority" | "newest" | "oldest" | "name";
+  updatedAt: string;
 }
 
-// Input để Create/Update
-export interface CreateGenreInput {
+// Input dành cho Form (Giống PlaylistFormInput)
+export interface GenreFormInput {
   name: string;
   description?: string;
   color?: string;
@@ -45,9 +37,31 @@ export interface CreateGenreInput {
   parentId?: string | null;
   priority?: number;
   isTrending?: boolean;
-  image?: File | null;
+  isActive?: boolean;
+  // image: Sử dụng any vì có thể là File (upload) hoặc string (URL cũ)
+  image?: any;
 }
 
-export interface UpdateGenreInput extends Partial<CreateGenreInput> {
+export type CreateGenreInput = GenreFormInput;
+
+export interface UpdateGenreInput extends Partial<GenreFormInput> {
   _id: string;
+}
+
+// Filter chuẩn hóa giống PlaylistFilterParams
+export interface GenreFilterParams {
+  page?: number;
+  limit?: number | "all";
+  status?: GenreStatus;
+  keyword?: string;
+  isTrending?: boolean;
+  parentId?: string | "root";
+  sort?: GenreSort;
+}
+
+// Response cho Virtual Scroll (Đồng bộ với PlaylistDetailResponse)
+export interface GenreDetailResponse extends IGenre {
+  subGenres: IGenre[]; // Danh sách con để hiện tab/chip
+  breadcrumbs: Array<{ _id: string; name: string; slug: string }>; // Đường dẫn phân cấp
+  trackIds: string[]; // Mảng ID bài hát để Frontend chạy Virtualizer
 }

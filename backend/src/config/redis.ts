@@ -19,6 +19,8 @@ export const cacheRedis = new Redis(cacheUrl, {
   lazyConnect: true,
   retryStrategy: (times) => Math.min(times * 50, 2000),
   tls: getTlsConfig(cacheUrl),
+  maxRetriesPerRequest: 3, // sau 3 lần fail → throw, không retry mãi
+  connectTimeout: 5000, // 5s không connect được → throw
 });
 
 cacheRedis.on("connect", () =>

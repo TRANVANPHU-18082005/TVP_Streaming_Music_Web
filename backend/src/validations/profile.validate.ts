@@ -69,7 +69,34 @@ export const getAnalyticsSchema = z.object({
     })
     .strict(),
 });
-
+export const getRecentlyTrackSchema = z.object({
+  query: z
+    .object({
+      // 1. Phân trang: Kiểm soát chặt chẽ limit để tránh Overload RAM khi serialize
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(50, "Limit too high")
+        .default(12),
+    })
+    .strict(),
+});
+export const getFavouriteTrackSchema = z.object({
+  query: z
+    .object({
+      // 1. Phân trang: Kiểm soát chặt chẽ limit để tránh Overload RAM khi serialize
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(50, "Limit too high")
+        .default(12),
+    })
+    .strict(),
+});
 // -----------------------------------------------------------------------------
 // 🔥 TYPES EXPORT
 // -----------------------------------------------------------------------------

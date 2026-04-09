@@ -1,54 +1,3 @@
-/**
- * TrackRow.tsx — Fixed version
- *
- * BUG FIXES
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * 1. LikeButton burst ring overflows table cell → scroll + broken click.
- *
- *    ROOT CAUSE: The burst animation uses `scale: 2.6` on a `motion.span`
- *    with `position: absolute; inset: 0`. In a `<table>` context, table
- *    cells use `overflow: visible` by default — the scaled span extends
- *    ~180% outside the button bounds, pushing the table row wider than its
- *    container (the fixed colgroup width) and triggering horizontal scroll.
- *    The expanded DOM area also intercepts pointer events on adjacent
- *    cells, preventing clicks from reaching the button.
- *
- *    FIX A (in LikeButton): wrap the `motion.button` in an `isolate-layer`
- *    container with `overflow: hidden; contain: layout paint` so the
- *    Framer scale + all absolutely-positioned burst/glow children are
- *    clipped to the button's bounds. This is the correct fix — it keeps
- *    all animation effects while preventing DOM overflow.
- *
- *    FIX B (in TrackRow): add `overflow-hidden` + `isolate` to the
- *    actions wrapper span so even if LikeButton is used elsewhere without
- *    the containment wrapper, the cell doesn't leak.
- *
- * 2. `console.log(track)` — debug log removed.
- *
- * 3. LikeButton opacity logic was wrong:
- *    Original: `opacity-100 pointer-events-none group-hover:opacity-100 ...`
- *    The button was ALWAYS opacity-100 (visible), but had pointer-events-none
- *    at rest, meaning it was visible but unclickable. Intent was: invisible
- *    at rest, visible on hover OR when liked.
- *    FIX: `opacity-0 pointer-events-none` at rest (matches original intent
- *    from the comment), with `isLiked` state adding `opacity-100 pointer-events-auto`
- *    so a liked track always shows the heart even when not hovered.
- *
- * 4. LikeButton `motion.button` whileHover scale in table context.
- *    Framer's scale transform uses the element's natural bounds as the
- *    transform-origin. In a table cell with `overflow: visible`, this
- *    causes the button to visually expand into adjacent cells on hover,
- *    creating the "can't click" experience. FIX: containment wrapper
- *    (see Fix A) clips the transform.
- *
- * 5. Glow backdrop `blur-xl` causes paint outside button bounds.
- *    `filter: blur()` always paints beyond the element's border-box.
- *    The blur radius (xl = 24px) means the glow extended 24px beyond
- *    the button in every direction, contributing to overflow.
- *    FIX: contained within the `contain: paint` wrapper.
- */
-
 import React, { memo, useState, useCallback, useRef } from "react";
 import {
   Play,
@@ -74,9 +23,9 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "@/utils/track-helper";
 import { Link } from "react-router-dom";
 import { ITrack } from "@/features/track/types";
-import { LikeButton } from "@/features";
 import { useAppSelector } from "@/store/hooks";
 import { MarqueeText } from "@/features/player/components/MarqueeText";
+import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -527,7 +476,7 @@ export const TrackRow = memo(
             // `contain: paint` is the critical property — clips filter:blur() overflow
             style={{ contain: "layout paint" }}
           >
-            <LikeButton id={track._id} size="sm" />
+            <TrackLikeButton id={track._id} />
           </span>
         </TableCell>
 

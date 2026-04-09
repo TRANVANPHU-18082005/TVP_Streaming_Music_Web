@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from "react";
-import { Users, TrendingUp } from "lucide-react";
+import { Users } from "lucide-react";
 import { Mic2 } from "lucide-react";
 
 import Pagination from "@/utils/pagination";
@@ -10,11 +10,7 @@ import { ArtistFilters } from "@/features/artist/components/ArtistFilters";
 import { useArtistParams } from "@/features/artist/hooks/useArtistParams";
 import { useArtistsQuery } from "@/features/artist/hooks/useArtistsQuery";
 import { APP_CONFIG } from "@/config/constants";
-import {
-  type Artist,
-  Artistpageskeleton,
-  useSyncInteractions,
-} from "@/features";
+import { Artistpageskeleton, IArtist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 
@@ -178,7 +174,10 @@ const ArtistPage: React.FC = () => {
   );
 
   // Must run unconditionally — enabled guard prevents execution when empty
-  const artistIds = useMemo(() => artists.map((a: Artist) => a._id), [artists]);
+  const artistIds = useMemo(
+    () => artists.map((a: IArtist) => a._id),
+    [artists],
+  );
   useSyncInteractions(
     artistIds,
     "follow",

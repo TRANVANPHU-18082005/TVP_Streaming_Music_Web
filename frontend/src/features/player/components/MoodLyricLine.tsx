@@ -45,7 +45,6 @@ export interface MoodLyricLineProps {
 export const MoodLyricLine = memo(
   ({
     currentText,
-    accentColor = "#a78bfa",
     onSeek,
     currentStartTimeMs,
     currentIndex,
@@ -59,14 +58,6 @@ export const MoodLyricLine = memo(
         onSeek(currentStartTimeMs / 1000);
       }
     }, [onSeek, currentStartTimeMs]);
-
-    const glowStyle: CSSProperties = {
-      textShadow: `
-        0 0 24px ${accentColor}55,
-        0 1px 3px rgba(0,0,0,1),
-        0 3px 12px rgba(0,0,0,0.9)
-      `,
-    };
 
     // Wrapper fixed bottom — scrim chỉ ở vùng lyric
     const wrapperStyle: CSSProperties = {
@@ -132,7 +123,6 @@ export const MoodLyricLine = memo(
                   backdropFilter: "blur(12px) saturate(1.3)",
                   WebkitBackdropFilter: "blur(12px) saturate(1.3)",
                   border: "1px solid rgba(255,255,255,0.07)",
-                  ...glowStyle,
                 }}
               >
                 {currentText}
@@ -155,14 +145,12 @@ export const MoodLyricLine = memo(
                 {[0, 1, 2].map((i) => (
                   <div
                     key={i}
-                    className="ml-idle"
+                    className="ml-idle bg-primary shadow-brand"
                     style={{
                       width: 5,
                       height: 5,
                       borderRadius: "50%",
-                      background: accentColor,
                       animationDelay: `${i * 0.36}s`,
-                      boxShadow: `0 0 8px ${accentColor}99`,
                     }}
                   />
                 ))}

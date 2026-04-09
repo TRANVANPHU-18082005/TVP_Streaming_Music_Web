@@ -1,30 +1,36 @@
 "use client";
 
-import { useState, useCallback, useMemo, memo } from "react";
+import { useCallback, useMemo, memo } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Play, Loader2 } from "lucide-react";
+import { Play, Pause, Loader2 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { Album } from "@/features/album/types";
-import { LikeButton } from "@/features/interaction";
+import { IAlbum } from "..";
+import { AlbumLikeButton } from "@/features/interaction/components/LikeButton";
+import { useAlbumPlayback } from "@/features/player/hooks/useAlbumPlayback";
+import {
+  PremiumMusicVisualizer,
+  WaveformBars,
+} from "@/components/MusicVisualizer";
 
 interface PublicAlbumCardProps {
-  album: Album;
+  album: IAlbum;
   className?: string;
-  artistName?: string;
-  onPlay?: () => Promise<void>;
 }
 
 const PublicAlbumCard = memo<PublicAlbumCardProps>(
-  function PublicAlbumCard({
-    album,
-    className,
-    artistName = album.artist?.name,
-    onPlay,
-  }) {
+  function PublicAlbumCard({ album, className }) {
     const navigate = useNavigate();
-    const [isLoadingPlay, setIsLoadingPlay] = useState(false);
+
+    // 1. Sử dụng Hook vạn năng đã đóng gói logic Source Context
+    const {
+      togglePlayAlbum,
+      isThisAlbumActive,
+      isThisAlbumPlaying,
+      isFetching,
+    } = useAlbumPlayback(album);
 
     const releaseYear = useMemo(
       () => album.releaseYear || new Date().getFullYear(),
@@ -35,21 +41,6 @@ const PublicAlbumCard = memo<PublicAlbumCardProps>(
       navigate(`/albums/${album.slug || album._id}`);
     }, [navigate, album.slug, album._id]);
 
-    const handlePlay = useCallback(
-      async (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!onPlay) return handleNavigate();
-        setIsLoadingPlay(true);
-        try {
-          await onPlay();
-        } finally {
-          setIsLoadingPlay(false);
-        }
-      },
-      [onPlay, handleNavigate],
-    );
-
     const stopProp = useCallback(
       (e: React.MouseEvent) => e.stopPropagation(),
       [],
@@ -59,133 +50,161 @@ const PublicAlbumCard = memo<PublicAlbumCardProps>(
       <article
         onClick={handleNavigate}
         className={cn(
-          "group flex flex-col gap-3 p-2 rounded-2xl transition-all duration-300",
-          "hover:bg-muted/10", // Tạo một vùng hover nhẹ quanh card
+          "group cursor-pointer flex flex-col gap-3 relative",
+          "album-card !overflow-visible p-2 rounded-2xl transition-all duration-300",
+          "hover:bg-muted/10",
+          isThisAlbumActive && "bg-primary/5 shadow-brand-soft", // Highlight vùng card
           className,
         )}
       >
         {/* ── ARTWORK CONTAINER ── */}
-        <div className="album-card aspect-square relative isolate">
+        <div
+          className={cn(
+            "album-card aspect-square relative isolate overflow-hidden rounded-xl transition-all duration-500",
+            isThisAlbumActive
+              ? "ring-2 ring-primary shadow-glow-md"
+              : "ring-1 ring-border/50",
+          )}
+        >
           <ImageWithFallback
             src={album.coverImage}
             alt={album.title}
-            className="img-cover transition-transform duration-700 group-hover:scale-110"
-          />
-
-          {/* Overlay gradient theo token index.css */}
-
-          <div
             className={cn(
-              "block md:hidden absolute top-2.5 right-2.5 z-20 rounded-full",
-              "md:opacity-0 md:group-hover:opacity-100 md:group-hover:flex",
-              "transition-opacity duration-300",
+              "img-cover transition-transform duration-1000",
+              "group-hover:scale-110",
+              isThisAlbumPlaying && "blur-[2px] opacity-70 scale-105", // Làm mờ nhẹ khi đĩa than hiện lên
             )}
-          >
-            <span
-              aria-label="Trending genre" // FIX 10
-              className={cn(
-                "inline-flex items-center gap-1 sm:gap-1.5 shrink-0 w-50px h-8",
-                // .badge pattern from index.css §14 — adapted for dark overlay context
-                "rounded-full",
-                "bg-white/18 backdrop-blur-md border border-white/20 p-2",
-                "text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white",
-                "shadow-lg",
-              )}
-            >
-              <LikeButton id={album._id} size="md" type="album" />
-            </span>
-          </div>
+          />
+          {/* Premium Visualizer - Chỉ hiện khi đang ACTIVE (kể cả pause) */}
+          <AnimatePresence>
+            {isThisAlbumActive && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }} // Thay đổi hiệu ứng một chút cho sang
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                /* Thay đổi chính ở đây: 
+         - inset-0: Phủ toàn bộ diện tích card
+         - h-full: Chiều cao 100%
+         - background: Sử dụng radial-gradient để tối ở tâm, giúp visualizer nổi bật hơn 
+      */
+                className="absolute inset-0 h-full flex items-center justify-center z-20 pointer-events-none bg-black/20 backdrop-blur-[2px]"
+              >
+                {/* Visualizer bây giờ sẽ căn giữa tuyệt đối nhờ Flexbox của div cha
+                 */}
+                <PremiumMusicVisualizer
+                  active={isThisAlbumPlaying}
+                  size="md" // Nâng size lên md nếu đặt ở giữa card cho rõ nét
+                  barCount={10}
+                  className="drop-shadow-brand-glow" // Thêm glow để trông Neural hơn
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {/* Overlays */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
-          {/* Play Button - Center Control */}
 
+          {/* Like Button */}
+          <div className="absolute top-2.5 right-2.5 z-20 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+            <AlbumLikeButton id={album._id} variant="card" />
+          </div>
+
+          {/* ── Play Button ── */}
           <div
             className={cn(
-              "absolute right-3 bottom-3 z-20",
-              "transition-all duration-300 ease-out",
-              isLoadingPlay
+              "absolute right-3 bottom-3 z-20 transition-all duration-300 ease-out",
+              isThisAlbumActive || isFetching
                 ? "translate-y-0 opacity-100 scale-100"
                 : "translate-y-3 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100",
             )}
           >
             <button
               type="button"
-              onClick={handlePlay}
-              disabled={isLoadingPlay}
-              aria-label={isLoadingPlay ? "Loading…" : `Play ${album.title}`}
+              onClick={(e) => togglePlayAlbum(e)}
+              disabled={isFetching}
               className={cn(
-                "control-btn control-btn--primary",
-                "size-12 sm:size-14",
+                "control-btn control-btn--primary size-12 sm:size-14 shadow-glow-sm",
+                isThisAlbumActive && "bg-primary text-white",
               )}
             >
-              {isLoadingPlay ? (
-                <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-              ) : (
-                <Play
-                  className="size-5 ml-0.5 fill-current"
-                  aria-hidden="true"
-                />
-              )}
+              <AnimatePresence mode="wait">
+                {isFetching ? (
+                  <motion.div
+                    key="loader"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <Loader2 className="size-5 animate-spin" />
+                  </motion.div>
+                ) : isThisAlbumPlaying ? (
+                  <motion.div
+                    key="pause"
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.5, opacity: 0 }}
+                  >
+                    <Pause className="size-5 fill-current" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="play"
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.5, opacity: 0 }}
+                  >
+                    <Play className="size-5 ml-0.5 fill-current" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </button>
           </div>
 
-          {/* Top Actions - Quick access */}
-          {/* <div className="absolute top-3 right-3 z-20 flex flex-col gap-2 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-            <LikeButton id={album._id} type="album" />
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={stopProp}>
-                <button className="control-btn glass-dark size-9 border-white/10 hover:bg-white/20">
-                  <MoreVertical className="size-4 text-white" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="glass-frosted shadow-floating border-border/40 w-48"
-              >
-                <DropdownMenuItem onClick={handlePlay} className="menu-item">
-                  <Play className="size-4 mr-2" /> Phát ngay
-                </DropdownMenuItem>
-                <DropdownMenuItem className="menu-item">
-                  <PlusCircle className="size-4 mr-2" /> Thêm vào thư viện
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-border/40" />
-                <DropdownMenuItem className="menu-item">
-                  <Share2 className="size-4 mr-2" /> Chia sẻ
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div> */}
-
-          {/* Active Glow Ring */}
-          {isLoadingPlay && (
-            <div className="absolute inset-0 rounded-xl ring-2 ring-primary animate-glow-pulse" />
+          {/* Active Glow Ring khi đang tải */}
+          {isFetching && (
+            <div className="absolute inset-0 rounded-xl ring-2 ring-primary animate-glow-pulse pointer-events-none" />
           )}
         </div>
 
         {/* ── INFO SECTION ── */}
         <div className="px-1 flex flex-col gap-1">
-          <h3 className="text-track-title text-foreground truncate group-hover:text-primary transition-colors cursor-pointer">
-            {album.title}
-          </h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3
+              className={cn(
+                "text-track-title truncate transition-colors duration-200 flex-1",
+                isThisAlbumActive
+                  ? "text-primary"
+                  : "text-foreground group-hover:text-primary",
+              )}
+            >
+              {album.title}
+            </h3>
+
+            {/* Sóng nhạc mini cạnh tiêu đề - Chỉ hiện khi Active */}
+            {isThisAlbumActive && (
+              <WaveformBars active={isThisAlbumPlaying} bars={3} />
+            )}
+          </div>
           <div className="flex items-center gap-2 text-track-meta truncate">
             <Link
               to={`/artists/${album.artist?.slug || album.artist?._id}`}
               onClick={stopProp}
               className="hover:text-primary hover:underline transition-colors"
             >
-              {artistName}
+              {album?.artist?.name ? album?.artist?.name : ""}
             </Link>
-            <span className="text-[10px] opacity-30">•</span>
+            {album?.artist?.name && (
+              <span className="text-[10px] opacity-30">•</span>
+            )}
             <span className="text-duration">{releaseYear}</span>
           </div>
         </div>
       </article>
     );
   },
-  (prev, next) =>
-    prev.album._id === next.album._id &&
-    prev.album.coverImage === next.album.coverImage &&
-    prev.album.title === next.album.title,
+  (p, n) =>
+    p.album._id === n.album._id &&
+    p.album.coverImage === n.album.coverImage &&
+    p.album.title === n.album.title,
 );
 
 export default PublicAlbumCard;

@@ -1,8 +1,8 @@
-import type { Artist } from "@/features/artist/types";
-import type { Genre } from "@/features/genre/types";
-import { Track } from "@/features/track/types";
+import { IArtist } from "@/features/artist";
+import { IGenre } from "@/features/genre";
+import { ITrack } from "@/features/track";
 
-export interface Album {
+export interface IAlbum {
   _id: string;
   title: string;
   slug: string;
@@ -14,8 +14,8 @@ export interface Album {
   themeColor: string; // Hex color
 
   // Relations (Thường đã được populate)
-  artist: Artist; // Backend trả về object Artist đầy đủ
-  genres: Genre[]; // Backend trả về mảng Genre đầy đủ
+  artist: IArtist; // Backend trả về object Artist đầy đủ
+  genres: IGenre[]; // Backend trả về mảng Genre đầy đủ
 
   // Release & Legal
   releaseDate: string; // ISO Date String
@@ -26,7 +26,7 @@ export interface Album {
   tags?: string[];
   playCount: number; // Tổng lượt nghe của Album
   likeCount: number; // Số lượng yêu thích
-  tracks?: Track[];
+  tracks?: ITrack[];
   // Stats & Status
   totalTracks: number;
   isPublic: boolean;
@@ -84,4 +84,7 @@ export interface AlbumFilterParams {
   type?: "album" | "single" | "ep" | "compilation" | "all";
   sort?: "newest" | "oldest" | "popular" | "name"; // Thêm sort
   isPublic?: boolean; // Admin có thể lọc theo trạng thái
+}
+export interface AlbumDetailResponse extends IAlbum {
+  trackIds: string[];
 }

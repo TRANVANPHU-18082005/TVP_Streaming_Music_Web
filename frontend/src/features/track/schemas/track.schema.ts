@@ -1,15 +1,9 @@
-// ==========================================
-// MAIN SCHEMAS
-// ==========================================
-
-/**
- * SCHEMA: Tạo / Cập nhật 1 bài hát
- */
+// features/track/schemas/track.schema.ts
 import { z } from "zod";
 
-// ==========================================
-// CONSTANTS & RULES
-// ==========================================
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. CONSTANTS & HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 const MAX_AUDIO_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -28,168 +22,174 @@ const ACCEPTED_IMAGE_TYPES = [
   "image/webp",
 ];
 
-// ==========================================
-// REUSABLE SCHEMAS
-// ==========================================
-// 3. Schema cho Tags & Thể loại
-const tagsSchema = z
-  .array(z.string().trim().max(30, "Mỗi tag tối đa 30 ký tự"))
-  .max(20, "Chỉ được thêm tối đa 20 tags")
-  .default([]);
+export const TRACK_SORT_OPTIONS = [
+  "newest",
+  "oldest",
+  "popular",
+  "name",
+] as const;
+export const LYRIC_TYPES = ["none", "plain", "synced", "karaoke"] as const;
 
-const genreIdsSchema = z
-  .array(z.string().trim())
-  .min(1, "Vui lòng chọn ít nhất 1 thể loại")
-  .max(10, "Chỉ chọn tối đa 10 thể loại");
-
-// 4. Schema cho Image
-const imageSchema = z
-  .union([
-    z
-      .instanceof(File)
-      .refine((file) => file.size <= MAX_IMAGE_SIZE, "Ảnh cover tối đa 5MB")
-      .refine(
-        (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
-        "Định dạng ảnh không hỗ trợ (Chỉ nhận JPG, PNG, WEBP)",
-      ),
-    z.string().url("Đường dẫn ảnh không hợp lệ"),
-    z.null(),
-  ])
-  .optional()
-  .nullable();
-
-const relationIdSchema = z
-  .string()
-  .trim()
-  .transform((val) =>
-    val === "" || val === "null" || val === "undefined" ? null : val,
-  )
-  .nullable()
-  .optional();
-
-const optionalTextSchema = (maxLength: number, errorMsg: string) =>
+const optionalText = (maxLen: number, msg: string) =>
   z
     .string()
     .trim()
-    .max(maxLength, errorMsg)
+    .max(maxLen, msg)
     .optional()
     .nullable()
-    .transform((val) => (val === "" ? undefined : val));
+    .transform((val) => (val === "" ? undefined : val) ?? undefined);
 
-// ==========================================
-// MAIN TRACK SCHEMA
-// ==========================================
+const relationId = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .transform((val) =>
+    val === "" || val === "null" || val === "undefined" ? null : val,
+  );
 
-export const trackSchema = z.object({
-  // --- 1. BASIC INFO ---
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. FILE SCHEMAS
+// ─────────────────────────────────────────────────────────────────────────────
+const audioFileSchema = z
+  .instanceof(File)
+  .refine((f) => f.size <= MAX_AUDIO_SIZE, "File nhạc tối đa 100MB")
+  .refine(
+    (f) => ACCEPTED_AUDIO_TYPES.includes(f.type),
+    "Định dạng âm thanh không hỗ trợ",
+  );
+
+const imageFileSchema = z
+  .instanceof(File)
+  .refine((f) => f.size <= MAX_IMAGE_SIZE, "Ảnh cover tối đa 5MB")
+  .refine(
+    (f) => ACCEPTED_IMAGE_TYPES.includes(f.type),
+    "Chỉ nhận JPG, PNG, WEBP",
+  );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. SHARED BASE SCHEMA
+// ─────────────────────────────────────────────────────────────────────────────
+const trackBaseSchema = z.object({
   title: z
     .string({ required_error: "Vui lòng nhập tên bài hát" })
     .trim()
-    .min(1, "Tên bài hát không được để trống")
-    .max(200, "Tên bài hát tối đa 200 ký tự"),
+    .min(1, "Không được để trống")
+    .max(200),
+  description: optionalText(2000, "Mô tả tối đa 2000 ký tự"),
+  lyricType: z.enum(LYRIC_TYPES).default("none"),
+  plainLyrics: optionalText(15000, "Lời bài hát quá dài"),
 
-  description: optionalTextSchema(2000, "Mô tả tối đa 2000 ký tự"),
-
-  // --- 2. UPGRADE: LYRIC MANAGEMENT ---
-  // Cho phép Admin chọn loại Lyric: none (ko lời), plain (thô), synced (lời khớp dòng)
-  lyricType: z.enum(["none", "plain", "synced", "karaoke"]).default("none"),
-
-  // Lời bài hát thô (Dùng để hiển thị hoặc để Worker parse nếu chọn synced/plain)
-  plainLyrics: optionalTextSchema(15000, "Lời bài hát quá dài"),
-
-  // --- 3. RELATIONSHIPS ---
   artistId: z.string().trim().min(1, "Vui lòng chọn Nghệ sĩ chính"),
-
   featuringArtistIds: z.array(z.string().trim()).default([]),
-
-  albumId: relationIdSchema,
-
+  albumId: relationId,
   genreIds: z.array(z.string().trim()).min(1, "Chọn ít nhất 1 thể loại"),
+  moodVideoId: relationId,
 
-  // --- 4. UPGRADE: VISUAL CANVAS (MOOD VIDEO) ---
-  // ID của video canvas cụ thể. Nếu để null, Worker sẽ tự khớp theo tags.
-  moodVideoId: relationIdSchema,
-
-  // --- 5. METADATA & TAGS ---
-  // Tags rất quan trọng để Worker v2.0 tự động gán Canvas
   tags: z
     .array(z.string().trim().max(30))
-    .min(
-      1,
-      "Thêm ít nhất 1 tag cảm xúc (ví dụ: buồn, lofi, chill) để hệ thống tự khớp Canvas",
-    )
+    .min(1, "Thêm ít nhất 1 tag cảm xúc (buồn, chill...)")
     .default([]),
 
   releaseDate: z.string().default(() => new Date().toISOString()),
   isExplicit: z.boolean().default(false),
   isPublic: z.boolean().default(true),
-
   trackNumber: z.coerce.number().int().min(1).default(1),
   diskNumber: z.coerce.number().int().min(1).default(1),
 
-  // --- 6. ADVANCED ---
-  copyright: optionalTextSchema(500, "Thông tin bản quyền quá dài"),
+  copyright: optionalText(500, "Thông tin bản quyền quá dài"),
   isrc: z
     .string()
     .trim()
     .optional()
     .nullable()
-    .transform((val) => (val === "" ? undefined : val))
+    .transform((v) => (v === "" ? undefined : v))
     .refine(
-      (val) => val === undefined || /^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$/.test(val),
+      (v) => !v || /^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$/.test(v),
       "Mã ISRC không hợp lệ",
     ),
-
-  // --- 7. FILES ---
-  // audio: Bắt buộc khi tạo mới, optional khi update
-  audio: z
-    .union([z.instanceof(File), z.string(), z.null()])
-    .optional()
-    .refine((file) => {
-      if (file instanceof File) return file.size <= MAX_AUDIO_SIZE;
-      return true;
-    }, "File nhạc tối đa 100MB")
-    .refine((file) => {
-      if (file instanceof File) return ACCEPTED_AUDIO_TYPES.includes(file.type);
-      return true;
-    }, "Định dạng âm thanh không hỗ trợ"),
-
-  coverImage: z
-    .union([
-      z
-        .instanceof(File)
-        .refine((f) => f.size <= MAX_IMAGE_SIZE, "Ảnh tối đa 5MB"),
-      z.string().url(),
-      z.null(),
-    ])
-    .optional()
-    .nullable(),
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. CREATE / EDIT / PARAMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const trackCreateSchema = trackBaseSchema.extend({
+  audio: audioFileSchema, // Bắt buộc khi tạo
+  coverImage: imageFileSchema.optional(),
+});
+
+export const trackEditSchema = trackBaseSchema.extend({
+  // Khi sửa: Audio có thể là URL cũ (string) hoặc File mới
+  audio: z.union([audioFileSchema, z.string().url(), z.null()]).optional(),
+  coverImage: z.union([imageFileSchema, z.string().url(), z.null()]).optional(),
+});
+
+export const trackParamsSchema = z.object({
+  page: z.coerce.number().int().min(1).catch(1),
+  limit: z.coerce.number().int().min(1).max(100).catch(10),
+  sort: z.enum(TRACK_SORT_OPTIONS).catch("newest"),
+  keyword: z.string().trim().optional().catch(undefined),
+  artistId: z.string().trim().optional().catch(undefined),
+  albumId: z.string().trim().optional().catch(undefined),
+  genreId: z.string().trim().optional().catch(undefined),
+});
+// features/track/schemas/track.schema.ts (Phần tiếp theo)
 
 /**
  * SCHEMA: Cập nhật hàng loạt (Bulk Edit)
+ * Dùng khi Admin chọn nhiều bài hát và muốn đổi chung Thể loại, Album hoặc Tag.
  */
 export const bulkTrackSchema = z.object({
-  // Đều là optional, nếu Client không gửi -> Giữ nguyên trong DB
-  genreIds: genreIdsSchema.optional(),
+  // 1. Phân loại & Tags (Cho phép gửi mảng mới để ghi đè)
+  genreIds: z
+    .array(z.string().trim())
+    .min(1, "Chọn ít nhất 1 thể loại")
+    .max(10, "Tối đa 10 thể loại")
+    .optional(),
 
-  tags: tagsSchema.optional(),
+  tags: z.array(z.string().trim().max(30)).max(20, "Tối đa 20 tags").optional(),
 
-  releaseDate: z.string().datetime("Ngày phát hành không hợp lệ").optional(),
+  // 2. Metadata chung
+  releaseDate: z
+    .string()
+    .pipe(z.coerce.date())
+    .transform((d) => d.toISOString().split("T")[0])
+    .optional(),
 
   isPublic: z.boolean().optional(),
   isExplicit: z.boolean().optional(),
 
-  // Cần dùng relationIdSchema để hỗ trợ hành động: Gửi null/"" để gỡ bài khỏi Album
-  albumId: relationIdSchema,
+  // 3. Relationships (Quan trọng: Dùng relationId để có thể gỡ bài khỏi Album bằng cách gửi null)
+  albumId: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((val) =>
+      val === "" || val === "null" || val === "undefined" ? null : val,
+    ),
+
+  artistId: z.string().trim().optional(), // Đổi chủ sở hữu hàng loạt (ít dùng nhưng nên có)
 
   featuringArtistIds: z
     .array(z.string().trim())
     .max(20, "Tối đa 20 nghệ sĩ hợp tác")
     .optional(),
 
-  coverImage: imageSchema,
+  // 4. Media chung (Ví dụ thay ảnh bìa cho tất cả các bài trong 1 đĩa đơn)
+  coverImage: z
+    .union([
+      z
+        .instanceof(File)
+        .refine((f) => f.size <= 5 * 1024 * 1024, "Ảnh tối đa 5MB"),
+      z.string().url("Link ảnh không hợp lệ"),
+      z.null(),
+    ])
+    .optional(),
 });
 
 export type BulkTrackFormValues = z.infer<typeof bulkTrackSchema>;
-export type TrackFormValues = z.infer<typeof trackSchema>;
+export type TrackCreateFormValues = z.infer<typeof trackCreateSchema>;
+export type TrackEditFormValues = z.infer<typeof trackEditSchema>;
+export type TrackFilterParams = z.infer<typeof trackParamsSchema>;

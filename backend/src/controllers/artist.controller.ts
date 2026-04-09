@@ -5,14 +5,17 @@ import artistService from "../services/artist.service"; // Instance service
 import Artist from "../models/Artist";
 import ApiError from "../utils/ApiError";
 import { IUser } from "../models/User";
-import { ArtistFilterInput } from "../validations/artist.validation";
+import {
+  ArtistFilterInput,
+  getArtistTracksSchema,
+} from "../validations/artist.validation";
 
 // 1. PUBLIC: GET LIST
 export const getArtists = catchAsync(async (req: Request, res: Response) => {
   // Cast Type từ Zod Schema (Query params đã được validate)
   const query = req.query as unknown as ArtistFilterInput;
-
-  const result = await artistService.getArtists(query);
+  const currentUser = req.user as IUser | undefined;
+  const result = await artistService.getArtists(query, currentUser);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -23,20 +26,20 @@ export const getArtists = catchAsync(async (req: Request, res: Response) => {
 // 2. PUBLIC: GET DETAIL
 export const getArtistDetail = catchAsync(
   async (req: Request, res: Response) => {
-    const currentUserId = req.user
-      ? (req.user as IUser)._id.toString()
-      : undefined;
+    const currentUser = req.user as IUser | undefined;
 
-    const result = await artistService.getArtistDetail(
+    const currentUserId = currentUser ? currentUser._id.toString() : undefined;
+
+    const albumDetailResult = await artistService.getArtistDetail(
       req.params.id,
-      currentUserId
+      currentUserId,
     );
 
     res.status(httpStatus.OK).json({
       success: true,
-      data: result,
+      data: albumDetailResult,
     });
-  }
+  },
 );
 
 // 3. ARTIST: GET MY PROFILE
@@ -64,7 +67,7 @@ export const updateMyProfile = catchAsync(
     const result = await artistService.updateMyProfile(
       req.user!._id.toString(),
       req.body,
-      files
+      files,
     );
 
     res.status(httpStatus.OK).json({
@@ -72,7 +75,7 @@ export const updateMyProfile = catchAsync(
       message: "Cập nhật hồ sơ thành công",
       data: result,
     });
-  }
+  },
 );
 
 // 5. ADMIN: CREATE
@@ -95,7 +98,7 @@ export const updateArtist = catchAsync(async (req: Request, res: Response) => {
   const result = await artistService.updateArtistByAdmin(
     req.params.id,
     req.body,
-    files
+    files,
   );
 
   res.status(httpStatus.OK).json({
@@ -125,5 +128,24 @@ export const deleteArtist = catchAsync(async (req: Request, res: Response) => {
   res.status(httpStatus.OK).json({
     success: true,
     message: "Đã xóa nghệ sĩ vĩnh viễn",
+  });
+});
+// 6. GET ALBUM TRACKS
+export const getArtistTracks = catchAsync(async (req, res) => {
+  // 1. Parse query - Đảm bảo dữ liệu sạch
+  const { query } = getArtistTracksSchema.parse({ query: req.query });
+  const currentUser = req.user as IUser | undefined;
+
+  const userRole = currentUser ? currentUser.role : undefined;
+
+  const result = await artistService.getArtistTracks(
+    req.params.id,
+    query,
+    userRole,
+  );
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: result,
   });
 });

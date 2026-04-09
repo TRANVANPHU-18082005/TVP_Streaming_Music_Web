@@ -128,15 +128,9 @@ export interface IChartDataPoint {
   top3: number;
 }
 
-export interface IRealtimeChartData {
-  items: IChartItem[];
-  chart: IChartDataPoint[];
-}
-
 export interface IChartResponse {
   success: boolean;
   data: IRealtimeChartData;
-  lastUpdatedAt: string;
 }
 // Định nghĩa Artist và Album tối giản để dùng chung cho Chart và Track
 export interface IArtistMin {
@@ -177,7 +171,6 @@ export interface IRealtimeChartData {
 export interface IChartResponse {
   success: boolean;
   data: IRealtimeChartData;
-  lastUpdatedAt: string;
 }
 
 export type ChartUpdatePayload = Partial<IRealtimeChartData>;

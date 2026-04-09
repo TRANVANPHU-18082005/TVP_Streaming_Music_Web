@@ -29,19 +29,19 @@ const trackApi = {
   },
 
   // Admin: Lấy chi tiết bài hát bằng ID
-  getById: async (id: string) => {
+  getTrackDetail: async (id: string) => {
     const { data } = await api.get<ApiResponse<ITrack>>(`/tracks/${id}`);
-    return data;
+    return data.data; // unwrap ApiResponse wrapper
   },
 
-  // Public: Lấy chi tiết bài hát bằng Slug (Dùng cho SEO/Client)
-  getDetail: async (slug: string) => {
-    // Tùy endpoint backend của bạn, có thể là /tracks/slug/:slug hoặc /tracks/:slug
-    const { data } = await api.get<ApiResponse<ITrack>>(
-      `/tracks/detail/${slug}`,
-    );
-    return data;
-  },
+  // // Public: Lấy chi tiết bài hát bằng Slug (Dùng cho SEO/Client)
+  // getDetail: async (slug: string) => {
+  //   // Tùy endpoint backend của bạn, có thể là /tracks/slug/:slug hoặc /tracks/:slug
+  //   const { data } = await api.get<ApiResponse<ITrack>>(
+  //     `/tracks/detail/${slug}`,
+  //   );
+  //   return data;
+  // },
 
   // ==========================================
   // 2. MUTATIONS (Thêm / Sửa / Xóa cơ bản)
@@ -114,9 +114,7 @@ const trackApi = {
 
   getRealtimeChart: async () => {
     // Giả sử ChartResponse được bọc trong ApiResponse từ backend
-    const { data } = await api.get<ApiResponse<IChartResponse>>(
-      "/tracks/charts/realtime",
-    );
+    const data = await api.get<IChartResponse>("/tracks/charts/realtime");
     return data.data;
   },
   // trackApi.ts thêm vào phần ACTIONS

@@ -1,15 +1,11 @@
 import {
   useQuery,
-  useMutation,
-  useQueryClient,
   keepPreviousData,
+  useInfiniteQuery,
 } from "@tanstack/react-query";
-import { toast } from "sonner";
 import artistApi from "../api/artistApi";
 import { artistKeys } from "@/features/artist/utils/artistKeys";
-import { handleError } from "@/utils/handleError";
 import type { ArtistFilterParams } from "../types";
-import type { ArtistFormValues } from "@/features/artist/schemas/artist.schema";
 
 // ==========================================
 // 1. PUBLIC HOOKS (Dành cho Người dùng cuối)
@@ -23,7 +19,7 @@ import type { ArtistFormValues } from "@/features/artist/schemas/artist.schema";
 export const useArtistsQuery = (params: ArtistFilterParams) => {
   return useQuery({
     queryKey: artistKeys.list(params),
-    queryFn: () => artistApi.getAll(params),
+    queryFn: () => artistApi.getArtists(params),
 
     // UX: Giữ data cũ trên màn hình trong lúc fetch data trang mới -> Tránh Layout Shift
     placeholderData: keepPreviousData,
@@ -48,7 +44,7 @@ export const useSpotlightArtists = (limit = 10) => {
     // Đảm bảo queryKey phản ánh đúng params được truyền vào API
     queryKey: artistKeys.list({ sort: "popular", limit, isActive: true }),
     queryFn: () =>
-      artistApi.getAll({
+      artistApi.getArtists({
         page: 1,
         limit,
         sort: "popular",
@@ -71,7 +67,40 @@ export const useArtistDetail = (slugOrId: string) => {
     select: (response) => response.data, // Bóc tách thẳng data của artist
   });
 };
+export const useArtistTracksInfinite = (
+  albumId: string | undefined,
+  limit = 20,
+) => {
+  return useInfiniteQuery({
+    queryKey: artistKeys.trackList(albumId!, { limit }),
 
+    queryFn: async ({ pageParam = 1 }) => {
+      // 1. Phải gọi đúng API
+      return artistApi.getArtistTracks(albumId!, { page: pageParam, limit });
+    },
+
+    enabled: !!albumId,
+    initialPageParam: 1,
+
+    // 2. Fix đường dẫn lấy Meta: response (ApiResponse) -> data (PagedResponse) -> meta
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.data.meta;
+      return page < totalPages ? page + 1 : undefined;
+    },
+
+    placeholderData: (previousData) => previousData,
+
+    // 3. Fix Select: Truy cập đúng cấu trúc ApiResponse -> PagedResponse -> data (mảng tracks)
+    // Lưu ý: Trong ApiResponse của bạn, mảng tracks nằm trong field 'data' của PagedResponse
+    select: (data) => ({
+      allTracks: data.pages.flatMap((page) => page.data.data), // Phẳng hóa mảng ITrack
+      totalItems: data.pages[0]?.data.meta.totalItems ?? 0,
+      meta: data.pages[data.pages.length - 1]?.data.meta,
+    }),
+
+    staleTime: 5 * 60 * 1000,
+  });
+};
 // ==========================================
 // 2. STUDIO HOOKS (Dành cho Nghệ sĩ tự quản lý)
 // ==========================================
@@ -85,33 +114,5 @@ export const useMyArtistProfile = () => {
     queryFn: artistApi.getMyProfile,
     retry: 1, // Không retry nhiều lần nếu họ chưa phải là artist (tránh spam API lỗi 403/404)
     select: (response) => response.data,
-  });
-};
-
-/**
- * Hook cập nhật Profile của chính Nghệ sĩ
- */
-export const useUpdateMyArtistProfile = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: ArtistFormValues) => artistApi.updateMyProfile(data),
-    onSuccess: (res) => {
-      toast.success("Hồ sơ đã được cập nhật thành công!");
-
-      // 1. Refresh lại data trong trang Studio
-      queryClient.invalidateQueries({ queryKey: artistKeys.profile() });
-
-      // 2. Nếu update có làm thay đổi slug, refresh luôn trang Public Detail của họ
-      if (res.data?.slug) {
-        queryClient.invalidateQueries({
-          queryKey: artistKeys.detail(res.data.slug),
-        });
-      }
-
-      // 3. (Tùy chọn) Có thể clear cache list để lỡ user ra ngoài trang chủ thấy tên mới liền
-      // queryClient.invalidateQueries({ queryKey: artistKeys.lists() });
-    },
-    onError: (err) => handleError(err, "Lỗi cập nhật hồ sơ nghệ sĩ"),
   });
 };

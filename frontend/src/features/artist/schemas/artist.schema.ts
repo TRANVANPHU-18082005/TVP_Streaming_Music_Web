@@ -1,75 +1,75 @@
 import { z } from "zod";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. CONSTANTS & TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
   "image/jpg",
   "image/png",
   "image/webp",
-];
+] as const;
 
-// ==========================================
-// 1. REUSABLE SCHEMAS (Chuẩn hóa)
-// ==========================================
+export const ARTIST_SORT_OPTIONS = [
+  "newest",
+  "oldest",
+  "name",
+  "popular",
+] as const;
 
-// Chuẩn hóa Link MXH: Biến chuỗi rỗng "" thành undefined để DB sạch sẽ
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. REUSABLE PRIMITIVES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Chuỗi optional: trim, biến "" thành undefined để DB sạch */
+const optionalString = (maxLen: number, maxMsg: string) =>
+  z
+    .string()
+    .trim()
+    .max(maxLen, maxMsg)
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" ? undefined : val) ?? undefined);
+
+/** Link MXH chuẩn hóa */
 const socialLinkSchema = z
   .string()
   .trim()
   .url("Định dạng link không hợp lệ")
-  .optional()
   .or(z.literal(""))
-  .transform((val) => (val === "" ? undefined : val));
-
-// Chuẩn hóa File Ảnh Đơn (Avatar, Cover)
-const imageSchema = z
-  .union([
-    z
-      .instanceof(File)
-      .refine((file) => file.size <= MAX_FILE_SIZE, "Kích thước ảnh tối đa 5MB")
-      .refine(
-        (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
-        "Định dạng không hỗ trợ (Chỉ nhận JPG, PNG, WEBP)",
-      ),
-    z.string(), // Dành cho URL cũ khi Edit
-    z.null(),
-  ])
   .optional()
-  .nullable();
+  .nullable()
+  .transform((val) => (val === "" ? undefined : val) ?? undefined);
 
-// Lõi chuẩn hóa File cho mảng Gallery (Bắt buộc phải validate lại File ở đây)
+/** Validate File ảnh đơn */
+const imageFileSchema = z
+  .instanceof(File)
+  .refine((f) => f.size <= MAX_FILE_SIZE, "Kích thước ảnh tối đa 5MB")
+  .refine(
+    (f) => ACCEPTED_IMAGE_TYPES.includes(f.type as any),
+    "Chỉ nhận định dạng .jpg, .jpeg, .png, .webp",
+  );
+
+/** Item trong Gallery: Có thể là File mới hoặc URL cũ */
 const galleryItemSchema = z.union([
-  z
-    .instanceof(File)
-    .refine((file) => file.size <= MAX_FILE_SIZE, "Mỗi ảnh tối đa 5MB")
-    .refine(
-      (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
-      "Định dạng ảnh không hỗ trợ",
-    ),
-  z.string(), // URL cũ
+  imageFileSchema,
+  z.string().url("Link ảnh gallery không hợp lệ"),
 ]);
 
-// ==========================================
-// 2. MAIN ARTIST SCHEMA
-// ==========================================
-
-export const artistSchema = z.object({
-  // THÔNG TIN CƠ BẢN
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. SHARED BASE SCHEMA
+// ─────────────────────────────────────────────────────────────────────────────
+const artistBaseSchema = z.object({
   name: z
     .string({ required_error: "Vui lòng nhập tên nghệ sĩ" })
     .trim()
     .min(2, "Tên nghệ sĩ tối thiểu 2 ký tự")
-    .max(100, "Tên nghệ sĩ quá dài (Tối đa 100 ký tự)"),
+    .max(100, "Tên nghệ sĩ tối đa 100 ký tự"),
 
   aliases: z
-    .array(
-      z
-        .string()
-        .trim()
-        .min(1, "Alias không được để trống")
-        .max(50, "Alias tối đa 50 ký tự"),
-    )
-    .max(10, "Chỉ được nhập tối đa 10 tên gọi khác")
+    .array(z.string().trim().min(1).max(50))
+    .max(10, "Tối đa 10 tên gọi khác")
     .default([]),
 
   nationality: z
@@ -78,28 +78,14 @@ export const artistSchema = z.object({
     .min(1, "Vui lòng chọn quốc tịch")
     .default("VN"),
 
-  // LIÊN KẾT
   genreIds: z
     .array(z.string())
     .min(1, "Vui lòng chọn ít nhất 1 thể loại")
-    .max(5, "Chỉ được chọn tối đa 5 thể loại chính"),
+    .max(5, "Tối đa 5 thể loại chính"),
 
-  userId: z
-    .string()
-    .trim()
-    .optional()
-    .nullable()
-    // Quan trọng: Tránh gửi "" cho trường ObjectId của DB
-    .transform((val) => (val === "" ? undefined : val)),
+  userId: optionalString(50, "UserId không hợp lệ"),
 
-  // CHI TIẾT
-  bio: z
-    .string()
-    .trim()
-    .max(3000, "Tiểu sử tối đa 3000 ký tự")
-    .optional()
-    .nullable()
-    .transform((val) => (val === "" ? undefined : val)),
+  bio: optionalString(3000, "Tiểu sử tối đa 3000 ký tự"),
 
   themeColor: z
     .string()
@@ -107,11 +93,9 @@ export const artistSchema = z.object({
     .regex(/^#([0-9A-F]{3}){1,2}$/i, "Mã màu Hex không hợp lệ")
     .default("#ffffff"),
 
-  // TRẠNG THÁI
   isVerified: z.boolean().default(false),
   isActive: z.boolean().default(true),
 
-  // MẠNG XÃ HỘI
   socialLinks: z
     .object({
       facebook: socialLinkSchema,
@@ -121,17 +105,69 @@ export const artistSchema = z.object({
       spotify: socialLinkSchema,
       youtube: socialLinkSchema,
     })
-    .optional(),
+    .optional()
+    .default({}),
 
-  // MEDIA (Hình ảnh)
-  avatar: imageSchema,
-  coverImage: imageSchema,
-
-  // Gallery: Bây giờ đã an toàn, kiểm tra chặt chẽ File và khóa giới hạn 10 ảnh
+  // Gallery ảnh nghệ sĩ
   images: z
     .array(galleryItemSchema)
-    .max(10, "Chỉ được phép đăng tải tối đa 10 ảnh Gallery")
+    .max(10, "Tối đa 10 ảnh Gallery")
     .default([]),
 });
 
-export type ArtistFormValues = z.infer<typeof artistSchema>;
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. CREATE / EDIT SCHEMAS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const artistCreateSchema = artistBaseSchema.extend({
+  avatar: imageFileSchema.optional(),
+  coverImage: imageFileSchema.optional(),
+});
+
+export const artistEditSchema = artistBaseSchema.extend({
+  avatar: z
+    .union([
+      z.string().url("Link avatar không hợp lệ"),
+      imageFileSchema,
+      z.null(),
+    ])
+    .optional(),
+  coverImage: z
+    .union([
+      z.string().url("Link cover không hợp lệ"),
+      imageFileSchema,
+      z.null(),
+    ])
+    .optional(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. PARAMS SCHEMA (Dùng cho trang danh sách nghệ sĩ)
+// ─────────────────────────────────────────────────────────────────────────────
+export const artistParamsSchema = z.object({
+  page: z.coerce.number().int().min(1).catch(1),
+  limit: z.coerce.number().int().min(1).max(100).catch(12),
+  keyword: z.string().trim().optional().catch(undefined),
+  sort: z.enum(ARTIST_SORT_OPTIONS).catch("newest"),
+  isVerified: z
+    .preprocess(
+      (val) => (val === "true" ? true : val === "false" ? false : undefined),
+      z.boolean().optional(),
+    )
+    .catch(undefined),
+  nationality: z.string().trim().optional().catch(undefined),
+  genreId: z.string().trim().optional().catch(undefined),
+  isActive: z
+    .preprocess(
+      (val) => (val === "true" ? true : val === "false" ? false : undefined),
+      z.boolean().optional(),
+    )
+    .catch(undefined),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. TYPES
+// ─────────────────────────────────────────────────────────────────────────────
+export type ArtistCreateFormValues = z.infer<typeof artistCreateSchema>;
+export type ArtistEditFormValues = z.infer<typeof artistEditSchema>;
+export type ArtistFilterParams = z.infer<typeof artistParamsSchema>;

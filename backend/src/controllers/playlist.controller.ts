@@ -3,7 +3,10 @@ import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
 import playlistService from "../services/playlist.service"; // Import instance (camelCase)
 import { IUser } from "../models/User";
-import { PlaylistFilterInput } from "../validations/playlist.validation";
+import {
+  getPlaylistTracksSchema,
+  PlaylistFilterInput,
+} from "../validations/playlist.validation";
 
 // 1. Create Playlist
 export const createPlaylist = catchAsync(
@@ -26,12 +29,9 @@ export const createPlaylist = catchAsync(
 export const getPlaylists = catchAsync(async (req: Request, res: Response) => {
   // Cast Type chuẩn từ Zod Validation (req.query đã qua validate middleware)
   const filter = req.query as unknown as PlaylistFilterInput;
-
+  const currentUser = req.user as IUser | undefined;
   // Truyền req.user (có thể undefined nếu guest)
-  const result = await playlistService.getPlaylists(
-    filter,
-    req.user as IUser | undefined,
-  );
+  const result = await playlistService.getPlaylists(filter, currentUser);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -42,15 +42,20 @@ export const getPlaylists = catchAsync(async (req: Request, res: Response) => {
 // 3. Get Playlist Detail
 export const getPlaylistDetail = catchAsync(
   async (req: Request, res: Response) => {
-    // Service đã được nâng cấp để xử lý logic Guest/User/Admin bên trong
-    const result = await playlistService.getPlaylistDetail(
+    const currentUser = req.user as IUser | undefined;
+
+    const currentUserId = currentUser ? currentUser._id.toString() : undefined;
+    const userRole = currentUser ? currentUser.role : undefined;
+
+    const playlistDetailResult = await playlistService.getPlaylistDetail(
       req.params.id,
-      req.user as IUser | undefined,
+      currentUserId,
+      userRole,
     );
 
     res.status(httpStatus.OK).json({
       success: true,
-      data: result,
+      data: playlistDetailResult,
     });
   },
 );
@@ -235,3 +240,24 @@ export const getMyPlaylists = catchAsync(
     });
   },
 );
+//  GET PLAYLIST TRACKS
+export const getPlaylistTracks = catchAsync(async (req, res) => {
+  // 1. Parse query - Đảm bảo dữ liệu sạch
+  const { query } = getPlaylistTracksSchema.parse({ query: req.query });
+  const currentUser = req.user as IUser | undefined;
+
+  const currentUserId = currentUser ? currentUser._id.toString() : undefined;
+  const userRole = currentUser ? currentUser.role : undefined;
+  console.log("Params" + req.params.id);
+  const result = await playlistService.getPlaylistTracks(
+    req.params.id,
+    query,
+    currentUserId,
+    userRole,
+  );
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: result,
+  });
+});

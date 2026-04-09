@@ -210,6 +210,10 @@
     from { height: 0; opacity: 0; }
     to   { height: var(--radix-accordion-content-height); opacity: 1; }
   }
+  @keyframes glow-breathe {
+    0%, 100% { opacity: 0.2; }
+    50%       { opacity: 0.55; }
+  }
   @keyframes accordion-up {
     from { height: var(--radix-accordion-content-height); opacity: 1; }
     to   { height: 0; opacity: 0; }
@@ -1040,7 +1044,12 @@
       0 3px 12px    hsl(var(--primary) / var(--shadow-brand-alpha)),
       0 12px 36px   hsl(var(--primary) / calc(var(--shadow-brand-alpha) * 0.5));
   }
-
+  .shadow-brand-dynamic {
+    box-shadow:
+      0 0 0 1px     hsl(var(--local-shadow-color) / 0.14),
+      0 3px 12px    hsl(var(--local-shadow-color) / var(--shadow-brand-alpha)),
+      0 12px 36px   hsl(var(--local-shadow-color) / calc(var(--shadow-brand-alpha) * 0.5));
+}
   .shadow-brand-lg {
     box-shadow:
       0 0 0 1px     hsl(var(--primary) / 0.18),
@@ -2234,7 +2243,19 @@
    17. MOTION & ANIMATION UTILITIES
    ================================================================ */
 @layer utilities {
+  .shadow-glow-md {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.3), 0 0 40px hsl(var(--primary) / 0.1);
+  }
 
+  /* Hiệu ứng mạch đập cho card đang phát */
+  .animate-pulse-subtle {
+    animation: pulse-subtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-subtle {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.9; transform: scale(0.995); }
+  }
   .animate-fade-in     { animation: var(--animate-fade-in); }
   .animate-fade-up     { animation: var(--animate-fade-up); }
   .animate-fade-down   { animation: var(--animate-fade-down); }

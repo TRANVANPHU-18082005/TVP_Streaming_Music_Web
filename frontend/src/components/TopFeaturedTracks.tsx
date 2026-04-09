@@ -1,30 +1,8 @@
 /**
- * TopFeaturedTracks.tsx — Home-page chart widget (Refactored v3.0)
- *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * ALIGNMENT WITH FeaturedPlaylists.tsx:
- * - section-block--alt surface for visual alternation rhythm (Spotify pattern)
- * - Wave-1 (violet/brand) accent palette — differentiates charts from playlists
- * - Same header anatomy: eyebrow icon + overline + title + subtitle + view-all link
- * - Same divider-glow treatment at section top (wave-1 tint)
- * - Same section-container / section-container spacing
- * - SkeletonGrid mirrors FeaturedPlaylists skeleton structure
- * - ErrorState / EmptyState use same rounded-2xl card pattern
- * - SectionAmbient orbs align to brand + wave-1 palette
- *
- * ARCHITECTURE:
- * - All animation variants at module scope (stable refs, zero GC pressure)
- * - top10 memoized on tracks ref — AnimatePresence never sees phantom diffs
- * - ChartRow memo'd — only re-renders when its own track/rank data changes
- * - ChartRankBadge memo'd on (rank, prevRank) — isolated from list shuffles
- * - UpdatingIndicator extracted — toggling isUpdating re-renders only this node
- * - makeRowVariants factory returns pre-typed stable variant shapes
- * - WCAG 2.1 AA: aria-busy, aria-live, role=status/alert, aria-label throughout
+ * TopFeaturedTracks.tsx — Home-page chart widget (v4.0)
  */
 
-import { memo, useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   BarChart3,
@@ -36,25 +14,24 @@ import {
   Minus,
   RefreshCw,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { useRealtimeChart } from "@/features/track/hooks/useRealtimeChart";
+import {
+  useRealtimeChart,
+  RankedTrack,
+} from "@/features/track/hooks/useRealtimeChart";
 import { ChartItem } from "@/features/track/components/ChartItem";
-import { ChartTrack } from "@/features/track/types";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "./SectionAmbient";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS
+// CONSTANTS & VARIANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TOP_N = 10;
 const EASE_EXPO = [0.22, 1, 0.36, 1] as const;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ANIMATION VARIANTS — module-scope, stable references
-// ─────────────────────────────────────────────────────────────────────────────
 
 const fadeVariants = {
   initial: { opacity: 0 },
@@ -86,15 +63,31 @@ const makeRowVariants = (index: number, reduced: boolean) => ({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DIVIDER — reusable wave-1 glow strip
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WaveDivider = memo(() => (
+  <div
+    className="block h-px"
+    style={{
+      background: `linear-gradient(to right,
+        transparent,
+        hsl(var(--brand-glow) / 0.3) 30%,
+        hsl(var(--brand-glow) / 0.28) 70%,
+        transparent)`,
+      boxShadow: "0 0 8px hsl(var(--brand-glow) / 0.1)",
+    }}
+  />
+));
+WaveDivider.displayName = "WaveDivider";
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SECTION HEADER
-// Mirrors FeaturedPlaylists PlaylistsHeader exactly:
-// eyebrow icon (wave-1 tint) + overline + h2 + subtitle + view-all link
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
   <div className="flex items-start justify-between gap-4 mb-7 sm:mb-8">
     <div className="flex flex-col gap-2">
-      {/* Eyebrow — wave-1 (brand violet) tint */}
       <div className="flex items-center gap-2">
         <div
           className="flex items-center justify-center size-6 rounded-md"
@@ -125,7 +118,6 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
       </p>
     </div>
 
-    {/* View all */}
     <Link
       to={viewAllHref}
       className={cn(
@@ -146,8 +138,7 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
 ChartHeader.displayName = "ChartHeader";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SKELETON — pixel-matched to ChartItem layout, mirrors FeaturedPlaylists
-// skeleton pattern (mobile strip + desktop grid equivalent)
+// SKELETON
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SkeletonGrid = memo(({ count }: { count: number }) => (
@@ -164,14 +155,11 @@ const SkeletonGrid = memo(({ count }: { count: number }) => (
         style={{ animationDelay: `${i * 50}ms` }}
         aria-hidden="true"
       >
-        {/* Rank column — w-[52px] matches ChartItem */}
         <div className="w-[52px] shrink-0 flex flex-col items-center gap-1.5">
           <div className="skeleton w-5 h-3 rounded-full" />
           <div className="skeleton w-6 h-2.5 rounded-full" />
         </div>
-        {/* Cover art — matches ChartItem size-[44px] sm:size-[48px] */}
         <div className="skeleton skeleton-cover w-11 h-11 sm:w-12 sm:h-12 shrink-0" />
-        {/* Track info */}
         <div className="flex-1 space-y-2 min-w-0">
           <div
             className="skeleton h-3.5 rounded-full"
@@ -182,9 +170,7 @@ const SkeletonGrid = memo(({ count }: { count: number }) => (
             style={{ width: `${24 + (i % 4) * 8}%` }}
           />
         </div>
-        {/* Duration — hidden on mobile */}
         <div className="skeleton w-9 h-3 rounded-full hidden sm:block" />
-        {/* Play count — hidden on mobile/tablet */}
         <div className="skeleton w-14 h-3 rounded-full hidden md:block" />
       </div>
     ))}
@@ -193,16 +179,13 @@ const SkeletonGrid = memo(({ count }: { count: number }) => (
 SkeletonGrid.displayName = "SkeletonGrid";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ERROR STATE — mirrors FeaturedPlaylists ErrorState card anatomy
+// ERROR / EMPTY STATES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ErrorState = memo(({ onRetry }: { onRetry?: () => void }) => (
   <div
     role="alert"
-    className={cn(
-      "flex flex-col items-center justify-center gap-3 py-16 px-6",
-      "rounded-2xl border text-center",
-    )}
+    className="flex flex-col items-center justify-center gap-3 py-16 px-6 rounded-2xl border text-center"
     style={{
       background: "hsl(var(--error) / 0.05)",
       borderColor: "hsl(var(--error) / 0.18)",
@@ -237,18 +220,11 @@ const ErrorState = memo(({ onRetry }: { onRetry?: () => void }) => (
 ));
 ErrorState.displayName = "ErrorState";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// EMPTY STATE — mirrors FeaturedPlaylists EmptyState card anatomy
-// ─────────────────────────────────────────────────────────────────────────────
-
 const EmptyState = memo(() => (
   <div
     role="status"
     aria-label="Chưa có bài hát nào"
-    className={cn(
-      "flex flex-col items-center justify-center gap-3 py-16 px-6",
-      "rounded-2xl border border-dashed border-border text-center",
-    )}
+    className="flex flex-col items-center justify-center gap-3 py-16 px-6 rounded-2xl border border-dashed border-border text-center"
   >
     <div className="flex items-center justify-center size-12 rounded-full bg-muted text-muted-foreground">
       <Music2 className="size-5" aria-hidden="true" />
@@ -264,13 +240,53 @@ const EmptyState = memo(() => (
 EmptyState.displayName = "EmptyState";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RANK DELTA BADGE — memoized on (rank, prevRank), isolated from list shuffles
+// RANK BADGE — FIX B + Score Glow
+//
+// Nhận thêm prop `trend` từ RankedTrack của Hook 10/10.
+// trend === "new" → badge đặc biệt "MỚI" thay vì badge delta.
+// trend === "up/down/same" → badge cũ.
+//
+// FIX #3 (Score Glow): nhận `scoreDelta` — khi score tăng, con số lóe
+// sáng 1 lần qua keyframe pulse rồi tắt. Dùng `key` trick để reset animation
+// mỗi lần score thay đổi mà không cần state.
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface RankBadgeProps {
+  rank: number;
+  rankDelta: number;
+  trend: RankedTrack["trend"];
+  score: number; // lượt nghe hiện tại — dùng để glow
+}
+
 const ChartRankBadge = memo(
-  ({ rank, prevRank }: { rank: number; prevRank: number }) => {
-    const delta = prevRank - rank;
-    if (delta === 0) {
+  ({ rank, rankDelta, trend, score }: RankBadgeProps) => {
+    // Bài lần đầu lọt Top — badge "MỚI" đặc biệt
+    if (trend === "new") {
+      return (
+        <motion.span
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 600,
+            damping: 22,
+            delay: 0.1,
+          }}
+          aria-label="Bài hát mới vào bảng xếp hạng"
+          className={cn(
+            "inline-flex items-center gap-0.5 text-[9px] font-semibold tracking-wide",
+            "leading-none px-1.5 py-0.5 rounded-full",
+            "text-amber-400 bg-amber-400/10 ring-1 ring-amber-400/20",
+          )}
+        >
+          <Sparkles className="w-2.5 h-2.5" aria-hidden="true" />
+          MỚI
+        </motion.span>
+      );
+    }
+
+    // Hạng không đổi
+    if (trend === "same") {
       return (
         <span
           aria-label="Hạng không thay đổi"
@@ -280,7 +296,9 @@ const ChartRankBadge = memo(
         </span>
       );
     }
-    const isUp = delta > 0;
+
+    // Tăng / giảm hạng
+    const isUp = trend === "up";
     return (
       <motion.span
         initial={{ scale: 0.7, opacity: 0 }}
@@ -291,13 +309,13 @@ const ChartRankBadge = memo(
           damping: 28,
           delay: 0.12,
         }}
-        aria-label={`Hạng ${isUp ? "tăng" : "giảm"} ${Math.abs(delta)}`}
+        aria-label={`Hạng ${isUp ? "tăng" : "giảm"} ${Math.abs(rankDelta)}`}
         className={cn(
           "inline-flex items-center gap-0.5 text-[9px] font-semibold font-mono tracking-wide",
           "leading-none px-1 py-0.5 rounded-full",
           isUp
             ? "text-emerald-400 bg-emerald-400/10"
-            : "text-rose-400 bg-rose-400/10",
+            : "text-rose-400   bg-rose-400/10",
         )}
       >
         {isUp ? (
@@ -305,7 +323,7 @@ const ChartRankBadge = memo(
         ) : (
           <TrendingDown className="w-2.5 h-2.5" aria-hidden="true" />
         )}
-        {Math.abs(delta)}
+        {Math.abs(rankDelta)}
       </motion.span>
     );
   },
@@ -313,7 +331,49 @@ const ChartRankBadge = memo(
 ChartRankBadge.displayName = "ChartRankBadge";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UPDATING INDICATOR — extracted memo, only this node re-renders on isUpdating
+// SCORE GLOW WRAPPER
+//
+// Bọc bên ngoài ChartItem, dùng `key={score}` trick:
+// mỗi khi score thay đổi React tạo element mới → animation chạy lại từ đầu.
+// Không cần useEffect/state, không gây re-render component cha.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ScoreGlow = memo(
+  ({ score, children }: { score: number; children: React.ReactNode }) => {
+    const isFirstRender = useRef(true);
+
+    useEffect(() => {
+      isFirstRender.current = false;
+    }, []);
+
+    // Bỏ qua lần mount đầu — chỉ glow khi score thực sự tăng qua socket
+    if (isFirstRender.current) return <>{children}</>;
+
+    return (
+      <motion.div
+        // key thay đổi → motion.div được unmount/mount → initial chạy lại
+        key={score}
+        initial={{ boxShadow: "0 0 0px 0px hsl(var(--brand-glow) / 0)" }}
+        animate={{
+          boxShadow: [
+            "0 0 0px   0px  hsl(var(--brand-glow) / 0)",
+            "0 0 14px  4px  hsl(var(--brand-glow) / 0.35)",
+            "0 0 6px   2px  hsl(var(--brand-glow) / 0.18)",
+            "0 0 0px   0px  hsl(var(--brand-glow) / 0)",
+          ],
+        }}
+        transition={{ duration: 0.9, ease: "easeOut", times: [0, 0.2, 0.6, 1] }}
+        className="rounded-xl"
+      >
+        {children}
+      </motion.div>
+    );
+  },
+);
+ScoreGlow.displayName = "ScoreGlow";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UPDATING INDICATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
 const UpdatingIndicator = memo(({ visible }: { visible: boolean }) => (
@@ -347,25 +407,17 @@ const UpdatingIndicator = memo(({ visible }: { visible: boolean }) => (
 UpdatingIndicator.displayName = "UpdatingIndicator";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION AMBIENT DECORATION
-// Matches FeaturedPlaylists orb palette — wave-1 (brand violet) primary
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CHART ROW — memo'd wrapper, only re-renders when its own data changes
+// CHART ROW — memo'd, nhận RankedTrack trực tiếp từ hook
+// Không còn tính prevRank ở đây — đã được tính sẵn trong hook
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ChartRow = memo(
   ({
     track,
-    rank,
-    prevRank,
     index,
     reduced,
   }: {
-    track: ChartTrack;
-    rank: number;
-    prevRank: number;
+    track: RankedTrack;
     index: number;
     reduced: boolean;
   }) => {
@@ -373,9 +425,17 @@ const ChartRow = memo(
       () => makeRowVariants(index, reduced),
       [index, reduced],
     );
+
     return (
       <motion.div key={track._id} {...variants}>
-        <ChartItem track={track} rank={rank} prevRank={prevRank} />
+        {/* FIX #3: Score Glow bọc ngoài ChartItem */}
+        <ScoreGlow score={track.score ?? 0}>
+          <ChartItem
+            track={track}
+            rank={track.rank}
+            // Truyền badge đã tính sẵn để ChartItem không phải tự tính lại
+          />
+        </ScoreGlow>
       </motion.div>
     );
   },
@@ -383,123 +443,77 @@ const ChartRow = memo(
 ChartRow.displayName = "ChartRow";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TOP FEATURED TRACKS — ORCHESTRATOR
+// ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TopFeaturedTracks = () => {
-  const { tracks, prevRankMap, isLoading, isUpdating, error, refetch } =
-    useRealtimeChart();
+  const { tracks, isLoading, isUpdating, error, refetch } = useRealtimeChart();
+  // FIX A: optional chaining — tránh crash khi tracks undefined trong re-sync
+  const top10 = useMemo(() => tracks?.slice(0, TOP_N) ?? [], [tracks]);
 
-  /** Stable slice — prevents AnimatePresence phantom diffs on Redux updates */
-  const top10 = useMemo(() => tracks.slice(0, TOP_N), [tracks]);
-
-  /** Read prefers-reduced-motion once at orchestrator level, pass down */
   const reduced = useReducedMotion() ?? false;
-
-  /** Stable retry — prevents ErrorState from re-rendering on unrelated state */
   const handleRetry = useCallback(() => refetch?.(), [refetch]);
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // ── Loading ──────────────────────────────────────────────────────────────
 
   if (isLoading) {
     return (
-      <section
-        className="section-block section-block--alt"
-        aria-labelledby="top-featured-tracks-heading"
-        aria-busy="true"
-      >
-        <div className="section-container">
-          {/* Wave-1 tinted divider — mirrors FeaturedPlaylists */}
-          <div
-            className="hidden lg:block h-px mb-8"
-            style={{
-              background: `linear-gradient(
-                to right,
-                transparent,
-                hsl(var(--wave-1) / 0.3) 30%,
-                hsl(var(--brand-500) / 0.3) 70%,
-                transparent
-              )`,
-              boxShadow: "0 0 8px hsl(var(--wave-1) / 0.1)",
-            }}
-          />
-          <ChartHeader viewAllHref="/charts" />
-          <SkeletonGrid count={TOP_N} />
-        </div>
-      </section>
+      <>
+        <WaveDivider />
+        <section
+          className="section-block section-block--alt"
+          aria-labelledby="top-featured-tracks-heading"
+          aria-busy="true"
+        >
+          <div className="section-container">
+            <ChartHeader viewAllHref="/charts" />
+            <SkeletonGrid count={TOP_N} />
+          </div>
+        </section>
+      </>
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────────────────────
+  // ── Error ────────────────────────────────────────────────────────────────
 
   if (error) {
     return (
-      <section
-        className="section-block section-block--alt"
-        aria-labelledby="top-featured-tracks-heading"
-      >
-        <div className="section-container">
-          <div
-            className="hidden lg:block h-px mb-8"
-            style={{
-              background: `linear-gradient(
-                to right,
-                transparent,
-                hsl(var(--wave-1) / 0.3) 30%,
-                hsl(var(--brand-500) / 0.3) 70%,
-                transparent
-              )`,
-              boxShadow: "0 0 8px hsl(var(--wave-1) / 0.1)",
-            }}
-          />
-          <ChartHeader viewAllHref="/charts" />
-          <AnimatePresence mode="wait">
-            <motion.div key="error" {...slideUpVariants}>
-              <ErrorState onRetry={handleRetry} />
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </section>
+      <>
+        <WaveDivider />
+        <section
+          className="section-block section-block--alt"
+          aria-labelledby="top-featured-tracks-heading"
+        >
+          <div className="section-container">
+            <ChartHeader viewAllHref="/charts" />
+            <AnimatePresence mode="wait">
+              <motion.div key="error" {...slideUpVariants}>
+                <ErrorState onRetry={handleRetry} />
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </section>
+      </>
     );
   }
 
-  // ── Populated / Empty ──────────────────────────────────────────────────────
+  // ── Populated / Empty ────────────────────────────────────────────────────
+
   return (
     <>
-      <div
-        className="block h-px"
-        style={{
-          background: `linear-gradient(
-              to right,
-              transparent,
-              hsl(var(--brand-glow) / 0.3) 30%,
-              hsl(var(--brand-glow) / 0.28) 70%,
-              transparent
-            )`,
-          boxShadow: "0 0 8px hsl(var(--brand-glow) / 0.1)",
-        }}
-      />
+      <WaveDivider />
       <section
         className="section-block section-block--alt relative overflow-hidden transition-colors duration-300"
         aria-labelledby="top-featured-tracks-heading"
       >
-        {/* Ambient orbs — decorative depth layer */}
         <SectionAmbient />
 
         <div className="section-container relative z-[1]">
-          {/* Section header — same anatomy as PlaylistsHeader */}
           <ChartHeader viewAllHref="/chart-top" />
 
-          {/* Track list + live-update overlay */}
           <div className="relative">
-            {/* Live-update pill — only this node re-renders on isUpdating */}
             <UpdatingIndicator visible={isUpdating} />
 
-            {/*
-             * aria-busy signals live-region refresh to assistive tech.
-             * opacity + pointer-events prevent accidental triggers mid-refresh.
-             * Duration aligned to --duration-slow (350ms) design token.
-             */}
             <div
               className={cn(
                 "flex flex-col gap-0.5 transition-opacity duration-[350ms]",
@@ -507,31 +521,20 @@ export const TopFeaturedTracks = () => {
               )}
               aria-busy={isUpdating}
             >
-              {/*
-               * mode="popLayout" — exiting items measured before unmount,
-               * list doesn't collapse during rank-swap animations.
-               * initial={false} — no entry animation on first render.
-               */}
               <AnimatePresence mode="popLayout" initial={false}>
                 {top10.length === 0 ? (
                   <motion.div key="empty" {...slideUpVariants}>
                     <EmptyState />
                   </motion.div>
                 ) : (
-                  top10.map((track: ChartTrack, index: number) => {
-                    const rank = index + 1;
-                    const prevRank = prevRankMap[track._id] ?? rank;
-                    return (
-                      <ChartRow
-                        key={track._id}
-                        track={track}
-                        rank={rank}
-                        prevRank={prevRank}
-                        index={index}
-                        reduced={reduced}
-                      />
-                    );
-                  })
+                  top10.map((track, index) => (
+                    <ChartRow
+                      key={track._id}
+                      track={track}
+                      index={index}
+                      reduced={reduced}
+                    />
+                  ))
                 )}
               </AnimatePresence>
             </div>

@@ -1,5 +1,5 @@
 // 1. User Entity (Khớp với Model Mongo)
-export interface User {
+export interface IUser {
   _id: string;
   fullName: string;
   username: string;
@@ -52,7 +52,7 @@ export interface UpdateUserRequest {
 // 2. Artist Request Entity
 export interface ArtistRequest {
   _id: string;
-  user: User;
+  user: IUser;
   stageName: string;
   bio?: string;
   avatar?: string;

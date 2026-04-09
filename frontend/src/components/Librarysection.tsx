@@ -10,20 +10,16 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
 
-import { useUserLibrary } from "@/features/profile/hooks/useProfileQuery";
-import { Album, Playlist, TrackList } from "@/features";
+import {
+  useFavouriteTracksInfinite,
+  useUserLibrary,
+} from "@/features/profile/hooks/useProfileQuery";
 import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
 import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
-import albumApi from "@/features/album/api/albumApi";
-import playlistApi from "@/features/playlist/api/playlistApi";
-import { albumKeys } from "@/features/album/utils/albumKeys";
-import { playlistKeys } from "@/features/playlist/utils/playlistKeys";
-import { useAppDispatch } from "@/store/hooks";
-import { setIsPlaying, setQueue } from "@/features";
+
+import { IAlbum, IPlaylist, ITrack, TrackList } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "./SectionAmbient";
 
@@ -448,106 +444,90 @@ ErrorState.displayName = "ErrorState";
 // ALBUM CONTENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AlbumContent = memo(
-  ({
-    albums,
-    onPlay,
-  }: {
-    albums: Album[];
-    onPlay: (id: string) => Promise<void>;
-  }) => (
-    <div className="relative">
-      {/* Mobile */}
-      <div className="lg:hidden scroll-overflow-mask -mx-4 px-4" role="list">
-        <HorizontalScroll>
-          {albums.map((album, i) => (
-            <motion.div
-              key={album._id}
-              custom={i}
-              variants={mobileCardVariants}
-              initial="hidden"
-              animate="visible"
-              role="listitem"
-              className={cn(
-                "snap-start shrink-0 w-[168px] sm:w-[200px] first:pl-0 last:pr-4",
-              )}
-            >
-              <PublicAlbumCard album={album} onPlay={() => onPlay(album._id)} />
-            </motion.div>
-          ))}
-        </HorizontalScroll>
-      </div>
-      {/* Desktop */}
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-48px" }}
-        className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
-        role="list"
-      >
-        {albums.map((album) => (
-          <motion.div key={album._id} variants={cardVariants} role="listitem">
-            <PublicAlbumCard album={album} onPlay={() => onPlay(album._id)} />
+const AlbumContent = memo(({ albums }: { albums: IAlbum[] }) => (
+  <div className="relative">
+    {/* Mobile */}
+    <div className="lg:hidden scroll-overflow-mask -mx-4 px-4" role="list">
+      <HorizontalScroll>
+        {albums.map((album, i) => (
+          <motion.div
+            key={album._id}
+            custom={i}
+            variants={mobileCardVariants}
+            initial="hidden"
+            animate="visible"
+            role="listitem"
+            className={cn(
+              "snap-start shrink-0 w-[168px] sm:w-[200px] first:pl-0 last:pr-4",
+            )}
+          >
+            <PublicAlbumCard album={album} />
           </motion.div>
         ))}
-      </motion.div>
+      </HorizontalScroll>
     </div>
-  ),
-);
+    {/* Desktop */}
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: "-48px" }}
+      className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
+      role="list"
+    >
+      {albums.map((album) => (
+        <motion.div key={album._id} variants={cardVariants} role="listitem">
+          <PublicAlbumCard album={album} />
+        </motion.div>
+      ))}
+    </motion.div>
+  </div>
+));
 AlbumContent.displayName = "AlbumContent";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST CONTENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PlaylistContent = memo(
-  ({
-    playlists,
-    onPlay,
-  }: {
-    playlists: Playlist[];
-    onPlay: (id: string) => Promise<void>;
-  }) => (
-    <div className="relative">
-      {/* Mobile */}
-      <div className="lg:hidden scroll-overflow-mask -mx-4 px-4" role="list">
-        <HorizontalScroll>
-          {playlists.map((pl, i) => (
-            <motion.div
-              key={pl._id}
-              custom={i}
-              variants={mobileCardVariants}
-              initial="hidden"
-              animate="visible"
-              role="listitem"
-              className={cn(
-                "snap-start shrink-0 w-[168px] sm:w-[200px] first:pl-0 last:pr-4",
-              )}
-            >
-              <PublicPlaylistCard playlist={pl} onPlay={() => onPlay(pl._id)} />
-            </motion.div>
-          ))}
-        </HorizontalScroll>
-      </div>
-      {/* Desktop */}
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-48px" }}
-        className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
-        role="list"
-      >
-        {playlists.map((pl) => (
-          <motion.div key={pl._id} variants={cardVariants} role="listitem">
-            <PublicPlaylistCard playlist={pl} onPlay={() => onPlay(pl._id)} />
+const PlaylistContent = memo(({ playlists }: { playlists: IPlaylist[] }) => (
+  <div className="relative">
+    {/* Mobile */}
+    <div className="lg:hidden scroll-overflow-mask -mx-4 px-4" role="list">
+      <HorizontalScroll>
+        {playlists.map((pl, i) => (
+          <motion.div
+            key={pl._id}
+            custom={i}
+            variants={mobileCardVariants}
+            initial="hidden"
+            animate="visible"
+            role="listitem"
+            className={cn(
+              "snap-start shrink-0 w-[168px] sm:w-[200px] first:pl-0 last:pr-4",
+            )}
+          >
+            <PublicPlaylistCard playlist={pl} />
           </motion.div>
         ))}
-      </motion.div>
+      </HorizontalScroll>
     </div>
-  ),
-);
+    {/* Desktop */}
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: "-48px" }}
+      className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
+      role="list"
+    >
+      {playlists.map((pl) => (
+        <motion.div key={pl._id} variants={cardVariants} role="listitem">
+          <PublicPlaylistCard playlist={pl} />
+        </motion.div>
+      ))}
+    </motion.div>
+  </div>
+));
 PlaylistContent.displayName = "PlaylistContent";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -557,23 +537,60 @@ PlaylistContent.displayName = "PlaylistContent";
 export function LibrarySection() {
   const { data: library, isLoading, error, refetch } = useUserLibrary();
 
-  const tracks = useMemo(() => library?.tracks ?? [], [library]);
   const albums = useMemo(() => library?.albums ?? [], [library]);
   const playlists = useMemo(() => library?.playlists ?? [], [library]);
-  console.log(library?.albums, library?.playlists, library?.tracks);
-  console.log(tracks, albums, playlists);
+  const {
+    data: tracksData,
+    isLoading: isLoadingTracks,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error: tracksError,
+    refetch: refetchTracks,
+  } = useFavouriteTracksInfinite();
+  const allTracks = useMemo<ITrack[]>(
+    () => tracksData?.allTracks ?? [],
+    [tracksData?.allTracks],
+  );
+  const totalItems = useMemo(
+    () => tracksData?.totalItems ?? 0,
+    [tracksData?.totalItems],
+  );
+  const TrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
+
+  const trackListProps = useMemo(
+    () => ({
+      allTrackIds: TrackIds,
+      tracks: allTracks,
+      totalItems,
+      isLoading: isLoadingTracks,
+      error: tracksError as Error | null,
+      isFetchingNextPage,
+      hasNextPage: hasNextPage ?? false,
+      onFetchNextPage: fetchNextPage,
+      onRetry: refetchTracks,
+    }),
+    [
+      TrackIds,
+      allTracks,
+      totalItems,
+      isLoadingTracks,
+      tracksError,
+      isFetchingNextPage,
+      hasNextPage,
+      fetchNextPage,
+      refetchTracks,
+    ],
+  );
   // Determine initial tab: first one that has data
   const initialTab = useMemo<LibraryTab>(() => {
-    if (tracks.length) return "tracks";
+    if (totalItems) return "tracks";
     if (albums.length) return "albums";
     if (playlists.length) return "playlists";
     return "tracks";
-  }, [tracks.length, albums.length, playlists.length]);
+  }, [totalItems, albums.length, playlists.length]);
 
   const [activeTab, setActiveTab] = useState<LibraryTab>(initialTab);
-
-  const queryClient = useQueryClient();
-  const dispatch = useAppDispatch();
 
   const handleRetry = useCallback(() => refetch?.(), [refetch]);
 
@@ -581,76 +598,30 @@ export function LibrarySection() {
   const resolvedTab = useMemo<LibraryTab>(() => {
     if (
       activeTab === "tracks" &&
-      !tracks.length &&
+      !totalItems &&
       (albums.length || playlists.length)
     )
       return albums.length ? "albums" : "playlists";
     if (
       activeTab === "albums" &&
       !albums.length &&
-      (tracks.length || playlists.length)
+      (totalItems || playlists.length)
     )
-      return tracks.length ? "tracks" : "playlists";
+      return totalItems ? "tracks" : "playlists";
     if (
       activeTab === "playlists" &&
       !playlists.length &&
-      (tracks.length || albums.length)
+      (totalItems || albums.length)
     )
-      return tracks.length ? "tracks" : "albums";
+      return totalItems ? "tracks" : "albums";
     return activeTab;
-  }, [activeTab, tracks.length, albums.length, playlists.length]);
-
-  const handlePlayAlbum = useCallback(
-    async (albumId: string) => {
-      try {
-        const res = await queryClient.fetchQuery({
-          queryKey: albumKeys.detail(albumId),
-          queryFn: () => albumApi.getById(albumId),
-          staleTime: 5 * 60 * 1000,
-        });
-        const t = res.data?.tracks;
-        if (!t?.length) {
-          toast.error("Album này chưa có bài hát nào.");
-          return;
-        }
-        dispatch(setQueue({ tracks: t, startIndex: 0 }));
-        dispatch(setIsPlaying(true));
-        toast.success(`Đang phát ${t.length} bài từ album`);
-      } catch {
-        toast.error("Không thể tải album. Vui lòng thử lại.");
-      }
-    },
-    [queryClient, dispatch],
-  );
-
-  const handlePlayPlaylist = useCallback(
-    async (playlistId: string) => {
-      try {
-        const res = await queryClient.fetchQuery({
-          queryKey: playlistKeys.detail(playlistId),
-          queryFn: () => playlistApi.getById(playlistId),
-          staleTime: 5 * 60 * 1000,
-        });
-        const t = res.data?.tracks;
-        if (!t?.length) {
-          toast.error("Playlist này chưa có bài hát nào.");
-          return;
-        }
-        dispatch(setQueue({ tracks: t, startIndex: 0 }));
-        dispatch(setIsPlaying(true));
-        toast.success(`Đang phát ${t.length} bài từ playlist`);
-      } catch {
-        toast.error("Không thể tải playlist. Vui lòng thử lại.");
-      }
-    },
-    [queryClient, dispatch],
-  );
+  }, [activeTab, totalItems, albums.length, playlists.length]);
 
   // ── Nothing to show ───────────────────────────────────────────────────────
   if (
     !isLoading &&
     !error &&
-    !tracks.length &&
+    !totalItems &&
     !albums.length &&
     !playlists.length
   ) {
@@ -667,11 +638,16 @@ export function LibrarySection() {
 
     if (error) return <ErrorState onRetry={handleRetry} />;
 
+    // ✅ ĐOẠN CODE ĐÚNG:
     if (resolvedTab === "tracks") {
-      return tracks.length === 0 ? (
-        <EmptyState tab={activeTabConfig} />
-      ) : (
-        <TrackList tracks={tracks} isLoading={false} />
+      return (
+        <TrackList
+          {...trackListProps}
+          maxHeight={400}
+          moodColor={`var(${activeTabConfig.wave})`}
+          skeletonCount={12}
+          staggerAnimation={true}
+        />
       );
     }
 
@@ -679,7 +655,7 @@ export function LibrarySection() {
       return albums.length === 0 ? (
         <EmptyState tab={activeTabConfig} />
       ) : (
-        <AlbumContent albums={albums} onPlay={handlePlayAlbum} />
+        <AlbumContent albums={albums} />
       );
     }
 
@@ -687,7 +663,7 @@ export function LibrarySection() {
     return playlists.length === 0 ? (
       <EmptyState tab={activeTabConfig} />
     ) : (
-      <PlaylistContent playlists={playlists} onPlay={handlePlayPlaylist} />
+      <PlaylistContent playlists={playlists} />
     );
   };
 
@@ -728,7 +704,7 @@ export function LibrarySection() {
           <LibraryHeader
             activeTab={resolvedTab}
             tabs={TABS}
-            hasTracks={tracks.length > 0}
+            hasTracks={totalItems > 0}
             hasAlbums={albums.length > 0}
             hasPlaylists={playlists.length > 0}
             onTabChange={setActiveTab}

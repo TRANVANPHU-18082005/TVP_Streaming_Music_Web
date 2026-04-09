@@ -1,55 +1,89 @@
+// features/album/hooks/useAlbumForm.ts
 import { useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { albumSchema, type AlbumFormValues } from "../schemas/album.schema";
+
+import {
+  albumCreateSchema,
+  albumEditSchema,
+  type AlbumCreateFormValues,
+  type AlbumEditFormValues,
+} from "../schemas/album.schema";
 import type { Album } from "@/features/album/types";
 import { mapEntityToForm } from "../utils/formMapper";
 import { buildAlbumPayload } from "../utils/payloadBuilder";
 
-interface UseAlbumFormProps {
-  albumToEdit?: Album | null;
-  onSubmit: (formData: FormData) => Promise<void>; // Inject hàm gọi API vào
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Overload types — TS biết chính xác return type theo mode */
+interface UseAlbumFormCreateProps {
+  mode: "create";
+  albumToEdit?: never;
+  onSubmit: (formData: FormData) => Promise<void>;
 }
 
-export const useAlbumForm = ({ albumToEdit, onSubmit }: UseAlbumFormProps) => {
-  const defaultValues = useMemo(() => {
-    return mapEntityToForm(albumToEdit);
-  }, [albumToEdit]);
+interface UseAlbumFormEditProps {
+  mode: "edit";
+  albumToEdit: Album;
+  onSubmit: (formData: FormData) => Promise<void>;
+}
 
-  // 1. Init Form
-  const form = useForm<AlbumFormValues>({
-    resolver: zodResolver(albumSchema),
+type UseAlbumFormProps = UseAlbumFormCreateProps | UseAlbumFormEditProps;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOOK
+// ─────────────────────────────────────────────────────────────────────────────
+export const useAlbumForm = ({
+  mode,
+  albumToEdit,
+  onSubmit,
+}: UseAlbumFormProps) => {
+  const isEditMode = mode === "edit";
+
+  // Schema khác nhau theo mode:
+  // - create: coverImage chỉ nhận File | undefined
+  // - edit:   coverImage nhận string URL | File | null | undefined
+  const schema = isEditMode ? albumEditSchema : albumCreateSchema;
+
+  const defaultValues = useMemo(
+    () => mapEntityToForm(isEditMode ? albumToEdit : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [albumToEdit?._id, isEditMode], // dùng _id thay vì object reference — tránh reset vô tội vạ
+  );
+
+  // ── Init form ──────────────────────────────────────────────────────────────
+  const form = useForm<AlbumCreateFormValues | AlbumEditFormValues>({
+    resolver: zodResolver(schema),
     defaultValues,
-    mode: "onSubmit", // Chỉ validate khi user ấn submit
+    mode: "onSubmit", // validate khi submit
+    reValidateMode: "onChange", // sau lần submit đầu, re-validate realtime
   });
 
-  // 2. Reset form khi data đầu vào thay đổi (Dùng khi mở Modal Edit)
+  // ── Reset khi mở modal Edit với album khác ─────────────────────────────────
   useEffect(() => {
     form.reset(defaultValues);
   }, [defaultValues, form]);
 
-  // 3. Custom Submit Handler
+  // ── Submit handler ─────────────────────────────────────────────────────────
   const handleSubmit = form.handleSubmit(async (values) => {
     const { dirtyFields } = form.formState;
-    const isEditMode = !!albumToEdit;
 
-    const hasFile = values.coverImage instanceof File;
-    const hasChanges = Object.keys(dirtyFields).length > 0;
+    // Tối ưu băng thông: Edit mode + không có thay đổi → skip
+    if (isEditMode) {
+      const hasFile = values.coverImage instanceof File;
+      const hasDirtyFields = Object.keys(dirtyFields).length > 0;
 
-    // TỐI ƯU BĂNG THÔNG
-    if (isEditMode && !hasChanges && !hasFile) {
-      console.log("⚠️ Không có thay đổi nào, bỏ qua gọi API.");
-      // Tùy chọn: Gọi 1 hàm onClose() ở đây nếu muốn tự đóng modal
-      return;
+      if (!hasDirtyFields && !hasFile) {
+        // Không throw, không toast — gọi callback để component tự xử lý (đóng modal,...)
+        console.warn("[AlbumForm] No changes detected, skipping API call.");
+        return;
+      }
     }
 
-    console.log("Dirty fields (Các trường đã sửa):", dirtyFields);
-
-    // Build Payload
+    // Build payload — chỉ gửi dirtyFields khi Edit, gửi tất cả khi Create
     const payload = buildAlbumPayload(values, dirtyFields, isEditMode);
-    console.log("🚀 Submitting Album Payload:", payload);
-
-    // MỞ COMMENT DÒNG NÀY ĐỂ GỌI API
     await onSubmit(payload);
   });
 
@@ -58,5 +92,6 @@ export const useAlbumForm = ({ albumToEdit, onSubmit }: UseAlbumFormProps) => {
     handleSubmit,
     isSubmitting: form.formState.isSubmitting,
     isDirty: form.formState.isDirty,
+    isEditMode,
   };
 };

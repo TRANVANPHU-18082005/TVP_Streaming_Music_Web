@@ -3,7 +3,6 @@ export { default as MiniPlayer } from "./components/MiniPlayer";
 export { default as MusicPlayer } from "./components/MusicPlayer";
 export { default as PlayerControls } from "./components/PlayerControls";
 export { default as ProgressBar } from "./components/ProgressBar";
-export { default as QueueList } from "./components/QueueList";
 
 export { default as VolumeControl } from "./components/VolumeControl";
 

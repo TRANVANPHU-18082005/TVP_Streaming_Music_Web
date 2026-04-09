@@ -13,7 +13,12 @@ import { usePlaylistsQuery } from "@/features/playlist/hooks/usePlaylistsQuery";
 import playlistApi from "@/features/playlist/api/playlistApi";
 import { playlistKeys } from "@/features/playlist/utils/playlistKeys";
 import { useAppDispatch } from "@/store/hooks";
-import { Playlistpageskeleton, setIsPlaying, setQueue } from "@/features";
+import {
+  Playlistpageskeleton,
+  setIsPlaying,
+  setQueue,
+  useSyncInteractions,
+} from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
@@ -191,7 +196,12 @@ const PlaylistPage: React.FC = () => {
     () => ({ ...DEFAULT_META, ...data?.meta }),
     [data?.meta],
   );
+  const playlistIds = useMemo(
+    () => playlists?.map((p) => p._id) ?? [],
+    [playlists],
+  );
 
+  useSyncInteractions(playlistIds, "like", "playlist", playlistIds.length > 0);
   /**
    * Play handler — no throw, no artificial delay (v4.0-prev fixes preserved).
    * useCallback prevents new ref breaking PublicPlaylistCard memo.

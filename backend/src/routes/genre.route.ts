@@ -1,5 +1,9 @@
 import express from "express";
-import { protect, authorize } from "../middlewares/auth.middleware";
+import {
+  protect,
+  authorize,
+  optionalAuth,
+} from "../middlewares/auth.middleware";
 import validate from "../middlewares/validate"; // Middleware Validation
 import * as genreController from "../controllers/genre.controller";
 import {
@@ -19,10 +23,18 @@ const router = express.Router();
 // ==========================================
 
 // Lấy danh sách (Validate query params như page, limit...)
-router.get("/", validate(getGenresSchema), genreController.getGenres);
+router.get(
+  "/",
+  optionalAuth,
+  validate(getGenresSchema),
+  genreController.getGenres,
+);
 // GET /api/genres/:slug
 router.get("/tree", genreController.getTree);
-router.get("/:slug", genreController.getGenreDetail);
+router.get("/:id", optionalAuth, genreController.getGenreDetail);
+// (Get Album Tracks) api/albums/:id/tracks?page=?&limit=?
+router.get("/:id/tracks", optionalAuth, genreController.getGenreTracks);
+
 // ==========================================
 // 🔴 ADMIN ONLY ROUTES
 // ==========================================

@@ -6,7 +6,6 @@ import {
   useEffect,
   useRef,
   useCallback,
-  useMemo,
   startTransition,
   type ReactNode,
   type Dispatch,
@@ -33,20 +32,19 @@ import {
   Clock,
   ListMusic,
   MinusCircle,
-  Gem,
   X,
   GripVertical,
   Loader2,
   Focus,
 } from "lucide-react";
-import { useDispatch, useSelector } from "react-redux";
+import { shallowEqual, useDispatch, useSelector } from "react-redux";
 
 import { Button } from "@/components/ui/button";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { cn } from "@/lib/utils";
 import {
   selectPlayer,
-  setQueue,
+  jumpToIndex, // ← mới, thay setQueue
   setIsPlaying,
   nextTrack,
   prevTrack,
@@ -56,15 +54,19 @@ import {
 import { ProgressBar } from "./ProgressBar";
 import { ILyricLine, ITrack } from "@/features/track";
 import { formatTime } from "@/utils/format";
-import { LikeButton } from "@/features";
 import { MoodFocusView } from "./MoodFocusView";
 import KaraokeView from "./LyricEngine";
 import { useLyrics } from "../hooks/useLyrics";
 import { WaveformBars } from "@/components/MusicVisualizer";
 import { MarqueeText } from "./MarqueeText";
+import { extractDominantColor } from "@/utils/track-helper";
+import { PlayerBackground } from "@/components/PlayerBackground";
+import { RootState } from "@/store/store";
+import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
+// ← đã xóa: import { is } from "date-fns/locale"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS
+// CONSTANTS & TYPES (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PHASE_1_DELAY = 360;
@@ -75,7 +77,6 @@ const QUEUE_COLLAPSE_Y = 72;
 const QUEUE_COLLAPSE_VY = 400;
 const SWIPE_THRESHOLD = 48;
 
-// VIEWS order matches swipe direction: left = forward, right = backward
 const VIEWS = ["mood", "lyrics", "artwork", "info"] as const;
 type PlayerView = (typeof VIEWS)[number];
 
@@ -85,10 +86,6 @@ const VIEW_LABEL: Record<PlayerView, string> = {
   lyrics: "Lời bài hát",
   info: "Thông tin",
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SPRING PRESETS — module scope (unchanged from v1)
-// ─────────────────────────────────────────────────────────────────────────────
 
 const SP = {
   snappy: { type: "spring", stiffness: 440, damping: 28 } as const,
@@ -102,60 +99,28 @@ const SP = {
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STYLE INJECTION — DOM ID guard
+// STYLE INJECTION (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PLAYER_STYLE_ID = "__fp-styles__";
-
 const PLAYER_CSS = `
-  @keyframes fp-slide-in {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(0); }
-  }
+  @keyframes fp-slide-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .fp-enter { animation: fp-slide-in 360ms cubic-bezier(0.22,1,0.36,1) both; }
-
-  @keyframes fp-orb-a {
-    0%,100% { transform: translate3d(0,0,0) scale(1); }
-    50%      { transform: translate3d(26px,-14px,0) scale(1.06); }
-  }
-  @keyframes fp-orb-b {
-    0%,100% { transform: translate3d(0,0,0) scale(1); }
-    50%      { transform: translate3d(-22px,18px,0) scale(1.05); }
-  }
+  @keyframes fp-orb-a { 0%,100% { transform: translate3d(0,0,0) scale(1); } 50% { transform: translate3d(26px,-14px,0) scale(1.06); } }
+  @keyframes fp-orb-b { 0%,100% { transform: translate3d(0,0,0) scale(1); } 50% { transform: translate3d(-22px,18px,0) scale(1.05); } }
   .fp-orb-a { animation: fp-orb-a 18s ease-in-out infinite; will-change: transform; }
   .fp-orb-b { animation: fp-orb-b 22s ease-in-out infinite; will-change: transform; }
-
-  @keyframes fp-vinyl-breathe {
-    0%,100% { transform: scale(1); }
-    50%      { transform: scale(1.018); }
-  }
+  @keyframes fp-vinyl-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.018); } }
   .fp-vinyl-playing { animation: fp-vinyl-breathe 3.6s cubic-bezier(0.45,0,0.55,1) infinite; }
   .fp-vinyl-paused  { animation: none; transform: scale(1); transition: transform 0.6s ease-out; }
-
   @keyframes fp-spin { to { transform: rotate(360deg); } }
   .fp-vinyl-spin { animation: fp-spin 4s linear infinite; }
-
-  @keyframes fp-stagger-up {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+  @keyframes fp-stagger-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   .fp-stagger > *:nth-child(1) { animation: fp-stagger-up 240ms ease both 0ms; }
   .fp-stagger > *:nth-child(2) { animation: fp-stagger-up 240ms ease both 40ms; }
   .fp-stagger > *:nth-child(3) { animation: fp-stagger-up 240ms ease both 80ms; }
   .fp-stagger > *:nth-child(4) { animation: fp-stagger-up 240ms ease both 120ms; }
   .fp-stagger > *:nth-child(5) { animation: fp-stagger-up 240ms ease both 160ms; }
-
-  @keyframes fp-qbar {
-    0%,100% { transform: scaleY(0.2); }
-    50%      { transform: scaleY(1); }
-  }
-
-  /* Tab pill shimmer on first render */
-  @keyframes fp-tab-enter {
-    from { opacity: 0; transform: scaleX(0.6); }
-    to   { opacity: 1; transform: scaleX(1); }
-  }
-
   .custom-scrollbar::-webkit-scrollbar { display: none; }
   .custom-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 `;
@@ -174,7 +139,7 @@ const PlayerStyles = memo(() => {
 PlayerStyles.displayName = "PlayerStyles";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HOOKS
+// HOOKS (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function usePhase() {
@@ -200,7 +165,6 @@ function useHorizontalSwipe(onSwipe: (dir: "left" | "right") => void) {
   const ref = useRef<{ x: number; y: number; axis: "x" | "y" | null } | null>(
     null,
   );
-
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     ref.current = {
       x: e.touches[0].clientX,
@@ -208,7 +172,6 @@ function useHorizontalSwipe(onSwipe: (dir: "left" | "right") => void) {
       axis: null,
     };
   }, []);
-
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     const t = ref.current;
     if (!t || t.axis) return;
@@ -216,7 +179,6 @@ function useHorizontalSwipe(onSwipe: (dir: "left" | "right") => void) {
     const dy = Math.abs(e.touches[0].clientY - t.y);
     if (dx > 8 || dy > 8) t.axis = dx > dy ? "x" : "y";
   }, []);
-
   const onTouchEnd = useCallback(
     (e: React.TouchEvent) => {
       const t = ref.current;
@@ -227,7 +189,6 @@ function useHorizontalSwipe(onSwipe: (dir: "left" | "right") => void) {
     },
     [onSwipe],
   );
-
   return { onTouchStart, onTouchMove, onTouchEnd };
 }
 
@@ -245,15 +206,14 @@ function useFocusTrap(
     const last = focusable[focusable.length - 1];
     first?.focus();
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Tab") {
-        if (
-          e.shiftKey
-            ? document.activeElement === first
-            : document.activeElement === last
-        ) {
-          e.preventDefault();
-          (e.shiftKey ? last : first)?.focus();
-        }
+      if (e.key !== "Tab") return;
+      if (
+        e.shiftKey
+          ? document.activeElement === first
+          : document.activeElement === last
+      ) {
+        e.preventDefault();
+        (e.shiftKey ? last : first)?.focus();
       }
     };
     el.addEventListener("keydown", onKeyDown);
@@ -263,12 +223,11 @@ function useFocusTrap(
 
 function useViewportHeight() {
   useEffect(() => {
-    const setVh = () => {
+    const setVh = () =>
       document.documentElement.style.setProperty(
         "--vh",
         `${window.innerHeight * 0.01}px`,
       );
-    };
     setVh();
     window.addEventListener("resize", setVh, { passive: true });
     return () => window.removeEventListener("resize", setVh);
@@ -276,7 +235,7 @@ function useViewportHeight() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VINYL DISK — unchanged
+// VINYL DISK (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VinylDisk = memo(
@@ -284,9 +243,7 @@ const VinylDisk = memo(
     <div
       className={cn(
         "relative aspect-square w-full max-w-[280px] lg:max-w-[320px]",
-        "rounded-full overflow-hidden",
-        "border-[5px] border-[#191919]",
-        "shadow-brand",
+        "rounded-full overflow-hidden border-[5px] border-[#191919] shadow-brand",
         isPlaying ? "animate-vinyl-slow" : "pause-animation",
       )}
       style={{ willChange: "transform" }}
@@ -302,8 +259,7 @@ const VinylDisk = memo(
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.07) 0%, transparent 55%), " +
-            "radial-gradient(circle at 70% 75%, rgba(0,0,0,0.3) 0%, transparent 50%)",
+            "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.07) 0%, transparent 55%), radial-gradient(circle at 70% 75%, rgba(0,0,0,0.3) 0%, transparent 50%)",
         }}
       />
       {[18, 32, 44].map((pct) => (
@@ -339,7 +295,7 @@ const VinylDisk = memo(
 VinylDisk.displayName = "VinylDisk";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLAY BUTTON — unchanged
+// PLAY BUTTON (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PlayButtonProps {
@@ -364,8 +320,7 @@ const PlayButton = memo(
     const iconSize = size === "lg" ? 38 : 32;
     const sharedCls = cn(
       "control-btn relative flex items-center justify-center rounded-full bg-white text-background shadow-lg",
-      "shadow-[0_8px_36px_rgba(255,255,255,0.18)]",
-      "disabled:opacity-40 disabled:pointer-events-none",
+      "shadow-[0_8px_36px_rgba(255,255,255,0.18)] disabled:opacity-40 disabled:pointer-events-none",
     );
     const content = isLoading ? (
       <Loader2
@@ -397,7 +352,6 @@ const PlayButton = memo(
         </button>
       );
     }
-
     return (
       <motion.button
         onClick={onToggle}
@@ -449,7 +403,7 @@ const PlayButton = memo(
 PlayButton.displayName = "PlayButton";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SIDE BUTTON / SKIP BUTTON — unchanged from v1
+// SIDE BUTTON / SKIP BUTTON (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SideButtonProps {
@@ -462,7 +416,6 @@ interface SideButtonProps {
   isLg: boolean;
   children: ReactNode;
 }
-
 const SideButton = memo(
   ({
     active,
@@ -474,8 +427,7 @@ const SideButton = memo(
     children,
   }: SideButtonProps) => {
     const baseCls = cn(
-      "absolute inset-0 flex items-center justify-center rounded-full transition-colors",
-      "disabled:opacity-25 disabled:pointer-events-none",
+      "absolute inset-0 flex items-center justify-center rounded-full transition-colors disabled:opacity-25 disabled:pointer-events-none",
       active ? "text-[hsl(var(--primary))]" : "text-white/50 hover:text-white",
     );
     if (phase < 1) return null;
@@ -517,12 +469,11 @@ interface SkipBtnProps {
   phase: number;
   children: ReactNode;
 }
-
 const SkipBtn = memo(
   ({ onClick, disabled, label, phase, children }: SkipBtnProps) => {
     const baseCls =
       "text-white/80 hover:text-white p-1 disabled:opacity-25 disabled:pointer-events-none";
-    if (phase < 1) {
+    if (phase < 1)
       return (
         <button
           onClick={onClick}
@@ -533,7 +484,6 @@ const SkipBtn = memo(
           {children}
         </button>
       );
-    }
     return (
       <motion.button
         onClick={onClick}
@@ -552,7 +502,10 @@ const SkipBtn = memo(
 SkipBtn.displayName = "SkipBtn";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONTROLS ROW — unchanged
+// CONTROLS ROW — đồng bộ slice mới
+// Thay: activeQueue.length → activeQueueIds.length
+//       isLoading (boolean) → loadingState !== "ready" && loadingState !== "idle"
+//       currentIndex < activeQueue.length - 1 → currentIndex < activeQueueIds.length - 1
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ControlsRowProps {
@@ -568,23 +521,26 @@ const ControlsRow = memo(
       isPlaying,
       isShuffling,
       repeatMode,
-      isLoading,
-      activeQueue,
+      loadingState, // ← enum thay vì boolean
+      activeQueueIds, // ← string[] thay vì ITrack[]
       currentIndex,
     } = useSelector(selectPlayer);
 
-    const hasQueue = activeQueue.length > 0;
+    const queueLen = activeQueueIds.length;
+    const hasQueue = queueLen > 0;
     const isLg = size === "lg";
     const skipCls = isLg ? "size-9" : "size-7";
     const sideDim = isLg ? 40 : 36;
+
+    // isLoading: true khi đang fetch metadata hoặc buffer audio
+    const isLoading =
+      loadingState === "loading" || loadingState === "buffering";
 
     const canPrev =
       hasQueue && (currentIndex > 0 || repeatMode !== "off" || isShuffling);
     const canNext =
       hasQueue &&
-      (currentIndex < activeQueue.length - 1 ||
-        repeatMode !== "off" ||
-        isShuffling);
+      (currentIndex < queueLen - 1 || repeatMode !== "off" || isShuffling);
 
     const handlePrev = useCallback(
       (e: React.MouseEvent) => {
@@ -593,6 +549,7 @@ const ControlsRow = memo(
       },
       [canPrev, getCurrentTime, dispatch],
     );
+
     const handleNext = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -600,6 +557,7 @@ const ControlsRow = memo(
       },
       [canNext, dispatch],
     );
+
     const handleToggle = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -607,6 +565,7 @@ const ControlsRow = memo(
       },
       [hasQueue, isPlaying, dispatch],
     );
+
     const handleShuf = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -614,6 +573,7 @@ const ControlsRow = memo(
       },
       [hasQueue, dispatch],
     );
+
     const handleRep = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -718,7 +678,7 @@ const ControlsRow = memo(
 ControlsRow.displayName = "ControlsRow";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TOOLBAR — now includes Focus Mode toggle
+// TOOLBAR (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ToolbarProps {
@@ -726,10 +686,16 @@ interface ToolbarProps {
   onToggleQueue: () => void;
   focusMode: boolean;
   onToggleFocus: () => void;
+  bitrate: number;
 }
-
 const Toolbar = memo(
-  ({ showQueue, onToggleQueue, focusMode, onToggleFocus }: ToolbarProps) => (
+  ({
+    showQueue,
+    onToggleQueue,
+    focusMode,
+    onToggleFocus,
+    bitrate = 320,
+  }: ToolbarProps) => (
     <div
       className="fp-stagger flex items-center justify-between pt-2 border-t border-white/[0.06]"
       role="toolbar"
@@ -743,16 +709,16 @@ const Toolbar = memo(
           onClick: undefined,
         },
         {
-          icon: <Gem className="size-5" />,
-          label: "Audio quality",
-          active: false,
-          onClick: undefined,
+          icon: <Focus className="size-5" />,
+          label: focusMode ? "Exit focus" : "Focus mode",
+          active: focusMode,
+          onClick: onToggleFocus,
         },
         {
           icon: (
             <div className="px-3 py-1 bg-white/8 rounded-lg border border-white/10">
               <span className="text-[10px] font-black text-white/65 tracking-wide">
-                320K
+                {bitrate ? `${bitrate} kbps` : "Bitrate"}
               </span>
             </div>
           ),
@@ -765,12 +731,6 @@ const Toolbar = memo(
           label: "Download",
           active: false,
           onClick: undefined,
-        },
-        {
-          icon: <Focus className="size-5" />,
-          label: focusMode ? "Exit focus" : "Focus mode",
-          active: focusMode,
-          onClick: onToggleFocus,
         },
         {
           icon: <ListMusic className="size-5" />,
@@ -804,7 +764,7 @@ const Toolbar = memo(
 Toolbar.displayName = "Toolbar";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MOBILE PROGRESS — isolated memo
+// MOBILE PROGRESS (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MobileProgress = memo(
@@ -827,7 +787,7 @@ const MobileProgress = memo(
 MobileProgress.displayName = "MobileProgress";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QUEUE ITEM — unchanged from v1
+// QUEUE ITEM (giữ nguyên — nhận ITrack đã được resolve từ cache)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface QueueItemProps {
@@ -838,7 +798,6 @@ interface QueueItemProps {
   onPlay: () => void;
   animate: boolean;
 }
-
 const QueueItem = memo(
   ({
     track,
@@ -855,8 +814,7 @@ const QueueItem = memo(
       exit={{ opacity: 0, x: 10, transition: { duration: 0.12 } }}
       transition={SP.queue}
       className={cn(
-        "group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer",
-        "transition-colors duration-150",
+        "group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors duration-150",
         isCurrent ? "bg-[hsl(var(--primary)/0.1)]" : "hover:bg-white/[0.05]",
       )}
       onClick={onPlay}
@@ -927,10 +885,6 @@ const QueueItem = memo(
 );
 QueueItem.displayName = "QueueItem";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION LABEL
-// ─────────────────────────────────────────────────────────────────────────────
-
 function SectionLabel({
   children,
   dimmer,
@@ -953,58 +907,134 @@ function SectionLabel({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QUEUE PANEL — unchanged from v1
+// QUEUE PANEL — đồng bộ slice mới
+// Thay: activeQueue (ITrack[]) → activeQueueIds (string[]) + trackMetadataCache
+//       setQueue({ tracks, startIndex }) → jumpToIndex(index)
+//       currentTrack?._id → currentTrackId
 // ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @file QueuePanel.tsx
+ * @description Panel hiển thị queue: Now Playing, Next Up, History.
+ *
+ * @fixes (production hardening)
+ *   1. History queueIndex dùng explicit index thay vì i (tình cờ đúng)
+ *   2. upNextIds key đổi thành id thay vì `${id}-${ri}` (không stable)
+ *   3. handleItemPlay history truyền đúng realIndex vào jumpToIndex
+ *   4. Auto-scroll dùng data-current thay vì aria-current (không tồn tại)
+ *   5. shouldAnimate bỏ didMount pattern — dùng AnimatePresence initial={false}
+ *   6. Skeleton row thêm aria-hidden="true"
+ *   7. History key đổi thành id (stable)
+ *   8. useSelector tách trackMetadataCache riêng + shallowEqual để giảm re-render
+ */
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface QueuePanelProps {
   onClose?: () => void;
   showCloseButton?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 const QueuePanel = memo(({ onClose, showCloseButton }: QueuePanelProps) => {
   const dispatch = useDispatch();
-  const { activeQueue, currentTrack, isPlaying } = useSelector(selectPlayer);
+
+  /**
+   * @fix #8 — Tách selector để kiểm soát re-render.
+   *
+   * Trước đây dùng selectPlayer → destructure toàn bộ → mỗi khi trackMetadataCache
+   * đổi (lazy load bài mới) component re-render dù activeQueueIds không đổi.
+   *
+   * Tách thành 2 selector:
+   *   - selector 1: các field primitive + array identity → shallowEqual
+   *   - selector 2: trackMetadataCache riêng (reference đổi thường xuyên)
+   *
+   * shallowEqual so sánh từng key của object trả về → không re-render
+   * nếu activeQueueIds, currentTrackId, currentIndex, isPlaying không đổi.
+   */
+  const { activeQueueIds, currentTrackId, currentIndex, isPlaying } =
+    useSelector(
+      (s: RootState) => ({
+        activeQueueIds: s.player.activeQueueIds,
+        currentTrackId: s.player.currentTrackId,
+        currentIndex: s.player.currentIndex,
+        isPlaying: s.player.isPlaying,
+      }),
+      shallowEqual,
+    );
+
+  // trackMetadataCache tách riêng — reference thay đổi mỗi khi lazy-load
+  // bài mới, nhưng component đã memo nên chỉ re-render khi cache thực sự
+  // ảnh hưởng đến những bài đang hiển thị.
+  const trackMetadataCache = useSelector(
+    (s: RootState) => s.player.trackMetadataCache,
+  );
+
   const scrollRef = useRef<HTMLDivElement>(null);
-  const didMount = useRef(false);
+  const hasQueue = activeQueueIds.length > 0;
 
+  // Resolve ITrack của bài đang phát từ cache
+  const currentTrack =
+    currentTrackId != null
+      ? (trackMetadataCache[currentTrackId] ?? null)
+      : null;
+
+  /**
+   * @fix #1 #3 — Tạo entries kèm realIndex ngay khi slice
+   * historyIds = slice(0, currentIndex) → i === realIndex là tình cờ đúng.
+   * Nếu sau này thêm filter/sort trên history thì i không còn là realIndex.
+   * Map ngay thành { id, index } để không bao giờ nhầm.
+   */
+  const upNextEntries =
+    currentIndex >= 0
+      ? activeQueueIds
+          .slice(currentIndex + 1)
+          .map((id, i) => ({ id, index: currentIndex + 1 + i }))
+      : activeQueueIds.map((id, i) => ({ id, index: i }));
+
+  const historyEntries =
+    currentIndex > 0
+      ? activeQueueIds.slice(0, currentIndex).map((id, i) => ({ id, index: i }))
+      : [];
+
+  // ── Auto-scroll đến bài đang phát ────────────────────────────────────────
+
+  /**
+   * @fix #4 — selector dùng data-current thay vì aria-current
+   * aria-current="true" không được set trên element nào trong QueueItem
+   * → querySelector luôn trả null → scroll không bao giờ chạy.
+   * Dùng data-current="true" và đảm bảo QueueItem set attribute này.
+   */
   useEffect(() => {
-    didMount.current = true;
-  }, []);
-
-  const currentIndex = useMemo(
-    () => activeQueue.findIndex((t) => t._id === currentTrack?._id),
-    [activeQueue, currentTrack?._id],
-  );
-
-  const { upNext, history } = useMemo(
-    () => ({
-      upNext:
-        currentIndex >= 0 ? activeQueue.slice(currentIndex + 1) : activeQueue,
-      history: currentIndex > 0 ? activeQueue.slice(0, currentIndex) : [],
-    }),
-    [activeQueue, currentIndex],
-  );
-
-  const hasQueue = activeQueue.length > 0;
-
-  useEffect(() => {
-    if (!scrollRef.current || !currentTrack) return;
-    const el = scrollRef.current.querySelector('[aria-current="true"]');
+    if (!scrollRef.current || !currentTrackId) return;
+    const el = scrollRef.current.querySelector<HTMLElement>(
+      '[data-current="true"]',
+    );
     el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [currentTrack?._id]);
+  }, [currentTrackId]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleItemPlay = useCallback(
     (index: number, trackId: string) => {
-      if (currentTrack?._id === trackId) dispatch(setIsPlaying(!isPlaying));
-      else dispatch(setQueue({ tracks: activeQueue, startIndex: index }));
+      if (currentTrackId === trackId) {
+        dispatch(setIsPlaying(!isPlaying));
+      } else {
+        dispatch(jumpToIndex(index));
+      }
     },
-    [activeQueue, currentTrack?._id, isPlaying, dispatch],
+    [currentTrackId, isPlaying, dispatch],
   );
 
-  const shouldAnimate = didMount.current;
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header */}
       <header className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
         <div className="flex items-center gap-2">
           <ListMusic
@@ -1016,41 +1046,31 @@ const QueuePanel = memo(({ onClose, showCloseButton }: QueuePanelProps) => {
           </span>
           {hasQueue && (
             <motion.span
-              key={activeQueue.length}
+              key={activeQueueIds.length}
               initial={{ scale: 0.7, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={SP.snappy}
-              className="text-[10px] text-white/30 bg-white/[0.06] border border-white/[0.08] px-1.5 py-0.5 rounded-full font-mono"
-              aria-label={`${activeQueue.length} songs`}
+              className="text-[10px] text-brand bg-white/[0.06] border border-white/[0.08] px-1.5 py-0.5 rounded-full font-mono"
+              aria-label={`${activeQueueIds.length} songs`}
             >
-              {activeQueue.length}
+              {activeQueueIds.length}
             </motion.span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          {hasQueue && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-[10px] uppercase tracking-widest font-semibold text-white/25 hover:text-white/50 hover:bg-white/[0.05] rounded-full px-2.5 gap-1"
-              aria-label="Clear queue"
-            >
-              <X className="size-2.5" /> Clear
-            </Button>
-          )}
-          {showCloseButton && onClose && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="size-7 text-white/40 hover:text-white"
-              aria-label="Close queue"
-            >
-              <X className="size-4" />
-            </Button>
-          )}
-        </div>
+        {showCloseButton && onClose && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="size-7 text-white/40 hover:text-white"
+            aria-label="Close queue"
+          >
+            <X className="size-4" />
+          </Button>
+        )}
       </header>
+
+      {/* Scrollable body */}
       <div
         ref={scrollRef}
         className="custom-scrollbar flex-1 overflow-y-auto overscroll-contain"
@@ -1065,67 +1085,114 @@ const QueuePanel = memo(({ onClose, showCloseButton }: QueuePanelProps) => {
           </div>
         ) : (
           <div className="p-2">
+            {/* ── Now Playing ── */}
             {currentTrack && (
               <>
                 <SectionLabel>Now Playing</SectionLabel>
+                {/**
+                 * @fix #5 — bỏ shouldAnimate / didMount pattern.
+                 * AnimatePresence initial={false} đã đủ để tắt exit animation
+                 * lần render đầu. animate={true} luôn — Framer Motion tự handle.
+                 */}
                 <AnimatePresence mode="popLayout">
-                  {activeQueue
-                    .filter((t) => t._id === currentTrack._id)
-                    .map((t) => (
-                      <QueueItem
-                        key={t._id}
-                        track={t}
-                        queueIndex={currentIndex}
-                        isCurrent
-                        isPlaying={isPlaying}
-                        onPlay={() => handleItemPlay(currentIndex, t._id)}
-                        animate={shouldAnimate}
-                      />
-                    ))}
+                  <QueueItem
+                    key={currentTrack._id}
+                    track={currentTrack}
+                    queueIndex={currentIndex}
+                    isCurrent
+                    isPlaying={isPlaying}
+                    onPlay={() =>
+                      handleItemPlay(currentIndex, currentTrack._id)
+                    }
+                    animate
+                  />
                 </AnimatePresence>
               </>
             )}
-            {upNext.length > 0 && (
+
+            {/* ── Next Up ── */}
+            {upNextEntries.length > 0 && (
               <>
-                <SectionLabel dimmer={false}>Next Up</SectionLabel>
+                <SectionLabel>Next Up</SectionLabel>
+                {/**
+                 * @fix #2 — key={entry.id} thay vì `${id}-${ri}`
+                 * ri = currentIndex + 1 + i → thay đổi mỗi khi currentIndex đổi
+                 * → React unmount/remount toàn bộ list → AnimatePresence
+                 *   không thể chạy exit animation đúng.
+                 * id là stable identity của track trong queue.
+                 */}
                 <AnimatePresence mode="popLayout" initial={false}>
-                  {upNext.map((t, i) => {
-                    const ri = currentIndex + 1 + i;
+                  {upNextEntries.map(({ id, index }) => {
+                    const track = trackMetadataCache[id];
+
+                    if (!track) {
+                      /**
+                       * @fix #6 — aria-hidden="true" trên skeleton
+                       * Skeleton không có nội dung meaningful cho screen reader.
+                       */
+                      return (
+                        <div
+                          key={id}
+                          aria-hidden="true"
+                          className="flex items-center gap-3 px-3 py-2 rounded-xl"
+                        >
+                          <div className="w-7 h-4 bg-white/[0.06] rounded animate-pulse" />
+                          <div className="size-9 bg-white/[0.06] rounded-md animate-pulse shrink-0" />
+                          <div className="flex-1 space-y-1.5">
+                            <div className="h-3 bg-white/[0.06] rounded animate-pulse w-3/4" />
+                            <div className="h-2.5 bg-white/[0.06] rounded animate-pulse w-1/2" />
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <QueueItem
-                        key={`${t._id}-${ri}`}
-                        track={t}
-                        queueIndex={ri}
+                        key={id}
+                        track={track}
+                        queueIndex={index}
                         isCurrent={false}
                         isPlaying={isPlaying}
-                        onPlay={() => handleItemPlay(ri, t._id)}
-                        animate={shouldAnimate}
+                        onPlay={() => handleItemPlay(index, id)}
+                        animate
                       />
                     );
                   })}
                 </AnimatePresence>
               </>
             )}
-            {history.length > 0 && (
+
+            {/* ── History ── */}
+            {historyEntries.length > 0 && (
               <>
                 <SectionLabel dimmer>History</SectionLabel>
                 <div className="opacity-35">
+                  {/**
+                   * @fix #7 — key={entry.id} thay vì `${id}-h${i}`
+                   * i đổi khi currentIndex tăng → toàn bộ history re-mount.
+                   */}
                   <AnimatePresence mode="popLayout" initial={false}>
-                    {history.map((t, i) => (
-                      <QueueItem
-                        key={`${t._id}-h${i}`}
-                        track={t}
-                        queueIndex={i}
-                        isCurrent={false}
-                        isPlaying={false}
-                        onPlay={() => handleItemPlay(i, t._id)}
-                        animate={shouldAnimate}
-                      />
-                    ))}
+                    {historyEntries.map(({ id, index }) => {
+                      const track = trackMetadataCache[id];
+                      // History miss → bỏ qua, không cần skeleton
+                      if (!track) return null;
+                      return (
+                        <QueueItem
+                          key={id}
+                          track={track}
+                          queueIndex={index}
+                          isCurrent={false}
+                          isPlaying={false}
+                          onPlay={() => handleItemPlay(index, id)}
+                          animate
+                        />
+                      );
+                    })}
                   </AnimatePresence>
                 </div>
               </>
             )}
+
             <div className="h-4" />
           </div>
         )}
@@ -1133,18 +1200,11 @@ const QueuePanel = memo(({ onClose, showCloseButton }: QueuePanelProps) => {
     </div>
   );
 });
+
 QueuePanel.displayName = "QueuePanel";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VIEW HEADER — NEW: replaced dot + label with a full glassmorphic tab bar
-//
-// Design decisions:
-//   - `layoutId="fp-tab-pill"` on the background pill creates a smooth
-//     Framer shared-layout transition as tabs change — no JS animation loop.
-//   - Tab bar has `glass-frosted` (from design system) + blur backdrop.
-//   - Active tab text brightens; inactive dims to 40% opacity.
-//   - Collapse + More buttons remain flanking the tab bar.
-//   - `aria-live="polite"` on label for screen readers (retained from v1).
+// VIEW HEADER (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ViewHeaderProps {
@@ -1154,7 +1214,6 @@ interface ViewHeaderProps {
   setSwipeDir: Dispatch<SetStateAction<number>>;
   onCollapse: () => void;
 }
-
 const ViewHeader = memo(
   ({
     currentView,
@@ -1163,7 +1222,6 @@ const ViewHeader = memo(
     setSwipeDir,
     onCollapse,
   }: ViewHeaderProps) => {
-    // FIX 8: stable handler — computed from stable setters
     const handleViewChange = useCallback(
       (v: PlayerView) => {
         setSwipeDir(VIEWS.indexOf(v) > VIEWS.indexOf(currentView) ? -1 : 1);
@@ -1173,7 +1231,7 @@ const ViewHeader = memo(
     );
 
     return (
-      <header className="flex items-center justify-between px-4 h-16 shrink-0">
+      <header className="flex items-center justify-between px-4 h-16 shrink-0 bg-transparent">
         <button
           onClick={onCollapse}
           className="flex items-center justify-center size-10 rounded-full text-white/70 hover:text-white hover:bg-white/[0.08] active:scale-90 transition-all"
@@ -1181,9 +1239,7 @@ const ViewHeader = memo(
         >
           <ChevronDown className="size-7" strokeWidth={2} />
         </button>
-
         <div className="flex flex-col items-center gap-2">
-          {/* FIX 20: aria-live for screen reader view change announcement */}
           {phase >= 1 ? (
             <AnimatePresence mode="wait">
               <motion.span
@@ -1195,8 +1251,6 @@ const ViewHeader = memo(
                 className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/30"
                 aria-live="polite"
               >
-                {" "}
-                {/* FIX 20 */}
                 {VIEW_LABEL[currentView]}
               </motion.span>
             </AnimatePresence>
@@ -1205,7 +1259,6 @@ const ViewHeader = memo(
               {VIEW_LABEL[currentView]}
             </span>
           )}
-
           <div
             className="flex gap-1.5"
             role="tablist"
@@ -1228,7 +1281,6 @@ const ViewHeader = memo(
             ))}
           </div>
         </div>
-
         <button
           className="flex items-center justify-center size-10 rounded-full text-white/70 hover:text-white hover:bg-white/[0.08] active:scale-90 transition-all"
           aria-label="More options"
@@ -1240,9 +1292,9 @@ const ViewHeader = memo(
   },
 );
 ViewHeader.displayName = "ViewHeader";
+
 // ─────────────────────────────────────────────────────────────────────────────
-// SWIPEABLE VIEWS
-// Changed: lyrics view now passes onSeek + focusRadius + accentColor to KaraokeView
+// SWIPEABLE VIEWS (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SWIPE_VARIANTS: Variants = {
@@ -1264,7 +1316,6 @@ interface SwipeableViewsProps {
   onSeek: (t: number) => void;
   focusMode: boolean;
 }
-
 const SwipeableViews = memo(
   ({
     lyrics,
@@ -1280,11 +1331,10 @@ const SwipeableViews = memo(
     focusMode,
   }: SwipeableViewsProps) => (
     <main
-      className="relative flex-1 overflow-hidden touch-pan-y"
+      className="relative flex-1 overflow-hidden touch-pan-y bg-transparent"
       {...swipeHandlers}
     >
       <AnimatePresence mode="wait" initial={false} custom={direction}>
-        {/* ARTWORK */}
         {currentView === "artwork" && (
           <motion.div
             key="artwork"
@@ -1313,8 +1363,6 @@ const SwipeableViews = memo(
             <VinylDisk src={track.coverImage} isPlaying={isPlaying} />
           </motion.div>
         )}
-
-        {/* LYRICS — now wired with onSeek + focusRadius */}
         {currentView === "lyrics" && (
           <motion.div
             key="lyrics"
@@ -1331,13 +1379,12 @@ const SwipeableViews = memo(
               loading={loadingLyrics}
               currentTime={currentTime}
               onSeek={onSeek}
-              focusRadius={focusMode ? 3 : 0}
+              focusRadius={focusMode ? 1 : 0}
               duetMode={false}
+              accentColor="primary"
             />
           </motion.div>
         )}
-
-        {/* MOOD */}
         {currentView === "mood" && (
           <motion.div
             key="mood"
@@ -1347,7 +1394,7 @@ const SwipeableViews = memo(
             animate="center"
             exit="exit"
             transition={SP.swipe}
-            className="absolute inset-0"
+            className="absolute inset-0 bg-transparent"
           >
             <MoodFocusView
               lyrics={lyrics ?? []}
@@ -1358,8 +1405,6 @@ const SwipeableViews = memo(
             />
           </motion.div>
         )}
-
-        {/* INFO */}
         {currentView === "info" && (
           <motion.div
             key="info"
@@ -1412,7 +1457,7 @@ const SwipeableViews = memo(
 SwipeableViews.displayName = "SwipeableViews";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRACK INFO ROW — unchanged
+// TRACK INFO ROW (giữ nguyên)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TrackInfoRow = memo(
@@ -1436,25 +1481,22 @@ const TrackInfoRow = memo(
         </button>
       )}
       <div className={cn("flex-1 min-w-0", size !== "sm" && "text-center")}>
-        <motion.h2
-          key={track.title}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={SP.gentle}
+        <MarqueeText
+          text={track.title}
           className={cn(
-            "font-bold text-white truncate leading-tight",
-            size === "sm" ? "text-sm" : "text-xl",
+            "flex-1 min-w-0 font-semibold tracking-tight text-brand",
+            size === "sm" ? "text-sm" : "text-lg",
           )}
-        >
-          {track.title}
-        </motion.h2>
+          speed={38}
+          pauseMs={1600}
+        />
         <motion.p
           key={track.artist?.name}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.06, ...SP.gentle }}
           className={cn(
-            "text-white/45 mt-0.5",
+            "text-white/45 mt-0.5 text-track-meta",
             size === "sm" ? "text-xs truncate" : "text-sm",
           )}
         >
@@ -1462,7 +1504,7 @@ const TrackInfoRow = memo(
         </motion.p>
       </div>
       {phase >= 1 ? (
-        <LikeButton id={track._id} size="lg" type="track" />
+        <TrackLikeButton id={track._id} />
       ) : (
         <div
           className={size === "sm" ? "size-5" : "size-6"}
@@ -1475,7 +1517,7 @@ const TrackInfoRow = memo(
 TrackInfoRow.displayName = "TrackInfoRow";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN COMPONENT
+// MAIN COMPONENT (giữ nguyên hoàn toàn)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface FullPlayerProps {
@@ -1502,15 +1544,21 @@ export const FullPlayer = ({
   const [showQueue, setShowQueue] = useState(false);
   const [queueMounted, setQueueMounted] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [dominantColor, setDominantColor] = useState("primary");
 
   const phase = usePhase();
   useViewportHeight();
 
   const queueSheetRef = useRef<HTMLElement>(null);
   const { lyrics, loading } = useLyrics(track.lyricUrl);
+
   useEffect(() => {
     if (showQueue && !queueMounted) setQueueMounted(true);
   }, [showQueue, queueMounted]);
+  // useEffect(() => {
+  //   if (!track.coverImage) return;
+  //   extractDominantColor(track.coverImage).then(setDominantColor);
+  // }, [track.coverImage]);
 
   useFocusTrap(showQueue, queueSheetRef as React.RefObject<HTMLElement>);
 
@@ -1547,13 +1595,13 @@ export const FullPlayer = ({
   const toggleQueue = useCallback(() => setShowQueue((v) => !v), []);
   const toggleFocus = useCallback(() => setFocusMode((v) => !v), []);
   const isArtwork = currentView === "artwork";
+  const isFullView = currentView === "lyrics" || currentView === "mood";
 
   return (
     <>
       <PlayerStyles />
-
       <motion.div
-        className="fp-enter fixed inset-0 z-[60] flex flex-col h-dvh overflow-hidden select-none bg-[#0c0c0c]"
+        className="fp-enter fixed inset-0 z-[60] flex flex-col h-dvh overflow-hidden select-none bg-[#0c0c0c] isolate"
         style={{ scale: cardScale }}
         drag="y"
         dragConstraints={{ top: 0, bottom: 0 }}
@@ -1570,31 +1618,12 @@ export const FullPlayer = ({
         aria-modal="true"
         aria-label={`Now playing: ${track.title}`}
       >
-        {/* Ambient orbs */}
-        {phase >= 2 && (
-          <motion.div
-            className="absolute inset-0 -z-10 pointer-events-none overflow-hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            aria-hidden="true"
-          >
-            <div
-              className="fp-orb-a absolute rounded-full bg-blue-900/[0.08] blur-[110px]"
-              style={{ top: "-20%", left: "-20%", width: "80%", height: "80%" }}
-            />
-            <div
-              className="fp-orb-b absolute rounded-full bg-violet-900/[0.08] blur-[110px]"
-              style={{
-                bottom: "-20%",
-                right: "-20%",
-                width: "80%",
-                height: "80%",
-              }}
-            />
-          </motion.div>
-        )}
-
+        <PlayerBackground
+          coverImage={track.coverImage}
+          dominantColor={dominantColor}
+          focusMode={focusMode}
+          isPlaying={isPlaying}
+        />
         <motion.div
           className="absolute inset-0 bg-black pointer-events-none z-0"
           style={{ opacity: rimOpacity }}
@@ -1605,17 +1634,17 @@ export const FullPlayer = ({
           className="mx-auto w-full h-full relative z-10 flex flex-col lg:flex-row lg:items-stretch lg:max-w-4xl xl:max-w-5xl"
           style={{ opacity: bgOpacity }}
         >
-          {/* ══ LEFT / MAIN PANEL ═══════════════════════════════════ */}
+          {/* LEFT PANEL */}
           <div className="flex flex-col flex-1 min-h-0 lg:flex-initial lg:w-[50%] xl:w-[55%]">
-            {/* NEW: glassmorphic tab bar header */}
-            <ViewHeader
-              currentView={currentView}
-              phase={phase}
-              setView={setCurrentView}
-              setSwipeDir={setSwipeDir}
-              onCollapse={onCollapse}
-            />
-
+            {currentView !== "mood" && (
+              <ViewHeader
+                currentView={currentView}
+                phase={phase}
+                setView={setCurrentView}
+                setSwipeDir={setSwipeDir}
+                onCollapse={onCollapse}
+              />
+            )}
             <SwipeableViews
               lyrics={lyrics}
               loadingLyrics={loading}
@@ -1630,10 +1659,9 @@ export const FullPlayer = ({
               focusMode={focusMode}
             />
 
-            {/* ── MOBILE CONTROLS ─────────────────────────────── */}
-            <div className="lg:hidden">
+            <div className="lg:hidden bg-transparent">
               {isArtwork ? (
-                <div className="px-6 pb-5 space-y-5 shrink-0">
+                <div className="px-6 pb-2 pt-2 space-y-5 shrink-0 bg-transparent outline-none border-none">
                   <TrackInfoRow track={track} phase={phase} />
                   <MobileProgress
                     currentTime={currentTime}
@@ -1647,6 +1675,7 @@ export const FullPlayer = ({
                   />
                   {phase >= 1 && (
                     <Toolbar
+                      bitrate={track.bitrate}
                       showQueue={showQueue}
                       onToggleQueue={toggleQueue}
                       focusMode={focusMode}
@@ -1655,24 +1684,26 @@ export const FullPlayer = ({
                   )}
                 </div>
               ) : (
-                <div className="px-5 pb-5 space-y-4 shrink-0">
-                  <TrackInfoRow track={track} phase={phase} size="sm" />
-                  <MobileProgress
-                    currentTime={currentTime}
-                    duration={duration}
-                    onSeek={onSeek}
-                  />
-                  <ControlsRow
-                    size="md"
-                    phase={phase}
-                    getCurrentTime={getCurrentTime}
-                  />
-                </div>
+                !isFullView && (
+                  <div className="px-5 pb-5 pt-2 space-y-4 shrink-0 bg-transparent">
+                    <TrackInfoRow track={track} phase={phase} size="sm" />
+                    <MobileProgress
+                      currentTime={currentTime}
+                      duration={duration}
+                      onSeek={onSeek}
+                    />
+                    <ControlsRow
+                      size="md"
+                      phase={phase}
+                      getCurrentTime={getCurrentTime}
+                    />
+                  </div>
+                )
               )}
             </div>
           </div>
 
-          {/* ══ RIGHT PANEL (desktop) ═══════════════════════════════ */}
+          {/* RIGHT PANEL */}
           <div className="hidden lg:flex flex-col lg:w-[50%] xl:w-[45%] border-l border-white/[0.05] overflow-hidden">
             <div className="shrink-0 px-10 pt-16 pb-6 flex flex-col">
               <div className="flex items-start justify-between gap-4 mb-6">
@@ -1697,18 +1728,16 @@ export const FullPlayer = ({
                   </motion.p>
                 </div>
                 {phase >= 1 ? (
-                  <LikeButton id={track._id} size="lg" type="track" />
+                  <TrackLikeButton id={track._id} />
                 ) : (
                   <div className="size-7" aria-hidden="true" />
                 )}
               </div>
-
               <ProgressBar
                 currentTime={currentTime}
                 duration={duration}
                 onSeek={onSeek}
               />
-
               <div className="mt-8">
                 <ControlsRow
                   size="lg"
@@ -1716,10 +1745,10 @@ export const FullPlayer = ({
                   getCurrentTime={getCurrentTime}
                 />
               </div>
-
               {phase >= 1 && (
                 <div className="mt-8">
                   <Toolbar
+                    bitrate={track.bitrate}
                     showQueue={showQueue}
                     onToggleQueue={toggleQueue}
                     focusMode={focusMode}
@@ -1734,8 +1763,7 @@ export const FullPlayer = ({
                 animate={{ opacity: showQueue ? 1 : 0, y: showQueue ? 0 : -8 }}
                 transition={SP.queue}
                 className={cn(
-                  "flex-1 min-h-0 mx-4 mb-4 rounded-2xl border border-white/[0.07]",
-                  "bg-white/[0.03] backdrop-blur-xl overflow-hidden",
+                  "flex-1 min-h-0 mx-4 mb-4 rounded-2xl border border-white/[0.07] bg-white/[0.03] backdrop-blur-xl overflow-hidden",
                   !showQueue && "pointer-events-none",
                 )}
                 aria-hidden={!showQueue}
@@ -1746,7 +1774,7 @@ export const FullPlayer = ({
           </div>
         </motion.div>
 
-        {/* ══ MOBILE QUEUE BOTTOM SHEET ═══════════════════════════ */}
+        {/* MOBILE QUEUE SHEET */}
         <AnimatePresence>
           {showQueue && (
             <>

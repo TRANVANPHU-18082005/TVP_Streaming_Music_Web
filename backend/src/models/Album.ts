@@ -102,7 +102,8 @@ AlbumSchema.index({ genres: 1, isPublic: 1, releaseDate: -1 });
 
 // 4. 🔥 Charts: Top Albums (Hot nhất)
 AlbumSchema.index({ isPublic: 1, playCount: -1 });
-
+AlbumSchema.index({ isPublic: 1, type: 1, releaseDate: -1 }); // filter type + sort
+AlbumSchema.index({ isPublic: 1, releaseYear: 1 });
 // 5. New Releases Global
 AlbumSchema.index({ isPublic: 1, releaseDate: -1 });
 // --- MIDDLEWARE ---

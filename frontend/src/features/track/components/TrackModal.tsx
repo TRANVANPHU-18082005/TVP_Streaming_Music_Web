@@ -1,32 +1,3 @@
-"use client";
-
-/**
- * @file TrackModal.tsx — Track Upload / Edit Studio (v3.0 — Soundwave Premium)
- *
- * REDESIGN vs v2.0:
- * ─ Full design-token alignment with Soundwave index.css:
- *   glass-frosted / glass-heavy panels, shadow-brand, shadow-glow-*, progress-track,
- *   btn-primary / btn-ghost / btn-danger tokens, text-overline, badge-* classes
- * ─ Layout: responsive sidebar (full-width mobile → 300px lg+), tab rail uses
- *   glass-frosted pill strip matching AlbumPage / ProfilePage filter bar pattern
- * ─ Theme: hardcoded #0a0a0b / text-white replaced with bg-card / text-foreground
- *   CSS vars — full light + dark mode support, no flicker
- * ─ FormField extracted as stable memo — eliminates re-render cascade from
- *   inline component definitions inside render (v2.0 anti-pattern)
- * ─ SectionDivider replaces ad-hoc spacing gaps for consistent 8pt rhythm
- * ─ Artwork dropzone: added drag-over state, file-size hint, ARIA label
- * ─ Audio picker: animated waveform EQ bars when file selected (.eq-bars token)
- * ─ Publishing toggles: uses design-token border/bg semantics, not raw emerald/amber
- * ─ Tab triggers: icon + label + active underline matching ProfilePage tab rail
- * ─ Canvas tab: Smart Selection banner uses card-base + gradient-brand-soft
- * ─ Lyrics tab: font-mono textarea with line-numbers hint; empty state uses
- *   card-base border-dashed (EmptyState pattern from ProfilePage)
- * ─ Footer: UUID badge uses badge-muted token; submit uses btn-primary token
- * ─ ScrollArea: scrollbar-thin token replaces custom-scrollbar
- * ─ Body scroll lock: cleanup always runs (no isOpen dependency race)
- * ─ Portal: guarded with typeof document check for SSR safety
- */
-
 import React, {
   useEffect,
   memo,
@@ -445,8 +416,11 @@ const TrackModal = ({
     imagePreview,
     audioName,
     isSubmitting,
-  } = useTrackForm({ trackToEdit, onSubmit });
-
+  } = useTrackForm(
+    trackToEdit
+      ? { mode: "edit", trackToEdit, onSubmit }
+      : { mode: "create", onSubmit },
+  );
   const {
     register,
     setValue,

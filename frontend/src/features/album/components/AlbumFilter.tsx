@@ -21,7 +21,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AlbumFilterParams } from "@/features/album/types";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -37,6 +36,7 @@ import {
 import { ArtistSelector } from "@/features/artist/components/ArtistSelector";
 import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { useAppSelector } from "@/store/hooks";
+import { AlbumFilterParams } from "../schemas/album.schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -532,11 +532,6 @@ const AlbumFilter = memo<AlbumFilterProps>(
             activeFiltersCount > 0 && "border-primary/20 shadow-brand",
           )}
         >
-          {/* Subtle top accent line when filters active */}
-          {activeFiltersCount > 0 && (
-            <div className="absolute inset-x-0 top-0 h-px gradient-wave opacity-60" />
-          )}
-
           {/* ── TOP ROW: Search + Sort + Toggle ── */}
           <div className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
             {/* Search — flex-1 */}

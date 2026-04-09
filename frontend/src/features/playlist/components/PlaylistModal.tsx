@@ -324,8 +324,18 @@ const PlaylistModal = memo<PlaylistModalProps>(
       form,
       handleSubmit,
       isSubmitting: isFormSubmitting,
-    } = usePlaylistForm({ playlistToEdit, onSubmit });
-
+    } = usePlaylistForm(
+      playlistToEdit
+        ? {
+            mode: "edit",
+            playlistToEdit,
+            onSubmit,
+          }
+        : {
+            mode: "create",
+            onSubmit,
+          },
+    );
     const {
       register,
       control,

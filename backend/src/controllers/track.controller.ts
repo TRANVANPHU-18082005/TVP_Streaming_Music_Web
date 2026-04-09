@@ -140,11 +140,9 @@ export const bulkUpdateTracks = catchAsync(
 export const getTopChart = async (req: Request, res: Response) => {
   try {
     const data = await getRealtimeChart();
-
     return res.status(200).json({
       success: true,
       data: data, // Chứa { items, chart }
-      lastUpdatedAt: new Date().toISOString(),
     });
   } catch (error) {
     console.error("Controller Chart Error:", error);

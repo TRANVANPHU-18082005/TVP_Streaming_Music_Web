@@ -11,6 +11,10 @@ import {
   GenreFilterInput,
   UpdateGenreInput,
 } from "../validations/genre.validation";
+import { IUser } from "../models/User";
+import { buildCacheKey, withCacheTimeout } from "../utils/cacheHelper";
+import { cacheRedis } from "../config/redis";
+import escapeStringRegexp from "escape-string-regexp";
 
 class GenreService {
   // ==========================================
@@ -296,11 +300,24 @@ class GenreService {
   // ==========================================
   // 🟢 READ METHODS (GET LIST & TREE)
   // ==========================================
-
   /**
-   * 2. GET ALL (Table Management - Paginated)
+   * 2. GET ALL GENRES (Tree Support & Caching)
    */
-  async getAllGenres(queryInput: GenreFilterInput) {
+  async getAllGenres(queryInput: GenreFilterInput, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
+    const isAdmin = userRole === "admin";
+
+    // 1. STABLE CACHE KEY
+    const cleanFilter = Object.fromEntries(
+      Object.entries(queryInput).filter(
+        ([_, v]) => v !== undefined && v !== "",
+      ),
+    );
+    const cacheKey = buildCacheKey("genre:list", userRole, cleanFilter);
+
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
     const {
       page = 1,
       limit = 20,
@@ -311,66 +328,82 @@ class GenreService {
       isTrending,
     } = queryInput;
 
-    const filter: any = {};
+    const filterQuery: Record<string, any> = {};
 
-    // 🔥 Chống ReDOS
-    if (keyword) {
-      const escapeRegex = (text: string) =>
-        text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-      filter.name = { $regex: escapeRegex(keyword), $options: "i" };
+    // --- 2. SECURITY & FILTER LOGIC ---
+    // Guest/User chỉ thấy Active. Admin thấy theo filter.
+    if (!isAdmin) {
+      filterQuery.isActive = true;
+    } else if (status !== undefined) {
+      filterQuery.isActive = status === "active";
     }
 
-    if (status === "active") filter.isActive = true;
-    if (status === "inactive") filter.isActive = false;
-    if (isTrending) filter.isTrending = true;
+    if (isTrending !== undefined) filterQuery.isTrending = isTrending;
 
+    // Xử lý logic Tree
     if (parentId === "root") {
-      filter.parentId = null;
+      filterQuery.parentId = null;
     } else if (parentId) {
-      filter.parentId = new Types.ObjectId(parentId);
+      filterQuery.parentId = parentId;
     }
 
-    let sortOption: any = { priority: -1, trackCount: -1 };
-    switch (sort) {
-      case "popular":
-        sortOption = { trackCount: -1 };
-        break;
-      case "newest":
-        sortOption = { createdAt: -1 };
-        break;
-      case "name":
-        sortOption = { name: 1 };
-        break;
-      case "priority":
-        sortOption = { priority: -1 };
-        break;
+    // Chống ReDoS & Prefix Match để tận dụng Index
+    if (keyword) {
+      const safeKeyword = escapeStringRegexp(keyword.substring(0, 100));
+      filterQuery.name = { $regex: `^${safeKeyword}`, $options: "i" };
     }
 
-    const genresQuery = Genre.find(filter)
+    // --- 3. SORT MAP ---
+    const SORT_MAP: Record<string, any> = {
+      priority: { priority: -1, trackCount: -1, _id: 1 },
+      popular: { trackCount: -1, priority: -1, _id: 1 },
+      newest: { createdAt: -1, _id: 1 },
+      name: { name: 1, _id: 1 },
+      oldest: { createdAt: 1, _id: 1 },
+    };
+
+    const sortOption = SORT_MAP[sort ?? "priority"] ?? SORT_MAP.priority;
+
+    // --- 4. EXECUTION ---
+    const query = Genre.find(filterQuery)
       .populate("parentId", "name slug")
+      .select(
+        "name slug image color gradient priority trackCount isTrending isActive parentId themeColor",
+      )
       .sort(sortOption)
       .lean();
 
+    // Chỉ phân trang nếu limit không phải "all"
     if (limit !== "all") {
-      const limitNumber = Number(limit);
-      const skip = (Number(page) - 1) * limitNumber;
-      genresQuery.skip(skip).limit(limitNumber);
+      const skip = (Number(page) - 1) * Number(limit);
+      query.skip(skip).limit(Number(limit));
     }
 
     const [genres, total] = await Promise.all([
-      genresQuery.exec(),
-      Genre.countDocuments(filter),
+      query.exec(),
+      Genre.countDocuments(filterQuery),
     ]);
 
-    return {
+    const result = {
       data: genres,
       meta: {
         totalItems: total,
         page: Number(page),
         pageSize: limit === "all" ? total : Number(limit),
         totalPages: limit === "all" ? 1 : Math.ceil(total / Number(limit)),
+        hasNextPage: limit === "all" ? false : page * Number(limit) < total,
       },
     };
+
+    // --- 5. INTELLIGENT CACHING ---
+    // Thể loại thường rất ít thay đổi -> TTL dài (30 phút - 1 tiếng)
+    const ttl = 1800 + Math.floor(Math.random() * 600);
+
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Genre SET error:", err));
+
+    return result;
   }
 
   /**
@@ -386,25 +419,117 @@ class GenreService {
   /**
    * 4. GET GENRE DETAIL (Client View)
    */
-  async getGenreBySlug(slug: string) {
-    const genre = await Genre.findOne({ slug })
+  /**
+   * 4. GET GENRE DETAIL (Virtual Scroll Optimized)
+   * Lấy Metadata + Sub-genres + Mảng ID bài hát đầy đủ
+   */
+  async getGenreBySlug(slug: string, userRole?: string) {
+    // 1. Fetch thông tin Genre cơ bản
+    const genre = await Genre.findOne({ slug: slug, isActive: true })
       .populate("parentId", "_id name slug image color")
       .lean();
 
-    if (!genre)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy thể loại");
+    if (!genre) {
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Thể loại không tồn tại hoặc đã bị ẩn",
+      );
+    }
 
-    const [subGenres, breadcrumbs] = await Promise.all([
-      Genre.find({ parentId: genre._id, isActive: true })
-        .select("_id name slug image trackCount priority")
+    const genreId = genre._id;
+
+    // 2. 🔥 QUERY PARALLEL: Lấy dữ liệu liên quan
+    const [subGenres, breadcrumbs, allTrackIds] = await Promise.all([
+      // A. Lấy danh sách thể loại con (để hiện tab hoặc list gợi ý)
+      Genre.find({ parentId: genreId, isActive: true })
+        .select("_id name slug image trackCount priority color")
         .sort({ priority: -1, trackCount: -1 })
         .lean(),
+
+      // B. Xây dựng đường dẫn (Pop -> Dance Pop...)
       this.buildBreadcrumbs(genre),
+
+      // C. Lấy mảng ID của TOÀN BỘ bài hát thuộc thể loại này
+      // Sắp xếp theo độ phổ biến (playCount) hoặc mới nhất
+      Track.find({ genres: genreId, status: "ready", isPublic: true })
+        .sort({ playCount: -1, createdAt: -1 })
+        .select("_id")
+        .lean(),
     ]);
 
-    return { ...genre, subGenres, breadcrumbs };
+    return {
+      ...genre,
+      subGenres,
+      breadcrumbs,
+      // Trả về mảng ID cực nhẹ để FE làm Virtual Scroll
+      trackIds: allTrackIds.map((t) => t._id),
+    };
   }
+  /**
+   * 5. GET GENRE TRACKS (Infinite Loading)
+   * Tải chi tiết bài hát theo trang (Page/Limit) cho Virtual Scroll
+   */
+  async getGenreTracks(
+    genreId: string,
+    filter: any, // { page, limit }
+    userRole?: string,
+  ) {
+    const { page = 1, limit = 20 } = filter;
+    const skip = (page - 1) * limit;
+    const isAdmin = userRole === "admin";
 
+    // 1. Xử lý CACHE (Thể loại nhạc thường có lượt truy cập cao)
+    const cacheKey = buildCacheKey(
+      `genre:tracks:${genreId}`,
+      userRole || "guest",
+      { page, limit },
+    );
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
+    // 2. Truy vấn Database
+    const trackQuery: Record<string, any> = {
+      genres: genreId, // MongoDB tự hiểu genreId nằm trong mảng genreIds
+      status: "ready",
+    };
+
+    if (!isAdmin) {
+      trackQuery.isPublic = true;
+    }
+
+    const [tracks, total] = await Promise.all([
+      Track.find(trackQuery)
+        .sort({ playCount: -1, createdAt: -1 }) // Thứ tự phổ biến nhất
+        .skip(skip)
+        .limit(Number(limit))
+        .populate("artist", "name slug isVerified")
+        .populate("album", "title slug coverImage")
+        .select(
+          "title slug duration playCount coverImage hlsUrl isPublic isExplicit bitrate",
+        )
+        .lean(),
+      Track.countDocuments(trackQuery),
+    ]);
+
+    const result = {
+      data: tracks,
+      meta: {
+        totalItems: total,
+        page: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: skip + limit < total,
+      },
+    };
+
+    // 3. LƯU CACHE (15-20 phút)
+    const ttl = 900 + Math.floor(Math.random() * 120);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Set Genre Tracks Error:", err));
+
+    return result;
+  }
   // ==========================================
   // ⚙️ HELPERS
   // ==========================================

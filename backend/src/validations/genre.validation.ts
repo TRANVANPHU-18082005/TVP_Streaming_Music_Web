@@ -5,6 +5,7 @@ import {
   objectIdSchema,
   nullableObjectIdSchema,
   emptyToUndefined,
+  optionalObjectIdSchema,
 } from "./common.validate";
 
 // 1. CREATE GENRE
@@ -42,29 +43,51 @@ export const updateGenreSchema = z.object({
 });
 
 // 3. GET LIST (Filter)
+// features/genre/schemas/genre.schema.ts
+
 export const getGenresSchema = z.object({
-  query: z.object({
-    page: z.coerce.number().min(1).default(1),
-    // Hỗ trợ "all" limit cho dropdown tree
-    limit: z.union([z.coerce.number().min(1), z.literal("all")]).default(20),
+  query: z
+    .object({
+      // 1. Phân trang: Hỗ trợ cả số và từ khóa "all"
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z
+        .preprocess(
+          (val) => (val === "all" ? "all" : val),
+          z.union([z.coerce.number().int().min(1).max(100), z.literal("all")]),
+        )
+        .default(20),
 
-    keyword: z.preprocess(emptyToUndefined, z.string().trim().optional()),
-    status: z.enum(["active", "inactive"]).optional(),
+      // 2. Search & Filter: Chống ReDoS bằng giới hạn độ dài
+      keyword: z.preprocess(
+        (val) => (val === "" ? undefined : val),
+        z.string().trim().max(100).optional(),
+      ),
 
-    // Hỗ trợ ID chuẩn HOẶC chữ "root"
-    parentId: z.preprocess(
-      emptyToUndefined,
-      z.union([objectIdSchema, z.literal("root")]).optional(),
-    ),
+      status: z.enum(["active", "inactive", "all"]).default("all"),
 
-    isTrending: booleanSchema.optional(),
+      // 3. Tree Logic: Hỗ trợ lọc theo cha hoặc lọc các gốc (root)
+      parentId: z.preprocess(
+        (val) => (val === "" || val === "undefined" ? undefined : val),
+        z.union([optionalObjectIdSchema, z.literal("root")]).optional(),
+      ),
 
-    sort: z
-      .enum(["popular", "priority", "newest", "oldest", "name"])
-      .default("priority"),
+      isTrending: z.preprocess(
+        (val) => (val === "true" ? true : val === "false" ? false : undefined),
+        z.boolean().optional(),
+      ),
+
+      // 4. Sort: Theo độ ưu tiên (priority) hoặc độ phổ biến
+      sort: z
+        .enum(["popular", "priority", "newest", "oldest", "name"])
+        .default("priority"),
+    })
+    .strict(), // 🔥 Chặn đứng các tham số lạ
+});
+export const getGenreTracksSchema = getGenresSchema.extend({
+  query: getGenresSchema.shape.query.omit({
+    parentId: true,
   }),
 });
-
 export type CreateGenreInput = z.infer<typeof createGenreSchema>["body"];
 export type UpdateGenreInput = z.infer<typeof updateGenreSchema>["body"];
 export type GenreFilterInput = z.infer<typeof getGenresSchema>["query"];

@@ -1,11 +1,10 @@
-import { useMemo, useCallback } from "react";
-import { useQueryParams } from "@/hooks/useQueryParams"; // Import Generic Hook
-import { AlbumFilterParams } from "../types";
+import { useMemo, useCallback, useEffect } from "react";
+import { useQueryParams } from "@/hooks/useQueryParams";
+import {
+  albumParamsSchema,
+  type AlbumFilterParams,
+} from "../schemas/album.schema";
 
-const ALLOWED_SORTS = ["newest", "oldest", "popular", "name"] as const;
-const ALLOWED_TYPES = ["album", "single", "ep", "compilation", "all"] as const;
-
-// Default values
 const DEFAULT_ALBUM_PARAMS: AlbumFilterParams = {
   page: 1,
   limit: 10,
@@ -19,39 +18,44 @@ const DEFAULT_ALBUM_PARAMS: AlbumFilterParams = {
 };
 
 export const useAlbumParams = (initialLimit = 10) => {
-  // 1. Gọi Generic Hook
+  // 1. Lấy dữ liệu thô từ URL
   const { params: rawParams, setParams } = useQueryParams({
     ...DEFAULT_ALBUM_PARAMS,
     limit: initialLimit,
   });
 
-  // 2. Validate & Override (Logic đặc thù của Album)
-  // Generic hook chỉ parse cơ bản, ở đây ta validate kỹ hơn (Enum check)
-  const filterParams = useMemo((): AlbumFilterParams => {
-    return {
-      ...rawParams,
-      // Validate Sort
-      sort: ALLOWED_SORTS.includes(rawParams.sort as any)
-        ? rawParams.sort
-        : "newest",
-      // Validate Type
-      type: ALLOWED_TYPES.includes(rawParams.type as any)
-        ? rawParams.type
-        : undefined,
-    };
+  // 2. Màng lọc Zod: Luôn trả về data "sạch" cho UI sử dụng
+  const filterParams = useMemo(() => {
+    // Dùng safeParse hoặc parse tùy vào cách bạn config catch/default trong schema
+    return albumParamsSchema.parse(rawParams);
   }, [rawParams]);
 
-  // 3. Custom Handlers (Giữ nguyên như cũ)
+  // 3. 🔥 ĐỒNG BỘ URL (Self-healing): Nắn lại thanh địa chỉ nếu User nhập sai
+  useEffect(() => {
+    // So sánh dữ liệu thô trên URL và dữ liệu sạch sau khi qua Zod
+    const isDirty = JSON.stringify(rawParams) !== JSON.stringify(filterParams);
+
+    if (isDirty) {
+      // Ghi đè URL bằng data sạch, dùng replace: true để không làm hỏng nút Back của trình duyệt
+      setParams(filterParams, { replace: true });
+    }
+  }, [rawParams, filterParams, setParams]);
+
+  // 4. Handlers
   const handlePageChange = useCallback(
-    (page: number) => {
-      setParams({ page });
-    },
+    (page: number) => setParams({ page }),
     [setParams],
   );
 
+  // Trong useAlbumParams
   const handleSearch = useCallback(
     (keyword: string) => {
-      setParams({ keyword, page: 1 });
+      const trimmed = keyword.trim();
+      // Nếu rỗng thì gửi undefined để useQueryParams delete key khỏi URL
+      setParams({
+        keyword: trimmed === "" ? undefined : trimmed,
+        page: 1,
+      });
     },
     [setParams],
   );
@@ -59,24 +63,22 @@ export const useAlbumParams = (initialLimit = 10) => {
   const handleFilterChange = useCallback(
     <K extends keyof AlbumFilterParams>(
       key: K,
-      value: AlbumFilterParams[K] | null,
+      value: AlbumFilterParams[K] | null | undefined,
     ) => {
-      setParams({ [key]: value, page: 1 });
+      // Nếu giá trị là rỗng, set undefined để xóa key đó khỏi URL cho sạch
+      const cleanValue = value === "" ? undefined : value;
+      setParams({ [key]: cleanValue, page: 1 });
     },
     [setParams],
   );
 
   const clearFilters = useCallback(() => {
-    // Reset về default nhưng giữ limit
-    setParams({
-      ...DEFAULT_ALBUM_PARAMS,
-      limit: filterParams.limit,
-    });
-  }, [setParams, filterParams.limit]);
+    setParams({ ...DEFAULT_ALBUM_PARAMS, limit: initialLimit });
+  }, [setParams, initialLimit]);
 
   return {
     filterParams,
-    setFilterParams: setParams, // Expose raw setter nếu cần
+    setFilterParams: setParams,
     handlePageChange,
     handleSearch,
     handleFilterChange,

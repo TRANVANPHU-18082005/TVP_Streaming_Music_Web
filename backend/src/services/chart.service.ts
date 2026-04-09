@@ -1,15 +1,15 @@
 import PlayLog from "../models/PlayLog";
 import Track from "../models/Track";
-import { cacheRedis } from "../config/redis"; // Giả sử bạn dùng cacheRedis từ setup trước
+import { cacheRedis } from "../config/redis";
 
 const CACHE_KEY = "chart:live:top100";
-const CACHE_TTL = 30; // Cache 30 giây cho Realtime
+const CACHE_TTL = 30;
 
 export const getRealtimeChart = async () => {
-  // 1. Lấy từ Redis (Fast Path)
+  // 1. Fast Path: Redis cache
   try {
     const cached = await cacheRedis.get(CACHE_KEY);
-    if (cached) return JSON.parse(cached); // Bây giờ đã an toàn vì ta cache toàn bộ response
+    if (cached) return JSON.parse(cached);
   } catch (e) {
     console.error("Redis Cache GET Error", e);
   }
@@ -17,12 +17,35 @@ export const getRealtimeChart = async () => {
   const now = new Date();
   const startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-  // 2. QUERY REALTIME TRACKS (Có bọc chống bài rác)
+  // 2. FIX #3 — Unique Listeners: group theo (trackId, userId hoặc ip) trong 1 giờ
+  //    Mỗi listener chỉ được tính 1 điểm / bài / giờ, chống cày view
   const realtimeTracks = await PlayLog.aggregate([
     { $match: { listenedAt: { $gte: startTime } } },
-    { $group: { _id: "$trackId", score: { $sum: 1 } } },
+
+    // Dedup: mỗi (trackId, userId|ip, giờ) chỉ tính 1 lần
+    {
+      $group: {
+        _id: {
+          trackId: "$trackId",
+          // Ưu tiên userId, fallback về ip để cover khách vãng lai
+          listener: { $ifNull: ["$userId", "$ip"] },
+          hour: { $hour: { date: "$listenedAt", timezone: "+07:00" } },
+        },
+      },
+    },
+
+    // Sau khi dedup, cộng điểm thực sự cho mỗi bài
+    {
+      $group: {
+        _id: "$_id.trackId",
+        score: { $sum: 1 },
+      },
+    },
+
     { $sort: { score: -1 } },
-    { $limit: 100 },
+
+    // FIX #1 — Lấy buffer 150 để sau khi lọc bài rác vẫn đủ 100 bài
+    { $limit: 150 },
 
     // Lookup Track
     {
@@ -35,19 +58,22 @@ export const getRealtimeChart = async () => {
     },
     { $unwind: "$track" },
 
-    // Lọc bài rác
+    // FIX #2 — Dùng $ne: true để bắt cả bài cũ chưa có field isDeleted
     {
       $match: {
-        "track.isDeleted": false,
+        "track.isDeleted": { $ne: true },
         "track.isPublic": true,
         "track.status": "ready",
       },
     },
 
-    // 🔥 FIX CHI TIẾT ALBUM: Lookup bảng albums
+    // Cắt đúng 100 bài sau khi đã lọc sạch bài rác
+    { $limit: 100 },
+
+    // Lookup Album
     {
       $lookup: {
-        from: "albums", // Tên collection chứa album
+        from: "albums",
         localField: "track.album",
         foreignField: "_id",
         as: "albumDetails",
@@ -66,26 +92,25 @@ export const getRealtimeChart = async () => {
     },
     { $unwind: { path: "$artist", preserveNullAndEmptyArrays: true } },
 
-    // Format Output
+    // FIX #4 — Chỉ project đúng fields cần cho Chart, loại bỏ plainLyrics / lyricPreview / description
     {
       $project: {
         _id: "$track._id",
         title: "$track.title",
         slug: "$track.slug",
         duration: "$track.duration",
-        // Lấy từ albumDetails vừa lookup được
-        album: {
-          _id: "$albumDetails._id",
-          title: "$albumDetails.title", // Thường album dùng field 'title' thay vì 'name'
-          slug: "$albumDetails.slug",
-        },
         coverImage: "$track.coverImage",
         hlsUrl: "$track.hlsUrl",
         featuringArtists: "$track.featuringArtists",
         playCount: "$track.playCount",
+        album: {
+          _id: "$albumDetails._id",
+          title: "$albumDetails.title",
+          slug: "$albumDetails.slug",
+        },
         artist: {
-          name: "$artist.name",
           _id: "$artist._id",
+          name: "$artist.name",
           avatar: "$artist.avatar",
           slug: "$artist.slug",
         },
@@ -94,7 +119,7 @@ export const getRealtimeChart = async () => {
     },
   ]);
 
-  // 3. LOGIC FALLBACK (Lấp đầy nếu thiếu)
+  // 3. Fallback: lấp đầy nếu Realtime chưa đủ 100
   let finalTracks = [...realtimeTracks];
 
   if (finalTracks.length < 100) {
@@ -103,13 +128,19 @@ export const getRealtimeChart = async () => {
 
     const fallbackTracks = await Track.find({
       _id: { $nin: existingIds },
-      isDeleted: false,
+      // FIX #2 — nhất quán dùng $ne: true ở cả fallback query
+      isDeleted: { $ne: true },
       isPublic: true,
-      status: "ready", // 🔥 Bắt buộc bài phải sẵn sàng
+      status: "ready",
     })
+      // FIX #4 — Chỉ select fields cần thiết, tránh kéo plainLyrics / lyricPreview lên memory
+      .select(
+        "title slug duration coverImage hlsUrl featuringArtists playCount artist album",
+      )
       .sort({ playCount: -1 })
       .limit(needed)
-      .populate("artist", "name avatar _id")
+      .populate("artist", "name avatar _id slug")
+      .populate("album", "title slug _id")
       .lean();
 
     const formattedFallback = fallbackTracks.map((t: any) => ({
@@ -117,37 +148,37 @@ export const getRealtimeChart = async () => {
       title: t.title,
       slug: t.slug,
       duration: t.duration,
-      album: {
-        name: t.album?.name,
-        slug: t.album?.slug,
-        _id: t.album?._id,
-      },
       coverImage: t.coverImage,
       hlsUrl: t.hlsUrl,
-      trackUrl: t.trackUrl,
       featuringArtists: t.featuringArtists,
       playCount: t.playCount,
-      artist: {
-        name: t.artist?.name,
-        _id: t.artist?._id,
-        avatar: t.artist?.avatar,
-      },
+      album: t.album
+        ? { _id: t.album._id, title: t.album.title, slug: t.album.slug }
+        : null,
+      artist: t.artist
+        ? {
+            _id: t.artist._id,
+            name: t.artist.name,
+            avatar: t.artist.avatar,
+            slug: t.artist.slug,
+          }
+        : null,
       score: 0,
     }));
 
     finalTracks = [...finalTracks, ...formattedFallback];
   }
 
-  // 4. GET CHART DATA CHO TOP 3
+  // 4. Chart data cho Top 3
   const top3Ids = finalTracks.slice(0, 3).map((t) => t._id);
   const chartData = await getChartDataForTop3(top3Ids, startTime);
 
   const responseData = {
     items: finalTracks,
     chart: chartData,
+    lastUpdatedAt: new Date().toISOString(),
   };
 
-  // 🔥 FIX 1: Cache TOÀN BỘ responseData, không chỉ finalTracks
   cacheRedis
     .setex(CACHE_KEY, CACHE_TTL, JSON.stringify(responseData))
     .catch((err) => console.error("Redis Cache SET Error", err));
@@ -156,7 +187,11 @@ export const getRealtimeChart = async () => {
 };
 
 /**
- * Helper: Tính lượt nghe theo giờ cho Top 3
+ * Tính lượt nghe theo giờ cho Top 3 (Unique Listeners)
+ */
+/**
+ * Tính lượt nghe theo giờ cho Top 3 (Unique Listeners)
+ * Tối ưu hiệu năng O(n) bằng Map tra cứu nhanh
  */
 const getChartDataForTop3 = async (top3Ids: any[], startTime: Date) => {
   if (top3Ids.length === 0) return [];
@@ -171,39 +206,52 @@ const getChartDataForTop3 = async (top3Ids: any[], startTime: Date) => {
     {
       $project: {
         trackId: 1,
-        // Ép múi giờ về +07:00 trong Database
+        listener: { $ifNull: ["$userId", "$ip"] },
         hour: { $hour: { date: "$listenedAt", timezone: "+07:00" } },
+      },
+    },
+    // Chống cày view trong biểu đồ: 1 người/1 bài/1 giờ = 1 điểm
+    {
+      $group: {
+        _id: { trackId: "$trackId", listener: "$listener", hour: "$hour" },
       },
     },
     {
       $group: {
-        _id: { trackId: "$trackId", hour: "$hour" },
+        _id: { trackId: "$_id.trackId", hour: "$_id.hour" },
         count: { $sum: 1 },
       },
     },
   ]);
 
-  const chartPoints = [];
+  // --- BƯỚC VÍT GA: CHUYỂN ARRAY SANG MAP ---
+  // Key format: "trackId-hour" -> Value: count
+  const dataMap = new Map<string, number>();
 
-  // 🔥 FIX 2: Bắt buộc lấy giờ hiện tại theo UTC+7, bất chấp server đang ở đâu
+  rawChart.forEach((item) => {
+    const key = `${item._id.trackId.toString()}-${item._id.hour}`;
+    dataMap.set(key, item.count);
+  });
+
+  // Lấy giờ hiện tại UTC+7
   const now = new Date();
   const nowHour = (now.getUTCHours() + 7) % 24;
 
-  for (let i = 0; i < 24; i++) {
+  // Tạo 24 điểm dữ liệu
+  return Array.from({ length: 24 }, (_, i) => {
+    // Tính toán targetHour ngược từ hiện tại về quá khứ
     const targetHour = (nowHour - (23 - i) + 24) % 24;
-    const point: any = { time: `${targetHour}:00` };
+    const point: any = {
+      time: `${targetHour}:00`,
+      hour: targetHour, // Thêm field này để FE dễ handle nếu cần
+    };
 
     top3Ids.forEach((id, index) => {
-      const found = rawChart.find(
-        (item) =>
-          item._id.trackId.toString() === id.toString() &&
-          item._id.hour === targetHour,
-      );
-      point[`top${index + 1}`] = found ? found.count : 0;
+      // Tra cứu O(1) - Cực nhanh
+      const lookupKey = `${id.toString()}-${targetHour}`;
+      point[`top${index + 1}`] = dataMap.get(lookupKey) || 0;
     });
 
-    chartPoints.push(point);
-  }
-
-  return chartPoints;
+    return point;
+  });
 };

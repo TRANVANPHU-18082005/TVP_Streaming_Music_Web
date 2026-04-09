@@ -31,15 +31,23 @@ const ArtistModal: React.FC<ArtistModalProps> = ({
   isPending,
 }) => {
   // 🔥 TÍCH HỢP HOOK MỚI
+
   const {
     form,
     handleSubmit,
-    isSubmitting: isFormSubmitting, // Trạng thái xử lý nội bộ của form
-  } = useArtistForm({
-    artistToEdit,
-    onSubmit,
-  });
-
+    isSubmitting: isFormSubmitting,
+  } = useArtistForm(
+    artistToEdit
+      ? {
+          mode: "edit",
+          artistToEdit,
+          onSubmit,
+        }
+      : {
+          mode: "create",
+          onSubmit,
+        },
+  );
   // Lock scroll body khi modal mở
   useEffect(() => {
     if (isOpen) document.body.style.overflow = "hidden";

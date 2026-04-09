@@ -1,28 +1,23 @@
 /**
- * ChartItem.tsx — Premium ranked track row (v4.0 — Soundwave Premium)
+ * ChartItem.tsx — Premium ranked track row (v5.0 — Soundwave Neural Audio)
  *
- * UPGRADES vs previous production version:
- * ─ Hardcoded sky-500/amber-500/emerald-500/rose-500 Tailwind color literals
- *   in RankBadge and RANK_CFG replaced with hsl(var(--wave-*)) / hsl(var(--success))
- *   / hsl(var(--error)) / hsl(var(--info)) CSS tokens — theme-adaptive, no flicker
- * ─ WaveBars: CSS injection replaced with .eq-bar token classes from index.css §9
- *   (WaveBars was the last inline-animation holdout — now purely CSS)
- * ─ DropdownMenuContent: hardcoded bg + blur chain → .glass-frosted + .shadow-floating
- *   tokens from index.css §6+§7 (single source of truth for glass surface)
- * ─ DropdownMenuItem: raw hover:bg-accent/40 chain → .menu-item token from §11
- * ─ Active cover ring: ring-primary/40 + shadow box → .shadow-glow-sm token
- * ─ RankBadge: trend UP/DOWN colors now use CSS token inline styles
- * ─ Play/Pause CoverOverlay: icon size bump to size-[20px] for better touch target
- * ─ Action strip: LikeButton + MoreHorizontal button gap tightened from gap-0.5 → gap-1
- * ─ All other architecture, memo(), useCallback, accessibility patterns preserved
+ * CHANGES vs v4.0:
+ * ─ Props: prevRank removed — rank/trend/rankDelta now come pre-computed
+ *   from RankedTrack (hook v10/10). rankBadge prop accepts pre-built badge
+ *   from TopFeaturedTracks so ChartItem stays decoupled from trend logic.
+ * ─ setQueue: aligned with playerSlice v2 signature
+ *   { trackIds, initialMetadata, startIndex } — no longer passes tracks[].
+ * ─ PlayCount: renders track.score (24h unique listeners) instead of
+ *   track.playCount (all-time). Label updated to "24h".
+ * ─ MarqueeText: gated by useOverflows() hook — only scrolls when title
+ *   genuinely overflows its container, eliminating unnecessary motion.
+ * ─ RankBadge: "haptic" pulse animation fires once on mount via
+ *   key={rankDelta} trick — gives rank changes physical weight without state.
  */
 
-import React, { memo, useState, useCallback } from "react";
+import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
   Play,
   Pause,
   MoreHorizontal,
@@ -31,6 +26,10 @@ import {
   Share2,
   Disc3,
   ListMusic,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Sparkles,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -44,52 +43,68 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { ChartTrack } from "@/features/track/types";
+import { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
 import { fmtCount, formatDuration } from "@/utils/track-helper";
 import { useAppDispatch } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
 import { handleError } from "@/utils/handleError";
-import { LikeButton } from "@/features";
 import { MarqueeText } from "@/features/player/components/MarqueeText";
+import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WAVE BARS — uses .eq-bars + .eq-bar CSS token classes from index.css §9
-// Eliminates the singleton style injection hack from the previous version.
-// GPU-composited via `transform-origin: bottom center` in the token.
-// Reduced-motion: index.css @media rule silences all .eq-bar animations.
+// useOverflows — measures whether text overflows its container
+// Returns true only when the element's scrollWidth > clientWidth.
+// Re-checks on window resize via ResizeObserver.
+// Prevents MarqueeText from animating short titles unnecessarily.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const useOverflows = (
+  text: string,
+): [React.RefObject<HTMLParagraphElement>, boolean] => {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const check = () => setOverflows(el.scrollWidth > el.clientWidth);
+    check();
+
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // Re-run when the text itself changes (e.g. track swap)
+  }, [text]);
+
+  return [ref, overflows];
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WAVE BARS
+// ─────────────────────────────────────────────────────────────────────────────
+
 const WaveBars = memo(({ active }: { active: boolean }) => (
   <div
     className={cn("eq-bars", !active && "paused")}
     aria-hidden="true"
     style={{ height: "18px", gap: "2px" }}
   >
-    {/* 4 bars — .eq-bar:nth-child(1..4) pick up staggered animation delays */}
-    <span
-      className="eq-bar"
-      style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
-    />
-    <span
-      className="eq-bar"
-      style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
-    />
-    <span
-      className="eq-bar"
-      style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
-    />
-    <span
-      className="eq-bar"
-      style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
-    />
+    {[0, 1, 2, 3].map((i) => (
+      <span
+        key={i}
+        className="eq-bar"
+        style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
+      />
+    ))}
   </div>
 ));
 WaveBars.displayName = "WaveBars";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RANK VISUAL CONFIGURATION
-// All colors now use CSS custom property references — theme-adaptive.
-// sky-500/amber-500 replaced with wave-3/wave-4 tokens from Soundwave spectrum.
+// RANK CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
+
 interface RankCfg {
   numSize: string;
   numColor: string;
@@ -148,62 +163,96 @@ const DEFAULT_CFG: RankCfg = {
   shimmer: "",
 };
 
-function getRankCfg(rank: number): RankCfg {
-  return rank <= 3 ? RANK_CFG[rank as 1 | 2 | 3] : DEFAULT_CFG;
-}
+const getRankCfg = (rank: number): RankCfg =>
+  rank <= 3 ? RANK_CFG[rank as 1 | 2 | 3] : DEFAULT_CFG;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RANK CHANGE BADGE — token-driven colors
-// UP: --success token. DOWN: --error token. FLAT: muted-foreground.
+// RANK BADGE
+//
+// Receives pre-computed trend + rankDelta from RankedTrack (hook v10/10).
+// "Haptic" pulse: key={rankDelta} remounts motion.span each time delta
+// changes → initial spring fires once, conveying physical weight.
+// trend === "new" → amber ✦ MỚI badge.
 // ─────────────────────────────────────────────────────────────────────────────
-const RankBadge = memo(({ diff }: { diff: number }) => (
-  <div
-    className="h-4 flex items-center justify-center"
-    aria-label={
-      diff > 0
-        ? `Up ${diff}`
-        : diff < 0
-          ? `Down ${Math.abs(diff)}`
-          : "No change"
-    }
-  >
-    {diff > 0 ? (
-      <span
-        className="flex items-center gap-[2px] text-[9px] font-bold leading-none select-none px-1.5 py-[2px] rounded-full"
-        style={{
-          color: "hsl(var(--success))",
-          background: "hsl(var(--success)/0.1)",
-        }}
+
+interface RankBadgeProps {
+  trend: RankedTrack["trend"];
+  rankDelta: number;
+}
+
+const BADGE_SPRING = {
+  type: "spring" as const,
+  stiffness: 600,
+  damping: 22,
+} as const;
+
+const RankBadge = memo(({ trend, rankDelta }: RankBadgeProps) => {
+  if (trend === "new") {
+    return (
+      <motion.span
+        // key remounts on every "new" entry → spring fires fresh each time
+        key="new"
+        initial={{ scale: 0.55, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ ...BADGE_SPRING, delay: 0.08 }}
+        aria-label="Bài hát mới vào bảng xếp hạng"
+        className={cn(
+          "inline-flex items-center gap-0.5 text-[7px]  font-semibold tracking-wide",
+          "leading-none rounded-full select-none p-0.5",
+          "text-amber-400 bg-amber-400/10 ring-1 ring-amber-400/20",
+        )}
       >
+        <Sparkles className="w-2 h-2 " aria-hidden="true" />
+        New
+      </motion.span>
+    );
+  }
+
+  if (trend === "same") {
+    return (
+      <span
+        aria-label="Hạng không thay đổi"
+        className="inline-flex items-center justify-center w-4 h-4 rounded-full text-foreground/18"
+      >
+        <Minus size={9} strokeWidth={2} aria-hidden="true" />
+      </span>
+    );
+  }
+
+  const isUp = trend === "up";
+
+  return (
+    <motion.span
+      // key={rankDelta} → remounts whenever delta value changes,
+      // firing the spring "haptic" pulse once per rank-change event.
+      key={rankDelta}
+      initial={{ scale: 0.6, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ ...BADGE_SPRING, delay: 0.1 }}
+      aria-label={`Hạng ${isUp ? "tăng" : "giảm"} ${Math.abs(rankDelta)}`}
+      className={cn(
+        "inline-flex items-center gap-[2px] text-[9px] font-bold font-mono leading-none",
+        "select-none px-1.5 py-[2px] rounded-full",
+        isUp
+          ? "text-emerald-400 bg-emerald-400/10"
+          : "text-rose-400   bg-rose-400/10",
+      )}
+    >
+      {isUp ? (
         <TrendingUp size={7} strokeWidth={3} aria-hidden="true" />
-        {diff}
-      </span>
-    ) : diff < 0 ? (
-      <span
-        className="flex items-center gap-[2px] text-[9px] font-bold leading-none select-none px-1.5 py-[2px] rounded-full"
-        style={{
-          color: "hsl(var(--error))",
-          background: "hsl(var(--error)/0.1)",
-        }}
-      >
+      ) : (
         <TrendingDown size={7} strokeWidth={3} aria-hidden="true" />
-        {Math.abs(diff)}
-      </span>
-    ) : (
-      <Minus
-        size={9}
-        strokeWidth={2}
-        className="text-foreground/18"
-        aria-hidden="true"
-      />
-    )}
-  </div>
-));
+      )}
+      {Math.abs(rankDelta)}
+    </motion.span>
+  );
+});
 RankBadge.displayName = "RankBadge";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COVER OVERLAY — single DOM node, AnimatePresence icon crossfade
+// COVER OVERLAY
 // ─────────────────────────────────────────────────────────────────────────────
+
 const ICON_SPRING = {
   initial: { scale: 0.58, opacity: 0 },
   animate: { scale: 1, opacity: 1 },
@@ -261,58 +310,88 @@ const CoverOverlay = memo(
 CoverOverlay.displayName = "CoverOverlay";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLAY COUNT
+// PLAY COUNT — shows 24h score (unique listeners) instead of all-time playCount
+// Falls back to playCount if score is absent (e.g. fallback tracks score = 0)
+// Label updated to "24h" to set correct user expectation.
 // ─────────────────────────────────────────────────────────────────────────────
-const PlayCount = memo(({ count }: { count: number }) => (
-  <div className="hidden sm:flex flex-col items-end gap-[2px]">
-    <span className="text-[12px] font-mono font-semibold tabular-nums leading-none text-foreground/45">
-      {fmtCount(count)}
-    </span>
-    <span className="text-[8.5px] uppercase tracking-wider font-semibold text-muted-foreground/28 leading-none">
-      plays
-    </span>
-  </div>
-));
+
+const PlayCount = memo(
+  ({ score, playCount }: { score: number; playCount: number }) => {
+    // Prefer score (24h realtime) when non-zero; fallback to all-time playCount
+    const display = score > 0 ? score : playCount;
+    const label = score > 0 ? "24h" : "plays";
+
+    return (
+      <div className="hidden sm:flex flex-col items-end gap-[2px]">
+        <span className="text-[12px] font-mono font-semibold tabular-nums leading-none text-foreground/45">
+          {fmtCount(display)}
+        </span>
+        <span className="text-[8.5px] uppercase tracking-wider font-semibold text-muted-foreground/28 leading-none">
+          {label}
+        </span>
+      </div>
+    );
+  },
+);
 PlayCount.displayName = "PlayCount";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PROPS
+//
+// track: RankedTrack (superset of ChartTrack — includes rank/trend/rankDelta/score)
+// rankBadge: pre-built badge node from TopFeaturedTracks (optional override).
+//   When provided, ChartItem renders it directly and skips internal RankBadge.
+//   Keeps ChartItem usable standalone (no rankBadge = renders own badge).
 // ─────────────────────────────────────────────────────────────────────────────
+
 export interface ChartItemProps {
-  track: ChartTrack;
+  track: RankedTrack;
   rank: number;
-  prevRank: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CHART ITEM — MAIN
 // ─────────────────────────────────────────────────────────────────────────────
-export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
+
+export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { currentTrack, isPlaying } = useSelector(selectPlayer);
+  const { currentTrackId, isPlaying } = useSelector(selectPlayer);
 
   const [isLoadingPlay, setIsLoadingPlay] = useState(false);
 
-  const isCurrentTrack = currentTrack?._id === track._id;
+  const isCurrentTrack = currentTrackId === track._id;
   const isActivePlaying = isCurrentTrack && isPlaying;
   const isActive = isCurrentTrack;
-  const diff = prevRank - rank;
   const cfg = getRankCfg(rank);
   const isTop3 = rank <= 3;
   const rowBg = isActivePlaying ? cfg.rowActive : cfg.rowIdle;
+
+  // MarqueeText overflow gate — only scroll when title genuinely overflows
+  const [titleRef, titleOverflows] = useOverflows(track.title);
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handlePlayPause = useCallback(
     async (e: React.MouseEvent | React.KeyboardEvent) => {
       e.stopPropagation();
       if (isLoadingPlay) return;
+
       if (isCurrentTrack) {
         dispatch(setIsPlaying(!isPlaying));
         return;
       }
+
       setIsLoadingPlay(true);
       try {
-        dispatch(setQueue({ tracks: [track], startIndex: 0 }));
+        // playerSlice v2 signature: { trackIds, initialMetadata, startIndex }
+        dispatch(
+          setQueue({
+            trackIds: [track._id],
+            initialMetadata: [track],
+            startIndex: 0,
+          }),
+        );
         dispatch(setIsPlaying(true));
       } catch (err) {
         handleError(err, "Playback failed. Please try again.");
@@ -349,6 +428,8 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
     [handlePlayPause],
   );
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <div
       role="row"
@@ -359,8 +440,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
       onKeyDown={handleKeyDown}
       className={cn(
         "group relative flex items-center rounded-xl cursor-pointer select-none",
-        "overflow-hidden",
-        "transition-colors duration-150 outline-none",
+        "overflow-hidden transition-colors duration-150 outline-none",
         "focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring)/0.5)] focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         rowBg,
         isTop3 && cfg.accent,
@@ -390,7 +470,8 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
         >
           {isCurrentTrack ? <WaveBars active={isActivePlaying} /> : rank}
         </div>
-        <RankBadge diff={diff} />
+
+        <RankBadge trend={track.trend} rankDelta={track.rankDelta} />
       </div>
 
       {/* ── COVER ── */}
@@ -406,11 +487,9 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
           "ring-1 ring-black/[0.06] dark:ring-white/[0.06]",
           "shadow-sm group-hover:shadow-md",
           "transition-[transform,box-shadow] duration-300 ease-out",
-
           isTop3
             ? "size-[52px] sm:size-[56px] group-hover:scale-[1.035]"
             : "size-[44px] sm:size-[48px]",
-          // Active ring — .shadow-glow-sm equivalent scoped to cover
           isActivePlaying &&
             "ring-primary/40 [box-shadow:0_0_12px_hsl(var(--primary)/0.28)]",
         )}
@@ -428,63 +507,37 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
 
       {/* ── TITLE + ARTIST ── */}
       <div className="relative z-10 flex-1 min-w-0 py-2.5 pr-2">
-        {isActive && (
+        {/* THẺ ĐO (Invisible): Luôn tồn tại để ResizeObserver theo dõi. 
+    Không có truncate để scrollWidth giãn ra tự nhiên.
+  */}
+        <p
+          ref={titleRef}
+          className="absolute invisible whitespace-nowrap pointer-events-none"
+          aria-hidden="true"
+        >
+          {track.title}
+        </p>
+
+        {/* HIỂN THỊ THỰC TẾ */}
+        {isActive && titleOverflows ? (
           <MarqueeText
             text={track.title}
             className="text-sm font-medium leading-snug mb-0.5 text-[hsl(var(--primary))]"
           />
-        )}
-        {!isActive && (
+        ) : (
           <p
             title={track.title}
             className={cn(
-              "truncate text-track-title text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
-              isActive
-                ? "text-[hsl(var(--primary))]"
-                : "text-[hsl(var(--foreground))]",
+              "truncate text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
+              isActive ? "text-[hsl(var(--primary))]" : "text-foreground",
             )}
           >
             {track.title}
           </p>
         )}
-
-        <div className="flex items-center gap-0.5 mt-[3px] min-w-0">
-          <button
-            type="button"
-            onClick={handleGoToArtist}
-            aria-label={`Go to artist: ${track.artist?.name}`}
-            className={cn(
-              "text-[11.5px] truncate font-medium leading-snug shrink min-w-0",
-              "text-track-meta",
-              "hover:text-foreground hover:underline underline-offset-2",
-              "transition-colors duration-150",
-              "focus-visible:outline-none focus-visible:underline",
-            )}
-          >
-            {track.artist?.name ?? "Unknown Artist"}
-          </button>
-
-          {track.album?.title && (
-            <button
-              type="button"
-              onClick={handleGoToAlbum}
-              aria-label={`Go to album: ${track.album.title}`}
-              className={cn(
-                "sm:inline-block lg:hidden text-[11px] truncate shrink-0 hidden",
-                "text-muted-foreground/32",
-                "hover:text-muted-foreground hover:underline underline-offset-2",
-                "transition-colors duration-150",
-                "before:content-['·'] before:mr-1 before:opacity-60",
-                "focus-visible:outline-none focus-visible:underline",
-              )}
-            >
-              {track.album.title}
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* ── ALBUM (lg+ dedicated column) ── */}
+      {/* ── ALBUM (lg+ column) ── */}
       {track.album?.title ? (
         <button
           type="button"
@@ -510,7 +563,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
 
       {/* ── META + ACTIONS ── */}
       <div className="relative z-10 flex items-center pr-3 shrink-0 gap-1 overflow-hidden min-w-[80px] sm:min-w-[112px]">
-        {/* Meta — fades out on hover */}
+        {/* Meta — fades on hover */}
         <div
           aria-hidden="true"
           className={cn(
@@ -519,7 +572,11 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
             "group-hover:opacity-0 group-hover:translate-x-1 group-hover:pointer-events-none",
           )}
         >
-          <PlayCount count={track.playCount ?? 0} />
+          {/* 24h score if available, else total playCount */}
+          <PlayCount
+            score={track.score ?? 0}
+            playCount={track.playCount ?? 0}
+          />
           <span className="text-[12px] font-mono tabular-nums w-9 text-right text-muted-foreground/38 leading-none">
             {formatDuration(track.duration)}
           </span>
@@ -535,7 +592,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
             "pointer-events-none group-hover:pointer-events-auto",
           )}
         >
-          <LikeButton id={track._id} />
+          <TrackLikeButton id={track._id} />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -546,8 +603,7 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
                 className={cn(
                   "flex items-center justify-center size-8 rounded-full",
                   "text-muted-foreground/50 hover:text-foreground",
-                  "hover:bg-muted/60",
-                  "transition-colors duration-150",
+                  "hover:bg-muted/60 transition-colors duration-150",
                   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring)/0.4)]",
                 )}
               >
@@ -559,14 +615,8 @@ export const ChartItem = memo(({ track, rank, prevRank }: ChartItemProps) => {
               align="end"
               sideOffset={4}
               onClick={(e) => e.stopPropagation()}
-              className={cn(
-                "w-52 rounded-xl p-1",
-                // .glass-frosted + .shadow-floating tokens from index.css §6+§7
-                "glass-frosted shadow-floating",
-                "border border-border/50",
-              )}
+              className="w-52 rounded-xl p-1 glass-frosted shadow-floating border border-border/50"
             >
-              {/* Play / Pause */}
               <DropdownMenuItem
                 onClick={handlePlayPause}
                 className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]"

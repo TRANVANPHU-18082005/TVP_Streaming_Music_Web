@@ -17,4 +17,8 @@ export const genreKeys = {
 
   // Dropdown select (thường là list rút gọn)
   select: () => [...genreKeys.all, "select"] as const,
+
+  tracks: () => [...genreKeys.all, "tracks"] as const,
+  trackList: (idOrSlug: string, params: { page?: number; limit?: number }) =>
+    [...genreKeys.tracks(), idOrSlug, { params }] as const,
 };

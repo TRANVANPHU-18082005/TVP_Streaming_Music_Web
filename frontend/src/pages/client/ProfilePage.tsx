@@ -32,12 +32,17 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppSelector } from "@/store/hooks";
 import { formatDate } from "@/utils/track-helper";
-import { useProfileDashboard } from "@/features/profile/hooks/useProfileQuery";
+import {
+  useProfileDashboard,
+  useFavouriteTracksInfinite,
+  useRecentlyPlayedInfinite,
+} from "@/features/profile/hooks/useProfileQuery";
+import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import UserPlaylistModal from "@/features/playlist/components/UserPlaylistModal";
 import { cn } from "@/lib/utils";
 import {
-  Album,
-  Playlist,
+  IAlbum,
+  IPlaylist,
   PublicAlbumCard,
   PublicPlaylistCard,
   TrackList,
@@ -62,15 +67,11 @@ const fadeVariants = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AMBIENT BACKGROUND — Spotify style: nền đơn sắc + 1 accent tint nhạt
-// KHÔNG có orbs, KHÔNG có aurora, KHÔNG có floating objects
+// AMBIENT BACKGROUND
 // ─────────────────────────────────────────────────────────────────────────────
 const AmbientBackground = memo(() => (
   <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
-    {/* 1. Base background */}
     <div className="absolute inset-0 bg-background" />
-
-    {/* 2. Primary accent tint — chỉ ở hero area, opacity rất thấp */}
     <div
       className="absolute inset-x-0 top-0 h-[55vh] pointer-events-none"
       style={{
@@ -78,24 +79,19 @@ const AmbientBackground = memo(() => (
           "linear-gradient(180deg, hsl(var(--primary)/0.07) 0%, hsl(var(--primary)/0.03) 40%, transparent 100%)",
       }}
     />
-
-    {/* 3. Grain texture — tạo depth như Spotify */}
     <div
       className="absolute inset-0 opacity-[0.022] mix-blend-overlay pointer-events-none"
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
       }}
     />
-
-    {/* 4. Player bar vignette */}
     <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
   </div>
 ));
 AmbientBackground.displayName = "AmbientBackground";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HERO BACKDROP — chỉ re-render khi avatar thay đổi
-// Blurred background + gradient overlay như Spotify
+// HERO BACKDROP
 // ─────────────────────────────────────────────────────────────────────────────
 const HeroBackdrop = memo(({ src }: { src?: string }) => (
   <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
@@ -107,7 +103,6 @@ const HeroBackdrop = memo(({ src }: { src?: string }) => (
         loading="eager"
       />
     )}
-    {/* Multi-stop gradient — đậm phía dưới để content đọc được */}
     <div
       className="absolute inset-0"
       style={{
@@ -120,107 +115,7 @@ const HeroBackdrop = memo(({ src }: { src?: string }) => (
 HeroBackdrop.displayName = "HeroBackdrop";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOADING SKELETON
-// ─────────────────────────────────────────────────────────────────────────────
-const LoadingState = memo(() => (
-  <div className="relative min-h-screen pb-28">
-    <AmbientBackground />
-    <div className="relative h-[40vh] min-h-[280px] flex items-end">
-      <div className="section-container pb-8 w-full">
-        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6">
-          <div className="skeleton skeleton-avatar size-32 sm:size-44 shrink-0" />
-          <div className="flex-1 space-y-3 w-full">
-            <div className="skeleton skeleton-pill w-20 h-4 mx-auto sm:mx-0" />
-            <div className="skeleton w-56 h-10 rounded-lg mx-auto sm:mx-0" />
-            <div className="skeleton w-48 h-4 rounded mx-auto sm:mx-0" />
-          </div>
-        </div>
-      </div>
-    </div>
-    <div className="section-container mt-4">
-      <div className="flex gap-6 border-b border-border/30 pb-3 mb-8">
-        {[80, 72, 88].map((w, i) => (
-          <div
-            key={i}
-            className="skeleton skeleton-pill h-4"
-            style={{ width: w }}
-          />
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-3">
-          <div className="skeleton rounded-2xl h-64 w-full" />
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="skeleton rounded-lg h-14 w-full" />
-          ))}
-        </div>
-        <div className="space-y-4">
-          <div className="skeleton rounded-2xl h-48 w-full" />
-          <div className="skeleton rounded-2xl h-36 w-full" />
-        </div>
-      </div>
-    </div>
-  </div>
-));
-LoadingState.displayName = "LoadingState";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GUEST STATE — Cải thiện layout, không floating giữa màn hình trống
-// ─────────────────────────────────────────────────────────────────────────────
-const GuestState = memo(() => (
-  <div className="relative min-h-screen pb-28">
-    <AmbientBackground />
-    {/* Hero area placeholder */}
-    <div className="relative h-[35vh] min-h-[240px] bg-gradient-to-b from-muted/30 to-transparent flex items-end">
-      <div className="section-container pb-8 w-full">
-        <div className="flex items-end gap-6">
-          <div className="size-28 sm:size-36 rounded-full bg-muted/60 border-4 border-background flex items-center justify-center shrink-0">
-            <UserCircle2
-              className="size-12 text-muted-foreground/40"
-              aria-hidden="true"
-            />
-          </div>
-          <div className="pb-2">
-            <p className="text-overline text-muted-foreground/50 mb-2">
-              Profile
-            </p>
-            <p className="text-display-lg text-muted-foreground/40">
-              Chưa đăng nhập
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-    {/* CTA section */}
-    <div className="section-container mt-10">
-      <div
-        className={cn("card-base p-8 max-w-md space-y-5", "border-primary/15")}
-      >
-        <div className="space-y-2">
-          <h2 className="text-display-lg text-gradient-brand">Đăng nhập</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Đăng nhập để xem playlist, lịch sử nghe nhạc và quản lý thư viện của
-            bạn.
-          </p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button type="button" className="btn-primary gap-2">
-            <Shield className="size-4" aria-hidden="true" />
-            Đăng nhập
-          </button>
-          <button type="button" className="btn-outline gap-2">
-            <Headphones className="size-4" aria-hidden="true" />
-            Khám phá nhạc
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-));
-GuestState.displayName = "GuestState";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION HEADER — eyebrow + icon + title
+// SECTION HEADER
 // ─────────────────────────────────────────────────────────────────────────────
 const SectionHeader = memo(
   ({
@@ -293,6 +188,104 @@ const EmptyState = memo(
 EmptyState.displayName = "EmptyState";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LOADING SKELETON
+// ─────────────────────────────────────────────────────────────────────────────
+const LoadingState = memo(() => (
+  <div className="relative min-h-screen pb-28">
+    <AmbientBackground />
+    <div className="relative h-[40vh] min-h-[280px] flex items-end">
+      <div className="section-container pb-8 w-full">
+        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6">
+          <div className="skeleton skeleton-avatar size-32 sm:size-44 shrink-0" />
+          <div className="flex-1 space-y-3 w-full">
+            <div className="skeleton skeleton-pill w-20 h-4 mx-auto sm:mx-0" />
+            <div className="skeleton w-56 h-10 rounded-lg mx-auto sm:mx-0" />
+            <div className="skeleton w-48 h-4 rounded mx-auto sm:mx-0" />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div className="section-container mt-4">
+      <div className="flex gap-6 border-b border-border/30 pb-3 mb-8">
+        {[80, 72, 88].map((w, i) => (
+          <div
+            key={i}
+            className="skeleton skeleton-pill h-4"
+            style={{ width: w }}
+          />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-3">
+          <div className="skeleton rounded-2xl h-64 w-full" />
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="skeleton rounded-lg h-14 w-full" />
+          ))}
+        </div>
+        <div className="space-y-4">
+          <div className="skeleton rounded-2xl h-48 w-full" />
+          <div className="skeleton rounded-2xl h-36 w-full" />
+        </div>
+      </div>
+    </div>
+  </div>
+));
+LoadingState.displayName = "LoadingState";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GUEST STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const GuestState = memo(() => (
+  <div className="relative min-h-screen pb-28">
+    <AmbientBackground />
+    <div className="relative h-[35vh] min-h-[240px] bg-gradient-to-b from-muted/30 to-transparent flex items-end">
+      <div className="section-container pb-8 w-full">
+        <div className="flex items-end gap-6">
+          <div className="size-28 sm:size-36 rounded-full bg-muted/60 border-4 border-background flex items-center justify-center shrink-0">
+            <UserCircle2
+              className="size-12 text-muted-foreground/40"
+              aria-hidden="true"
+            />
+          </div>
+          <div className="pb-2">
+            <p className="text-overline text-muted-foreground/50 mb-2">
+              Profile
+            </p>
+            <p className="text-display-lg text-muted-foreground/40">
+              Chưa đăng nhập
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div className="section-container mt-10">
+      <div
+        className={cn("card-base p-8 max-w-md space-y-5", "border-primary/15")}
+      >
+        <div className="space-y-2">
+          <h2 className="text-display-lg text-gradient-brand">Đăng nhập</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Đăng nhập để xem playlist, lịch sử nghe nhạc và quản lý thư viện của
+            bạn.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button type="button" className="btn-primary gap-2">
+            <Shield className="size-4" aria-hidden="true" />
+            Đăng nhập
+          </button>
+          <button type="button" className="btn-outline gap-2">
+            <Headphones className="size-4" aria-hidden="true" />
+            Khám phá nhạc
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+));
+GuestState.displayName = "GuestState";
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CHART TOOLTIP
 // ─────────────────────────────────────────────────────────────────────────────
 const ChartTooltip = ({ active, payload, label }: any) => {
@@ -306,19 +299,163 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RECENTLY PLAYED TRACK LIST
+// Mirrors RecentlyListenedTrack's hook pattern — renders inline (no section wrapper)
+// ─────────────────────────────────────────────────────────────────────────────
+const RecentlyPlayedTrackList = memo(() => {
+  const {
+    data: tracksData,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error,
+    refetch,
+  } = useRecentlyPlayedInfinite();
+
+  const allTracks = useMemo(
+    () => tracksData?.allTracks ?? [],
+    [tracksData?.allTracks],
+  );
+  const totalItems = useMemo(
+    () => tracksData?.totalItems ?? 0,
+    [tracksData?.totalItems],
+  );
+  const allTrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
+
+  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", !isLoading);
+
+  const trackListProps = useMemo(
+    () => ({
+      allTrackIds,
+      tracks: allTracks,
+      totalItems,
+      isLoading,
+      error: error as Error | null,
+      isFetchingNextPage,
+      hasNextPage: hasNextPage ?? false,
+      onFetchNextPage: fetchNextPage,
+      onRetry: refetch,
+    }),
+    [
+      allTrackIds,
+      allTracks,
+      totalItems,
+      isLoading,
+      error,
+      isFetchingNextPage,
+      hasNextPage,
+      fetchNextPage,
+      refetch,
+    ],
+  );
+
+  if (!isLoading && totalItems === 0) {
+    return (
+      <EmptyState
+        icon={History}
+        title="Chưa có lịch sử"
+        description="Các bài bạn nghe sẽ xuất hiện ở đây."
+      />
+    );
+  }
+
+  return (
+    <TrackList
+      {...trackListProps}
+      maxHeight={400}
+      skeletonCount={8}
+      staggerAnimation
+    />
+  );
+});
+RecentlyPlayedTrackList.displayName = "RecentlyPlayedTrackList";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FAVOURITE TRACK LIST
+// Mirrors FavouriteTrack's hook pattern — renders inline (no section wrapper)
+// ─────────────────────────────────────────────────────────────────────────────
+const FavouriteTrackList = memo(() => {
+  const {
+    data: tracksData,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error,
+    refetch,
+  } = useFavouriteTracksInfinite();
+
+  const allTracks = useMemo(
+    () => tracksData?.allTracks ?? [],
+    [tracksData?.allTracks],
+  );
+  const totalItems = useMemo(
+    () => tracksData?.totalItems ?? 0,
+    [tracksData?.totalItems],
+  );
+  const allTrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
+
+  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", !isLoading);
+
+  const trackListProps = useMemo(
+    () => ({
+      allTrackIds,
+      tracks: allTracks,
+      totalItems,
+      isLoading,
+      error: error as Error | null,
+      isFetchingNextPage,
+      hasNextPage: hasNextPage ?? false,
+      onFetchNextPage: fetchNextPage,
+      onRetry: refetch,
+    }),
+    [
+      allTrackIds,
+      allTracks,
+      totalItems,
+      isLoading,
+      error,
+      isFetchingNextPage,
+      hasNextPage,
+      fetchNextPage,
+      refetch,
+    ],
+  );
+
+  if (!isLoading && totalItems === 0) {
+    return (
+      <EmptyState
+        icon={Heart}
+        title="Chưa có bài đã thích"
+        description="Bài hát bạn thích sẽ xuất hiện ở đây."
+      />
+    );
+  }
+
+  return (
+    <TrackList
+      {...trackListProps}
+      maxHeight={400}
+      skeletonCount={10}
+      staggerAnimation
+    />
+  );
+});
+FavouriteTrackList.displayName = "FavouriteTrackList";
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PROFILE PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
-  const [isPending, setIsPending] = useState(false);
 
   const { user } = useAppSelector((s) => s.auth);
-  const { data: dashboard, isLoading } = useProfileDashboard();
-  const { data: myPlaylists, isLoading: isMyPlaylistsLoading } =
-    useMyPlaylists();
-  console.log("My Playlists:", myPlaylists);
-  console.log("Dashboard Data:", dashboard);
+  const { data: dashboard, isLoading: isDashboardLoading } =
+    useProfileDashboard();
+  const { data: myPlaylists } = useMyPlaylists();
+
   const userInitials = useMemo(
     () =>
       user?.fullName
@@ -339,6 +476,7 @@ export default function ProfilePage() {
     [],
   );
 
+  // Counts for hero stats — từ dashboard (tải ngay lập tức với hero)
   const tabCounts = useMemo(
     () => ({
       playlists: myPlaylists?.length ?? 0,
@@ -346,7 +484,7 @@ export default function ProfilePage() {
       likedAlbums: dashboard?.library?.albums?.length ?? 0,
       likedPlaylists: dashboard?.library?.playlists?.length ?? 0,
     }),
-    [dashboard],
+    [dashboard, myPlaylists],
   );
 
   const statsMax = useMemo(
@@ -354,23 +492,20 @@ export default function ProfilePage() {
       Math.max(
         tabCounts.likedTracks,
         tabCounts.playlists,
-        dashboard?.recentlyPlayed?.length ?? 0,
+        tabCounts.likedAlbums,
         1,
       ),
-    [tabCounts, dashboard],
+    [tabCounts],
   );
 
-  if (isLoading) return <LoadingState />;
+  if (isDashboardLoading) return <LoadingState />;
   if (!user) return <GuestState />;
 
   return (
     <div className="relative min-h-screen pb-28">
       <AmbientBackground />
 
-      {/* ══ HERO — Spotify style ══════════════════════════════════════════════
-          Avatar lớn + tên bold cực lớn + stats inline text
-          Không dùng StatCard có border → quá nặng
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══ HERO ════════════════════════════════════════════════════════════ */}
       <section
         className="relative w-full min-h-[38vh] sm:min-h-[44vh] flex items-end"
         aria-label="Profile header"
@@ -415,7 +550,7 @@ export default function ProfilePage() {
               </button>
             </motion.div>
 
-            {/* Identity — Spotify: text thuần, không card */}
+            {/* Identity */}
             <div className="flex-1 text-center md:text-left min-w-0">
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
@@ -423,12 +558,9 @@ export default function ProfilePage() {
                 transition={{ duration: 0.45, ease: EASE_EXPO, delay: 0.06 }}
                 className="space-y-3"
               >
-                {/* Account type label — Spotify hiện "Profile" hoặc "Artist" nhỏ */}
                 <p className="text-overline text-muted-foreground/60 uppercase tracking-[0.18em]">
                   {user?.role || "Member"}
                 </p>
-
-                {/* Tên — Spotify dùng font cực lớn, bold, sát cạnh */}
                 <h1
                   className={cn(
                     "font-black leading-[0.9] tracking-[-0.03em]",
@@ -438,19 +570,13 @@ export default function ProfilePage() {
                 >
                   {user?.fullName}
                 </h1>
-
-                {/* Stats dạng text inline — Spotify pattern */}
-                {/* "X Public Playlists  ·  Y Followers  ·  Z Following" */}
                 <p className="text-sm text-muted-foreground/70 font-medium">
                   <span>{tabCounts.likedTracks} bài đã thích</span>
                   <span className="mx-2 opacity-40">·</span>
                   <span>{tabCounts.playlists} playlist</span>
                   <span className="mx-2 opacity-40">·</span>
-                  <span>
-                    {dashboard?.recentlyPlayed?.length ?? 0} đã nghe gần đây
-                  </span>
+                  <span>{tabCounts.likedAlbums} album đã lưu</span>
                 </p>
-
                 {user?.bio && (
                   <p className="text-sm text-muted-foreground/55 italic max-w-md hidden md:block line-clamp-1">
                     {user.bio}
@@ -459,7 +585,7 @@ export default function ProfilePage() {
               </motion.div>
             </div>
 
-            {/* Edit CTA — right-aligned trên desktop */}
+            {/* Edit CTA */}
             <motion.div
               className="shrink-0 self-start md:self-end"
               initial={{ opacity: 0 }}
@@ -483,14 +609,14 @@ export default function ProfilePage() {
         <div className="divider-fade" />
       </div>
 
-      {/* ══ TABS ══════════════════════════════════════════════════════════════ */}
+      {/* ══ TABS ════════════════════════════════════════════════════════════ */}
       <div className="section-container mt-0">
         <Tabs
           defaultValue="overview"
           className="w-full"
           onValueChange={setActiveTab}
         >
-          {/* Sticky tab rail — Spotify: phẳng, không glass, underline mỏng */}
+          {/* Tab rail */}
           <div className="sticky top-0 z-40 py-0 bg-background/90 backdrop-blur-2xl border-b border-border/30">
             <TabsList className="bg-transparent w-full justify-start rounded-none h-auto p-0 gap-0">
               {(
@@ -529,7 +655,7 @@ export default function ProfilePage() {
 
           <div className="mt-7 sm:mt-9">
             <AnimatePresence mode="wait">
-              {/* ══ OVERVIEW ══════════════════════════════════════════════════ */}
+              {/* ══ OVERVIEW ══════════════════════════════════════════════ */}
               {activeTab === "overview" && (
                 <motion.div
                   key="overview"
@@ -541,7 +667,7 @@ export default function ProfilePage() {
                 >
                   {/* Main column */}
                   <div className="lg:col-span-2 space-y-10">
-                    {/* Chart */}
+                    {/* Analytics chart */}
                     <section aria-label="Weekly listening activity">
                       <SectionHeader
                         icon={BarChart3}
@@ -640,7 +766,7 @@ export default function ProfilePage() {
                       </div>
                     </section>
 
-                    {/* Recently Played */}
+                    {/* Recently Played — infinite + virtual scroll */}
                     <section aria-label="Recently played tracks">
                       <SectionHeader
                         icon={History}
@@ -660,18 +786,7 @@ export default function ProfilePage() {
                           </button>
                         }
                       />
-                      {dashboard?.recentlyPlayed?.length ? (
-                        <TrackList
-                          tracks={dashboard?.recentlyPlayed || []}
-                          isLoading={isLoading}
-                        />
-                      ) : (
-                        <EmptyState
-                          icon={History}
-                          title="Chưa có lịch sử"
-                          description="Các bài bạn nghe sẽ xuất hiện ở đây."
-                        />
-                      )}
+                      <RecentlyPlayedTrackList />
                     </section>
                   </div>
 
@@ -679,7 +794,6 @@ export default function ProfilePage() {
                   <aside className="space-y-5" aria-label="Thông tin profile">
                     {/* Bio card */}
                     <div className="card-base p-5 space-y-4">
-                      {/* Mini avatar + name */}
                       <div className="flex items-center gap-3">
                         <Avatar className="size-10 border border-border/40 shrink-0">
                           <AvatarImage src={user?.avatar} />
@@ -721,7 +835,7 @@ export default function ProfilePage() {
                       </div>
                     </div>
 
-                    {/* Quick stats với proportion bars */}
+                    {/* Stats card */}
                     <div className="card-base p-5 space-y-4">
                       <p className="text-overline text-muted-foreground/50">
                         Thống kê
@@ -741,9 +855,9 @@ export default function ProfilePage() {
                             color: "hsl(var(--wave-2))",
                           },
                           {
-                            icon: History,
-                            label: "Nghe gần đây",
-                            value: dashboard?.recentlyPlayed?.length ?? 0,
+                            icon: Disc,
+                            label: "Album đã lưu",
+                            value: tabCounts.likedAlbums,
                             color: "hsl(var(--success))",
                           },
                         ].map(({ icon: Icon, label, value, color }) => (
@@ -803,7 +917,7 @@ export default function ProfilePage() {
                 </motion.div>
               )}
 
-              {/* ══ PLAYLISTS ═════════════════════════════════════════════════ */}
+              {/* ══ PLAYLISTS ═══════════════════════════════════════════ */}
               {activeTab === "playlists" && (
                 <motion.div
                   key="playlists"
@@ -840,7 +954,7 @@ export default function ProfilePage() {
                         description="Tạo playlist đầu tiên để bắt đầu."
                       />
                     ) : (
-                      myPlaylists?.map((p: Playlist, i: number) => (
+                      myPlaylists?.map((p: IPlaylist, i: number) => (
                         <motion.div
                           key={p._id}
                           initial={{ opacity: 0, y: 12 }}
@@ -851,7 +965,7 @@ export default function ProfilePage() {
                             delay: Math.min(i * 45, 500),
                           }}
                         >
-                          <PublicPlaylistCard key={p._id} playlist={p} />
+                          <PublicPlaylistCard playlist={p} />
                         </motion.div>
                       ))
                     )}
@@ -859,7 +973,7 @@ export default function ProfilePage() {
                 </motion.div>
               )}
 
-              {/* ══ LIBRARY ═══════════════════════════════════════════════════ */}
+              {/* ══ LIBRARY ═════════════════════════════════════════════ */}
               {activeTab === "library" && (
                 <motion.div
                   key="library"
@@ -879,7 +993,6 @@ export default function ProfilePage() {
                   </div>
 
                   <Tabs defaultValue="liked_tracks">
-                    {/* Inner tab — đơn giản hơn, không glass frosted phức tạp */}
                     <TabsList className="bg-muted/50 rounded-xl p-1 h-auto mb-7 border border-border/40 inline-flex flex-wrap gap-1">
                       {[
                         {
@@ -922,29 +1035,9 @@ export default function ProfilePage() {
                       ))}
                     </TabsList>
 
+                    {/* Liked tracks — useFavouriteTracksInfinite + virtual scroll */}
                     <TabsContent value="liked_tracks" className="mt-0">
-                      {!dashboard?.library?.tracks?.length ? (
-                        <EmptyState
-                          icon={Heart}
-                          title="Chưa có bài đã thích"
-                          description="Bài hát bạn thích sẽ xuất hiện ở đây."
-                        />
-                      ) : (
-                        <div className="space-y-0.5">
-                          {dashboard?.library.tracks.length ? (
-                            <TrackList
-                              tracks={dashboard?.library.tracks || []}
-                              isLoading={isLoading}
-                            />
-                          ) : (
-                            <EmptyState
-                              icon={History}
-                              title="Chưa có lịch sử"
-                              description="Các bài bạn nghe sẽ xuất hiện ở đây."
-                            />
-                          )}
-                        </div>
-                      )}
+                      <FavouriteTrackList />
                     </TabsContent>
 
                     <TabsContent value="liked_albums" className="mt-0">
@@ -956,14 +1049,13 @@ export default function ProfilePage() {
                         />
                       ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                          {dashboard.library.albums.map((album: Album) => (
+                          {dashboard.library.albums.map((album: IAlbum) => (
                             <PublicAlbumCard key={album._id} album={album} />
                           ))}
                         </div>
                       )}
                     </TabsContent>
 
-                    {/* FIX: dùng library.playlists */}
                     <TabsContent value="liked_playlists" className="mt-0">
                       {!dashboard?.library?.playlists?.length ? (
                         <EmptyState
@@ -974,7 +1066,7 @@ export default function ProfilePage() {
                       ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                           {dashboard.library.playlists.map(
-                            (playlist: Playlist) => (
+                            (playlist: IPlaylist) => (
                               <PublicPlaylistCard
                                 key={playlist._id}
                                 playlist={playlist}

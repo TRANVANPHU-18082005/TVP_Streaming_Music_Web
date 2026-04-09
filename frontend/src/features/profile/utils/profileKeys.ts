@@ -1,15 +1,14 @@
 import { LikedContentParams } from "../types";
 
-/**
- * Query Key Factory cho Profile Module
- * Cấu trúc phân cấp giúp:
- * - queryClient.invalidateQueries({ queryKey: profileKeys.all }) -> Làm mới sạch sành sanh profile
- * - queryClient.invalidateQueries({ queryKey: profileKeys.likedAll() }) -> Chỉ làm mới các tab yêu thích
- */
 export const profileKeys = {
   // 1. Root Key
   all: ["profile"] as const,
 
+  recentlyPlayed: (params: { limit?: number }) =>
+    [...profileKeys.all, "recently-played", { params }] as const,
+  // Key cho Favourite Tracks
+  favouriteTracks: (params: { limit?: number }) =>
+    [...profileKeys.all, "favourite-tracks", { params }] as const,
   // 2. Dashboard & Analytics (Dữ liệu tổng hợp)
   dashboard: () => [...profileKeys.all, "dashboard"] as const,
   analytics: () => [...profileKeys.all, "analytics"] as const,

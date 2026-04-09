@@ -24,6 +24,7 @@
 import { useRef, useEffect, memo, useMemo, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -401,18 +402,7 @@ const KaraokeEmpty = memo(({ loading }: { loading: boolean }) => (
   >
     {loading ? (
       <>
-        {/* Pulsing skeleton lines */}
-        {[60, 90, 75, 85, 55].map((w, i) => (
-          <div
-            key={i}
-            className="h-[26px] rounded-full bg-shimmer"
-            style={{
-              width: `${w}%`,
-              animationDelay: `${i * 0.12}s`,
-              opacity: 0.35,
-            }}
-          />
-        ))}
+        <PremiumMusicVisualizer active size="lg" barCount={17} />
       </>
     ) : (
       <p className="text-white/20 text-lg font-semibold italic">
@@ -489,9 +479,8 @@ export const KaraokeView = memo(
         {/* Ambient glow based on album accent */}
         {accentColor && (
           <div
-            className="absolute inset-0 pointer-events-none -z-10"
+            className="absolute inset-0 pointer-events-none -z-10 "
             style={{
-              background: `radial-gradient(ellipse 70% 60% at 50% 40%, ${accentColor} 0%, transparent 70%)`,
               opacity: 0.12,
             }}
             aria-hidden="true"

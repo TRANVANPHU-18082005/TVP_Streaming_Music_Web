@@ -1,52 +1,82 @@
 import { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { AnimatePresence } from "framer-motion";
-import { selectPlayer } from "@/features/player/slice/playerSlice";
+import {
+  selectCurrentTrack,
+  selectPlayer,
+} from "@/features/player/slice/playerSlice";
 import { useAudioPlayer } from "@/features/player/hooks/useAudioPlayer";
 import { useKeyboardControls } from "@/features/player/hooks/useKeyboardControls";
 import { useCrossTabSync } from "@/features/player/hooks/useCrossTabSync";
+import { useTrackMetadataResolver } from "../hooks/useTrackMetadataResolver";
 import { MiniPlayer } from "./MiniPlayer";
 import { FullPlayer } from "./FullPlayer";
 
 export function MusicPlayer() {
-  const { currentTrack, duration } = useSelector(selectPlayer);
+  // selectCurrentTrack = O(1) lookup: cache[currentTrackId]
+  // Trả về null nếu chưa có metadata (loading) hoặc không có bài nào
+  const currentTrack = useSelector(selectCurrentTrack);
+
+  // duration lấy từ Redux — được set bởi useAudioPlayer khi audio loadedmetadata
+  const { duration } = useSelector(selectPlayer);
+
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // audioRef: gắn vào <audio> element
+  // currentTime: số giây hiện tại, cập nhật mỗi ~250ms từ requestAnimationFrame
+  // seek: fn(seconds) → set audio.currentTime + dispatch seekTo vào Redux
+  // getCurrentTime: fn() → trả về audio.currentTime trực tiếp (không qua state)
+  //   dùng cho prevTrack — cần biết đã nghe bao nhiêu giây để quyết định replay hay back
+  // events: { onTimeUpdate, onEnded, onLoadedMetadata, ... } gắn vào <audio>
   const { audioRef, currentTime, seek, getCurrentTime, events } =
     useAudioPlayer();
+
+  // Global keyboard: Space = play/pause, ←→ = seek 5s, M = mute
   useKeyboardControls(seek, currentTime);
+
+  // BroadcastChannel: đồng bộ play/pause giữa các tab cùng domain
   useCrossTabSync();
 
-  // 🔥 FIX 2: Khóa cuộn trang (Scroll Lock) khi mở FullPlayer
-  useEffect(() => {
-    if (isExpanded) {
-      // Lưu lại style cũ
-      const originalStyle = window.getComputedStyle(document.body).overflow;
-      // Khóa cuộn
-      document.body.style.overflow = "hidden";
-      // Chặn luôn touchmove trên iOS để tránh kéo nền
-      document.body.style.touchAction = "none";
+  // Tự động fetch metadata khi cache miss:
+  //   - currentTrackId thay đổi + loadingState === "loading" → gọi trackApi.getTrackDetail
+  //   - nextTrackIdPreloaded thay đổi → preload silent
+  //   - dùng fetchingRef (Set) để không duplicate request cùng 1 ID
+  useTrackMetadataResolver();
 
-      return () => {
-        // Trả lại style cũ khi đóng
-        document.body.style.overflow = originalStyle;
-        document.body.style.touchAction = "auto";
-      };
-    }
+  // Scroll lock khi FullPlayer mở — đặt SAU hooks để không vi phạm rules of hooks
+  useEffect(() => {
+    if (!isExpanded) return;
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none"; // chặn iOS bounce
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+    };
   }, [isExpanded]);
 
-  if (!currentTrack) return null;
+  // Không render gì nếu chưa có metadata bài hiện tại
+  // <audio> element vẫn cần tồn tại để giữ trạng thái playback
+  if (!currentTrack) {
+    return <audio ref={audioRef} {...events} preload="auto" />;
+  }
 
   return (
     <>
+      {/*
+        <audio> luôn được mount từ đầu, không bao giờ unmount.
+        Nếu đặt trong điều kiện !currentTrack thì React sẽ unmount/remount
+        → audio bị reset về 0, mất trạng thái buffer.
+      */}
       <audio ref={audioRef} {...events} preload="auto" />
 
-      {/* 🔥 FIX 1: Tối ưu hiệu năng mở (Instant Open)
-         - MiniPlayer luôn được render (không dùng điều kiện !isExpanded nữa).
-         - Khi mở FullPlayer, MiniPlayer vẫn nằm ở dưới, giúp giảm tải cho React không phải gỡ DOM cũ.
-         - Ta chỉ cần ẩn nó đi bằng CSS (hidden) khi animation xong hoặc để FullPlayer đè lên (z-index cao hơn).
+      {/*
+        MiniPlayer luôn render khi có track — không unmount khi mở FullPlayer.
+        Ẩn bằng CSS (invisible/opacity-0) thay vì conditional render
+        → tránh React phải teardown/rebuild DOM, giữ animation state.
+        delay-200: đợi FullPlayer slide in xong mới ẩn hoàn toàn.
       */}
-
       <div
         className={
           isExpanded
@@ -55,7 +85,6 @@ export function MusicPlayer() {
         }
       >
         <MiniPlayer
-          key="mini-player"
           track={currentTrack}
           currentTime={currentTime}
           getCurrentTime={getCurrentTime}
@@ -64,6 +93,11 @@ export function MusicPlayer() {
         />
       </div>
 
+      {/*
+        FullPlayer chỉ mount khi isExpanded = true.
+        AnimatePresence giữ component trong DOM đủ lâu để exit animation chạy xong
+        trước khi React unmount thật sự.
+      */}
       <AnimatePresence>
         {isExpanded && (
           <FullPlayer
@@ -80,4 +114,5 @@ export function MusicPlayer() {
     </>
   );
 }
+
 export default MusicPlayer;

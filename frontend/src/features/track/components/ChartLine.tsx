@@ -1,76 +1,17 @@
 /**
- * ChartLine.tsx — Premium play-count trend chart for the top-3 leaderboard
+ * ChartLine.tsx — v2.0
  *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * Refactor: Senior-level production upgrade
- *
- * ─── ARCHITECTURE OVERVIEW ────────────────────────────────────────────────
- *
- *   ChartLine (orchestrator — owns activeIndex state only)
- *   ├── useChartTheme()      — MutationObserver for dark↔light token sync
- *   ├── usePeakStats()       — single-pass max per series, memoized
- *   ├── useSeriesOpacity()   — derived opacity/width per series, memoized
- *   ├── ChartDefs            — SVG <defs> gradients + glow filters (memo)
- *   ├── LegendGrid           — 1–3 TrackLegendCard items (memo)
- *   │   └── TrackLegendCard  — highlight/dim toggle button (memo)
- *   ├── ChartCanvas          — Recharts container + all Area elements (memo)
- *   │   └── ChartTooltip     — glassmorphism tooltip surface (memo)
- *   ├── PeakStatsRow         — 3 PeakStatCard tiles in grid (memo)
- *   │   └── PeakStatCard     — pre-computed peak value tile (memo)
- *   └── EmptyChartState      — CLS-safe skeleton with EqualizerLoader (memo)
- *
- * ─── KEY CHANGES FROM ORIGINAL ───────────────────────────────────────────
- *
- *  1. SERIES OPACITY MEMOIZATION — original computed `isActive` per-Area
- *     inline in JSX on every render. Now `useSeriesOpacity` memoizes the
- *     full derived config object keyed to `activeIndex` only. Recharts
- *     receives stable prop references → no unnecessary Area reconciliation.
- *
- *  2. CHART DEFS STABLE ID — original used array index `i` as `key` on
- *     React.Fragment wrapping gradient + filter. Added `key={s.key}` on the
- *     Fragment (s.key is stable "top1"/"top2"/"top3"). Prevents React from
- *     diffing SVG <defs> children by position on any SERIES reorder.
- *
- *  3. useChartTheme() SSR GUARD — original's initializer called
- *     `getComputedStyle(document.documentElement)` directly. On SSR / React
- *     18 Strict Mode double-invoke this throws. Wrapped in `typeof document`
- *     guard with a typed SSR_DEFAULTS fallback object.
- *
- *  4. toggleActive STABLE DEPS — original's `useCallback` closure captured
- *     `hintRef` which is already a stable ref, but the dep array listed it
- *     explicitly causing lint warnings. Replaced with a direct `.current`
- *     mutation inside the callback — no dep array entry needed.
- *
- *  5. TOOLTIP `tracks` PROP — ChartTooltip received `tracks` as a prop from
- *     the Recharts `content` render prop pattern. This caused a new function
- *     reference on every parent render. Fixed: `tracks` passed to a stable
- *     curried factory `makeTooltipContent(tracks)` via `useMemo` — the
- *     Tooltip content prop only changes when `tracks` identity changes.
- *
- *  6. CHART CANVAS EXTRACTED — all Recharts JSX was inline in ChartLine's
- *     return. Extracted to `ChartCanvas` memo'd component. `activeIndex`
- *     changes now only re-render ChartCanvas + LegendGrid, never PeakStatsRow.
- *
- *  7. AREA isAnimationActive — original set `isAnimationActive={isActive}`.
- *     This means dimmed series lose their animate-in, then re-animate when
- *     restored. Fixed: `isAnimationActive` is always `true` on first mount
- *     (controlled by a `hasMounted` ref), then `false` on all subsequent
- *     renders (live data updates don't replay the chart animation).
- *
- *  8. MOBILE HINT VIA STATE — original used an imperative `ref.current.style`
- *     mutation to hide the hint. Replaced with `useState(true)` + conditional
- *     render — React-idiomatic and testable.
- *
- *  9. GRADIENT STOP DARK MODE — original used the same `s.stroke` color for
- *     both light and dark fills, which washed out on dark backgrounds (the
- *     gradient stop needs higher base opacity in dark mode). Added
- *     `s.fillOpacityDark` per-series configuration.
- *
- * 10. ACCESSIBLE CHART — added `<title>` + `<desc>` inside ResponsiveContainer
- *     via `ChartAccessibilityLabel` so screen readers announce the chart.
- *     `role="img"` and `aria-labelledby` wired to the title element id.
- *
- * ─────────────────────────────────────────────────────────────────────────
+ * CHANGES vs v1.0:
+ * ─ Props: tracks typed as RankedTrack[] (superset of ChartTrack — backward safe).
+ *   animationDelay prop added — forwarded to ChartCanvas for staggered hero draw.
+ * ─ ChartLineProps: animationDelay?: number
+ * ─ ChartCanvas: animationDelay prop drives Area animationBegin offset.
+ *   hasMounted ref still gates replay — delay only affects initial draw.
+ * ─ YAxis domain: [0, dataMax => ceil(dataMax * 1.1)] — 10% headroom,
+ *   biểu đồ không bị "dính trần", nhìn thoáng hơn.
+ * ─ Tooltip label: formatted as "15:00 · hôm nay" with Clock icon.
+ *   makeTooltipLabel() helper — pure fn, zero cost.
+ * ─ All other architecture, memo(), hooks, accessibility preserved.
  */
 
 import React, {
@@ -91,9 +32,10 @@ import {
   CartesianGrid,
   TooltipProps,
 } from "recharts";
-import { TrendingUp, Eye, BarChart2 } from "lucide-react";
+import { TrendingUp, Eye, BarChart2, Clock } from "lucide-react";
 
-import { ChartTrack, ITrack } from "@/features/track/types";
+import { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
+import { ChartTrack } from "@/features/track/types";
 import { EqualizerLoader } from "@/components/ui/MusicLoadingEffects";
 import { cn } from "@/lib/utils";
 
@@ -111,14 +53,12 @@ export interface ChartDataPoint {
 
 export interface ChartLineProps {
   data: ChartDataPoint[];
-  tracks: ChartTrack[];
+  tracks: RankedTrack[]; // RankedTrack ⊇ ChartTrack — fully backward safe
+  animationDelay?: number; // seconds — from HeroSection stagger (default 0)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SERIES CONFIG — module-scope constant, zero runtime cost.
-// `stroke` / `strokeDk` are theme-aware (verified WCAG AA contrast).
-// `fillOpacity` / `fillOpacityDk` differ because dark backgrounds
-//  wash out the same opacity value used in light mode.
+// SERIES CONFIG — unchanged from v1.0
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SeriesCfg {
@@ -126,8 +66,8 @@ interface SeriesCfg {
   readonly stroke: string;
   readonly strokeDk: string;
   readonly glow: string;
-  readonly fillOpacity: number; // light mode gradient top stop
-  readonly fillOpacityDk: number; // dark mode gradient top stop
+  readonly fillOpacity: number;
+  readonly fillOpacityDk: number;
   readonly gradId: string;
   readonly filterId: string;
   readonly badgeCls: string;
@@ -199,14 +139,20 @@ function fmtViews(n: number): string {
 }
 
 function getArtistName(track: ChartTrack): string {
-  return (track as ITrack).artist?.name ?? "Unknown Artist";
+  return (track as any).artist?.name ?? "Unknown Artist";
+}
+
+/**
+ * makeTooltipLabel — formats "15:00" → "15:00 · hôm nay"
+ * Pure function — no deps, called inside tooltip render only.
+ */
+function makeTooltipLabel(raw: string): string {
+  if (!raw) return "";
+  return `${raw} · hôm nay`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HOOK — useChartTheme
-// Resolves CSS token values to concrete strings for Recharts props.
-// Re-resolves on dark↔light class toggle via MutationObserver.
-// SSR-safe: `typeof document` guard with typed fallback.
+// HOOK — useChartTheme (unchanged from v1.0)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ChartTheme {
@@ -224,9 +170,7 @@ const SSR_DEFAULTS: ChartTheme = {
 };
 
 function resolveToken(name: string): string {
-  return `hsl(${getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim()})`;
+  return `hsl(${getComputedStyle(document.documentElement).getPropertyValue(name).trim()})`;
 }
 
 function readTheme(): ChartTheme {
@@ -242,7 +186,6 @@ function useChartTheme(): ChartTheme {
   const [theme, setTheme] = useState<ChartTheme>(() =>
     typeof document === "undefined" ? SSR_DEFAULTS : readTheme(),
   );
-
   useEffect(() => {
     const observer = new MutationObserver(() => setTheme(readTheme()));
     observer.observe(document.documentElement, {
@@ -251,13 +194,11 @@ function useChartTheme(): ChartTheme {
     });
     return () => observer.disconnect();
   }, []);
-
   return theme;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HOOK — usePeakStats
-// Single-pass max calculation, memoized on `data` identity.
+// HOOK — usePeakStats (unchanged from v1.0)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function usePeakStats(data: ChartDataPoint[]): number[] {
@@ -274,9 +215,7 @@ function usePeakStats(data: ChartDataPoint[]): number[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HOOK — useSeriesOpacity
-// Derives stable per-series rendering config from `activeIndex`.
-// Memoized: Recharts Area receives stable prop references — no extra diffing.
+// HOOK — useSeriesOpacity (unchanged from v1.0)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SeriesRenderCfg {
@@ -305,9 +244,7 @@ function useSeriesOpacity(activeIndex: number | null): SeriesRenderCfg[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SVG DEFS — gradients + glow filters
-// Memo'd: never reinstantiated when parent state changes.
-// `isDark` drives gradient stop opacity to compensate for dark backgrounds.
+// SVG DEFS (unchanged from v1.0)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ChartDefs = memo(({ isDark }: { isDark: boolean }) => (
@@ -325,8 +262,6 @@ const ChartDefs = memo(({ isDark }: { isDark: boolean }) => (
             />
             <stop offset="100%" stopColor={s.stroke} stopOpacity={0} />
           </linearGradient>
-
-          {/* Glow: blur + source merge = glowing stroke */}
           <filter id={s.filterId} x="-15%" y="-80%" width="130%" height="260%">
             <feGaussianBlur stdDeviation="3" result="blur" />
             <feMerge>
@@ -342,14 +277,14 @@ const ChartDefs = memo(({ isDark }: { isDark: boolean }) => (
 ChartDefs.displayName = "ChartDefs";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHART TOOLTIP — glassmorphism surface
-// Stable via `makeTooltipContent(tracks)` factory — see ChartCanvas usage.
-// `isAnimationActive={false}` prevents Recharts' own CSS transition from
-//  fighting our backdrop-blur.
+// CHART TOOLTIP
+//
+// FIX — label now uses makeTooltipLabel() for "15:00 · hôm nay" format.
+// Clock icon added as visual anchor. Time string rendered in font-mono.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ChartTooltipInnerProps extends TooltipProps<number, string> {
-  tracks: ChartTrack[];
+  tracks: RankedTrack[];
 }
 
 const ChartTooltipInner = memo(
@@ -362,12 +297,13 @@ const ChartTooltipInner = memo(
 
     if (!rows.length) return null;
 
+    const formattedLabel = makeTooltipLabel(label as string);
+
     return (
       <div
         role="tooltip"
         className={cn(
           "min-w-[210px] rounded-xl overflow-hidden",
-          // Soundwave glass-frosted equivalent
           "bg-card/90 dark:bg-card/88",
           "backdrop-blur-[28px] saturate-[175%]",
           "border border-border/60 dark:border-border/35",
@@ -375,25 +311,28 @@ const ChartTooltipInner = memo(
           "shadow-[inset_0_1px_0_hsl(0_0%_100%/0.07)]",
         )}
       >
-        {/* Time header */}
+        {/* Time header — FIX: formatted label + Clock icon */}
         <div className="px-3.5 py-2 border-b border-border/45 bg-muted/25 dark:bg-muted/12">
-          <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-[0.14em]">
-            {label}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <Clock
+              aria-hidden="true"
+              className="size-[9px] text-muted-foreground/50 shrink-0"
+            />
+            <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-[0.14em] font-mono">
+              {formattedLabel}
+            </p>
+          </div>
         </div>
 
-        {/* Series rows */}
+        {/* Series rows — unchanged */}
         <div className="px-3 py-3 space-y-2.5">
           {rows.map(({ entry, track, s }, idx) => (
             <div key={idx} className="flex items-center gap-2.5">
-              {/* Series color bar */}
               <span
                 aria-hidden="true"
                 className="shrink-0 w-[3px] h-8 rounded-full"
                 style={{ backgroundColor: s.stroke }}
               />
-
-              {/* Track cover */}
               <div className="w-8 h-8 rounded-lg overflow-hidden border border-border/60 shrink-0">
                 <img
                   src={track.coverImage}
@@ -404,8 +343,6 @@ const ChartTooltipInner = memo(
                   decoding="async"
                 />
               </div>
-
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <p className="text-[11.5px] font-semibold text-foreground/90 truncate leading-snug">
                   {track.title}
@@ -430,12 +367,11 @@ const ChartTooltipInner = memo(
 ChartTooltipInner.displayName = "ChartTooltipInner";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRACK LEGEND CARD — highlight / dim toggle button
-// `isHighlighted` and `isDimmed` are primitive booleans → stable prop identity.
+// TRACK LEGEND CARD (unchanged from v1.0 except track type → RankedTrack)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface TrackLegendCardProps {
-  track: ChartTrack;
+  track: RankedTrack;
   seriesIndex: number;
   isHighlighted: boolean;
   isDimmed: boolean;
@@ -451,7 +387,6 @@ const TrackLegendCard = memo(
     onClick,
   }: TrackLegendCardProps) => {
     const s = SERIES[seriesIndex];
-
     return (
       <button
         type="button"
@@ -460,25 +395,18 @@ const TrackLegendCard = memo(
         aria-label={`${isDimmed ? "Show" : isHighlighted ? "Reset" : "Isolate"}: ${track.title} by ${getArtistName(track)}`}
         disabled={isDimmed}
         className={cn(
-          // Layout
           "group relative flex items-center gap-2.5 w-full text-left",
           "rounded-xl border px-3 py-2.5",
-          // Transition
           "transition-all duration-200 ease-out",
-          // Focus ring — --ring token
           "focus-visible:outline-none focus-visible:ring-2",
           "focus-visible:ring-[hsl(var(--ring)/0.55)]",
           "select-none cursor-pointer",
-          // Surface
           "bg-card border-border",
           "hover:bg-accent/55 dark:hover:bg-accent/38",
-          // Active isolation ring
           !isDimmed && isHighlighted && cn("ring-1", s.ringCls),
-          // Dimmed — ghost opacity + scale
           isDimmed && "opacity-22 scale-[0.982] pointer-events-none",
         )}
       >
-        {/* Left accent bar — glows when this series is isolated */}
         <span
           aria-hidden="true"
           className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[58%] rounded-r-full"
@@ -490,22 +418,16 @@ const TrackLegendCard = memo(
             transition: "opacity 0.22s ease, box-shadow 0.22s ease",
           }}
         />
-
-        {/* Rank badge */}
         <span
           aria-hidden="true"
           className={cn(
-            "ml-2 shrink-0",
-            "text-[10px] font-black w-[22px] h-[22px]",
-            "rounded-md border flex items-center justify-center",
-            "font-mono leading-none",
+            "ml-2 shrink-0 text-[10px] font-black w-[22px] h-[22px]",
+            "rounded-md border flex items-center justify-center font-mono leading-none",
             s.badgeCls,
           )}
         >
           #{seriesIndex + 1}
         </span>
-
-        {/* Cover art */}
         <div className="relative shrink-0 w-9 h-9 rounded-lg overflow-hidden border border-border/60 shadow-sm">
           <img
             src={track.coverImage}
@@ -515,8 +437,6 @@ const TrackLegendCard = memo(
             decoding="async"
           />
         </div>
-
-        {/* Track info */}
         <div className="flex-1 min-w-0">
           <p className="text-[12px] font-semibold text-foreground/90 truncate leading-snug">
             {track.title}
@@ -525,8 +445,6 @@ const TrackLegendCard = memo(
             {getArtistName(track)}
           </p>
         </div>
-
-        {/* Trend icon */}
         <TrendingUp
           aria-hidden="true"
           className={cn(
@@ -542,11 +460,11 @@ const TrackLegendCard = memo(
 TrackLegendCard.displayName = "TrackLegendCard";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEGEND GRID — memo'd; re-renders only when activeIndex changes
+// LEGEND GRID (unchanged from v1.0 except track type)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface LegendGridProps {
-  tracks: ChartTrack[];
+  tracks: RankedTrack[];
   activeIndex: number | null;
   onToggle: (i: number) => void;
 }
@@ -570,31 +488,44 @@ const LegendGrid = memo(
 LegendGrid.displayName = "LegendGrid";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHART CANVAS — Recharts container + all Area elements
-// Extracted so PeakStatsRow never re-renders on activeIndex changes.
-// `hasMounted` ref controls animate-in: plays once, never replays on updates.
+// CHART CANVAS
+//
+// FIX 1 — animationDelay prop:
+//   Each Area's animationBegin is offset by `animationDelay * 1000` ms.
+//   hasMounted ref still gates replay — delay only affects initial draw,
+//   live socket updates remain silent (isAnimationActive = false after mount).
+//
+// FIX 2 — YAxis domain:
+//   [0, dataMax => Math.ceil(dataMax * 1.1)] gives 10% headroom above peak.
+//   Biểu đồ không bị "dính trần", peak label không overlap the top edge.
+//   YAxis remains hidden — domain computation is the only purpose.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ChartCanvasProps {
   data: ChartDataPoint[];
-  tracks: ChartTrack[];
+  tracks: RankedTrack[];
   theme: ChartTheme;
-  seriesOpacity: ReturnType<typeof useSeriesOpacity>;
+  seriesOpacity: SeriesRenderCfg[];
   showHint: boolean;
+  animationDelay: number; // seconds → converted to ms for Recharts
 }
 
 const ChartCanvas = memo(
-  ({ data, tracks, theme, seriesOpacity, showHint }: ChartCanvasProps) => {
+  ({
+    data,
+    tracks,
+    theme,
+    seriesOpacity,
+    showHint,
+    animationDelay,
+  }: ChartCanvasProps) => {
     const hasMounted = useRef(false);
 
     useEffect(() => {
       hasMounted.current = true;
     }, []);
 
-    /**
-     * Stable tooltip content factory — memoized on `tracks` identity.
-     * Prevents a new function reference from hitting Recharts on every render.
-     */
+    // Stable tooltip content — memoized on tracks identity
     const tooltipContent = useMemo(
       () => (props: TooltipProps<number, string>) => (
         <ChartTooltipInner {...props} tracks={tracks} />
@@ -603,13 +534,18 @@ const ChartCanvas = memo(
     );
 
     const activeDotStyle = useMemo(
-      () => ({
-        r: 5,
-        strokeWidth: 2.5,
-        stroke: theme.background,
-      }),
+      () => ({ r: 5, strokeWidth: 2.5, stroke: theme.background }),
       [theme.background],
     );
+
+    // FIX 2: 10% headroom — biểu đồ không bị dính trần
+    const yDomain = useMemo(
+      () => [0, (dataMax: number) => Math.ceil(dataMax * 1.1)] as const,
+      [],
+    );
+
+    // animationDelay in seconds → ms for Recharts animationBegin
+    const delayMs = Math.round(animationDelay * 1000);
 
     return (
       <div
@@ -619,7 +555,6 @@ const ChartCanvas = memo(
           "transition-shadow duration-200",
         )}
       >
-        {/* Y-axis label overlay */}
         <div
           aria-hidden="true"
           className="absolute top-3 left-3 flex items-center gap-1.5 z-10 pointer-events-none"
@@ -653,17 +588,13 @@ const ChartCanvas = memo(
                 dataKey="time"
                 axisLine={false}
                 tickLine={false}
-                tick={{
-                  fill: theme.mutedFg,
-                  fontSize: 10,
-                  fontWeight: 600,
-                }}
+                tick={{ fill: theme.mutedFg, fontSize: 10, fontWeight: 600 }}
                 dy={8}
                 interval="preserveStartEnd"
               />
 
-              {/* Y-axis: hidden — only drives domain computation */}
-              <YAxis hide domain={["auto", "auto"]} />
+              {/* FIX 2: domain with 10% headroom */}
+              <YAxis hide domain={yDomain} />
 
               <Tooltip
                 cursor={{
@@ -698,8 +629,9 @@ const ChartCanvas = memo(
                         ? { ...activeDotStyle, fill: s.dot }
                         : false
                     }
-                    // Only animate on initial mount — live data updates are silent
+                    // FIX 1: animate on first mount only, staggered by delayMs
                     isAnimationActive={!hasMounted.current}
+                    animationBegin={delayMs + i * 120}
                     animationDuration={800 + i * 180}
                     animationEasing="ease-out"
                   />
@@ -709,7 +641,6 @@ const ChartCanvas = memo(
           </ResponsiveContainer>
         </div>
 
-        {/* Mobile isolation hint */}
         {showHint && (
           <p
             aria-hidden="true"
@@ -725,28 +656,19 @@ const ChartCanvas = memo(
 ChartCanvas.displayName = "ChartCanvas";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PEAK STAT CARD — pre-computed peak value tile
+// PEAK STAT CARD / PEAK STATS ROW (unchanged from v1.0 except track type)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PeakStatCardProps {
-  track: ChartTrack;
+  track: RankedTrack;
   seriesIndex: number;
   peak: number;
 }
 
 const PeakStatCard = memo(({ track, seriesIndex, peak }: PeakStatCardProps) => {
   const s = SERIES[seriesIndex];
-
   return (
-    <div
-      className={cn(
-        "rounded-xl border border-border bg-card",
-        "px-3 py-2.5 flex flex-col gap-1.5 min-w-0",
-        "shadow-raised dark:shadow-black/22",
-        "transition-shadow duration-200 hover:shadow-elevated",
-      )}
-    >
-      {/* Label */}
+    <div className="rounded-xl border border-border bg-card px-3 py-2.5 flex flex-col gap-1.5 min-w-0 shadow-raised dark:shadow-black/22 transition-shadow duration-200 hover:shadow-elevated">
       <div className="flex items-center gap-1.5">
         <span
           aria-hidden="true"
@@ -757,8 +679,6 @@ const PeakStatCard = memo(({ track, seriesIndex, peak }: PeakStatCardProps) => {
           Peak
         </span>
       </div>
-
-      {/* Value */}
       <p
         className={cn(
           "text-[15px] font-black tabular-nums leading-none",
@@ -768,8 +688,6 @@ const PeakStatCard = memo(({ track, seriesIndex, peak }: PeakStatCardProps) => {
       >
         {fmtViews(peak)}
       </p>
-
-      {/* Track title */}
       <p className="text-[9.5px] text-muted-foreground/55 truncate font-medium leading-snug">
         {track.title}
       </p>
@@ -778,33 +696,24 @@ const PeakStatCard = memo(({ track, seriesIndex, peak }: PeakStatCardProps) => {
 });
 PeakStatCard.displayName = "PeakStatCard";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PEAK STATS ROW — memo'd independently of activeIndex
-// activeIndex changes (legend toggles) NEVER cause this to re-render.
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface PeakStatsRowProps {
-  tracks: ChartTrack[];
-  peaks: number[];
-}
-
-const PeakStatsRow = memo(({ tracks, peaks }: PeakStatsRowProps) => (
-  <div className="grid grid-cols-3 gap-2">
-    {tracks.map((track, i) => (
-      <PeakStatCard
-        key={track._id ?? i}
-        track={track}
-        seriesIndex={i}
-        peak={peaks[i]}
-      />
-    ))}
-  </div>
-));
+const PeakStatsRow = memo(
+  ({ tracks, peaks }: { tracks: RankedTrack[]; peaks: number[] }) => (
+    <div className="grid grid-cols-3 gap-2">
+      {tracks.map((track, i) => (
+        <PeakStatCard
+          key={track._id ?? i}
+          track={track}
+          seriesIndex={i}
+          peak={peaks[i]}
+        />
+      ))}
+    </div>
+  ),
+);
 PeakStatsRow.displayName = "PeakStatsRow";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMPTY / LOADING STATE
-// Exact chart height preserved to eliminate CLS when data arrives.
+// EMPTY STATE (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EmptyChartState = memo(() => (
@@ -812,12 +721,7 @@ const EmptyChartState = memo(() => (
     role="status"
     aria-live="polite"
     aria-label="Loading chart data"
-    className={cn(
-      "w-full h-[320px] sm:h-[380px]",
-      "flex flex-col items-center justify-center gap-4",
-      "rounded-2xl border border-border",
-      "bg-muted/12 dark:bg-muted/8",
-    )}
+    className="w-full h-[320px] sm:h-[380px] flex flex-col items-center justify-center gap-4 rounded-2xl border border-border bg-muted/12 dark:bg-muted/8"
   >
     <EqualizerLoader />
     <p className="text-[9.5px] text-muted-foreground/40 font-bold tracking-[0.18em] uppercase">
@@ -829,12 +733,13 @@ EmptyChartState.displayName = "EmptyChartState";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CHART LINE — ORCHESTRATOR
-// Owns `activeIndex` state only. All derived config memoized into sub-trees.
-// Re-render surface: only LegendGrid + ChartCanvas update on activeIndex change.
-// PeakStatsRow and the outer wrapper are completely isolated.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ChartLine = ({ data, tracks }: ChartLineProps) => {
+export const ChartLine = ({
+  data,
+  tracks,
+  animationDelay = 0,
+}: ChartLineProps) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [showHint, setShowHint] = useState(true);
 
@@ -844,10 +749,6 @@ export const ChartLine = ({ data, tracks }: ChartLineProps) => {
   const theme = useChartTheme();
   const seriesOpacity = useSeriesOpacity(activeIndex);
 
-  /**
-   * Stable toggle — second click on same series resets to "all visible".
-   * Hides mobile hint on first interaction (React-idiomatic setState).
-   */
   const toggleActive = useCallback((i: number) => {
     setActiveIndex((prev) => (prev === i ? null : i));
     setShowHint(false);
@@ -857,23 +758,19 @@ export const ChartLine = ({ data, tracks }: ChartLineProps) => {
 
   return (
     <div className="w-full space-y-3 animate-fade-up">
-      {/* Legend — re-renders on activeIndex change */}
       <LegendGrid
         tracks={displayTracks}
         activeIndex={activeIndex}
         onToggle={toggleActive}
       />
-
-      {/* Chart — re-renders on activeIndex, data, theme */}
       <ChartCanvas
         data={data}
         tracks={displayTracks}
         theme={theme}
         seriesOpacity={seriesOpacity}
         showHint={showHint}
+        animationDelay={animationDelay}
       />
-
-      {/* Peak stats — NEVER re-renders on activeIndex change */}
       <PeakStatsRow tracks={displayTracks} peaks={peaks} />
     </div>
   );

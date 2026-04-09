@@ -25,5 +25,6 @@ export interface PagedResponse<T> {
     page: number;
     pageSize?: number;
     totalPages: number;
+    hasNextPage: boolean;
   };
 }

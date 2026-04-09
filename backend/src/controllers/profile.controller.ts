@@ -4,6 +4,11 @@ import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
 import { IUser } from "../models/User";
 import profileService from "../services/profile.service";
+import {
+  getFavouriteTrackSchema,
+  getRecentlyTrackSchema,
+} from "../validations/profile.validate";
+import logger from "../utils/logger";
 
 export const getAnalytics = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as IUser;
@@ -27,14 +32,31 @@ export const getLibrary = catchAsync(async (req: Request, res: Response) => {
 });
 export const getRecentlyPlayedTracks = catchAsync(
   async (req: Request, res: Response) => {
+    const { query } = getRecentlyTrackSchema.parse({ query: req.query });
     const user = req.user as IUser;
-    const recentlyPlayed = await profileService.getRecentlyPlayed(
+    const result = await profileService.getRecentlyPlayed(
       user._id.toString(),
+      query,
     );
 
     res.status(httpStatus.OK).json({
       success: true,
-      data: recentlyPlayed,
+      data: result,
+    });
+  },
+);
+export const getFavouriteTracks = catchAsync(
+  async (req: Request, res: Response) => {
+    const { query } = getFavouriteTrackSchema.parse({ query: req.query });
+    const user = req.user as IUser;
+
+    const result = await profileService.getLikedTracks(
+      user._id.toString(),
+      query,
+    );
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: result,
     });
   },
 );

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import profileApi from "../api/profileApi";
 import { profileKeys } from "../utils/profileKeys";
 
@@ -41,14 +41,58 @@ export const useUserLibrary = () => {
   });
 };
 
-/**
- * 5. Hook Recently Played (Lấy lịch sử nghe nhạc)
- */
-export const useRecentlyPlayed = (limit: number = 10) => {
-  return useQuery({
-    queryKey: [...profileKeys.all, "recently-played", limit],
-    queryFn: () => profileApi.getRecentlyPlayed(limit),
-    staleTime: 30 * 1000, // Lịch sử nên được làm mới thường xuyên hơn
-    select: (res) => res.data,
+// ── HOOK: LẤY BÀI HÁT YÊU THÍCH ──────────────────────────────────────────
+export const useFavouriteTracksInfinite = (limit = 20) => {
+  return useInfiniteQuery({
+    queryKey: profileKeys.favouriteTracks({ limit }),
+
+    queryFn: async ({ pageParam = 1 }) => {
+      // Gọi profileApi đã nâng cấp ở bước trước
+      return profileApi.getFavouriteTracks({ page: pageParam, limit });
+    },
+
+    initialPageParam: 1,
+
+    // Logic lấy trang tiếp theo từ meta backend
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.data.meta;
+      return page < totalPages ? page + 1 : undefined;
+    },
+
+    // Phẳng hóa dữ liệu để render Virtual Scroll
+    select: (data) => ({
+      allTracks: data.pages.flatMap((page) => page.data.data),
+      totalItems: data.pages[0]?.data.meta.totalItems ?? 0,
+      meta: data.pages[data.pages.length - 1]?.data.meta,
+    }),
+
+    staleTime: 2 * 60 * 1000, // Nhạc yêu thích cho phép cache 2 phút
+  });
+};
+
+// ── HOOK: LẤY LỊCH SỬ NGHE NHẠC ──────────────────────────────────────────
+export const useRecentlyPlayedInfinite = (limit = 20) => {
+  return useInfiniteQuery({
+    queryKey: profileKeys.recentlyPlayed({ limit }),
+
+    queryFn: async ({ pageParam = 1 }) => {
+      return profileApi.getRecentlyPlayed({ page: pageParam, limit });
+    },
+
+    initialPageParam: 1,
+
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.data.meta;
+      return page < totalPages ? page + 1 : undefined;
+    },
+
+    select: (data) => ({
+      allTracks: data.pages.flatMap((page) => page.data.data),
+      totalItems: data.pages[0]?.data.meta.totalItems ?? 0,
+      meta: data.pages[data.pages.length - 1]?.data.meta,
+    }),
+
+    // Recently played nên để staleTime thấp hoặc = 0 để luôn cập nhật bài vừa nghe xong
+    staleTime: 0,
   });
 };

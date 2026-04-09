@@ -3,7 +3,11 @@ import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
 import albumService from "../services/album.service"; // Import instance camelCase
 import { IUser } from "../models/User";
-import { AlbumFilterInput } from "../validations/album.validation";
+import {
+  AlbumFilterInput,
+  getAlbumsSchema,
+  getAlbumTracksSchema,
+} from "../validations/album.validation";
 
 // 1. CREATE ALBUM
 export const createAlbum = catchAsync(async (req: Request, res: Response) => {
@@ -24,8 +28,9 @@ export const createAlbum = catchAsync(async (req: Request, res: Response) => {
 export const getAlbums = catchAsync(async (req: Request, res: Response) => {
   // Cast Type chuẩn từ Zod (req.query đã được validate & coerce bởi middleware)
   const filter = req.query as unknown as AlbumFilterInput;
-  console.log("Received filter from query:", filter); // Debug log
-  const result = await albumService.getAlbums(filter);
+  const currentUser = req.user as IUser;
+  console.log("Received filter from query:", filter, currentUser); // Debug log
+  const result = await albumService.getAlbums(filter, currentUser);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -42,7 +47,7 @@ export const getAlbumDetail = catchAsync(
     const currentUserId = currentUser ? currentUser._id.toString() : undefined;
     const userRole = currentUser ? currentUser.role : undefined;
 
-    const album = await albumService.getAlbumDetail(
+    const albumDetailResult = await albumService.getAlbumDetail(
       req.params.id,
       currentUserId,
       userRole,
@@ -50,7 +55,7 @@ export const getAlbumDetail = catchAsync(
 
     res.status(httpStatus.OK).json({
       success: true,
-      data: album,
+      data: albumDetailResult,
     });
   },
 );
@@ -78,5 +83,22 @@ export const deleteAlbum = catchAsync(async (req: Request, res: Response) => {
   res.status(httpStatus.OK).json({
     success: true,
     message: "Đã xóa Album",
+  });
+});
+// 6. GET ALBUM TRACKS
+export const getAlbumTracks = catchAsync(async (req, res) => {
+  // 1. Parse query - Đảm bảo dữ liệu sạch
+  const { query } = getAlbumsSchema.parse({ query: req.query });
+  const currentUser = req.user as IUser | undefined;
+
+  const result = await albumService.getAlbumTracks(
+    req.params.id,
+    query,
+    currentUser,
+  );
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: result,
   });
 });

@@ -79,32 +79,62 @@ export const updateAlbumSchema = z.object({
     isPublic: booleanSchema.optional(),
   }),
 });
-
-// --- 3. GET ALBUMS SCHEMA (Filter) ---
+// --- 3. GET ALBUMS SCHEMA (Dành cho query parameters) ---
 export const getAlbumsSchema = z.object({
-  query: z.object({
-    page: z.coerce.number().min(1).default(1),
-    // 🔥 SỬA: Giới hạn tối đa 50 item 1 page để chống hacker ddos DB bằng cách gửi limit=999999
-    limit: z.coerce.number().min(1).max(100).default(12),
+  query: z
+    .object({
+      // 1. Phân trang: Giới hạn chặt chẽ để tránh càn quét Database
+      page: z.coerce.number().min(1).default(1),
+      limit: z.coerce.number().min(1).max(50).default(12),
 
-    keyword: z.preprocess(emptyToUndefined, z.string().trim().optional()),
+      // 2. Keyword: Chặn đứng ReDoS (Regex Denial of Service) bằng .max()
+      keyword: z.preprocess(
+        emptyToUndefined,
+        z.string().trim().min(1).max(100).optional(),
+      ),
 
-    artistId: optionalObjectIdSchema,
-    genreId: optionalObjectIdSchema,
-    isPublic: booleanSchema.optional(),
+      // 3. IDs: Kiểm tra định dạng 24 ký tự Hex
+      artistId: optionalObjectIdSchema,
+      genreId: optionalObjectIdSchema,
 
-    // Year: Đã chuẩn
-    year: z.preprocess(
-      emptyToUndefined,
-      z.coerce.number().min(1900).optional(),
-    ),
+      // 4. Privacy Control: Ép kiểu và mặc định là true (Bảo mật dữ liệu ẩn)
+      isPublic: z.preprocess(
+        (val) => (val === "true" ? true : val === "false" ? false : undefined),
+        z.boolean().optional(), // ← bỏ .default(true)
+      ),
 
-    type: z.enum(["album", "single", "ep", "compilation"]).optional(),
-    sort: z.enum(["newest", "oldest", "popular", "name"]).default("newest"),
+      // 5. Năm: Chặn các con số phi lý (Năm 3000 chẳng hạn)
+      year: z.preprocess(
+        emptyToUndefined,
+        z.coerce
+          .number()
+          .min(1900, "Too old")
+          .max(new Date().getFullYear() + 2, "Too far in future")
+          .optional(),
+      ),
+
+      // 6. Enums: Chỉ cho phép các giá trị hợp lệ
+      type: z.enum(["album", "single", "ep", "compilation"]).optional(),
+
+      // 7. Sort: Định nghĩa rõ ràng các tiêu chí sắp xếp
+      sort: z
+        .enum(["newest", "oldest", "popular", "name", "trending"])
+        .default("newest"),
+    })
+    .strict(), // 🔥 CHIÊU CUỐI: Chặn mọi tham số "lạ" không nằm trong danh sách
+});
+// Cách dùng .omit để tái sử dụng mà không bị thừa
+export const getAlbumTracksSchema = getAlbumsSchema.extend({
+  query: getAlbumsSchema.shape.query.omit({
+    artistId: true,
+    genreId: true,
+    year: true,
   }),
 });
-
 // --- TYPES ---
 export type CreateAlbumInput = z.infer<typeof createAlbumSchema>["body"];
 export type UpdateAlbumInput = z.infer<typeof updateAlbumSchema>["body"];
 export type AlbumFilterInput = z.infer<typeof getAlbumsSchema>["query"];
+export type AlbumTracksFilterInput = z.infer<
+  typeof getAlbumTracksSchema
+>["query"];

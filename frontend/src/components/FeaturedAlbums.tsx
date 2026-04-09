@@ -1,38 +1,14 @@
-"use client";
-
-/**
- * @file FeaturedAlbums.tsx — Featured Albums Section (Refactored v2.0)
- *
- * ARCHITECTURE:
- * - `handlePlayAlbum` stabilized with useCallback — breaks referential equality
- *   chain that caused every PublicAlbumCard to re-render on parent state change
- * - Skeleton, Error, Empty states lifted into named components with proper
- *   aria roles for screen-reader parity with loaded state
- * - Mobile/desktop layout split driven by CSS only (no JS resize listeners)
- * - Stagger animation scoped inside whileInView — no layout thrash on mount
- *
- * DESIGN:
- * - Full Soundwave token integration: .section-block, .section-container,
- *   .skeleton, .album-card, .shadow-elevated, .glass variants
- * - Mood-reactive section accent via CSS custom property
- * - 8pt grid spacing throughout
- */
-
-import { memo, useCallback } from "react";
+import { memo, useMemo } from "react";
 import { Disc3, AlertCircle, MusicIcon, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
-import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+
 import { Link } from "react-router-dom";
 
 import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
-import { Album } from "@/features/album/types";
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useFeatureAlbums } from "@/features/album/hooks/useAlbumsQuery";
-import albumApi from "@/features/album/api/albumApi";
-import { albumKeys } from "@/features/album/utils/albumKeys";
-import { useAppDispatch } from "@/store/hooks";
-import { setIsPlaying, setQueue } from "@/features";
+
+import { IAlbum, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "./SectionAmbient";
 
@@ -219,72 +195,56 @@ EmptyState.displayName = "EmptyState";
 // ALBUM GRID — desktop whileInView stagger
 // Isolated so viewport observer doesn't re-mount on parent re-render
 // ─────────────────────────────────────────────────────────────────────────────
-const AlbumGrid = memo(
-  ({
-    albums,
-    onPlay,
-  }: {
-    albums: Album[];
-    onPlay: (id: string) => Promise<void>;
-  }) => (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: "-48px" }}
-      className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
-      role="list"
-      aria-label="Danh sách album nổi bật"
-    >
-      {albums.map((album) => (
-        <motion.div key={album._id} variants={cardVariants} role="listitem">
-          <PublicAlbumCard album={album} onPlay={() => onPlay(album._id)} />
-        </motion.div>
-      ))}
-    </motion.div>
-  ),
-);
+const AlbumGrid = memo(({ albums }: { albums: IAlbum[] }) => (
+  <motion.div
+    variants={containerVariants}
+    initial="hidden"
+    whileInView="visible"
+    viewport={{ once: true, margin: "-48px" }}
+    className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
+    role="list"
+    aria-label="Danh sách album nổi bật"
+  >
+    {albums.map((album) => (
+      <motion.div key={album._id} variants={cardVariants} role="listitem">
+        <PublicAlbumCard album={album} />
+      </motion.div>
+    ))}
+  </motion.div>
+));
 AlbumGrid.displayName = "AlbumGrid";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALBUM SCROLL — mobile horizontal scroll strip
 // snap-x scroll with masked edges from .scroll-overflow-mask
 // ─────────────────────────────────────────────────────────────────────────────
-const AlbumScroll = memo(
-  ({
-    albums,
-    onPlay,
-  }: {
-    albums: Album[];
-    onPlay: (id: string) => Promise<void>;
-  }) => (
-    <div
-      className="lg:hidden scroll-overflow-mask -mx-4 px-4"
-      role="list"
-      aria-label="Danh sách album nổi bật"
-    >
-      <HorizontalScroll>
-        {albums.map((album, i) => (
-          <motion.div
-            key={album._id}
-            custom={i}
-            variants={mobileCardVariants}
-            initial="hidden"
-            animate="visible"
-            role="listitem"
-            className={cn(
-              "snap-start shrink-0",
-              "w-[168px] sm:w-[200px]",
-              "first:pl-0 last:pr-4",
-            )}
-          >
-            <PublicAlbumCard album={album} onPlay={() => onPlay(album._id)} />
-          </motion.div>
-        ))}
-      </HorizontalScroll>
-    </div>
-  ),
-);
+const AlbumScroll = memo(({ albums }: { albums: IAlbum[] }) => (
+  <div
+    className="lg:hidden scroll-overflow-mask -mx-4 px-4"
+    role="list"
+    aria-label="Danh sách album nổi bật"
+  >
+    <HorizontalScroll>
+      {albums.map((album, i) => (
+        <motion.div
+          key={album._id}
+          custom={i}
+          variants={mobileCardVariants}
+          initial="hidden"
+          animate="visible"
+          role="listitem"
+          className={cn(
+            "snap-start shrink-0",
+            "w-[168px] sm:w-[200px]",
+            "first:pl-0 last:pr-4",
+          )}
+        >
+          <PublicAlbumCard album={album} />
+        </motion.div>
+      ))}
+    </HorizontalScroll>
+  </div>
+));
 AlbumScroll.displayName = "AlbumScroll";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,39 +252,10 @@ AlbumScroll.displayName = "AlbumScroll";
 // ─────────────────────────────────────────────────────────────────────────────
 export function FeaturedAlbums() {
   const { data: albums, isLoading, isError } = useFeatureAlbums(6);
-  const queryClient = useQueryClient();
-  const dispatch = useAppDispatch();
 
-  /**
-   * Stable play handler — useCallback prevents new function reference
-   * on every render, which was breaking React.memo on PublicAlbumCard children.
-   * staleTime: 5min — avoids redundant network fetches on rapid re-plays.
-   */
-  const handlePlayAlbum = useCallback(
-    async (albumId: string) => {
-      try {
-        const res = await queryClient.fetchQuery({
-          queryKey: albumKeys.detail(albumId),
-          queryFn: () => albumApi.getById(albumId),
-          staleTime: 5 * 60 * 1000,
-        });
+  const albumIds = useMemo(() => albums?.map((a) => a._id) ?? [], [albums]);
 
-        const tracks = res.data?.tracks;
-
-        if (!tracks?.length) {
-          toast.error("Album này chưa có bài hát nào.");
-          return;
-        }
-
-        dispatch(setQueue({ tracks, startIndex: 0 }));
-        dispatch(setIsPlaying(true));
-        toast.success(`Đang phát ${tracks.length} bài từ album`);
-      } catch {
-        toast.error("Không thể tải album. Vui lòng thử lại.");
-      }
-    },
-    [queryClient, dispatch],
-  );
+  useSyncInteractions(albumIds, "like", "album", albumIds.length > 0);
 
   const renderContent = () => {
     if (isLoading) return <SkeletonGrid count={6} />;
@@ -334,8 +265,8 @@ export function FeaturedAlbums() {
 
     return (
       <div className="relative">
-        <AlbumScroll albums={albums} onPlay={handlePlayAlbum} />
-        <AlbumGrid albums={albums} onPlay={handlePlayAlbum} />
+        <AlbumScroll albums={albums} />
+        <AlbumGrid albums={albums} />
       </div>
     );
   };

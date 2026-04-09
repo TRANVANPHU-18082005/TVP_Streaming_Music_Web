@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import { ApiResponse } from "@/types";
+import { ApiResponse, PagedResponse } from "@/types";
 import { ProfileDashboard, AnalyticsData, UserLibrary } from "../types";
 import { ITrack } from "@/features/track";
 
@@ -37,17 +37,25 @@ const profileApi = {
       await api.get<ApiResponse<UserLibrary>>("/profile/library");
     return response.data;
   },
+  /**
+   * 5. Lấy lịch sử nghe nhạc (Hỗ trợ phân trang cho Virtual Scroll)
+   */
+  getRecentlyPlayed: async (params?: { page?: number; limit?: number }) => {
+    // Để ý: Trả về PagedResponse<ITrack> thay vì mảng ITrack đơn thuần
+    const response = await api.get<ApiResponse<PagedResponse<ITrack>>>(
+      "/profile/recently-played",
+      { params },
+    );
+    return response.data;
+  },
 
   /**
-   * 5. Lấy lịch sử nghe nhạc gần đây
-   * Mặc định lấy 10-20 bài để hiển thị nhanh
+   * 7. Lấy danh sách bài hát yêu thích (Virtual Scroll)
    */
-  getRecentlyPlayed: async (limit: number = 10) => {
-    const response = await api.get<ApiResponse<ITrack[]>>(
-      "/profile/recently-played",
-      {
-        params: { limit },
-      },
+  getFavouriteTracks: async (params?: { page?: number; limit?: number }) => {
+    const response = await api.get<ApiResponse<PagedResponse<ITrack>>>(
+      "/profile/favourite-track",
+      { params },
     );
     return response.data;
   },
@@ -55,9 +63,9 @@ const profileApi = {
   /**
    * 6. Cập nhật hồ sơ (Hỗ trợ upload ảnh qua FormData)
    */
-  updateProfile: async (data: FormData | any) => {
+  updateProfile: async (data: FormData) => {
     const isFormData = data instanceof FormData;
-    const response = await api.patch<ApiResponse<any>>(
+    const response = await api.patch<ApiResponse<User>>(
       "/profile/update",
       data,
       {

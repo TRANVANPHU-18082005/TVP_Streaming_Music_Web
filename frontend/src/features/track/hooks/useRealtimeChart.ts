@@ -1,7 +1,5 @@
 /**
  * @file useRealtimeChart.ts
- * @description Hook quản lý bảng xếp hạng thời gian thực đạt chuẩn Production.
- * Kết hợp dữ liệu từ React Query và Socket.io với cơ chế chống giật và tính toán thứ hạng.
  */
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
@@ -10,16 +8,50 @@ import { useSocket } from "@/hooks/useSocket";
 import trackApi from "@/features/track/api/trackApi";
 import { ChartTrack } from "@/features/track/types";
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * So sánh nhanh 2 danh sách track theo id + score.
+ * Tránh deep-clone toàn bộ object chỉ để kiểm tra bằng nhau.
+ */
+const isSameTrackList = (a: ChartTrack[], b: ChartTrack[]): boolean => {
+  if (a.length !== b.length) return false;
+  return a.every((t, i) => t._id === b[i]._id && t.score === b[i].score);
+};
+
+/** Trích xuất items[] từ mọi dạng response (Array hoặc Object {items, chart}) */
+const extractItems = (data: any): ChartTrack[] =>
+  Array.isArray(data) ? data : (data?.items ?? []);
+
+const extractChart = (data: any): any[] =>
+  Array.isArray(data) ? [] : (data?.chart ?? []);
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export type RankTrend = "up" | "down" | "new" | "same";
+
+export interface RankedTrack extends ChartTrack {
+  rank: number;
+  trend: RankTrend;
+  rankDelta: number; // Dương = tăng hạng, âm = giảm hạng
+}
+
+// ─── Hook ────────────────────────────────────────────────────────────────────
+
 export const useRealtimeChart = () => {
   const queryClient = useQueryClient();
   const { socket, isConnected } = useSocket();
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // 1. Ref Quản lý trạng thái không gây re-render
+  // Ref lưu thứ hạng CỦA LẦN RENDER TRƯỚC — không gây re-render
   const prevRankMapRef = useRef<Record<string, number>>({});
-  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 2. Initial Fetch: Lấy dữ liệu nền tảng
+  // FIX #2 — Throttle: giữ payload mới nhất, chỉ flush tối đa 1 lần / 3s
+  const pendingPayloadRef = useRef<any>(null);
+  const throttleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isUpdatingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ── Initial Fetch ──────────────────────────────────────────────────────────
   const {
     data: apiResponse,
     isLoading,
@@ -29,116 +61,131 @@ export const useRealtimeChart = () => {
   } = useQuery({
     queryKey: ["live-chart"],
     queryFn: trackApi.getRealtimeChart,
-    staleTime: Infinity, // Không tự động gọi lại API, ưu tiên Socket
-    gcTime: 1000 * 60 * 60, // Giữ trong cache 1 tiếng
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60,
   });
+  // ── Normalization ──────────────────────────────────────────────────────────
+  const rawData = apiResponse?.data;
 
-  // 3. Normalization: Luôn trả về cấu trúc dữ liệu chuẩn dù API trả về gì
-  const { tracks, chartData } = useMemo(() => {
-    const rawData = apiResponse?.data;
-    if (!rawData) return { tracks: [], chartData: [] };
+  // ── FIX #1 — Tính Trend ngay trong useMemo ────────────────────────────────
+  // Toàn bộ logic Up/Down/New/Same được tính tại đây, dựa trên snapshot
+  // prevRankMapRef.current được chụp TRƯỚC khi tracks thay đổi (xem updateChartCache).
+  // Kết quả là một mảng RankedTrack chứa sẵn rank + trend cho Component dùng trực tiếp.
+  const rankedTracks = useMemo((): RankedTrack[] => {
+    const items = extractItems(rawData);
+    if (items.length === 0) return [];
 
-    // Hỗ trợ cả Format cũ (Array) và Format mới (Object {items, chart})
-    const items = Array.isArray(rawData) ? rawData : rawData?.items || [];
-    const chart = Array.isArray(rawData) ? [] : rawData?.chart || [];
+    return items.map((track, index) => {
+      const currentRank = index + 1;
+      const previousRank = prevRankMapRef.current[track._id];
 
-    return { tracks: items as ChartTrack[], chartData: chart };
-  }, [apiResponse]);
+      let trend: RankTrend;
+      let rankDelta: number;
 
-  /**
-   * 4. Logic cập nhật Cache thông minh
-   * Tách riêng để code sạch và dễ bảo trì
-   */
+      if (previousRank === undefined) {
+        // Bài xuất hiện lần đầu trong Chart
+        trend = "new";
+        rankDelta = 0;
+      } else {
+        rankDelta = previousRank - currentRank; // Dương = lên hạng
+        if (rankDelta > 0) trend = "up";
+        else if (rankDelta < 0) trend = "down";
+        else trend = "same";
+      }
+
+      return { ...track, rank: currentRank, trend, rankDelta };
+    });
+  }, [rawData]);
+
+  const chartData = useMemo(() => extractChart(rawData), [rawData]);
+  // ── FIX #3 — Cache Update với Deep Compare ────────────────────────────────
   const updateChartCache = useCallback(
     (payload: any) => {
       queryClient.setQueryData(["live-chart"], (old: any) => {
         if (!old) return old;
 
-        const oldData = old.data;
-        const oldItems = Array.isArray(oldData)
-          ? oldData
-          : oldData?.items || [];
-        const oldChart = Array.isArray(oldData) ? [] : oldData?.chart || [];
+        const oldItems = extractItems(old.data);
+        const oldChart = extractChart(old.data);
+        const newItems = extractItems(payload);
+        const newChart = Array.isArray(payload)
+          ? oldChart
+          : (payload?.chart ?? oldChart);
 
-        // Tính toán thứ hạng cũ trước khi ghi đè data mới (phục vụ animation)
-        const newPrevMap: Record<string, number> = {};
-        oldItems.forEach((t: ChartTrack, i: number) => {
-          newPrevMap[t._id] = i + 1;
+        // Nếu danh sách không đổi → bail out, không tạo object mới
+        if (isSameTrackList(oldItems, newItems)) return old;
+
+        // Chụp snapshot thứ hạng CŨ trước khi ghi đè (dùng cho FIX #1)
+        const snapshot: Record<string, number> = {};
+        oldItems.forEach((t, i) => {
+          snapshot[t._id] = i + 1;
         });
-        prevRankMapRef.current = newPrevMap;
-
-        // Merge dữ liệu: Ưu tiên payload, fallback về dữ liệu cũ nếu payload thiếu hụt
-        let nextItems = [];
-        let nextChart = [];
-
-        if (Array.isArray(payload)) {
-          nextItems = payload;
-          nextChart = oldChart;
-        } else {
-          nextItems = payload.items || oldItems;
-          nextChart =
-            payload.chart && payload.chart.length > 0
-              ? payload.chart
-              : oldChart;
-        }
+        prevRankMapRef.current = snapshot;
 
         return {
           ...old,
-          data: {
-            items: nextItems,
-            chart: nextChart,
-          },
+          data: { items: newItems, chart: newChart },
         };
       });
     },
     [queryClient],
   );
 
-  // 5. Quản lý kết nối Socket
+  // ── FIX #2 — Flush throttled payload ──────────────────────────────────────
+  const flushPendingUpdate = useCallback(() => {
+    if (pendingPayloadRef.current === null) return;
+
+    const payload = pendingPayloadRef.current;
+    pendingPayloadRef.current = null;
+    throttleTimerRef.current = null;
+
+    // Bật indicator
+    setIsUpdating(true);
+    if (isUpdatingTimerRef.current) clearTimeout(isUpdatingTimerRef.current);
+    isUpdatingTimerRef.current = setTimeout(() => setIsUpdating(false), 800);
+
+    updateChartCache(payload);
+  }, [updateChartCache]);
+
+  // ── Socket Management ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket || !isConnected) return;
 
-    // Join room chuyên biệt cho Chart
     socket.emit("join_chart_page");
 
     const handleUpdate = (payload: any) => {
-      // Hiệu ứng "Updating" nhấp nháy nhẹ trên UI
-      setIsUpdating(true);
-      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-      updateTimeoutRef.current = setTimeout(() => setIsUpdating(false), 800);
+      // Luôn giữ payload mới nhất
+      pendingPayloadRef.current = payload;
 
-      // Cập nhật dữ liệu vào React Query Cache
-      updateChartCache(payload);
+      // Chỉ đặt timer nếu chưa có — đảm bảo tối đa 1 update / 3s
+      if (throttleTimerRef.current === null) {
+        throttleTimerRef.current = setTimeout(flushPendingUpdate, 3000);
+      }
     };
 
     socket.on("chart_update", handleUpdate);
 
-    // Cleanup khi component unmount
     return () => {
       socket.emit("leave_chart_page");
       socket.off("chart_update", handleUpdate);
-      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+      if (throttleTimerRef.current) clearTimeout(throttleTimerRef.current);
+      if (isUpdatingTimerRef.current) clearTimeout(isUpdatingTimerRef.current);
     };
-  }, [socket, isConnected, updateChartCache]);
+  }, [socket, isConnected, flushPendingUpdate]);
 
-  // 6. Cơ chế Re-sync: Nếu mất mạng rồi có lại, fetch lại API để đảm bảo data mới nhất
+  // ── Re-sync khi reconnect ──────────────────────────────────────────────────
   useEffect(() => {
-    if (isConnected) {
-      refetch();
-    }
+    if (isConnected) refetch();
   }, [isConnected, refetch]);
 
   return {
-    tracks,
+    tracks: rankedTracks, // Đã có rank + trend + rankDelta, dùng trực tiếp
     chartData,
-    prevRankMap: prevRankMapRef.current, // Dùng để tính toán Up/Down/Stay trong Component
     isLoading,
     error,
     refetch,
     isRefetching,
-
     isUpdating,
     isConnected,
-    lastUpdatedAt: apiResponse?.lastUpdatedAt || null,
+    lastUpdatedAt: apiResponse?.data.lastUpdatedAt ?? null,
   };
 };

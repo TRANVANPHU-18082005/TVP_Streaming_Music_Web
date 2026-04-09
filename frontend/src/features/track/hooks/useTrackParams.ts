@@ -1,13 +1,16 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { useQueryParams } from "@/hooks/useQueryParams";
-import { TrackFilterParams } from "../types";
+import {
+  trackParamsSchema,
+  type TrackFilterParams,
+} from "../schemas/track.schema";
 
 const DEFAULT_PARAMS: TrackFilterParams = {
   page: 1,
   limit: 10,
-  keyword: "",
+  keyword: undefined,
   sort: "newest",
-  status: undefined,
+  status: "all",
   genreId: undefined,
   albumId: undefined,
   artistId: undefined,
@@ -20,44 +23,46 @@ export const useTrackParams = (initialLimit = 10) => {
     limit: initialLimit,
   });
 
-  const filterParams = useMemo((): TrackFilterParams => {
-    return {
-      ...rawParams,
-      // Convert các params đặc biệt nếu cần (VD: boolean string -> boolean)
-      // sort: validateSort(rawParams.sort),
-    };
-  }, [rawParams]);
+  const filterParams = useMemo(
+    () => trackParamsSchema.parse(rawParams),
+    [rawParams],
+  );
 
-  // --- Handlers ---
+  useEffect(() => {
+    const isDirty = JSON.stringify(rawParams) !== JSON.stringify(filterParams);
+    if (isDirty) {
+      setParams(filterParams, { replace: true });
+    }
+  }, [rawParams, filterParams, setParams]);
+
   const handlePageChange = useCallback(
     (page: number) => setParams({ page }),
     [setParams],
   );
 
   const handleSearch = useCallback(
-    (keyword: string) => setParams({ keyword, page: 1 }),
+    (keyword: string) => {
+      const trimmed = keyword.trim();
+      setParams({ keyword: trimmed === "" ? undefined : trimmed, page: 1 });
+    },
     [setParams],
   );
 
   const handleFilterChange = useCallback(
     <K extends keyof TrackFilterParams>(
       key: K,
-      value: TrackFilterParams[K],
+      value: TrackFilterParams[K] | null | undefined,
     ) => {
-      setParams({ [key]: value, page: 1 });
+      setParams({ [key]: value === "" ? undefined : value, page: 1 });
     },
     [setParams],
   );
-
-  const clearFilters = useCallback(() => {
-    setParams({ ...DEFAULT_PARAMS, limit: filterParams.limit });
-  }, [setParams, filterParams.limit]);
 
   return {
     filterParams,
     handlePageChange,
     handleSearch,
     handleFilterChange,
-    clearFilters,
+    clearFilters: () => setParams(DEFAULT_PARAMS),
   };
 };

@@ -1,6 +1,5 @@
 export * from "./api/interactionApi";
 
-export { default as LikeButton } from "./components/LikeButton";
 export { default as FollowButton } from "./components/FollowButton";
 
 export * from "./hooks/useInteraction";

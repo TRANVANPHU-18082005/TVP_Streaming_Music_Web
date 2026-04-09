@@ -1,6 +1,6 @@
 import mongoose, { Types } from "mongoose";
 import Artist from "../models/Artist";
-import User from "../models/User";
+import User, { IUser } from "../models/User";
 import Album from "../models/Album";
 import Track from "../models/Track";
 import Follow from "../models/Follow"; // Import bảng Follow
@@ -15,6 +15,9 @@ import {
   ArtistFilterInput,
 } from "../validations/artist.validation";
 import Genre from "../models/Genre";
+import { cacheRedis } from "../config/redis";
+import { buildCacheKey, withCacheTimeout } from "../utils/cacheHelper";
+import escapeStringRegexp from "escape-string-regexp";
 
 class ArtistService {
   // ==========================================
@@ -24,62 +27,130 @@ class ArtistService {
   /**
    * 1. GET DETAIL (Tối ưu Performance & Aggregation)
    */
+  /**
+   * 1. GET DETAIL (Virtual Scroll Optimized)
+   */
   async getArtistDetail(slugOrId: string, currentUserId?: string) {
-    // 1. Xác định ID hay Slug
-    const isId = mongoose.isValidObjectId(slugOrId); // Dùng mongoose check ID cho chuẩn
+    const isId = mongoose.isValidObjectId(slugOrId);
     const query = isId ? { _id: slugOrId } : { slug: slugOrId };
 
-    // 2. Fetch thông tin Artist
+    // 1. Fetch thông tin Artist cơ bản
     const artist = await Artist.findOne({ ...query, isActive: true })
       .populate("genres", "name slug color")
       .lean();
 
-    if (!artist) {
-      throw new ApiError(
-        httpStatus.NOT_FOUND,
-        "Nghệ sĩ không tồn tại hoặc đã bị ẩn",
-      );
-    }
+    if (!artist)
+      throw new ApiError(httpStatus.NOT_FOUND, "Nghệ sĩ không tồn tại");
 
     const artistId = artist._id;
 
-    // 3. 🔥 QUERY PARALLEL: Tối ưu lấy dữ liệu liên quan
-    const [isFollowed, topTracks, albums] = await Promise.all([
-      // A. Check Follow
-      currentUserId
-        ? Follow.exists({ follower: currentUserId, following: artistId })
-        : Promise.resolve(null),
-
-      // B. Get Top 5 Popular Tracks
-      Track.find({ artist: artistId, status: "ready", isPublic: true })
-        .sort({ playCount: -1 })
-        .limit(5)
-        .select("-audioFile -status") // CHỐNG LỘ THÔNG TIN BẢO MẬT/FILE GỐC
-        .populate("album", "title coverImage slug")
-        .lean(),
-
-      // C. Get Albums (Discography)
+    // 2. 🔥 QUERY PARALLEL: Lấy các thông tin "vỏ"
+    const [albums, allTrackIds] = await Promise.all([
+      // B. Get Albums (Discography) - Lấy 10 album mới nhất
       Album.find({ artist: artistId, isPublic: true })
-        .sort({ releaseYear: -1, createdAt: -1 }) // Sort kết hợp để chính xác hơn
+        .sort({ releaseYear: -1, createdAt: -1 })
         .limit(10)
         .select("title coverImage releaseYear slug type")
+        .lean(),
+
+      // C. Lấy mảng ID của TOÀN BỘ bài hát (Để làm Virtual Scroll)
+      // Sắp xếp theo playCount để lấy danh sách "Top Tracks" đầy đủ
+      Track.find({ artist: artistId, status: "ready", isPublic: true })
+        .sort({ playCount: -1 })
+        .select("_id")
         .lean(),
     ]);
 
     return {
       artist: {
         ...artist,
-        isFollowed: !!isFollowed,
+        trackIds: allTrackIds.map((t) => t._id),
       },
-      topTracks,
       albums,
     };
   }
+  /**
+   * 2. GET ARTIST TRACKS (Infinite Loading cho Virtual Scroll)
+   */
+  async getArtistTracks(
+    artistId: string,
+    filter: any, // { page, limit }
+    userRole?: string,
+  ) {
+    const { page = 1, limit = 20 } = filter;
+    const skip = (page - 1) * limit;
+    const isAdmin = userRole === "admin";
 
+    // 1. Cache Key
+    const cacheKey = buildCacheKey(
+      `artist:tracks:${artistId}`,
+      userRole || "guest",
+      { page, limit },
+    );
+    const cached = await cacheRedis.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    // 2. Truy vấn Database
+    const trackQuery: Record<string, any> = {
+      artist: artistId,
+      status: "ready",
+    };
+
+    if (!isAdmin) {
+      trackQuery.isPublic = true;
+    }
+
+    const [tracks, total] = await Promise.all([
+      Track.find(trackQuery)
+        .sort({ playCount: -1, createdAt: -1 }) // Thứ tự phổ biến giảm dần
+        .skip(skip)
+        .limit(Number(limit))
+        .populate("album", "title slug coverImage")
+        .select(
+          "title slug duration playCount coverImage hlsUrl isPublic bitrate isExplicit trackNumber",
+        )
+        .lean(),
+      Track.countDocuments(trackQuery),
+    ]);
+
+    const result = {
+      data: tracks,
+      meta: {
+        totalItems: total,
+        page: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: skip + limit < total,
+      },
+    };
+
+    // 3. Set Cache (TTL 15-20 phút)
+    const ttl = 900 + Math.floor(Math.random() * 120);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Set Album Tracks Error:", err));
+
+    return result;
+  }
   /**
    * 2. GET LIST (Advanced Search & Filter)
    */
-  async getArtists(queryInput: ArtistFilterInput) {
+  async getArtists(queryInput: ArtistFilterInput, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
+    const isAdmin = userRole === "admin";
+
+    // 1. CHUẨN HÓA FILTER & CACHE KEY
+    // Loại bỏ các trường rỗng/undefined để Cache Key luôn ổn định
+    const cleanFilter = Object.fromEntries(
+      Object.entries(queryInput).filter(
+        ([_, v]) => v !== undefined && v !== "",
+      ),
+    );
+
+    const cacheKey = buildCacheKey("artist:list", userRole, cleanFilter);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
     const {
       page = 1,
       limit = 12,
@@ -92,61 +163,73 @@ class ArtistService {
     } = queryInput;
 
     const skip = (page - 1) * limit;
-    const filter: any = {};
+    const filterQuery: Record<string, any> = {};
 
-    // 🔥 Tối ưu Regex Search: Tránh lỗi người dùng nhập ký tự đặc biệt (ReDoS)
+    // --- 2. SECURITY LAYER ---
+    // Guest/User chỉ thấy Artist đang hoạt động. Admin thấy theo filter.
+    if (!isAdmin) {
+      filterQuery.isActive = true;
+    } else if (isActive !== undefined) {
+      filterQuery.isActive = isActive;
+    }
+
+    // --- 3. SEARCH LOGIC (Chống ReDoS & Tối ưu Index) ---
     if (keyword) {
-      const escapeRegex = (text: string) =>
-        text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-      const safeKeyword = escapeRegex(keyword);
-      filter.$or = [
-        { name: { $regex: safeKeyword, $options: "i" } },
-        { aliases: { $regex: safeKeyword, $options: "i" } },
+      const safeKeyword = escapeStringRegexp(keyword.substring(0, 100));
+      // Prefix match (^) để tận dụng Index hiệu quả hơn thay vì tìm kiếm chứa chuỗi (contains)
+      filterQuery.$or = [
+        { name: { $regex: `^${safeKeyword}`, $options: "i" } },
+        { aliases: { $in: [new RegExp(`^${safeKeyword}`, "i")] } },
       ];
     }
 
-    if (genreId) filter.genres = genreId;
-    if (nationality) filter.nationality = nationality;
-    if (isVerified !== undefined) filter.isVerified = isVerified;
-    if (isActive !== undefined) filter.isActive = isActive;
+    if (genreId) filterQuery.genres = genreId;
+    if (nationality) filterQuery.nationality = nationality;
+    if (isVerified !== undefined) filterQuery.isVerified = isVerified;
 
-    // Sort Logic (Giữ nguyên, đã chuẩn)
-    let sortOption: any = { totalPlays: -1 };
+    // --- 4. SORT MAP ---
+    const SORT_MAP: Record<string, any> = {
+      popular: { totalPlays: -1, totalFollowers: -1, _id: 1 },
+      monthlyListeners: { monthlyListeners: -1, _id: 1 },
+      newest: { createdAt: -1, _id: 1 },
+      name: { name: 1, _id: 1 },
+    };
 
-    switch (sort) {
-      case "popular":
-        sortOption = { totalPlays: -1, totalFollowers: -1 };
-        break;
-      case "monthlyListeners":
-        sortOption = { monthlyListeners: -1 };
-        break;
-      case "newest":
-        sortOption = { createdAt: -1 };
-        break;
-      case "name":
-        sortOption = { name: 1 };
-        break;
-    }
+    const sortOption = SORT_MAP[sort ?? "popular"] ?? SORT_MAP.popular;
 
+    // --- 5. EXECUTION ---
     const [artists, total] = await Promise.all([
-      Artist.find(filter)
-        .populate("genres", "name color") // Thêm color để Frontend dễ render tag
+      Artist.find(filterQuery)
+        .populate("genres", "name color slug")
+        .select(
+          "name avatar coverImage slug isVerified nationality genres themeColor totalFollowers monthlyListeners isActive",
+        )
+        .sort(sortOption)
         .skip(skip)
         .limit(Number(limit))
-        .sort(sortOption)
         .lean(),
-      Artist.countDocuments(filter),
+      Artist.countDocuments(filterQuery),
     ]);
 
-    return {
+    const result = {
       data: artists,
       meta: {
         totalItems: total,
         page: Number(page),
         pageSize: Number(limit),
         totalPages: Math.ceil(total / Number(limit)),
+        hasNextPage: page * limit < total,
       },
     };
+
+    // --- 6. CACHE SET (Jitter logic) ---
+    // TTL 15-20 phút (Artist ít thay đổi hơn Track)
+    const ttl = 900 + Math.floor(Math.random() * 300);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Artist SET error:", err));
+
+    return result;
   }
   // ==========================================
   // 🔴 ADMIN / WRITE METHODS

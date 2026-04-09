@@ -1,25 +1,3 @@
-/**
- * GenreModal.tsx — Create / Edit genre modal
- *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * DELTA-ONLY REFACTOR
- *
- * FIX 1: Scroll lock — no scrollbar width compensation (layout shift on open)
- * FIX 2: Scroll lock cleanup unsafe in StrictMode double-invoke
- * FIX 3: No exit animation — modal blinks off instead of fading+scaling out
- * FIX 4: Modal content needs stopPropagation to prevent overlay close
- * FIX 5: createPortal(document.body) — SSR unsafe without guard
- * FIX 6: handleImageChange — no pre-validation (size/type) before setValue
- * FIX 7: labelClass string constant defined inside render — should be module scope
- * FIX 8: Trending toggle <div onClick> — WCAG violation (no role, tabIndex, aria)
- * FIX 9: File input missing aria-label
- * FIX 10: isWorking derived inline 5× — should be useMemo
- * FIX 11: watchColor fallback shows "black swatch" when no color selected
- * FIX 12: GenreModal not memo'd — parent re-renders on filter/sort state changes
- */
-
 import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { Controller } from "react-hook-form";
@@ -90,8 +68,18 @@ const GenreModal = memo<GenreModalProps>(
       form,
       handleSubmit,
       isSubmitting: isFormSubmitting,
-    } = useGenreForm({ genreToEdit, onSubmit });
-
+    } = useGenreForm(
+      genreToEdit
+        ? {
+            mode: "edit",
+            genreToEdit,
+            onSubmit,
+          }
+        : {
+            mode: "create",
+            onSubmit,
+          },
+    );
     const {
       register,
       setValue,

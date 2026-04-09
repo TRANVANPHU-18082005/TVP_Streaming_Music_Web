@@ -16,6 +16,8 @@ const getClientIp = (socket: Socket): string => {
   return socket.handshake.address || "";
 };
 
+// ... (Các phần import giữ nguyên)
+
 export const initSocket = (httpServer: HttpServer) => {
   io = new Server(httpServer, {
     cors: { origin: "*", methods: ["GET", "POST"], credentials: true },
@@ -25,11 +27,14 @@ export const initSocket = (httpServer: HttpServer) => {
 
   io.on("connection", (socket: Socket) => {
     const userIp = getClientIp(socket);
-    // 🔥 BƯỚC QUAN TRỌNG CHO NOTIFICATION:
-    // Khi user connect, check xem họ có gửi userId (thông qua query hoặc auth) không.
-    // Nếu dùng Auth middleware cho Socket thì lấy từ socket.data.user.
-    // Ở đây mình lấy đơn giản từ query hoặc handshake để bạn dễ test.
     const userId = socket.handshake.query.userId as string;
+
+    /**
+     * [PRIVATE ROOM]
+     * Tên: Cá nhân hóa thông báo
+     * Chức năng: Đưa user vào một phòng riêng có tên là chính ID của họ.
+     * Dùng để: Gửi thông báo (Like, Follow) đích danh cho user này mà người khác không thấy.
+     */
 
     if (userId && userId !== "undefined") {
       socket.join(userId);
@@ -39,17 +44,35 @@ export const initSocket = (httpServer: HttpServer) => {
     // 1. Theo dõi vị trí (Analytics ngay khi vào app)
     analyticsService.trackUserLocation(userIp);
 
-    // --- PHẦN 1: ROOMS & LISTENERS ---
+    /**
+     * [EVENT: join_room]
+     * Chức năng: Cho phép Client gia nhập vào bất kỳ phòng (room) nào theo yêu cầu.
+     * Dùng để: Tham gia vào phòng chat, phòng sự kiện chung.
+     */
     socket.on("join_room", (room: string) => socket.join(room));
 
+    /**
+     * [EVENT: listening_track]
+     * Chức năng: Đăng ký nghe một bài hát cụ thể.
+     * Dùng để:
+     * 1. Gom nhóm những người đang nghe cùng một bài hát.
+     * 2. Tính toán số lượng người đang nghe (Real-time listeners count) cho bài đó.
+     */
     socket.on("listening_track", (trackId: string) => {
       const roomName = `track:${trackId}`;
       socket.join(roomName);
+      // Lấy tổng số kết nối hiện có trong phòng này
       const count = io.sockets.adapter.rooms.get(roomName)?.size || 0;
+      // Gửi số lượng người nghe cho tất cả mọi người đang nghe bài này
       io.to(roomName).emit("listeners_count", count);
     });
 
-    // --- PHẦN 2: REAL-TIME ANALYTICS HEARTBEAT ---
+    /**
+     * [EVENT: client_heartbeat]
+     * Chức năng: Nhận tín hiệu "duy trì sự sống" từ Client.
+     * Dùng để: Cập nhật trạng thái "Active" của user trên Dashboard Admin.
+     * Nếu 1 phút không nhận được cái này, Admin sẽ thấy user đó đã Offline.
+     */
     socket.on(
       "client_heartbeat",
       (data: { userId: string; trackId?: string }) => {
@@ -59,7 +82,14 @@ export const initSocket = (httpServer: HttpServer) => {
       },
     );
 
-    // --- PHẦN 3: XỬ LÝ VIEW NHẠC (CHUẨN PRODUCTION) ---
+    /**
+     * [EVENT: track_play] (TRỌNG TÂM)
+     * Chức năng: Ghi nhận sự kiện một bài hát bắt đầu được phát.
+     * Quy trình:
+     * 1. Anti-spam: Dùng Redis chặn nếu 1 user/ip cố tình "cày view" liên tục.
+     * 2. Analytics: Cập nhật số liệu nóng (Real-time dashboard).
+     * 3. Queue: Đẩy vào BullMQ để xử lý ghi Log vào MongoDB một cách bất đồng bộ (tránh lag server).
+     */
     socket.on(
       "track_play",
       async (data: { trackId: string; userId?: string }) => {
@@ -103,31 +133,52 @@ export const initSocket = (httpServer: HttpServer) => {
       },
     );
 
-    // --- PHẦN 4: ADMIN & CHART ROOMS ---
+    /**
+     * [EVENT: join_chart_page]
+     * Chức năng: Đưa user vào phòng "Xem biểu đồ trực tuyến".
+     * Dùng để: Khi dữ liệu bảng xếp hạng thay đổi, server sẽ tự "đẩy" (push) data mới cho user.
+     */
     socket.on("join_chart_page", () => {
       socket.join("live_chart_room");
       getRealtimeChart().then((data) => socket.emit("chart_update", data));
     });
 
+    /**
+     * [EVENT: join_admin_dashboard]
+     * Chức năng: Dành riêng cho quản trị viên.
+     * Dùng để: Nhận dữ liệu tổng quan về hệ thống (lượt nghe, số người online) mỗi 5 giây.
+     */
     socket.on("join_admin_dashboard", () => {
       socket.join("admin_room");
       analyticsService
         .getStats()
         .then((stats) => socket.emit("admin_analytics_update", stats));
     });
-    // --- PHẦN 5: NOTIFICATION LOGIC (BỔ SUNG) ---
-    // API để đánh dấu đã đọc hoặc các tương tác thông báo khác nếu cần
+    /**
+     * [EVENT: jmark_notifications_read]
+     * Chức năng: Dành riêng cho quản trị viên.
+     * Dùng để: Nhận dữ liệu tổng quan về hệ thống (lượt nghe, số người online) mỗi 5 giây.
+     */
     socket.on("mark_notifications_read", () => {
       // Logic xử lý nhanh nếu cần
     });
+    /**
+     * [EVENT: disconnect]
+     * Chức năng: Xử lý khi user thoát app hoặc mất mạng.
+     * Dùng để: Dọn dẹp dữ liệu, giảm số lượng người nghe trong các phòng bài hát.
+     */
     socket.on("disconnect", () => {
       console.log(`❌ Disconnected: ${socket.id}`);
     });
   });
 
-  // --- SERVER PUSH (Tối ưu hiệu năng) ---
+  // --- SERVER PUSH LOGIC (Cơ chế chủ động từ Server) ---
 
-  // Update Dashboard Admin (Mỗi 5s nếu có admin online)
+  /**
+   * [PUSH: Admin Update]
+   * Chức năng: Cập nhật Dashboard Admin mỗi 5 giây.
+   * Tối ưu: Chỉ chạy Query Database khi có ít nhất 1 Admin đang mở Dashboard.
+   */
   setInterval(async () => {
     if (io.sockets.adapter.rooms.get("admin_room")?.size) {
       const stats = await analyticsService.getStats();
@@ -135,7 +186,11 @@ export const initSocket = (httpServer: HttpServer) => {
     }
   }, 5000);
 
-  // Update Chart (Mỗi 10s nếu có user xem chart)
+  /**
+   * [PUSH: Chart Update]
+   * Chức năng: Cập nhật Bảng xếp hạng Real-time mỗi 10 giây.
+   * Tối ưu: Chỉ tính toán Chart khi có ít nhất 1 người đang xem trang Chart.
+   */
   setInterval(async () => {
     if (io.sockets.adapter.rooms.get("live_chart_room")?.size) {
       const chartData = await getRealtimeChart();
@@ -145,7 +200,6 @@ export const initSocket = (httpServer: HttpServer) => {
 
   return io;
 };
-
 export const getIO = () => {
   if (!io) throw new Error("Socket.io not initialized!");
   return io;

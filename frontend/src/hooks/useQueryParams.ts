@@ -1,63 +1,53 @@
-import { useSearchParams } from "react-router-dom";
-import { useCallback, useMemo } from "react";
+import { useSearchParams, type NavigateOptions } from "react-router-dom";
+import { useCallback, useMemo, useRef } from "react";
 
-/**
- * Hook Generic quản lý URL Search Params
- * @param defaultParams Giá trị mặc định và định hình kiểu dữ liệu
- */
-export const useQueryParams = <T extends Record<string, any>>(
+export const useQueryParams = <T extends Record<string, unknown>>(
   defaultParams: T,
 ) => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const defaultsRef = useRef(defaultParams);
 
-  // 1. Parse URL Generic
   const params = useMemo(() => {
-    const currentParams = {} as T;
+    const defaults = defaultsRef.current;
+    const result = { ...defaults } as T;
 
-    // Lấy tất cả key từ defaultParams để quét URL
-    Object.keys(defaultParams).forEach((key) => {
-      const value = searchParams.get(key);
-      if (value === null) {
-        // @ts-ignore
-        currentParams[key] = defaultParams[key];
+    Object.keys(defaults).forEach((key) => {
+      const urlValue = searchParams.get(key);
+      if (urlValue === null) return;
+
+      const defaultVal = defaults[key];
+      if (typeof defaultVal === "number") {
+        const n = Number(urlValue);
+        if (!isNaN(n)) (result as any)[key] = n;
+      } else if (typeof defaultVal === "boolean") {
+        (result as any)[key] = urlValue === "true";
       } else {
-        // Auto parse cơ bản (Số, Boolean, String)
-        if (!isNaN(Number(value)) && typeof defaultParams[key] === "number") {
-          // @ts-ignore
-          currentParams[key] = Number(value);
-        } else if (value === "true" || value === "false") {
-          // @ts-ignore
-          currentParams[key] = value === "true";
-        } else {
-          // @ts-ignore
-          currentParams[key] = value;
-        }
+        (result as any)[key] = urlValue;
       }
     });
 
-    return currentParams;
-  }, [searchParams, defaultParams]);
+    return result;
+  }, [searchParams]);
 
-  // 2. Set Params Generic
+  // 🔥 Fix ở đây: Thêm tham số options cho navigate
   const setParams = useCallback(
-    (newParams: Partial<T>) => {
-      setSearchParams((prev) => {
-        const current = Object.fromEntries(prev.entries());
-        const merged = { ...current, ...newParams };
+    (newParams: Partial<T>, options?: NavigateOptions) => {
+      setSearchParams(
+        (prev) => {
+          const merged = Object.fromEntries(prev.entries());
 
-        const cleanParams: Record<string, string> = {};
-        Object.entries(merged).forEach(([key, value]) => {
-          if (
-            value !== undefined &&
-            value !== null &&
-            value !== "" &&
-            value !== "all"
-          ) {
-            cleanParams[key] = String(value);
-          }
-        });
-        return cleanParams;
-      });
+          Object.entries(newParams).forEach(([key, val]) => {
+            if (val === undefined || val === null) {
+              delete merged[key];
+            } else {
+              merged[key] = String(val);
+            }
+          });
+
+          return merged;
+        },
+        options, // ✅ Truyền options (như { replace: true }) vào đây mới đúng!
+      );
     },
     [setSearchParams],
   );

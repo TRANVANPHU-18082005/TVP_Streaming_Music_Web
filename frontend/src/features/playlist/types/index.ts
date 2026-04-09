@@ -1,10 +1,10 @@
 import { ITrack } from "@/features/track/types";
-import { type User } from "@/features/user/types";
+import { type IUser } from "@/features/user/types";
 
 export type PlaylistVisibility = "public" | "private" | "unlisted";
 export type PlaylistType = "playlist" | "radio" | "mix";
 
-export interface Playlist {
+export interface IPlaylist {
   _id: string;
   title: string;
   slug: string;
@@ -13,8 +13,8 @@ export interface Playlist {
   themeColor: string;
 
   // Quan hệ đã được Populate
-  user: User;
-  collaborators: User[];
+  user: IUser;
+  collaborators: IUser[];
 
   // Danh sách bài hát (Dạng phẳng hoặc dạng lồng tùy API của bạn)
   tracks: ITrack[];
@@ -43,7 +43,7 @@ export interface PlaylistFormInput {
   themeColor: string;
 
   // Quan hệ đã được Populate
-  collaborators: User[];
+  collaborators: IUser[];
 
   // Danh sách bài hát (Dạng phẳng hoặc dạng lồng tùy API của bạn)
 
@@ -56,28 +56,18 @@ export interface PlaylistFormInput {
 }
 export type CreatePlaylistInput = PlaylistFormInput;
 
-// Input dùng cho hàm Update (cần thêm _id để định danh)
 export interface UpdatePlaylistInput extends Partial<PlaylistFormInput> {
   _id: string;
 }
-// Params để gọi Hook useQuery hoặc usePlaylistAdmin
 export interface PlaylistFilterParams {
   page?: number;
   limit?: number;
   keyword?: string;
   visibility?: PlaylistVisibility | "all";
   type?: PlaylistType | "all";
-  userId?: string;
   isSystem?: boolean;
-  sort?: "newest" | "popular" | "followers" | "name";
+  sort?: "newest" | "oldest" | "popular" | "name";
 }
-
-export interface PlaylistListResponse {
-  data: Playlist[];
-  meta: {
-    totalItems: number;
-    page: number;
-    pageSize: number;
-    totalPages: number;
-  };
+export interface PlaylistDetailResponse extends IPlaylist {
+  trackIds: string[];
 }

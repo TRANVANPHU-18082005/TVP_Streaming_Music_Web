@@ -17,6 +17,7 @@ router.get("/dashboard", profileController.getProfileDashboard);
 router.get("/analytics", profileController.getAnalytics);
 router.get("/library", profileController.getLibrary);
 router.get("/recently-played", profileController.getRecentlyPlayedTracks);
+router.get("/favourite-track", profileController.getFavouriteTracks);
 // Favourite Album
 router.get(
   "/liked",

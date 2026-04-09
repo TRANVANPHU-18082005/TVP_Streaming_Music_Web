@@ -1,28 +1,3 @@
-"use client";
-
-/**
- * @file FeaturedGenres.tsx — Featured Genres Section (Refactored v2.0)
- *
- * ARCHITECTURE:
- * - No play handler needed (genre cards navigate, don't queue) — component is
- *   purely presentational after data resolves; zero dispatch/queryClient deps
- * - GenreGrid / GenreScroll isolated as memos — viewport IntersectionObserver
- *   only attaches after data resolves, not during loading state
- * - Aspect ratio: desktop grid uses `aspect-[3/2]` (landscape) matching
- *   GenreCard's intended proportions; mobile strip uses `aspect-[16/9]`
- * - renderContent() replaces triple ternary — explicit state machine
- *
- * DESIGN:
- * - Wave-3 (cyan/teal) accent to complete the section color palette:
- *     Albums  → brand-500 (purple)
- *     Playlists → wave-2 (fuchsia)
- *     Genres  → wave-3 (cyan) ← this file
- * - section-block (no --alt) for surface rhythm: alt → base → alt pattern
- * - Aurora-style glow divider with wave-3/wave-4 gradient
- * - 2×4 desktop grid (landscape cards) vs horizontal snap on mobile
- * - Skeleton aspect ratios match loaded card exactly — no layout shift
- */
-
 import { memo } from "react";
 import { Shapes, AlertCircle, LayoutGrid, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";

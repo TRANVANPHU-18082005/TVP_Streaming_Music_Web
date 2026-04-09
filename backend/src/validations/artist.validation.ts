@@ -65,25 +65,50 @@ export const updateArtistSchema = z.object({
   }),
 });
 
-// --- 3. GET ARTISTS SCHEMA (Filter) ---
 export const getArtistsSchema = z.object({
-  query: z.object({
-    page: z.coerce.number().min(1).default(1),
-    limit: z.coerce.number().min(1).default(12),
-    keyword: z.string().trim().optional(),
-    nationality: z.string().trim().optional(),
+  query: z
+    .object({
+      // 1. Phân trang: Giới hạn limit để tránh càn quét data
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).max(50).default(12),
 
-    // An toàn tuyệt đối với boolean và ID rỗng từ Query String
-    isActive: booleanSchema.optional(),
-    isVerified: booleanSchema.optional(),
-    genreId: optionalObjectIdSchema,
+      // 2. Search: Giới hạn độ dài để bảo vệ Regex engine (Chống ReDoS)
+      keyword: z.preprocess(
+        (val) => (val === "" ? undefined : val),
+        z.string().trim().max(100, "Keyword too long").optional(),
+      ),
 
-    sort: z
-      .enum(["popular", "newest", "name", "monthlyListeners"])
-      .default("popular"),
+      // 3. Filters: Dùng preprocess để xử lý Boolean từ Query String
+      nationality: z.preprocess(
+        (val) => (val === "" ? undefined : val),
+        z.string().trim().max(50).optional(),
+      ),
+
+      isActive: z.preprocess(
+        (val) => (val === "true" ? true : val === "false" ? false : undefined),
+        z.boolean().optional(),
+      ),
+
+      isVerified: z.preprocess(
+        (val) => (val === "true" ? true : val === "false" ? false : undefined),
+        z.boolean().optional(),
+      ),
+
+      // 4. IDs: Validate định dạng ObjectId (24 ký tự Hex)
+      genreId: optionalObjectIdSchema,
+
+      // 5. Sorting: Chỉ cho phép các tiêu chí đã Index
+      sort: z
+        .enum(["popular", "newest", "name", "monthlyListeners"])
+        .default("popular"),
+    })
+    .strict(), // 🔥 CHIÊU CUỐI: Chặn mọi tham số "lạ" không nằm trong danh sách
+});
+export const getArtistTracksSchema = getArtistsSchema.extend({
+  query: getArtistsSchema.shape.query.omit({
+    genreId: true,
   }),
 });
-
 // --- TYPES ---
 export type CreateArtistInput = z.infer<typeof createArtistSchema>["body"];
 export type UpdateArtistInput = z.infer<typeof updateArtistSchema>["body"];

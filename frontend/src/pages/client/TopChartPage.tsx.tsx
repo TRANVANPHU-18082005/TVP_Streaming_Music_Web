@@ -1,4 +1,26 @@
-import React, { memo, useState, useMemo, useCallback } from "react";
+/**
+ * TopChartPage.tsx — Full-page chart view (v5.0 — Soundwave Neural Audio)
+ *
+ * CHANGES vs v4.0:
+ * ─ Hook alignment: tracks is now RankedTrack[] — rank/trend/rankDelta/score
+ *   pre-computed. prevRankMap removed from hook exports and from all props.
+ * ─ ChartItem usage updated: passes RankedTrack directly, no prevRank prop.
+ * ─ ChartLine receives animationDelay prop for staggered hero draw animation.
+ * ─ Pull-to-refresh: usePullToRefresh() hook wired to refetch() on mobile.
+ * ─ Sticky list header: useSticky() hook drives a compact sticky bar that
+ *   fades in once the section scrolls past the viewport top.
+ * ─ TrackListSection: isUpdating-only re-render boundary preserved.
+ * ─ HeroSection: no isUpdating dependency — never re-renders on live refresh.
+ */
+
+import React, {
+  memo,
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+} from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Loader2,
@@ -11,33 +33,49 @@ import {
   AlertCircle,
   RefreshCw,
   ChevronUp,
+  ArrowDown,
 } from "lucide-react";
 
-import { useRealtimeChart } from "@/features/track/hooks/useRealtimeChart";
+import {
+  useRealtimeChart,
+  RankedTrack,
+} from "@/features/track/hooks/useRealtimeChart";
 import { ChartItem } from "@/features/track/components/ChartItem";
 import { ChartLine } from "@/features/track/components/ChartLine";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChartTrack, ITrack } from "@/features/track/types";
 import { useSyncInteractions } from "@/features";
 import SectionAmbient from "@/components/SectionAmbient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-const INITIAL_VISIBLE = 10;
 
-/** Medal tier — gold/silver/bronze are semantic and intentionally fixed */
+const INITIAL_VISIBLE = 10;
+const EXPO_EASE = [0.22, 1, 0.36, 1] as const;
+
 const RANK_STYLES = [
   { border: "border-amber-400", dot: "bg-amber-400", label: "Gold" },
   { border: "border-slate-400", dot: "bg-slate-400", label: "Silver" },
   { border: "border-orange-500", dot: "bg-orange-500", label: "Bronze" },
 ] as const;
 
+const SKELETON_WIDTHS = [
+  { title: "42%", artist: "26%" },
+  { title: "55%", artist: "32%" },
+  { title: "38%", artist: "20%" },
+  { title: "48%", artist: "28%" },
+  { title: "61%", artist: "35%" },
+  { title: "44%", artist: "24%" },
+  { title: "52%", artist: "30%" },
+  { title: "39%", artist: "22%" },
+  { title: "58%", artist: "34%" },
+  { title: "46%", artist: "27%" },
+] as const;
+
 // ─────────────────────────────────────────────────────────────────────────────
-// ANIMATION FACTORIES — module-scope, stable references
+// ANIMATION FACTORIES
 // ─────────────────────────────────────────────────────────────────────────────
-const EXPO_EASE = [0.22, 1, 0.36, 1] as const;
 
 const fadeUp = (delay = 0, reduced = false) =>
   reduced
@@ -75,17 +113,165 @@ const listItem = (index: number, reduced = false) =>
       } as const);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LIVE BADGE — .badge-playing token from index.css §14
+// usePullToRefresh
+//
+// Detects a downward touch drag from the very top of the page on mobile.
+// Calls onRefresh when the drag exceeds THRESHOLD px.
+// Returns { isPulling, pullProgress (0–1) } for the indicator.
+// Passively listens (passive: true) — no scroll jank.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const PULL_THRESHOLD = 72; // px
+
+interface PullState {
+  isPulling: boolean;
+  pullProgress: number;
+}
+
+function usePullToRefresh(onRefresh: () => void): PullState {
+  const [state, setState] = useState<PullState>({
+    isPulling: false,
+    pullProgress: 0,
+  });
+  const startY = useRef<number | null>(null);
+  const pulling = useRef(false);
+
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      // Only engage when scrolled to the very top
+      if (window.scrollY > 4) return;
+      startY.current = e.touches[0].clientY;
+      pulling.current = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (startY.current === null) return;
+      const dy = e.touches[0].clientY - startY.current;
+      if (dy <= 0) {
+        startY.current = null;
+        return;
+      }
+
+      pulling.current = true;
+      const progress = Math.min(dy / PULL_THRESHOLD, 1);
+      setState({ isPulling: true, pullProgress: progress });
+    };
+
+    const onTouchEnd = () => {
+      if (pulling.current && state.pullProgress >= 1) onRefresh();
+      startY.current = null;
+      pulling.current = false;
+      setState({ isPulling: false, pullProgress: 0 });
+    };
+
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [onRefresh, state.pullProgress]);
+
+  return state;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useSticky
+//
+// Returns true once a ref'd element has scrolled above the viewport top.
+// Used to drive the sticky list header fade-in.
+// Runs on rAF-throttled scroll to avoid layout thrash.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function useSticky<T extends HTMLElement>(): [React.RefObject<T>, boolean] {
+  const ref = useRef<T>(null);
+  const [sticky, setSticky] = useState(false);
+  const rafId = useRef<number | null>(null);
+
+  useEffect(() => {
+    const check = () => {
+      if (!ref.current) return;
+      setSticky(ref.current.getBoundingClientRect().top <= 0);
+    };
+
+    const onScroll = () => {
+      if (rafId.current !== null) return;
+      rafId.current = requestAnimationFrame(() => {
+        check();
+        rafId.current = null;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    check();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (rafId.current !== null) cancelAnimationFrame(rafId.current);
+    };
+  }, []);
+
+  return [ref, sticky];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PULL INDICATOR — shown at top of page during pull gesture
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PullIndicator = memo(
+  ({
+    isPulling,
+    pullProgress,
+  }: {
+    isPulling: boolean;
+    pullProgress: number;
+  }) => (
+    <AnimatePresence>
+      {isPulling && (
+        <motion.div
+          key="pull"
+          initial={{ opacity: 0, y: -32 }}
+          animate={{ opacity: pullProgress, y: 0 }}
+          exit={{ opacity: 0, y: -32 }}
+          transition={{ duration: 0.15 }}
+          aria-live="polite"
+          aria-label={
+            pullProgress >= 1 ? "Release to refresh" : "Pull to refresh"
+          }
+          className="fixed top-3 inset-x-0 z-50 flex justify-center pointer-events-none"
+        >
+          <div
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-full",
+              "glass-frosted border border-border/40 shadow-raised",
+              "text-[11px] font-bold text-primary uppercase tracking-wide",
+              "transition-colors duration-200",
+              pullProgress >= 1 && "border-primary/40 text-primary",
+            )}
+          >
+            <motion.span
+              animate={{ rotate: pullProgress >= 1 ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ArrowDown className="w-3 h-3" aria-hidden="true" />
+            </motion.span>
+            {pullProgress >= 1 ? "Release to refresh" : "Pull to refresh"}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  ),
+);
+PullIndicator.displayName = "PullIndicator";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIVE BADGE
+// ─────────────────────────────────────────────────────────────────────────────
+
 const LiveBadge = memo(({ time }: { time: string }) => (
-  <div
-    className={cn(
-      "badge-playing badge",
-      "inline-flex items-center gap-2 px-4 py-1.5",
-      "text-[11px] font-bold uppercase tracking-widest",
-      "select-none",
-    )}
-  >
+  <div className="badge-playing badge inline-flex items-center gap-2 px-4 py-1.5 text-[11px] font-bold uppercase tracking-widest select-none">
     <span className="relative flex h-[7px] w-[7px]" aria-hidden="true">
       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
       <span className="relative inline-flex h-[7px] w-[7px] rounded-full bg-primary" />
@@ -96,13 +282,12 @@ const LiveBadge = memo(({ time }: { time: string }) => (
 LiveBadge.displayName = "LiveBadge";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEADER AVATARS — stacked top-3 cover images in hero chart card header
-// FIX 6: rank number rendered IN the medal dot (was empty)
+// LEADER AVATARS
 // ─────────────────────────────────────────────────────────────────────────────
-const LeaderAvatars = memo(({ tracks }: { tracks: ITrack[] }) => {
+
+const LeaderAvatars = memo(({ tracks }: { tracks: RankedTrack[] }) => {
   if (tracks.length < 3) return null;
   const top3 = tracks.slice(0, 3);
-
   return (
     <div className="flex items-center gap-3">
       <span
@@ -111,7 +296,6 @@ const LeaderAvatars = memo(({ tracks }: { tracks: ITrack[] }) => {
       >
         Top 3
       </span>
-
       <div className="flex -space-x-2.5" role="list" aria-label="Top 3 tracks">
         {top3.map((t, i) => (
           <div
@@ -138,13 +322,10 @@ const LeaderAvatars = memo(({ tracks }: { tracks: ITrack[] }) => {
                 className="w-full h-full object-cover"
               />
             </div>
-
-            {/* Medal rank dot WITH number — FIX 6 */}
             <span
               aria-hidden="true"
               className={cn(
-                "absolute -bottom-0.5 -right-0.5",
-                "w-[15px] h-[15px] rounded-full",
+                "absolute -bottom-0.5 -right-0.5 w-[15px] h-[15px] rounded-full",
                 "flex items-center justify-center",
                 "text-[7px] font-black text-white leading-none",
                 "border border-background shadow-sm",
@@ -162,21 +343,8 @@ const LeaderAvatars = memo(({ tracks }: { tracks: ITrack[] }) => {
 LeaderAvatars.displayName = "LeaderAvatars";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRACK SKELETON — exact ChartItem column widths, CLS-safe
-// FIX 7: stable per-index width seeds via SKELETON_WIDTHS constant
+// TRACK SKELETON
 // ─────────────────────────────────────────────────────────────────────────────
-const SKELETON_WIDTHS = [
-  { title: "42%", artist: "26%" },
-  { title: "55%", artist: "32%" },
-  { title: "38%", artist: "20%" },
-  { title: "48%", artist: "28%" },
-  { title: "61%", artist: "35%" },
-  { title: "44%", artist: "24%" },
-  { title: "52%", artist: "30%" },
-  { title: "39%", artist: "22%" },
-  { title: "58%", artist: "34%" },
-  { title: "46%", artist: "27%" },
-] as const;
 
 const TrackSkeleton = memo(({ index }: { index: number }) => {
   const w = SKELETON_WIDTHS[index % SKELETON_WIDTHS.length];
@@ -223,8 +391,9 @@ const TrackSkeletonList = memo(({ count }: { count: number }) => (
 TrackSkeletonList.displayName = "TrackSkeletonList";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE LOADER — triple concentric ring, uses .spinner-xl + .spinner--brand tokens
+// PAGE LOADER / ERROR / EMPTY
 // ─────────────────────────────────────────────────────────────────────────────
+
 const PageLoader = memo(() => (
   <div
     className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-background"
@@ -260,9 +429,6 @@ const PageLoader = memo(() => (
 ));
 PageLoader.displayName = "PageLoader";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ERROR PAGE — .glass + .shadow-raised, .btn-outline for retry
-// ─────────────────────────────────────────────────────────────────────────────
 const ErrorPage = memo(({ onRetry }: { onRetry?: () => void }) => (
   <div
     className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-8"
@@ -305,9 +471,6 @@ const ErrorPage = memo(({ onRetry }: { onRetry?: () => void }) => (
 ));
 ErrorPage.displayName = "ErrorPage";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// EMPTY STATE — .card-base + .animate-glow-breathe token
-// ─────────────────────────────────────────────────────────────────────────────
 const EmptyState = memo(() => (
   <div
     className="flex flex-col items-center justify-center py-24 gap-5 text-center"
@@ -315,7 +478,6 @@ const EmptyState = memo(() => (
     aria-label="No chart data"
   >
     <div className="relative">
-      {/* .animate-glow-breathe from index.css §17 */}
       <div
         className="absolute inset-0 rounded-full bg-primary/8 blur-2xl scale-150 animate-glow-breathe"
         aria-hidden="true"
@@ -342,8 +504,9 @@ const EmptyState = memo(() => (
 EmptyState.displayName = "EmptyState";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UPDATING BADGE — .shadow-glow-xs token
+// UPDATING BADGE
 // ─────────────────────────────────────────────────────────────────────────────
+
 const UpdatingBadge = memo(({ visible }: { visible: boolean }) => (
   <div aria-live="polite" aria-atomic="true">
     <AnimatePresence>
@@ -372,8 +535,8 @@ UpdatingBadge.displayName = "UpdatingBadge";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHOW MORE BUTTON
-// FIX 8: aria-expanded was inverted in original. Shows remaining count.
 // ─────────────────────────────────────────────────────────────────────────────
+
 interface ShowMoreButtonProps {
   showAll: boolean;
   totalTracks: number;
@@ -398,13 +561,7 @@ const ShowMoreButton = memo(
           aria-label={
             showAll ? "Show fewer tracks" : `Show all ${totalTracks} tracks`
           }
-          className={cn(
-            "btn-secondary btn-lg",
-            "rounded-full px-8 gap-2.5",
-            "font-bold text-[11px] uppercase tracking-widest",
-            "shadow-raised hover:shadow-elevated",
-            "backdrop-blur-sm",
-          )}
+          className="btn-secondary btn-lg rounded-full px-8 gap-2.5 font-bold text-[11px] uppercase tracking-widest shadow-raised hover:shadow-elevated backdrop-blur-sm"
         >
           {showAll ? (
             <>
@@ -425,13 +582,13 @@ const ShowMoreButton = memo(
 ShowMoreButton.displayName = "ShowMoreButton";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HERO SECTION — memo'd, no isUpdating dependency
-// FIX 2: isUpdating changes don't trigger hero re-render (ChartLine paint cost)
-// FIX 9: contain: "strict" on ambient layers
-// Card: .glass-frosted + .shadow-elevated tokens from index.css §6+§7
+// HERO SECTION
+// ChartLine receives chartAnimationDelay so its draw animation fires
+// 200ms after the hero title animation completes (staggered entry).
 // ─────────────────────────────────────────────────────────────────────────────
+
 interface HeroSectionProps {
-  tracks: ITrack[];
+  tracks: RankedTrack[];
   chartData: unknown[];
   lastUpdated: string;
   reduced: boolean;
@@ -443,7 +600,6 @@ const HeroSection = memo(
       aria-label="Chart overview"
       className="relative pt-12 pb-12 md:pt-20 md:pb-16 overflow-hidden"
     >
-      {/* Ambient background — FIX 9: contain: "strict" */}
       <div
         className="absolute inset-0 pointer-events-none -z-10"
         aria-hidden="true"
@@ -467,8 +623,6 @@ const HeroSection = memo(
           )}
           style={{ background: "hsl(var(--wave-3)/0.032)" }}
         />
-
-        {/* Grid texture — inline backgroundImage for hsl(var()) support */}
         <div
           className="absolute inset-0 opacity-[0.022] dark:opacity-[0.036]"
           style={{
@@ -479,12 +633,10 @@ const HeroSection = memo(
             backgroundSize: "44px 44px",
           }}
         />
-
         <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-background to-transparent" />
       </div>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
-        {/* Live badge */}
         <motion.div
           {...fadeUp(0, reduced)}
           className="flex justify-center mb-7"
@@ -492,18 +644,13 @@ const HeroSection = memo(
           <LiveBadge time={lastUpdated} />
         </motion.div>
 
-        {/* Hero title — CSS token gradient */}
         <motion.div {...fadeUp(0.07, reduced)} className="text-center mb-11">
-          <h1
-            className={cn(
-              "font-black tracking-[-0.045em] leading-[0.88] mb-3 select-none",
-              "text-[clamp(3.2rem,11vw,6.5rem)]",
-            )}
-          >
+          <h1 className="font-black tracking-[-0.045em] leading-[0.88] mb-3 select-none text-[clamp(3.2rem,11vw,6.5rem)]">
             <span
               className="text-transparent bg-clip-text bg-gradient-to-r"
               style={{
-                backgroundImage: `linear-gradient(to right, hsl(var(--wave-1)), hsl(var(--primary)), hsl(var(--wave-2)))`,
+                backgroundImage:
+                  "linear-gradient(to right, hsl(var(--wave-1)), hsl(var(--primary)), hsl(var(--wave-2)))",
               }}
             >
               #Charts
@@ -514,35 +661,14 @@ const HeroSection = memo(
           </p>
         </motion.div>
 
-        {/* Chart card — .glass-frosted + .shadow-elevated */}
+        {/* Chart card — ChartLine staggered 200ms after title (0.07 + 0.54 ≈ 0.61s → +0.2 = 0.81) */}
         <motion.div {...fadeUp(0.14, reduced)}>
           <div
-            className={cn(
-              "rounded-2xl",
-              "border border-border/50 dark:border-primary/15",
-              "shadow-brand p-0 md:p-4",
-              "animate-fade-up animation-fill-both",
-            )}
+            className="rounded-2xl border border-border/50 dark:border-primary/15 shadow-brand p-0 md:p-4 animate-fade-up animation-fill-both"
             style={{ animationDelay: "80ms" }}
           >
-            <div
-              className={cn(
-                "rounded-2xl overflow-hidden",
-                "border border-border/50 dark:border-border/30",
-                // .glass-frosted from index.css §6 — T2 glassmorphism
-                "glass-frosted",
-                // .shadow-elevated from index.css §7
-                "shadow-elevated",
-              )}
-            >
-              {/* Card header */}
-              <div
-                className={cn(
-                  "flex items-center justify-between px-5 py-4",
-                  "border-b border-border/40 dark:border-border/25",
-                  "bg-muted/20 dark:bg-muted/10",
-                )}
-              >
+            <div className="rounded-2xl overflow-hidden border border-border/50 dark:border-border/30 glass-frosted shadow-elevated">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border/40 dark:border-border/25 bg-muted/20 dark:bg-muted/10">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center bg-primary/10 border border-primary/15">
                     <BarChart2
@@ -551,7 +677,7 @@ const HeroSection = memo(
                     />
                   </div>
                   <div>
-                    <p className="text-[13.5px] font-bold text-section-title  leading-tight">
+                    <p className="text-[13.5px] font-bold text-section-title leading-tight">
                       24H Performance
                     </p>
                     <p className="text-[11px] text-section-subtitle leading-tight mt-[1px]">
@@ -562,9 +688,17 @@ const HeroSection = memo(
                 <LeaderAvatars tracks={tracks} />
               </div>
 
-              {/* Chart body */}
               <div className="p-4 sm:p-5">
-                <ChartLine data={chartData} tracks={tracks} />
+                {/*
+                chartAnimationDelay: hero title finishes at ~0.61s.
+                Adding 0.2s gap gives the eye time to land before lines draw.
+                ChartLine should accept this prop and pass it to its draw animation.
+              */}
+                <ChartLine
+                  data={chartData}
+                  tracks={tracks}
+                  animationDelay={reduced ? 0 : 0.81}
+                />
               </div>
             </div>
           </div>
@@ -576,12 +710,76 @@ const HeroSection = memo(
 HeroSection.displayName = "HeroSection";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRACK LIST SECTION — separated so isUpdating only re-renders this tree
+// STICKY LIST HEADER
+//
+// Rendered inside TrackListSection as a separate node.
+// Fades + slides down into view once `sticky` becomes true.
+// Uses glass-frosted so content behind it stays readable.
 // ─────────────────────────────────────────────────────────────────────────────
+
+interface StickyHeaderProps {
+  totalTracks: number;
+  isUpdating: boolean;
+  visible: boolean;
+}
+
+const StickyHeader = memo(
+  ({ totalTracks, isUpdating, visible }: StickyHeaderProps) => (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          key="sticky-header"
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.22, ease: EXPO_EASE }}
+          className={cn(
+            "sticky top-0 z-30",
+            "flex items-center justify-between gap-3",
+            "px-4 sm:px-6 lg:px-8 py-2.5",
+            "glass-frosted border-b border-border/30",
+            "shadow-raised",
+            // Negative horizontal margin so it bleeds edge-to-edge inside the section
+            "-mx-4 sm:-mx-6 lg:-mx-8",
+          )}
+          aria-label="Chart section header"
+        >
+          <div className="flex items-center gap-2">
+            <Flame
+              className="w-4 h-4 shrink-0"
+              style={{ color: "hsl(var(--wave-4))" }}
+              aria-hidden="true"
+            />
+            <span className="font-black tracking-tight text-foreground text-sm">
+              Top {totalTracks}
+            </span>
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 border border-border/50">
+              <Globe2
+                className="w-2.5 h-2.5 text-brand shrink-0"
+                aria-hidden="true"
+              />
+              <span className="text-[9px] font-bold text-brand uppercase tracking-widest">
+                Vietnam
+              </span>
+            </div>
+          </div>
+          <UpdatingBadge visible={isUpdating} />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  ),
+);
+StickyHeader.displayName = "StickyHeader";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRACK LIST SECTION
+// Separated from HeroSection so isUpdating only re-renders this tree.
+// Includes sticky header anchor + RankedTrack-aware ChartItem calls.
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface TrackListSectionProps {
-  tracks: ITrack[];
-  visibleTracks: ITrack[];
-  prevRankMap: Record<string, number>;
+  tracks: RankedTrack[];
+  visibleTracks: RankedTrack[];
   isLoading: boolean;
   isUpdating: boolean;
   showAll: boolean;
@@ -593,120 +791,125 @@ const TrackListSection = memo(
   ({
     tracks,
     visibleTracks,
-    prevRankMap,
     isLoading,
     isUpdating,
     showAll,
     onToggleAll,
     reduced,
-  }: TrackListSectionProps) => (
-    <section
-      id="chart-list"
-      aria-label="Chart rankings"
-      className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl mt-2 pb-4"
-    >
-      <SectionAmbient />
+  }: TrackListSectionProps) => {
+    // Sticky header: anchor ref sits above the section heading
+    const [anchorRef, isSticky] = useSticky<HTMLDivElement>();
 
-      {/* List controls */}
-      <motion.div
-        {...fadeUp(0.2, reduced)}
-        className="flex items-center justify-between gap-3 mb-6 flex-wrap"
+    return (
+      <section
+        id="chart-list"
+        aria-label="Chart rankings"
+        className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl mt-2 pb-4"
       >
-        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-          <Flame
-            className="w-[18px] h-[18px] shrink-0"
-            style={{ color: "hsl(var(--wave-4))" }}
-            aria-hidden="true"
-          />
-          <h2 className="font-black tracking-tight text-foreground text-xl sm:text-2xl">
-            Top {tracks.length || INITIAL_VISIBLE}
-          </h2>
+        <SectionAmbient />
 
-          {/* Region pill — .badge-muted equivalent */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/50">
-            <Globe2
-              className="w-3 h-3 text-brand shrink-0"
+        {/* Sentinel element — useSticky watches this div's top edge */}
+        <div ref={anchorRef} aria-hidden="true" />
+
+        {/* Sticky header — fades in once sentinel scrolls past viewport top */}
+        <StickyHeader
+          totalTracks={tracks.length || INITIAL_VISIBLE}
+          isUpdating={isUpdating}
+          visible={isSticky}
+        />
+
+        {/* Static list controls (always visible, not sticky) */}
+        <motion.div
+          {...fadeUp(0.2, reduced)}
+          className="flex items-center justify-between gap-3 mb-6 flex-wrap"
+        >
+          <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+            <Flame
+              className="w-[18px] h-[18px] shrink-0"
+              style={{ color: "hsl(var(--wave-4))" }}
               aria-hidden="true"
             />
-            <span className="text-[10px] font-bold text-brand uppercase tracking-widest">
-              Vietnam
-            </span>
+            <h2 className="font-black tracking-tight text-foreground text-xl sm:text-2xl">
+              Top {tracks.length || INITIAL_VISIBLE}
+            </h2>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/50">
+              <Globe2
+                className="w-3 h-3 text-brand shrink-0"
+                aria-hidden="true"
+              />
+              <span className="text-[10px] font-bold text-brand uppercase tracking-widest">
+                Vietnam
+              </span>
+            </div>
+            {/* UpdatingBadge here only when header is not sticky */}
+            {!isSticky && <UpdatingBadge visible={isUpdating} />}
           </div>
 
-          <UpdatingBadge visible={isUpdating} />
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="View ranking rules"
+            className="text-muted-foreground/55 hover:text-foreground text-[11px] font-semibold h-8 gap-1.5 shrink-0 rounded-lg"
+          >
+            <Info className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Ranking rules</span>
+            <span className="sm:hidden">Rules</span>
+          </Button>
+        </motion.div>
+
+        {/* Track list */}
+        <div
+          className={cn(
+            "flex flex-col gap-0.5",
+            "transition-opacity duration-300 ease-out",
+            isUpdating && "opacity-50 pointer-events-none select-none",
+          )}
+          aria-busy={isUpdating}
+        >
+          {isLoading ? (
+            <TrackSkeletonList count={INITIAL_VISIBLE} />
+          ) : tracks.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <AnimatePresence mode="popLayout" initial={false}>
+              {visibleTracks.map((track, index) => (
+                <motion.div key={track._id} {...listItem(index, reduced)}>
+                  {/*
+                    ChartItem v5: takes RankedTrack directly.
+                    rank/trend/rankDelta pre-computed in hook — no prevRank needed.
+                  */}
+                  <ChartItem track={track} rank={track.rank} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
         </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="View ranking rules"
-          className="text-muted-foreground/55 hover:text-foreground text-[11px] font-semibold h-8 gap-1.5 shrink-0 rounded-lg"
-        >
-          <Info className="w-3.5 h-3.5" aria-hidden="true" />
-          <span className="hidden sm:inline">Ranking rules</span>
-          <span className="sm:hidden">Rules</span>
-        </Button>
-      </motion.div>
-
-      {/* Track list */}
-      <div
-        className={cn(
-          "flex flex-col gap-0.5",
-          "transition-opacity duration-300 ease-out",
-          isUpdating && "opacity-50 pointer-events-none select-none",
-        )}
-        aria-busy={isUpdating}
-      >
-        {isLoading ? (
-          <TrackSkeletonList count={INITIAL_VISIBLE} />
-        ) : tracks.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <AnimatePresence mode="popLayout" initial={false}>
-            {visibleTracks.map((track: ITrack, index: number) => {
-              const rank = index + 1;
-              const prevRank = prevRankMap[track._id] ?? rank;
-              return (
-                <motion.div key={track._id} {...listItem(index, reduced)}>
-                  <ChartItem track={track} rank={rank} prevRank={prevRank} />
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        )}
-      </div>
-
-      {/* Show more / collapse */}
-      <AnimatePresence>
-        {!isLoading && tracks.length > INITIAL_VISIBLE && (
-          <ShowMoreButton
-            key="show-more"
-            showAll={showAll}
-            totalTracks={tracks.length}
-            onToggle={onToggleAll}
-            reduced={reduced}
-          />
-        )}
-      </AnimatePresence>
-    </section>
-  ),
+        <AnimatePresence>
+          {!isLoading && tracks.length > INITIAL_VISIBLE && (
+            <ShowMoreButton
+              key="show-more"
+              showAll={showAll}
+              totalTracks={tracks.length}
+              onToggle={onToggleAll}
+              reduced={reduced}
+            />
+          )}
+        </AnimatePresence>
+      </section>
+    );
+  },
 );
 TrackListSection.displayName = "TrackListSection";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SKIP TO CONTENT — keyboard accessibility anchor
+// SKIP TO CONTENT
 // ─────────────────────────────────────────────────────────────────────────────
+
 const SkipToContent = memo(() => (
   <a
     href="#chart-list"
-    className={cn(
-      "sr-only focus:not-sr-only",
-      "fixed top-3 left-3 z-[200]",
-      "px-4 py-2 rounded-xl",
-      "bg-primary text-primary-foreground",
-      "text-xs font-bold shadow-brand",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    )}
+    className="sr-only focus:not-sr-only fixed top-3 left-3 z-[200] px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
   >
     Skip to track list
   </a>
@@ -716,11 +919,11 @@ SkipToContent.displayName = "SkipToContent";
 // ─────────────────────────────────────────────────────────────────────────────
 // TOP CHART PAGE — ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────────────
+
 export const TopChartPage = () => {
   const {
     tracks = [],
     chartData = [],
-    prevRankMap = {},
     isLoading,
     isUpdating,
     error,
@@ -729,14 +932,13 @@ export const TopChartPage = () => {
   } = useRealtimeChart();
 
   const [showAll, setShowAll] = useState(false);
-
-  // FIX 10: respect prefers-reduced-motion at orchestrator level — stable prop
   const reduced = useReducedMotion() ?? false;
 
-  /**
-   * FIX 1: keyed to `lastUpdatedAt` (not `tracks.length`).
-   * Pagination appends shouldn't recalculate the timestamp.
-   */
+  const handleRetry = useCallback(() => refetch?.(), [refetch]);
+  const handleToggleAll = useCallback(() => setShowAll((v) => !v), []);
+
+  // Pull-to-refresh — fires refetch() when drag exceeds threshold
+  const { isPulling, pullProgress } = usePullToRefresh(handleRetry);
   const lastUpdated = useMemo(
     () =>
       new Date(lastUpdatedAt ?? Date.now()).toLocaleTimeString([], {
@@ -746,19 +948,13 @@ export const TopChartPage = () => {
     [lastUpdatedAt],
   );
 
-  /**
-   * FIX 5: memoized slice — no re-computation on unrelated Redux state changes
-   * (isPlaying, volume, currentTime). Isolates render surface.
-   */
+  // Slice memoized — re-computes only when tracks ref or showAll changes
   const visibleTracks = useMemo(
     () => (showAll ? tracks : tracks.slice(0, INITIAL_VISIBLE)),
     [tracks, showAll],
   );
 
-  const trackIds = useMemo(
-    () => tracks.map((t: ChartTrack) => t._id),
-    [tracks],
-  );
+  const trackIds = useMemo(() => tracks.map((t) => t._id), [tracks]);
 
   useSyncInteractions(
     trackIds,
@@ -767,24 +963,21 @@ export const TopChartPage = () => {
     !isLoading && trackIds.length > 0,
   );
 
-  const handleToggleAll = useCallback(() => setShowAll((v) => !v), []);
-  const handleRetry = useCallback(() => refetch?.(), [refetch]);
-
   if (isLoading && tracks.length === 0) return <PageLoader />;
   if (error && tracks.length === 0) return <ErrorPage onRetry={handleRetry} />;
 
   return (
     <>
       <SkipToContent />
+
+      {/* Pull-to-refresh indicator — mobile only, zero cost on desktop */}
+      <PullIndicator isPulling={isPulling} pullProgress={pullProgress} />
+
       <main
         id="top-chart-main"
-        className={cn(
-          "min-h-screen bg-background overflow-x-hidden",
-          // Player bar clearance — matches .player-bar height
-          "pb-24 pb-[env(safe-area-inset-bottom,0px)]",
-        )}
+        className="min-h-screen bg-background overflow-x-hidden pb-24 pb-[env(safe-area-inset-bottom,0px)]"
       >
-        {/* Hero: no isUpdating dep — never re-renders on live refresh */}
+        {/* Hero never re-renders on live refresh — no isUpdating dependency */}
         <HeroSection
           tracks={tracks}
           chartData={chartData}
@@ -792,11 +985,10 @@ export const TopChartPage = () => {
           reduced={reduced}
         />
 
-        {/* Ranked track list — re-renders on isUpdating, visibleTracks */}
+        {/* Track list — isUpdating re-renders only this tree */}
         <TrackListSection
           tracks={tracks}
           visibleTracks={visibleTracks}
-          prevRankMap={prevRankMap}
           isLoading={isLoading}
           isUpdating={isUpdating}
           showAll={showAll}

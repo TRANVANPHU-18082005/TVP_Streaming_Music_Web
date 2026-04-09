@@ -13,7 +13,12 @@ import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
 import albumApi from "@/features/album/api/albumApi";
 import { albumKeys } from "@/features/album/utils/albumKeys";
 import { useAppDispatch } from "@/store/hooks";
-import { Albumpageskeleton, setIsPlaying, setQueue } from "@/features";
+import {
+  Albumpageskeleton,
+  setIsPlaying,
+  setQueue,
+  useSyncInteractions,
+} from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
@@ -187,7 +192,9 @@ const AlbumPage: React.FC = () => {
     () => ({ ...DEFAULT_META, ...data?.meta }),
     [data?.meta],
   );
+  const albumIds = useMemo(() => albums?.map((a) => a._id) ?? [], [albums]);
 
+  useSyncInteractions(albumIds, "like", "album", albumIds.length > 0);
   /**
    * Play handler — no throw, no artificial delay (v3.2 fixes preserved).
    * useCallback prevents new function reference breaking PublicAlbumCard memo.
@@ -235,23 +242,35 @@ const AlbumPage: React.FC = () => {
   // ── Error state ─────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <div className="relative min-h-screen flex items-center justify-center px-4 pb-28">
-        <div
-          className={cn(
-            "card-base shadow-elevated p-8 max-w-md w-full text-center",
-            "animate-scale-in",
-          )}
+      <div className="relative min-h-screen pb-28 pb-28">
+        <main
+          className="section-container space-y-6 sm:space-y-8"
+          aria-labelledby="album-page-heading"
         >
-          <MusicResult
-            status="error"
-            title="Không thể tải danh sách Album"
-            description="Máy chủ gặp sự cố. Vui lòng kiểm tra kết nối và thử lại."
-            secondaryAction={{
-              label: "Tải lại",
-              onClick: () => window.location.reload(),
-            }}
-          />
-        </div>
+          <section
+            className="min-h-[50vh]"
+            aria-label="Danh sách album"
+            aria-busy={isLoading}
+          >
+            <div
+              className={cn(
+                "card-base border-dashed shadow-none",
+                "flex items-center justify-center min-h-[380px]",
+                "animate-fade-in",
+              )}
+            >
+              <MusicResult
+                status="error"
+                title="Không thể tải danh sách Album"
+                description="Máy chủ gặp sự cố. Vui lòng kiểm tra kết nối và thử lại."
+                secondaryAction={{
+                  label: "Tải lại",
+                  onClick: () => window.location.reload(),
+                }}
+              />
+            </div>
+          </section>
+        </main>
       </div>
     );
   }

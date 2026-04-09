@@ -3,36 +3,75 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
-import { trackSchema, type TrackFormValues } from "../schemas/track.schema";
+import {
+  trackCreateSchema,
+  trackEditSchema,
+  type TrackCreateFormValues,
+  type TrackEditFormValues,
+} from "../schemas/track.schema";
 import { mapTrackToForm } from "../utils/formMapper";
 import { buildTrackPayload } from "../utils/payloadBuilder";
 import { ITrack } from "@/features/track/types";
 
-interface UseTrackFormProps {
-  trackToEdit?: ITrack | null;
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface UseTrackFormCreateProps {
+  mode: "create";
+  trackToEdit?: never;
   onSubmit: (formData: FormData) => Promise<void>;
 }
 
-export const useTrackForm = ({ trackToEdit, onSubmit }: UseTrackFormProps) => {
+interface UseTrackFormEditProps {
+  mode: "edit";
+  trackToEdit: ITrack;
+  onSubmit: (formData: FormData) => Promise<void>;
+}
+
+type UseTrackFormProps = UseTrackFormCreateProps | UseTrackFormEditProps;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOOK
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const useTrackForm = ({
+  mode,
+  trackToEdit,
+  onSubmit,
+}: UseTrackFormProps) => {
+  const isEditMode = mode === "edit";
+  const schema = isEditMode ? trackEditSchema : trackCreateSchema;
+
+  // 1. Khởi tạo giá trị mặc định
   const defaultValues = useMemo(
-    () => mapTrackToForm(trackToEdit),
-    [trackToEdit],
+    () => mapTrackToForm(isEditMode ? trackToEdit : undefined),
+    [trackToEdit?._id, isEditMode],
   );
 
-  const form = useForm<TrackFormValues>({
-    resolver: zodResolver(trackSchema),
+  const form = useForm<TrackCreateFormValues | TrackEditFormValues>({
+    resolver: zodResolver(schema),
     defaultValues,
     mode: "onSubmit",
+    reValidateMode: "onChange",
   });
 
-  const { reset, watch, setValue, formState, getValues } = form;
+  const {
+    reset,
+    watch,
+    setValue,
+    formState,
+    getValues,
+    handleSubmit: internalHandleSubmit,
+  } = form;
   const { dirtyFields, isSubmitting } = formState;
 
+  // 2. Reset form khi chuyển đổi track hoặc mode
   useEffect(() => {
     reset(defaultValues);
   }, [defaultValues, reset]);
 
-  // --- PREVIEWS ---
+  // ── 3. PREVIEWS LOGIC (Ảnh & Tên File) ──────────────────────────────────────
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [audioName, setAudioName] = useState<string | null>(null);
 
@@ -40,43 +79,48 @@ export const useTrackForm = ({ trackToEdit, onSubmit }: UseTrackFormProps) => {
   const audioValue = watch("audio");
   const lyricType = watch("lyricType");
 
+  // Xử lý Preview ảnh bìa
   useEffect(() => {
     if (coverValue instanceof File) {
       const url = URL.createObjectURL(coverValue);
       setImagePreview(url);
       return () => URL.revokeObjectURL(url);
     }
+    // Nếu là string (URL từ server) thì dùng luôn, không thì null
     setImagePreview(typeof coverValue === "string" ? coverValue : null);
   }, [coverValue]);
 
+  // Xử lý hiển thị tên file nhạc
   useEffect(() => {
     if (audioValue instanceof File) {
       setAudioName(audioValue.name);
+    } else if (typeof audioValue === "string") {
+      setAudioName("Existing audio (Keep current)");
     } else {
-      setAudioName(
-        typeof audioValue === "string" ? "Current Audio File" : null,
-      );
+      setAudioName(null);
     }
   }, [audioValue]);
 
-  // --- SMART LOGIC ---
+  // ── 4. SMART UX LOGIC ───────────────────────────────────────────────────────
 
-  // Nếu LyricType là "none", tự động xóa Plain Lyrics
+  // Sync Lời bài hát: Nếu chọn "none" thì clear text, ngược lại nếu có text mà đang "none" thì auto "plain"
   useEffect(() => {
     if (lyricType === "none") {
-      setValue("plainLyrics", "", { shouldDirty: true });
+      const currentLyrics = getValues("plainLyrics");
+      if (currentLyrics) setValue("plainLyrics", "", { shouldDirty: true });
     }
-  }, [lyricType, setValue]);
+  }, [lyricType, setValue, getValues]);
 
+  // Handler khi chọn File nhạc
   const handleAudioChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      // Auto-fill tên bài hát nếu đang trống
+      // Auto-fill Title từ tên file nếu Title đang trống
       if (!getValues("title")) {
-        const fileName = file.name.replace(/\.[^/.]+$/, "");
-        setValue("title", fileName, {
+        const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+        setValue("title", fileNameWithoutExt, {
           shouldValidate: true,
           shouldDirty: true,
         });
@@ -87,28 +131,29 @@ export const useTrackForm = ({ trackToEdit, onSubmit }: UseTrackFormProps) => {
     [getValues, setValue],
   );
 
-  const handleSubmit = form.handleSubmit(async (values) => {
-    const isEditMode = !!trackToEdit;
+  // ── 5. SUBMIT HANDLER ───────────────────────────────────────────────────────
+  const handleSubmit = internalHandleSubmit(async (values) => {
+    // Dirty Checking nâng cao
     const hasNewAudio = values.audio instanceof File;
     const hasNewImage = values.coverImage instanceof File;
-    const isDirty = Object.keys(dirtyFields).length > 0;
+    const hasChanges = Object.keys(dirtyFields).length > 0;
 
-    if (isEditMode && !isDirty && !hasNewAudio && !hasNewImage) {
-      toast.info("No changes detected.");
+    if (isEditMode && !hasChanges && !hasNewAudio && !hasNewImage) {
+      toast.info("Không có thay đổi nào được ghi nhận.");
       return;
     }
 
-    // Tự động chuyển type sang "plain" nếu có text mà chưa chọn type
+    // Logic "Chữa lành" Lời nhạc trước khi gửi
     if (values.plainLyrics?.trim() && values.lyricType === "none") {
-      setValue("lyricType", "plain");
+      values.lyricType = "plain";
     }
-    console.log("Form Values on Submit:", values);
+
     try {
       const payload = buildTrackPayload(values, dirtyFields, isEditMode);
       await onSubmit(payload);
     } catch (error) {
       console.error("Submission error:", error);
-      toast.error("Failed to save track. Please check the form.");
+      toast.error("Không thể lưu bài hát. Vui lòng kiểm tra lại dữ liệu.");
     }
   });
 
@@ -120,5 +165,6 @@ export const useTrackForm = ({ trackToEdit, onSubmit }: UseTrackFormProps) => {
     audioName,
     isSubmitting,
     isDirty: formState.isDirty,
+    isEditMode,
   };
 };

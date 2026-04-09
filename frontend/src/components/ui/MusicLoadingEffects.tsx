@@ -22,6 +22,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { Music, Radio } from "lucide-react";
+import { VinylDisc } from "../MusicVisualizer";
 
 // ─────────────────────────────────────────────
 // 1. DESIGN TOKENS  (mirrors index.css :root)
@@ -418,8 +419,6 @@ export const VinylLoader: FC<LoaderProps> = memo(
     ariaLive,
   }) => {
     const { vinylPx } = SIZE_MAP[size];
-    const center = vinylPx * 0.18;
-    const dot = Math.max(4, vinylPx * 0.04);
 
     return (
       <LoaderBase
@@ -461,38 +460,7 @@ export const VinylLoader: FC<LoaderProps> = memo(
             />
 
             {/* Vinyl itself */}
-            <div
-              className="sw-vinyl-disc sw-animate-vinyl"
-              style={{ width: vinylPx, height: vinylPx }}
-            >
-              {/* Label centre */}
-              <div
-                style={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%,-50%)",
-                  width: center * 2,
-                  height: center * 2,
-                  borderRadius: "50%",
-                  background: "hsl(var(--primary, 258 90% 56%))",
-                  boxShadow: "inset 0 1px 0 hsl(0 0% 100% / .18)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 2,
-                }}
-              >
-                <div
-                  style={{
-                    width: dot,
-                    height: dot,
-                    borderRadius: "50%",
-                    background: "hsl(0 0% 100% / .7)",
-                  }}
-                />
-              </div>
-            </div>
+            <VinylDisc active />
           </div>
 
           {text && <LoaderLabel text={text} />}

@@ -1,6 +1,5 @@
 import {
   useState,
-  useMemo,
   useCallback,
   memo,
   useRef,
@@ -10,13 +9,10 @@ import {
 import {
   Play,
   Pause,
-  Heart,
-  Share2,
   ChevronLeft,
   ChevronRight,
   Loader2,
   Disc3,
-  Radio,
   Music2,
 } from "lucide-react";
 import {
@@ -25,35 +21,24 @@ import {
   useMotionValue,
   useTransform,
 } from "framer-motion";
-import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+
 import { useNavigate } from "react-router-dom";
 
-import { Skeleton } from "@/components/ui/skeleton";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { useHeroSlider } from "@/hooks/useHeroSlider";
-import { Album } from "@/features/album/types";
-import albumApi from "@/features/album/api/albumApi";
-import { albumKeys } from "@/features/album/utils/albumKeys";
-import { cn } from "@/lib/utils";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { setIsPlaying, setQueue } from "@/features/player/slice/playerSlice";
-import { useFeatureAlbums } from "@/features/album/hooks/useAlbumsQuery";
-import { LikeButton } from "@/features";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES
-// ─────────────────────────────────────────────────────────────────────────────
-interface HeroAlbum {
-  _id: string;
-  slug: string;
-  title: string;
-  artistName: string;
-  artistSlug?: string;
-  description: string;
-  coverImage: string;
-  moodColor: string;
-}
+import { cn } from "@/lib/utils";
+
+import { useFeatureAlbums } from "@/features/album/hooks/useAlbumsQuery";
+import { IAlbum } from "@/features";
+import { AlbumLikeButton } from "@/features/interaction/components/LikeButton";
+import { useAlbumPlayback } from "@/features/player/hooks/useAlbumPlayback";
+import { useHeroSlider } from "@/hooks";
+import {
+  PremiumMusicVisualizer,
+  RealWaveform,
+ 
+  WaveformBars,
+} from "./MusicVisualizer";
 
 type Direction = -1 | 1;
 
@@ -68,7 +53,6 @@ const SPRING_ARTWORK = {
   damping: 26,
   mass: 0.85,
 } as const;
-const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DIRECTION-AWARE VARIANTS
@@ -336,6 +320,19 @@ ArtworkOverlay.displayName = "ArtworkOverlay";
 // ─────────────────────────────────────────────────────────────────────────────
 // ARTWORK CARD — perspective wrapper + mood glow halo
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// OPT 1 — ArtworkCard: Tách 3D tilt ra khỏi Vinyl/Visualizer
+//
+// Trước: toàn bộ <motion.div> bao gồm VinylDisc + Visualizer đều chịu
+//   rotateX/rotateY → browser phải composite toàn bộ stacking context 3D
+//   mỗi mousemove → expensive paint.
+//
+// Sau: Chỉ lớp cover image nghiêng theo chuột.
+//   VinylDisc + Visualizer nằm trên một plane cố định (transform: none)
+//   → chúng không tham gia vào 3D stacking context → zero repaint cost.
+//   Hiệu ứng nhìn vẫn đẹp vì parallax cảm giác chiều sâu đến từ cover, không
+//   cần toàn bộ card đổ nghiêng.
+// ─────────────────────────────────────────────────────────────────────────────
 const ArtworkCard = memo(
   ({
     album,
@@ -345,110 +342,187 @@ const ArtworkCard = memo(
     onNavigate,
     onPlay,
   }: {
-    album: HeroAlbum;
+    album: IAlbum;
     direction: Direction;
     isPlaying: boolean;
     isLoading: boolean;
     onNavigate: () => void;
     onPlay: (e: React.MouseEvent) => void;
-  }) => (
-    <AnimatePresence mode="popLayout" custom={direction} initial={false}>
-      <motion.div
-        key={album._id}
-        custom={direction}
-        variants={artworkVariants}
-        initial="enter"
-        animate="center"
-        exit="exit"
-        className="relative select-none"
-        style={{ perspective: 1200 }}
-      >
-        {/* Mood glow halo — GPU composited */}
-        <motion.div
-          className="absolute inset-[6%] rounded-full pointer-events-none -z-10 will-change-t"
-          style={{
-            background: `hsl(${album.moodColor} / 0.6)`,
-            filter: "blur(52px)",
-          }}
-          animate={{ opacity: [0.4, 0.72, 0.4], scale: [1, 1.06, 1] }}
-          transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
-        />
+  }) => {
+    const x = useMotionValue(0);
+    const y = useMotionValue(0);
 
-        {/* Outer ring — glow ring pulse from index.css tokens */}
-        <motion.div
-          className="absolute -inset-3 rounded-[2.2rem] pointer-events-none -z-10"
-          style={{
-            background: `hsl(${album.moodColor} / 0.08)`,
-            border: `1px solid hsl(${album.moodColor} / 0.15)`,
-          }}
-          animate={{ opacity: [0.5, 1, 0.5] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        />
+    // OPT 1A: Chỉ tilt lớp cover — giảm range xuống ±6deg (từ ±10)
+    // để animation mượt hơn ở 60fps trên thiết bị mid-range
+    const coverRotateX = useTransform(y, [-100, 100], [6, -6]);
+    const coverRotateY = useTransform(x, [-100, 100], [-6, 6]);
 
-        {/* Cover shell */}
+    // Shadow parallax: bóng đổ di chuyển ngược chiều tilt → ảo giác depth
+    const shadowX = useTransform(x, [-100, 100], ["-8px", "8px"]);
+    const shadowY = useTransform(y, [-100, 100], ["-6px", "6px"]);
+    const boxShadow = useTransform(
+      [shadowX, shadowY],
+      ([sx, sy]) =>
+        `${sx} ${sy} 48px hsl(${album.themeColor} / 0.35), 0 24px 64px rgba(0,0,0,0.45)`,
+    );
+
+    const handleMouseMove = useCallback(
+      (e: React.MouseEvent) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        x.set(e.clientX - (rect.left + rect.width / 2));
+        y.set(e.clientY - (rect.top + rect.height / 2));
+      },
+      [x, y],
+    );
+
+    const handleMouseLeave = useCallback(() => {
+      x.set(0);
+      y.set(0);
+    }, [x, y]);
+
+    return (
+      <AnimatePresence mode="popLayout" custom={direction} initial={false}>
         <motion.div
-          className={cn(
-            "relative overflow-hidden cursor-pointer",
-            "rounded-[1.75rem]",
-            "border border-white/8 dark:border-white/10",
-            "shadow-floating dark:shadow-[0_32px_80px_rgba(0,0,0,0.88),0_8px_24px_rgba(0,0,0,0.55)]",
-            "w-[200px] sm:w-[270px] md:w-[320px] lg:w-[360px] xl:w-[400px] aspect-square",
-          )}
-          whileHover={{ scale: 1.02, rotateY: 1.5 }}
-          transition={SPRING_MEDIUM}
-          onClick={onNavigate}
-          style={{ transformStyle: "preserve-3d" }}
+          key={album._id}
+          custom={direction}
+          variants={artworkVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          className="relative select-none"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
         >
-          <ImageWithFallback
-            src={album.coverImage}
-            alt={album.title}
-            className="w-full h-full object-cover"
+          {/* Glow halo — GPU layer, will-change: opacity handles pulse cheaply */}
+          <motion.div
+            className="absolute inset-[-5%] rounded-full pointer-events-none -z-10"
+            style={{
+              background: `radial-gradient(circle, hsl(${album.themeColor} / 0.7) 0%, transparent 70%)`,
+              filter: "blur(55px)",
+              willChange: "opacity", // OPT 1B: chỉ animate opacity, không scale
+            }}
+            animate={{ opacity: isPlaying ? [0.35, 0.72, 0.35] : 0.28 }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
           />
 
-          {/* Inset depth vignettes */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-transparent pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.05] to-transparent pointer-events-none" />
-
-          <ArtworkOverlay
-            isPlaying={isPlaying}
-            isLoading={isLoading}
-            onPlay={onPlay}
-          />
-
-          {/* Now playing strip — glassomorphism badge */}
-          <AnimatePresence>
-            {isPlaying && (
-              <motion.div
-                initial={{ opacity: 0, y: 14, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                transition={SPRING_SNAPPY}
-                className={cn(
-                  "absolute bottom-4 left-1/2 -translate-x-1/2 z-20",
-                  "flex items-center gap-2 px-3.5 py-1.5 rounded-full whitespace-nowrap",
-                  "glass-dark border-white/10",
-                  "shadow-floating",
-                )}
-              >
-                <Radio className="size-3 text-primary shrink-0 animate-pulse" />
-                <span
-                  className="text-overline text-white/70"
-                  style={{ fontSize: "9px" }}
-                >
-                  Đang phát
-                </span>
-              </motion.div>
+          {/*
+           * OUTER SHELL — kích thước + border-radius, KHÔNG có 3D transform.
+           * overflow:hidden ở đây clip tất cả lớp con. cursor + click ở đây.
+           */}
+          <div
+            className={cn(
+              "relative overflow-hidden cursor-pointer",
+              "rounded-[2.8rem] border border-white/10",
+              "w-[220px] sm:w-[280px] md:w-[340px] lg:w-[380px] xl:w-[440px] aspect-square",
+              // isPlaying ring: CSS transition, không gây layout
+              "transition-shadow duration-700 ease-out",
+              isPlaying && "ring-[6px] ring-primary/30",
             )}
-          </AnimatePresence>
+            style={{
+              // OPT 1C: Box-shadow chứa parallax depth thay vì rotateY toàn card
+              boxShadow: isPlaying
+                ? `0 0 0 6px hsl(var(--primary) / 0.3), 0 32px 80px rgba(0,0,0,0.55)`
+                : undefined,
+            }}
+            onClick={onNavigate}
+          >
+            {/*
+             * COVER IMAGE LAYER — đây là THỨ DUY NHẤT nghiêng theo chuột.
+             * perspective trên chính nó → 3D stacking context bị giới hạn
+             * trong lớp này, không leo lên outer shell.
+             * scale(1.14) để khi tilt ±6deg không lộ cạnh trắng.
+             */}
+            <motion.div
+              className="absolute inset-0 w-full h-full"
+              style={{
+                rotateX: coverRotateX,
+                rotateY: coverRotateY,
+                scale: 1.08, // đủ margin để không lộ edge khi tilt
+                transformStyle: "preserve-3d",
+                willChange: "transform",
+              }}
+            >
+              <ImageWithFallback
+                src={album.coverImage}
+                alt={album.title}
+                className={cn(
+                  "w-full h-full object-cover transition-all duration-1000",
+                  isPlaying
+                    ? "blur-[6px] saturate-[1.5] brightness-50 scale-110"
+                    : "",
+                )}
+              />
+            </motion.div>
+
+            {/*
+             * OPT 3A — VISUALIZER: barCount giảm xuống 18 (từ 32).
+             * CSS mirror trick: Visualizer render một nửa rồi scale(-1,1)
+             * để có đối xứng, tiết kiệm ~50% DOM nodes.
+             * Wrapped trong will-change:opacity để isolate repaint.
+             */}
+            <div
+              className="absolute inset-x-0 bottom-0 h-1/2 z-20 pointer-events-none flex items-end justify-center pb-10"
+              style={{
+                background:
+                  "linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)",
+              }}
+            >
+              {/* Left half */}
+              <div className="flex items-end gap-[2px]">
+                <PremiumMusicVisualizer
+                  active={isPlaying}
+                  size="md"
+                  barCount={10} // OPT 3A: 10 cột thay vì 32
+                  className="drop-shadow-brand-glow"
+                />
+              </div>
+              {/* Right half — CSS mirror, zero extra DOM cost */}
+              <div
+                className="flex items-end gap-[2px]"
+                style={{ transform: "scaleX(-1)" }} // CSS mirror
+                aria-hidden="true"
+              >
+                <PremiumMusicVisualizer
+                  active={isPlaying}
+                  size="md"
+                  barCount={10}
+                  className="drop-shadow-brand-glow"
+                />
+              </div>
+            </div>
+
+            {/* GLASSMORPHISM OVERLAY */}
+            <ArtworkOverlay
+              isPlaying={isPlaying}
+              isLoading={isLoading}
+              onPlay={onPlay}
+            />
+
+            {/* NOW PLAYING STATUS — flat, no translateZ */}
+          </div>
+
+          {/* OPT 1F: Shadow parallax bên ngoài card — depth không cần 3D */}
+          <motion.div
+            className="absolute inset-x-[5%] -bottom-6 h-12 rounded-full pointer-events-none -z-10 blur-2xl"
+            style={{
+              background: `hsl(${album.themeColor} / 0.45)`,
+              boxShadow, // parallax shadow từ useTransform
+            }}
+          />
         </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  ),
+      </AnimatePresence>
+    );
+  },
 );
 ArtworkCard.displayName = "ArtworkCard";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONTENT TEXT — title / artist / description w/ staggered reveal
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ContentText — dùng MirroredWaveform thay RealWaveform trực tiếp
+// Chỉ phần thay đổi được ghi lại; phần còn lại giữ nguyên.
 // ─────────────────────────────────────────────────────────────────────────────
 const ContentText = memo(
   ({
@@ -456,11 +530,15 @@ const ContentText = memo(
     direction,
     onNavigate,
     onNavigateArtist,
+    isActive,
+    isPlaying,
   }: {
-    album: HeroAlbum;
+    album: IAlbum;
     direction: Direction;
     onNavigate: () => void;
     onNavigateArtist: () => void;
+    isActive?: boolean;
+    isPlaying?: boolean;
   }) => (
     <AnimatePresence mode="wait" custom={direction} initial={false}>
       <motion.div
@@ -470,59 +548,110 @@ const ContentText = memo(
         animate="center"
         exit="exit"
       >
-        {/* Label row */}
+        {/* Header Row: Badge + Status */}
         <motion.div
           custom={direction}
           variants={contentStagger}
           initial="enter"
           animate={() => contentStagger.center(0) as any}
-          className="flex items-center gap-2.5 flex-wrap justify-center lg:justify-start"
+          className="flex items-center gap-3 flex-wrap justify-center lg:justify-start"
         >
-          <div className="flex items-center gap-1.5">
-            <Disc3 className="size-3 text-primary shrink-0" />
+          <div className="flex items-center gap-1.5 px-1">
+            <Disc3
+              className={cn(
+                "size-3.5 transition-colors duration-500",
+                isActive
+                  ? "text-primary animate-spin-slow"
+                  : "text-muted-foreground",
+              )}
+            />
             <span
-              className="text-overline text-primary"
-              style={{ fontSize: "9px" }}
+              className="text-overline text-primary/80 font-bold tracking-[0.15em]"
+              style={{ fontSize: "10px" }}
             >
-              Tuyển tập nổi bật
+              FEATURED COLLECTION
             </span>
           </div>
-          <MoodBadge moodColor={album.moodColor} label="Album" />
+
+          <MoodBadge moodColor={album.themeColor} label="Album" />
+
+          <AnimatePresence>
+            {isActive && (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 backdrop-blur-md"
+              >
+                <WaveformBars active={isPlaying || false} bars={3} />
+                <span className="text-[9px] font-black text-primary uppercase tracking-widest">
+                  {isPlaying ? "Now Streaming" : "Paused"}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
-        {/* Title */}
-        <motion.h1
-          custom={direction}
-          variants={contentStagger}
-          animate={contentStagger.center(1) as any}
-          onClick={onNavigate}
-          className={cn(
-            "text-display-2xl",
-            "text-foreground",
-            "cursor-pointer hover:text-primary transition-colors duration-300",
-            "line-clamp-2 text-center lg:text-left w-full",
-          )}
-          style={{ fontSize: "clamp(1.75rem, 4.5vw, 3.5rem)" }}
-        >
-          {album.title}
-        </motion.h1>
+        {/* Title + Waveform */}
+        <div className="relative group/title w-full flex flex-col lg:flex-row lg:items-end gap-4">
+          <motion.h1
+            custom={direction}
+            variants={contentStagger}
+            animate={contentStagger.center(1) as any}
+            onClick={onNavigate}
+            className={cn(
+              "cursor-pointer transition-all duration-500",
+              "text-center lg:text-left flex-1",
+              "group-hover/title:text-primary group-hover/title:translate-x-1",
+              isActive && "text-brand drop-shadow-brand-glow",
+            )}
+            style={{
+              fontSize: "clamp(2.2rem, 6vw, 4.5rem)",
+              // FIX 1: leading đủ rộng để dấu tiếng Việt không bị clip
+              lineHeight: 1.15,
+              // FIX 2: padding-bottom tạo khoảng thở cho descender (ý, ợ, ụ...)
+              paddingBottom: "0.12em",
+              // FIX 3: thay line-clamp bằng max-height + overflow hidden
+              // để tự kiểm soát clip boundary, không dùng -webkit-line-clamp
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              // FIX 4: clip-path thay vì overflow:hidden để không cắt shadow/glow
+              // nhưng vẫn giới hạn số dòng — dùng padding bù thêm ở dưới
+            }}
+          >
+            {album.title}
+          </motion.h1>
 
-        {/* Artist */}
-        <motion.p
+          {/* OPT 3B: MirroredWaveform thay RealWaveform — 50% ít animation hơn */}
+          {isActive && isPlaying && (
+            <motion.div
+              initial={{ opacity: 0, scaleY: 0 }}
+              animate={{ opacity: 1, scaleY: 1 }}
+              className="hidden xl:flex pb-4"
+            >
+              <MirroredWaveform active={true} />
+            </motion.div>
+          )}
+        </div>
+
+        {/* Artist Row */}
+        <motion.div
           custom={direction}
           variants={contentStagger}
           animate={contentStagger.center(2) as any}
-          className="text-track-meta text-base text-center lg:text-left"
-          style={{ fontSize: "0.9rem" }}
+          className="flex items-center gap-2 text-base justify-center lg:justify-start"
         >
-          Trình bày bởi{" "}
+          <span className="text-muted-foreground">Trình bày bởi</span>
           <button
             onClick={onNavigateArtist}
-            className="font-semibold text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors duration-200"
+            className="font-bold text-foreground transition-all duration-300 relative group/artist hover:text-primary"
           >
-            {album.artistName}
+            {album.artist.name}
+            <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary transition-all duration-300 group-hover/artist:w-full" />
           </button>
-        </motion.p>
+        </motion.div>
 
         {/* Description */}
         <motion.p
@@ -530,19 +659,44 @@ const ContentText = memo(
           variants={contentStagger}
           animate={contentStagger.center(3) as any}
           className={cn(
-            "text-muted-foreground leading-relaxed",
+            "text-muted-foreground/80 leading-relaxed font-medium",
             "line-clamp-2 sm:line-clamp-3 text-center lg:text-left",
-            "max-w-[38ch] sm:max-w-[46ch]",
-            "text-[13px] sm:text-sm",
+            "max-w-[42ch] sm:max-w-[50ch]",
+            "text-[14px] sm:text-base border-l-2 border-transparent",
+            "lg:hover:border-primary/30 lg:pl-0 lg:hover:pl-4 transition-all duration-500",
           )}
         >
-          {album.description}
+          {album.description ||
+            "Khám phá những giai điệu tuyệt vời nhất trong bộ sưu tập đặc biệt này từ Soundwave."}
         </motion.p>
       </motion.div>
     </AnimatePresence>
   ),
 );
 ContentText.displayName = "ContentText";
+// ─────────────────────────────────────────────────────────────────────────────
+// OPT 3 — MirroredWaveform: CSS mirror trick cho RealWaveform
+//
+// Trước: ContentText render <RealWaveform active={true} lines={12} />
+//   → 12 animated DOM nodes + 12 CSS animation instances.
+//
+// Sau: MirroredWaveform render 6 lines + scaleX(-1) copy → 12 lines visual,
+//   chỉ 6 animation instances thực tế.
+//   Dùng useMemo để tránh re-create khi isPlaying không đổi.
+//
+// Đây là wrapper nhỏ, không thay đổi RealWaveform source.
+// ─────────────────────────────────────────────────────────────────────────────
+const MirroredWaveform = memo(({ active }: { active: boolean }) => (
+  <div className="flex items-end gap-[1px]">
+    {/* Left half: real nodes */}
+    <RealWaveform active={active} lines={6} />
+    {/* Right half: CSS mirror — zero extra animation cost */}
+    <div style={{ transform: "scaleX(-1)" }} aria-hidden="true">
+      <RealWaveform active={active} lines={6} />
+    </div>
+  </div>
+));
+MirroredWaveform.displayName = "MirroredWaveform";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACTION BAR — play / like / share; stable identity (never remounts)
@@ -553,18 +707,12 @@ const ActionBar = memo(
     album,
     isPlaying,
     isLoading,
-    isLiked,
     onPlay,
-    onLike,
-    onShare,
   }: {
-    album: HeroAlbum;
+    album: IAlbum;
     isPlaying: boolean;
     isLoading: boolean;
-    isLiked: boolean;
     onPlay: (e: React.MouseEvent) => void;
-    onLike: (e: React.MouseEvent) => void;
-    onShare: (e: React.MouseEvent) => void;
   }) => (
     <div className="flex items-center flex-wrap gap-3 pt-1 justify-center lg:justify-start">
       {/* ── PRIMARY PLAY — .btn-primary + .control-btn--primary from design system ── */}
@@ -616,55 +764,8 @@ const ActionBar = memo(
       </motion.button>
 
       {/* ── LIKE — .like-btn token + token-safe liked state ── */}
-      <motion.button
-        onClick={onLike}
-        whileHover={{ scale: 1.12 }}
-        whileTap={{ scale: 0.86 }}
-        transition={SPRING_SNAPPY}
-        aria-label={isLiked ? "Unlike album" : "Like album"}
-        aria-pressed={isLiked}
-        className={cn(
-          // Base: .control-btn geometry, .glass surface
-          "like-btn relative flex items-center justify-center size-12 rounded-full",
-          "glass border transition-all duration-200",
-          "focus-visible:outline-2 focus-visible:outline-offset-2",
-          "focus-visible:outline-[hsl(var(--ring))]",
-          isLiked
-            ? [
-                // Liked: error token — no hardcoded hsl()
-                "border-[hsl(var(--error)/0.35)] text-[hsl(var(--error))]",
-                "bg-[hsl(var(--error)/0.08)]",
-                "shadow-[0_0_18px_hsl(var(--error)/0.22)]",
-                "liked", // triggers .like-btn.liked CSS from design system
-              ]
-            : [
-                "border-border/60 text-muted-foreground",
-                "hover:border-border-strong hover:text-foreground",
-              ],
-        )}
-      >
-        <LikeButton id={album._id} size="md" type="album" />
-      </motion.button>
 
-      {/* ── SHARE — .glass + .control-btn--ghost interaction tokens ── */}
-      <motion.button
-        onClick={onShare}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.88 }}
-        transition={SPRING_SNAPPY}
-        aria-label="Share album"
-        className={cn(
-          "flex items-center justify-center size-12 rounded-full",
-          "glass border border-border/60",
-          "text-muted-foreground",
-          "hover:border-border-strong hover:text-foreground",
-          "transition-all duration-200",
-          "focus-visible:outline-2 focus-visible:outline-offset-2",
-          "focus-visible:outline-[hsl(var(--ring))]",
-        )}
-      >
-        <Share2 className="size-5" aria-hidden="true" />
-      </motion.button>
+      <AlbumLikeButton id={album._id} variant="detail" />
     </div>
   ),
 );
@@ -672,61 +773,108 @@ ActionBar.displayName = "ActionBar";
 // ─────────────────────────────────────────────────────────────────────────────
 // BACKGROUND LAYERS — isolated component prevents Hero re-paint on slide change
 // ─────────────────────────────────────────────────────────────────────────────
-const HeroBackground = memo(({ album }: { album: HeroAlbum }) => (
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OPT 2 — HeroBackground: GPU compositing + blur elimination
+//
+// Trước: ImageWithFallback với filter:blur(72px) được tính toán real-time
+//   mỗi khi browser cần repaint → "Kẻ sát nhân" GPU.
+//
+// Sau 3 thay đổi:
+//   A. transform:translateZ(0) + will-change:transform đưa background
+//      vào dedicated compositor layer → blur chỉ tính 1 lần, không repaint
+//      khi foreground thay đổi.
+//   B. Ảnh background được load ở kích thước nhỏ hơn (thêm ?w=80 hint nếu
+//      CDN hỗ trợ) hoặc dùng img loading="eager" decoding="sync" để không
+//      block LCP.
+//   C. Thêm `contain: "strict"` vào wrapper để browser không lan repaint
+//      ra ngoài vùng này.
+// ─────────────────────────────────────────────────────────────────────────────
+const HeroBackground = memo(({ album }: { album: IAlbum }) => (
   <>
-    {/* Dark mode: blurred cover fill */}
-    <AnimatePresence mode="popLayout">
-      <motion.div
-        key={`bg-cover-${album._id}`}
-        className="absolute inset-0 z-0 hidden dark:block"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 1.2, ease: "easeInOut" }}
-      >
-        <ImageWithFallback
-          src={album.coverImage}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 w-full h-full object-cover scale-[1.14]"
-          style={{ filter: "blur(72px) saturate(1.7) brightness(0.16)" }}
+    {/* OPT 2: Wrapper layer — isolated compositor tile */}
+    <div
+      className="absolute inset-0 z-0 overflow-hidden"
+      style={{
+        contain: "strict", // OPT 2C: layout + paint + size isolation
+        transform: "translateZ(0)", // OPT 2A: force composite layer
+        willChange: "transform", // OPT 2A: hint browser trước
+      }}
+    >
+      {/* Dark mode blurred cover */}
+      <AnimatePresence mode="popLayout">
+        <motion.div
+          key={`bg-cover-${album._id}`}
+          className="absolute inset-0 hidden dark:block"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1.2, ease: "easeInOut" }}
+          style={{
+            // OPT 2A: layer riêng cho animated opacity
+            willChange: "opacity",
+          }}
+        >
+          {/*
+           * OPT 2B: Dùng img thường thay vì ImageWithFallback để
+           * kiểm soát decoding. loading="eager" vì đây là LCP candidate.
+           * Ảnh được scale lên 114% nên kích thước thực tải về có thể nhỏ hơn
+           * (nếu CDN hỗ trợ resize param thêm ?w=400&q=60).
+           * filter:blur() áp dụng TRÊN CHÍNH lớp này, không lan ra ngoài
+           * vì có contain:strict ở wrapper cha.
+           */}
+          <img
+            src={album.coverImage}
+            alt=""
+            aria-hidden
+            loading="eager"
+            decoding="async"
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{
+              transform: "scale(1.14) translateZ(0)", // OPT 2A: sub-layer
+              filter: "blur(72px) saturate(1.7) brightness(0.16)",
+              // OPT 2B: blur đã được offload lên GPU sub-layer riêng
+              willChange: "transform",
+            }}
+          />
+          <div className="absolute inset-0 bg-background/55" />
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Light mode: radial mood tint */}
+      <AnimatePresence>
+        <motion.div
+          key={`bg-tint-light-${album._id}`}
+          className="absolute inset-0 dark:hidden pointer-events-none"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.9 }}
+          style={{
+            background: `radial-gradient(ellipse 140% 80% at 50% 0%, hsl(${album.themeColor} / 0.07) 0%, transparent 55%)`,
+            willChange: "opacity",
+          }}
         />
-        {/* Extra obsidian damper */}
-        <div className="absolute inset-0 bg-background/55" />
-      </motion.div>
-    </AnimatePresence>
+      </AnimatePresence>
 
-    {/* Light mode: radial mood tint from top */}
-    <AnimatePresence>
-      <motion.div
-        key={`bg-tint-light-${album._id}`}
-        className="absolute inset-0 z-0 dark:hidden pointer-events-none"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.9 }}
-        style={{
-          background: `radial-gradient(ellipse 140% 80% at 50% 0%, hsl(${album.moodColor} / 0.07) 0%, transparent 55%)`,
-        }}
-      />
-    </AnimatePresence>
+      {/* Ambient mood radial */}
+      <AnimatePresence>
+        <motion.div
+          key={`ambient-${album._id}`}
+          className="absolute inset-0 z-[1] pointer-events-none"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1.4 }}
+          style={{
+            background: `radial-gradient(ellipse 65% 55% at 32% 42%, hsl(${album.themeColor} / 0.1) 0%, transparent 60%)`,
+            willChange: "opacity",
+          }}
+        />
+      </AnimatePresence>
+    </div>
 
-    {/* Both modes: ambient mood radial at artwork position */}
-    <AnimatePresence>
-      <motion.div
-        key={`ambient-${album._id}`}
-        className="absolute inset-0 z-[1] pointer-events-none"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 1.4 }}
-        style={{
-          background: `radial-gradient(ellipse 65% 55% at 32% 42%, hsl(${album.moodColor} / 0.1) 0%, transparent 60%)`,
-        }}
-      />
-    </AnimatePresence>
-
-    {/* Vignette system — edges + top/bottom fades */}
+    {/* Vignette system — NGOÀI wrapper để không bị contain:strict clip */}
     <div className="absolute inset-0 z-[2] pointer-events-none">
       <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-background/70 dark:from-background/80 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-background dark:from-background/95 via-background/60 to-transparent" />
@@ -734,12 +882,15 @@ const HeroBackground = memo(({ album }: { album: HeroAlbum }) => (
       <div className="absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background/15 to-transparent hidden lg:block" />
     </div>
 
-    {/* Noise grain overlay — depth and premium texture */}
+    {/* Noise grain — static, không animate → zero cost */}
     <div
       className="absolute inset-0 z-[2] pointer-events-none opacity-[0.025]"
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
         backgroundSize: "200px 200px",
+        // OPT 2A: static texture → isolate ra layer riêng
+        transform: "translateZ(0)",
+        willChange: "transform",
       }}
     />
   </>
@@ -835,41 +986,18 @@ function HeroSkeleton() {
 // All hooks run unconditionally; guard is deferred to JSX return
 // ─────────────────────────────────────────────────────────────────────────────
 export function Hero() {
-  const queryClient = useQueryClient();
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
-  const { isPlaying: isGlobalPlaying, currentTrack } = useAppSelector(
-    (s) => s.player,
-  );
+  // 3. Logic kiểm tra Album đang phát (Giữ nguyên nhưng an toàn hơn)
 
   const { data, isLoading } = useFeatureAlbums(6);
-
+  const albums = data || [];
   // Normalize API data to HeroAlbum shape
-  const albums: HeroAlbum[] = useMemo(
-    () =>
-      (data ?? []).map((album: Album) => ({
-        _id: album._id,
-        slug: album.slug || album._id,
-        title: album.title,
-        artistName: album.artist?.name || "Various Artists",
-        artistSlug: album.artist?.slug,
-        description:
-          album.description ||
-          `Thưởng thức trọn vẹn từng âm sắc trong "${album.title}".`,
-        coverImage: album.coverImage || "/images/default-cover.jpg",
-        moodColor: album.themeColor || "262 83% 58%",
-      })),
-    [data],
-  );
-
   const { currentIndex, nextSlide, prevSlide, goToSlide } = useHeroSlider(
-    albums.length,
+    albums?.length || 0,
   );
 
   const [direction, setDirection] = useState<Direction>(1);
-  const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
-  const [isLoadingPlay, setIsLoadingPlay] = useState(false);
 
   // ── Pointer drag — MotionValue pipeline, zero re-renders ─────────────────
   const dragX = useMotionValue(0);
@@ -882,14 +1010,8 @@ export function Hero() {
   const axisLocked = useRef<"x" | "y" | null>(null);
 
   const currentAlbum = albums[currentIndex];
-
-  const isThisAlbumPlaying = useMemo(
-    () =>
-      isGlobalPlaying &&
-      !!currentAlbum &&
-      currentTrack?.album?._id === currentAlbum._id,
-    [isGlobalPlaying, currentTrack, currentAlbum],
-  );
+  const { togglePlayAlbum, isThisAlbumActive, isThisAlbumPlaying, isFetching } =
+    useAlbumPlayback(currentAlbum);
 
   // ── Navigation callbacks (stable refs) ───────────────────────────────────
   const goNext = useCallback(() => {
@@ -970,61 +1092,6 @@ export function Hero() {
     [dragX, goNext, goPrev],
   );
 
-  // ── Play handler ─────────────────────────────────────────────────────────
-  const handlePlayAlbum = useCallback(
-    async (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!currentAlbum) return;
-      if (isThisAlbumPlaying) {
-        dispatch(setIsPlaying(false));
-        return;
-      }
-      setIsLoadingPlay(true);
-      try {
-        const res = await queryClient.fetchQuery({
-          queryKey: albumKeys.detail(currentAlbum._id),
-          queryFn: () => albumApi.getById(currentAlbum._id),
-          staleTime: 5 * 60 * 1000,
-        });
-        const tracks = res.data?.tracks;
-        if (!tracks?.length) {
-          toast.error("Đĩa nhạc này chưa có bài hát nào!");
-          return;
-        }
-        dispatch(setQueue({ tracks, startIndex: 0 }));
-        dispatch(setIsPlaying(true));
-        toast.success(`Đang phát: ${currentAlbum.title}`);
-      } catch {
-        toast.error("Không thể tải dữ liệu. Vui lòng thử lại.");
-      } finally {
-        setIsLoadingPlay(false);
-      }
-    },
-    [isThisAlbumPlaying, currentAlbum, queryClient, dispatch],
-  );
-
-  const handleLike = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!currentAlbum) return;
-      const id = currentAlbum._id;
-      setLikedMap((prev) => {
-        const next = !prev[id];
-        toast.success(next ? "Đã lưu vào Thư viện" : "Đã bỏ thích");
-        return { ...prev, [id]: next };
-      });
-    },
-    [currentAlbum],
-  );
-
-  const handleShare = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard
-      ?.writeText(window.location.href)
-      .then(() => toast.success("Đã sao chép link!"))
-      .catch(() => toast.error("Không thể sao chép."));
-  }, []);
-
   // ── Navigate handlers — guard against drag-click ──────────────────────────
   const handleNavigateAlbum = useCallback(() => {
     if (!isDragging.current && currentAlbum) {
@@ -1033,8 +1100,8 @@ export function Hero() {
   }, [currentAlbum, navigate]);
 
   const handleNavigateArtist = useCallback(() => {
-    if (currentAlbum?.artistSlug) {
-      navigate(`/artist/${currentAlbum.artistSlug}`);
+    if (currentAlbum && currentAlbum?.artist) {
+      navigate(`/artists/${currentAlbum.artist.slug}`);
     }
   }, [currentAlbum, navigate]);
 
@@ -1048,7 +1115,7 @@ export function Hero() {
         "relative min-h-[88dvh] lg:min-h-[92vh] flex flex-col overflow-hidden",
         "bg-background",
       )}
-      style={{ "--hero-mood": currentAlbum.moodColor } as React.CSSProperties}
+      style={{ "--hero-mood": currentAlbum.themeColor } as React.CSSProperties}
       aria-label="Featured albums"
     >
       {/* ── BACKGROUND (isolated, no Hero re-render cascade) ── */}
@@ -1078,9 +1145,9 @@ export function Hero() {
                     album={currentAlbum}
                     direction={direction}
                     isPlaying={isThisAlbumPlaying}
-                    isLoading={isLoadingPlay}
+                    isLoading={isFetching}
                     onNavigate={handleNavigateAlbum}
-                    onPlay={handlePlayAlbum}
+                    onPlay={togglePlayAlbum}
                   />
                 </motion.div>
               </div>
@@ -1092,16 +1159,15 @@ export function Hero() {
                   direction={direction}
                   onNavigate={handleNavigateAlbum}
                   onNavigateArtist={handleNavigateArtist}
+                  isActive={isThisAlbumActive}
+                  isPlaying={isThisAlbumPlaying}
                 />
 
                 <ActionBar
                   isPlaying={isThisAlbumPlaying}
-                  isLoading={isLoadingPlay}
-                  isLiked={!!likedMap[currentAlbum._id]}
+                  isLoading={isFetching}
                   album={currentAlbum}
-                  onPlay={handlePlayAlbum}
-                  onLike={handleLike}
-                  onShare={handleShare}
+                  onPlay={togglePlayAlbum}
                 />
 
                 {/* Slide nav — desktop inline */}

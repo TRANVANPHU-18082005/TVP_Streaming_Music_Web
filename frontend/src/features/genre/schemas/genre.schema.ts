@@ -1,94 +1,109 @@
+// features/genre/schemas/genre.schema.ts
 import { z } from "zod";
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB cho icon genre là đủ
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
   "image/jpg",
   "image/png",
   "image/webp",
-  "image/svg+xml", // Rất tốt, vì Genre thường dùng SVG làm icon
-];
-const HEX_COLOR_REGEX = /^#([0-9A-F]{3}){1,2}$/i;
+  "image/svg+xml",
+] as const;
+export const GENRE_SORT_OPTIONS = [
+  "newest",
+  "oldest",
+  "popular",
+  "name",
+] as const;
+export const GENRE_STATUS_OPTIONS = ["active", "inactive"] as const;
 
-// Tách riêng Image Schema để dễ tái sử dụng và đọc code
-const imageSchema = z
-  .union([
-    z
-      .instanceof(File)
-      .refine((file) => file.size <= MAX_FILE_SIZE, "Kích thước ảnh tối đa 2MB")
-      .refine(
-        (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
-        "Chỉ hỗ trợ định dạng JPG, PNG, WEBP hoặc SVG",
-      ),
-    z.string().url("Đường dẫn ảnh không hợp lệ"), // Hỗ trợ kiểm tra URL cũ
-    z.null(),
-  ])
-  .optional()
-  .nullable();
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. REUSABLE PRIMITIVES
+// ─────────────────────────────────────────────────────────────────────────────
+const optionalString = (maxLen: number, maxMsg: string) =>
+  z
+    .string()
+    .trim()
+    .max(maxLen, maxMsg)
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" ? undefined : val) ?? undefined);
 
-export const genreSchema = z.object({
-  // ==========================================
-  // 1. THÔNG TIN CƠ BẢN
-  // ==========================================
+const imageFileSchema = z
+  .instanceof(File)
+  .refine((f) => f.size <= MAX_FILE_SIZE, "Kích thước ảnh tối đa 2MB")
+  .refine(
+    (f) => ACCEPTED_IMAGE_TYPES.includes(f.type as any),
+    "Chỉ nhận .jpg, .jpeg, .png, .webp hoặc .svg",
+  );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. SHARED BASE SCHEMA
+// ─────────────────────────────────────────────────────────────────────────────
+const genreBaseSchema = z.object({
   name: z
     .string({ required_error: "Vui lòng nhập tên thể loại" })
     .trim()
-    .min(2, "Tên thể loại tối thiểu 2 ký tự")
-    .max(50, "Tên thể loại tối đa 50 ký tự"),
-
-  description: z
-    .string()
-    .trim()
-    .max(200, "Mô tả tối đa 200 ký tự")
-    .optional()
-    .nullable()
-    // 🔥 BIẾN CHUỖI RỖNG THÀNH UNDEFINED: Giúp DB sạch sẽ, không lưu chuỗi ""
-    .transform((val) => (val === "" ? undefined : val)),
-
-  // ==========================================
-  // 2. GIAO DIỆN (VISUALS)
-  // ==========================================
+    .min(2, "Tên tối thiểu 2 ký tự")
+    .max(50, "Tên tối đa 50 ký tự"),
+  description: optionalString(200, "Mô tả tối đa 200 ký tự"),
   color: z
     .string()
     .trim()
-    .regex(HEX_COLOR_REGEX, "Mã màu không hợp lệ (VD: #1DB954)")
-    .default("#1db954"), // Nên để màu mặc định thân thiện hơn màu đen (#000000)
-
-  gradient: z
-    .string()
-    .trim()
-    .optional()
-    .nullable()
-    .transform((val) => (val === "" ? undefined : val)),
-
-  // ==========================================
-  // 3. CẤU TRÚC & PHÂN LOẠI
-  // ==========================================
+    .regex(/^#([0-9A-F]{3}){1,2}$/i, "Mã màu HEX không hợp lệ")
+    .default("#1db954"),
+  gradient: optionalString(500, "Gradient quá dài"),
   parentId: z
     .string()
     .trim()
     .optional()
     .nullable()
-    // 🔥 FIX LỖI FORMDATA: Tự động dọn dẹp các giá trị rác do Frontend/Select tạo ra
-    // trước khi nó được build thành FormData
-    .transform((val) => {
-      if (val === "" || val === "null" || val === "undefined") return null;
-      return val;
-    }),
-
+    .transform((val) =>
+      val === "" || val === "null" || val === "undefined" ? null : val,
+    ),
   priority: z.coerce
-    .number({ invalid_type_error: "Độ ưu tiên phải là số" })
-    .int("Độ ưu tiên phải là số nguyên")
-    .min(0, "Độ ưu tiên không được âm (Nhỏ nhất là 0)")
-    .max(100, "Độ ưu tiên tối đa là 100")
+    .number()
+    .int()
+    .min(0, "Tối thiểu là 0")
+    .max(100, "Tối đa là 100")
     .default(0),
-
   isTrending: z.boolean().default(false),
-
-  // ==========================================
-  // 4. MEDIA
-  // ==========================================
-  image: imageSchema,
+  isActive: z.boolean().default(true), // Trường status thực tế trong DB
 });
 
-export type GenreFormValues = z.infer<typeof genreSchema>;
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. CREATE / EDIT / PARAMS SCHEMAS
+// ─────────────────────────────────────────────────────────────────────────────
+export const genreCreateSchema = genreBaseSchema.extend({
+  image: imageFileSchema.optional(),
+});
+
+export const genreEditSchema = genreBaseSchema.extend({
+  image: z
+    .union([z.string().url("Link ảnh không hợp lệ"), imageFileSchema, z.null()])
+    .optional(),
+});
+
+/** Params cho URL - Có tính năng Self-healing (Tự sửa lỗi) */
+export const genreParamsSchema = z.object({
+  page: z.coerce.number().int().min(1).catch(1),
+  limit: z.coerce.number().int().min(1).max(100).catch(20),
+  sort: z.enum(GENRE_SORT_OPTIONS).catch("name"),
+  keyword: z.string().trim().optional().catch(undefined),
+  isTrending: z
+    .preprocess(
+      (val) => (val === "true" ? true : val === "false" ? false : undefined),
+      z.boolean().optional(),
+    )
+    .catch(undefined),
+  parentId: z.string().trim().optional().catch(undefined),
+  status: z.enum(GENRE_STATUS_OPTIONS).optional().catch(undefined), // Dùng cho Filter UI
+});
+
+// TYPES
+export type GenreCreateFormValues = z.infer<typeof genreCreateSchema>;
+export type GenreEditFormValues = z.infer<typeof genreEditSchema>;
+export type GenreFilterParams = z.infer<typeof genreParamsSchema>;

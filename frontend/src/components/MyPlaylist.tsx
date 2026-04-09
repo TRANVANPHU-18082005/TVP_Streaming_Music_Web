@@ -1,43 +1,14 @@
-"use client";
-
-/**
- * @file FeaturedPlaylists.tsx — Featured Playlists Section (Refactored v2.0)
- *
- * ARCHITECTURE:
- * - Structurally mirrors FeaturedAlbums but with distinct visual identity:
- *   section uses --section-block--alt surface + wave-2 accent palette
- * - `handlePlayPlaylist` memoized with useCallback — previously created new
- *   fn reference every render, defeating PublicPlaylistCard's React.memo
- * - Removed `throw new Error` inside catch (unhandled rejection anti-pattern)
- * - PlaylistGrid / PlaylistScroll isolated as memos — viewport observer
- *   only mounts after data resolves, preventing phantom IntersectionObserver
- *   entries during loading state transitions
- * - renderContent() replaces chained ternaries for legible state machine
- *
- * DESIGN:
- * - section-block--alt gives the section visual separation from FeaturedAlbums
- *   without a heavy border — alternating surface rhythm like Spotify's home
- * - Wave-2 (pink/fuchsia) accent instead of brand-500 purple to differentiate
- *   playlists from albums at a glance
- * - .divider-glow uses wave-2 tint via inline overrides
- * - Skeleton uses .skeleton token classes from index.css
- */
-
-import { memo, useCallback } from "react";
+import { memo, useMemo } from "react";
 import { AlertCircle, ListMusic, ChevronRight, Turntable } from "lucide-react";
 import { motion } from "framer-motion";
-import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+
 import { Link } from "react-router-dom";
 
 import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
-import { Playlist } from "@/features/playlist/types";
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useMyPlaylists } from "@/features/playlist/hooks/usePlaylistsQuery";
-import playlistApi from "@/features/playlist/api/playlistApi";
-import { playlistKeys } from "@/features/playlist/utils/playlistKeys";
-import { useAppDispatch } from "@/store/hooks";
-import { setIsPlaying, setQueue } from "@/features";
+
+import { IPlaylist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "./SectionAmbient";
 
@@ -230,71 +201,55 @@ EmptyState.displayName = "EmptyState";
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST GRID — desktop whileInView stagger
 // ─────────────────────────────────────────────────────────────────────────────
-const PlaylistGrid = memo(
-  ({
-    playlists,
-    onPlay,
-  }: {
-    playlists: Playlist[];
-    onPlay: (id: string) => Promise<void>;
-  }) => (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: "-48px" }}
-      className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
-      role="list"
-      aria-label="Danh sách playlist nổi bật"
-    >
-      {playlists.map((pl) => (
-        <motion.div key={pl._id} variants={cardVariants} role="listitem">
-          <PublicPlaylistCard playlist={pl} onPlay={() => onPlay(pl._id)} />
-        </motion.div>
-      ))}
-    </motion.div>
-  ),
-);
+const PlaylistGrid = memo(({ playlists }: { playlists: IPlaylist[] }) => (
+  <motion.div
+    variants={containerVariants}
+    initial="hidden"
+    whileInView="visible"
+    viewport={{ once: true, margin: "-48px" }}
+    className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6"
+    role="list"
+    aria-label="Danh sách playlist nổi bật"
+  >
+    {playlists.map((pl) => (
+      <motion.div key={pl._id} variants={cardVariants} role="listitem">
+        <PublicPlaylistCard playlist={pl} />
+      </motion.div>
+    ))}
+  </motion.div>
+));
 PlaylistGrid.displayName = "PlaylistGrid";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST SCROLL — mobile snap-x horizontal strip
 // ─────────────────────────────────────────────────────────────────────────────
-const PlaylistScroll = memo(
-  ({
-    playlists,
-    onPlay,
-  }: {
-    playlists: Playlist[];
-    onPlay: (id: string) => Promise<void>;
-  }) => (
-    <div
-      className="lg:hidden scroll-overflow-mask -mx-4 px-4"
-      role="list"
-      aria-label="Danh sách playlist nổi bật"
-    >
-      <HorizontalScroll>
-        {playlists.map((pl, i) => (
-          <motion.div
-            key={pl._id}
-            custom={i}
-            variants={mobileCardVariants}
-            initial="hidden"
-            animate="visible"
-            role="listitem"
-            className={cn(
-              "snap-start shrink-0",
-              "w-[168px] sm:w-[200px]",
-              "first:pl-0 last:pr-4",
-            )}
-          >
-            <PublicPlaylistCard playlist={pl} onPlay={() => onPlay(pl._id)} />
-          </motion.div>
-        ))}
-      </HorizontalScroll>
-    </div>
-  ),
-);
+const PlaylistScroll = memo(({ playlists }: { playlists: IPlaylist[] }) => (
+  <div
+    className="lg:hidden scroll-overflow-mask -mx-4 px-4"
+    role="list"
+    aria-label="Danh sách playlist nổi bật"
+  >
+    <HorizontalScroll>
+      {playlists.map((pl, i) => (
+        <motion.div
+          key={pl._id}
+          custom={i}
+          variants={mobileCardVariants}
+          initial="hidden"
+          animate="visible"
+          role="listitem"
+          className={cn(
+            "snap-start shrink-0",
+            "w-[168px] sm:w-[200px]",
+            "first:pl-0 last:pr-4",
+          )}
+        >
+          <PublicPlaylistCard playlist={pl} />
+        </motion.div>
+      ))}
+    </HorizontalScroll>
+  </div>
+));
 PlaylistScroll.displayName = "PlaylistScroll";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,40 +257,13 @@ PlaylistScroll.displayName = "PlaylistScroll";
 // ─────────────────────────────────────────────────────────────────────────────
 export function MyPlaylist() {
   const { data: playlists, isLoading, isError } = useMyPlaylists();
-  const queryClient = useQueryClient();
-  const dispatch = useAppDispatch();
 
-  /**
-   * Stable play handler — useCallback prevents referential churn on
-   * PublicPlaylistCard children. staleTime: 5min to avoid redundant fetches
-   * when the user rapidly plays/pauses the same playlist.
-   * `throw` removed from catch — unhandled rejection with toast already covers UX.
-   */
-  const handlePlayPlaylist = useCallback(
-    async (playlistId: string) => {
-      try {
-        const res = await queryClient.fetchQuery({
-          queryKey: playlistKeys.detail(playlistId),
-          queryFn: () => playlistApi.getById(playlistId),
-          staleTime: 5 * 60 * 1000,
-        });
-
-        const tracks = res.data?.tracks;
-
-        if (!tracks?.length) {
-          toast.error("Playlist này chưa có bài hát nào.");
-          return;
-        }
-
-        dispatch(setQueue({ tracks, startIndex: 0 }));
-        dispatch(setIsPlaying(true));
-        toast.success(`Đang phát ${tracks.length} bài từ playlist`);
-      } catch {
-        toast.error("Không thể tải playlist. Vui lòng thử lại.");
-      }
-    },
-    [queryClient, dispatch],
+  const playlistIds = useMemo(
+    () => playlists?.map((p) => p._id) ?? [],
+    [playlists],
   );
+
+  useSyncInteractions(playlistIds, "like", "playlist", playlistIds.length > 0);
 
   const renderContent = () => {
     if (isLoading) return <SkeletonGrid count={6} />;
@@ -346,8 +274,8 @@ export function MyPlaylist() {
 
     return (
       <div className="relative">
-        <PlaylistScroll playlists={playlists} onPlay={handlePlayPlaylist} />
-        <PlaylistGrid playlists={playlists} onPlay={handlePlayPlaylist} />
+        <PlaylistScroll playlists={playlists} />
+        <PlaylistGrid playlists={playlists} />
       </div>
     );
   };

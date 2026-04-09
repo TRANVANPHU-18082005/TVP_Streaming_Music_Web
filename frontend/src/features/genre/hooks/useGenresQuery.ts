@@ -1,4 +1,8 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  keepPreviousData,
+  useInfiniteQuery,
+} from "@tanstack/react-query";
 import genreApi from "../api/genreApi";
 import { genreKeys } from "../utils/genreKeys";
 import { GenreFilterParams } from "../types";
@@ -12,7 +16,7 @@ export const useGenresQuery = (params: GenreFilterParams) => {
     queryKey: genreKeys.list(params),
 
     // Hàm fetch data
-    queryFn: () => genreApi.getAll(params),
+    queryFn: () => genreApi.getGenres(params),
 
     // UX: Giữ data cũ khi chuyển trang -> Không bị nháy Loading (Skeleton chỉ hiện lần đầu)
     placeholderData: keepPreviousData,
@@ -51,9 +55,43 @@ export const useGenreTreeQuery = () => {
 export const useGenreDetailQuery = (slug: string, enabled = true) => {
   return useQuery({
     queryKey: genreKeys.detail(slug),
-    queryFn: () => genreApi.getBySlug(slug),
+    queryFn: () => genreApi.getDetail(slug),
     enabled: !!slug && enabled, // Chỉ fetch khi có slug
     staleTime: 1000 * 60,
     select: (response) => response.data,
+  });
+};
+export const useGenreTracksInfinite = (
+  genreId: string | undefined,
+  limit = 20,
+) => {
+  return useInfiniteQuery({
+    queryKey: genreKeys.trackList(genreId!, { limit }),
+
+    queryFn: async ({ pageParam = 1 }) => {
+      // 1. Phải gọi đúng API
+      return genreApi.getGenreTracks(genreId!, { page: pageParam, limit });
+    },
+
+    enabled: !!genreId,
+    initialPageParam: 1,
+
+    // 2. Fix đường dẫn lấy Meta: response (ApiResponse) -> data (PagedResponse) -> meta
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.data.meta;
+      return page < totalPages ? page + 1 : undefined;
+    },
+
+    placeholderData: (previousData) => previousData,
+
+    // 3. Fix Select: Truy cập đúng cấu trúc ApiResponse -> PagedResponse -> data (mảng tracks)
+    // Lưu ý: Trong ApiResponse của bạn, mảng tracks nằm trong field 'data' của PagedResponse
+    select: (data) => ({
+      allTracks: data.pages.flatMap((page) => page.data.data), // Phẳng hóa mảng ITrack
+      totalItems: data.pages[0]?.data.meta.totalItems ?? 0,
+      meta: data.pages[data.pages.length - 1]?.data.meta,
+    }),
+
+    staleTime: 5 * 60 * 1000,
   });
 };

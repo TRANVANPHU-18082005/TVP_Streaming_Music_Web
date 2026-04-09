@@ -1,18 +1,36 @@
 // hooks/useLyrics.ts
 import { ILyricLine } from "@/features/track";
-import { useEffect, useState, startTransition } from "react";
+import { useEffect, useState, startTransition, useRef } from "react";
 
 export function useLyrics(lyricsUrl?: string) {
   const [lyrics, setLyrics] = useState<ILyricLine[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const cacheRef = useRef<Map<string, ILyricLine[]>>(new Map());
 
   useEffect(() => {
-    if (!lyricsUrl) return;
+    // ✅ Reset ngay khi url thay đổi
+    startTransition(() => {
+      setLyrics([]);
+      setError(false);
+    });
+
+    if (!lyricsUrl) {
+      setLoading(false);
+      return;
+    }
+
+    // ✅ Trả cache ngay nếu đã fetch trước đó
+    const cached = cacheRef.current.get(lyricsUrl);
+    if (cached) {
+      startTransition(() => {
+        setLyrics(cached);
+        setLoading(false);
+      });
+      return;
+    }
 
     setLoading(true);
-    setError(false);
-
     const controller = new AbortController();
 
     fetch(lyricsUrl, { signal: controller.signal })
@@ -21,15 +39,24 @@ export function useLyrics(lyricsUrl?: string) {
         return res.json();
       })
       .then((data) => {
+        const parsed: ILyricLine[] = Array.isArray(data)
+          ? data
+          : (data.lines ?? []);
+
+        // ✅ Lưu vào cache
+        cacheRef.current.set(lyricsUrl, parsed);
+
         startTransition(() => {
-          setLyrics(Array.isArray(data) ? data : (data.lines ?? []));
+          setLyrics(parsed);
           setLoading(false);
         });
       })
       .catch((err) => {
         if (err.name !== "AbortError") {
-          setError(true);
-          setLoading(false);
+          startTransition(() => {
+            setError(true);
+            setLoading(false);
+          });
         }
       });
 

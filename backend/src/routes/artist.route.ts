@@ -22,10 +22,17 @@ const router = express.Router();
 // ==========================================
 
 // Lấy danh sách (Có validate filter)
-router.get("/", validate(getArtistsSchema), artistController.getArtists);
+router.get(
+  "/",
+  optionalAuth,
+  validate(getArtistsSchema),
+  artistController.getArtists,
+);
 
 // Xem chi tiết (Optional Auth để check Follow status)
 router.get("/:id", optionalAuth, artistController.getArtistDetail);
+// (Get Tracks) api/artists/:id/tracks?page=?&limit=?
+router.get("/:id/tracks", optionalAuth, artistController.getArtistTracks);
 
 // ==========================================
 // 🟠 PROTECTED ROUTES
@@ -42,7 +49,7 @@ router.patch(
   authorize("artist"),
   uploadArtistFiles, // Dùng config fields mới
   validate(updateArtistSchema), // Tái sử dụng schema update
-  artistController.updateMyProfile
+  artistController.updateMyProfile,
 );
 
 // --- 2. ADMIN MANAGEMENT ---
@@ -53,7 +60,7 @@ router.post(
   authorize("admin"),
   uploadArtistFiles, // Upload ảnh trước -> Validate Body sau
   validate(createArtistSchema),
-  artistController.createArtist
+  artistController.createArtist,
 );
 
 // Toggle Status
@@ -66,7 +73,7 @@ router
     authorize("admin"),
     uploadArtistFiles,
     validate(updateArtistSchema),
-    artistController.updateArtist
+    artistController.updateArtist,
   )
   .delete(authorize("admin"), artistController.deleteArtist);
 

@@ -7,4 +7,7 @@ export const albumKeys = {
     [...albumKeys.lists(), { filter }] as const,
   details: () => [...albumKeys.all, "detail"] as const,
   detail: (slug: string) => [...albumKeys.details(), slug] as const,
+  tracks: () => [...albumKeys.all, "tracks"] as const,
+  trackList: (idOrSlug: string, params: { page?: number; limit?: number }) =>
+    [...albumKeys.tracks(), idOrSlug, { params }] as const,
 };

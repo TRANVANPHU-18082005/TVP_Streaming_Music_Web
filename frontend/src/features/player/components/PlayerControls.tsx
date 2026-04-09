@@ -20,7 +20,7 @@ import {
   toggleRepeat,
 } from "@/features/player/slice/playerSlice";
 
-// ── Reusable animated icon button ──────────────────────────────────────────
+// --- IconBtn component giữ nguyên ---
 const IconBtn = ({
   onClick,
   disabled,
@@ -28,24 +28,15 @@ const IconBtn = ({
   children,
   className,
   title,
-}: {
-  onClick: (e: React.MouseEvent) => void;
-  disabled?: boolean;
-  active?: boolean;
-  size?: "sm" | "default" | "lg";
-  children: React.ReactNode;
-  className?: string;
-  title?: string;
-}) => (
+}: any) => (
   <motion.button
     title={title}
     onClick={onClick}
     disabled={disabled}
     whileHover={disabled ? {} : { scale: 1.1 }}
     whileTap={disabled ? {} : { scale: 0.88 }}
-    transition={{ type: "spring", stiffness: 400, damping: 20 }}
     className={cn(
-      "relative inline-flex items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+      "relative inline-flex items-center justify-center rounded-full transition-colors outline-none",
       "disabled:opacity-30 disabled:pointer-events-none",
       active && "text-primary",
       className,
@@ -63,25 +54,34 @@ export const PlayerControls = ({
   getCurrentTime?: () => number;
 }) => {
   const dispatch = useDispatch();
+
+  // 1. Lấy đúng các state từ PlayerSlice mới
   const {
     isPlaying,
     isShuffling,
     repeatMode,
-    isLoading,
-    activeQueue,
+    loadingState, // Dùng loadingState thay cho isLoading
+    activeQueueIds, // Dùng mảng ID
     currentIndex,
   } = useSelector(selectPlayer);
 
-  const hasQueue = activeQueue.length > 0;
+  // 2. Logic kiểm tra trạng thái
+  const hasQueue = activeQueueIds.length > 0;
+
+  // loading thực sự khi đang fetch metadata hoặc đang buffer audio
+  const isGlobalLoading =
+    loadingState === "loading" || loadingState === "buffering";
+
   const isPrevDisabled =
     !hasQueue || (currentIndex === 0 && repeatMode === "off");
   const isNextDisabled =
     !hasQueue ||
-    (currentIndex === activeQueue.length - 1 && repeatMode === "off");
+    (currentIndex === activeQueueIds.length - 1 && repeatMode === "off");
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isPrevDisabled) return;
+    // Gửi currentTime hiện tại để Slice quyết định: Replay bài hay Back bài
     dispatch(prevTrack(getCurrentTime ? getCurrentTime() : 0));
   };
 
@@ -97,80 +97,65 @@ export const PlayerControls = ({
     dispatch(nextTrack());
   };
 
-  const handleShuffle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!hasQueue) return;
-    dispatch(toggleShuffle());
-  };
+  // ... (handleShuffle, handleRepeat giữ nguyên)
 
-  const handleRepeat = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!hasQueue) return;
-    dispatch(toggleRepeat());
-  };
+  // ── RENDER LOGIC ─────────────────────────────────────────────────────────
 
-  // ── MINI VARIANT ─────────────────────────────────────────────────────────
+  // Helper render Play/Pause/Loading icon
+  const renderMainIcon = (sizeCls: string) => (
+    <AnimatePresence mode="wait" initial={false}>
+      {isGlobalLoading ? (
+        <motion.span
+          key="loader"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <Loader2 className={cn(sizeCls, "animate-spin")} />
+        </motion.span>
+      ) : isPlaying ? (
+        <motion.span
+          key="pause"
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.5, opacity: 0 }}
+        >
+          <Pause className={cn(sizeCls, "fill-current")} />
+        </motion.span>
+      ) : (
+        <motion.span
+          key="play"
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.5, opacity: 0 }}
+        >
+          <Play className={cn(sizeCls, "fill-current")} />
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+
   if (variant === "mini") {
     return (
       <div className="flex items-center gap-1">
         <IconBtn
           onClick={handlePrev}
           disabled={isPrevDisabled}
-          className="text-foreground/70 hover:text-foreground p-1.5"
-          title="Previous"
+          className="p-1.5"
         >
           <SkipBack className="size-4 fill-current" />
         </IconBtn>
-
-        {/* Play/Pause — primary pill */}
         <motion.button
           onClick={togglePlay}
           disabled={!hasQueue}
-          whileHover={hasQueue ? { scale: 1.07 } : {}}
-          whileTap={hasQueue ? { scale: 0.92 } : {}}
-          transition={{ type: "spring", stiffness: 380, damping: 18 }}
-          className="relative flex items-center justify-center rounded-full size-9 bg-primary text-primary-foreground shadow-md disabled:opacity-30 disabled:pointer-events-none"
+          className="relative flex items-center justify-center rounded-full size-9 bg-primary text-primary-foreground shadow-md"
         >
-          <AnimatePresence mode="wait" initial={false}>
-            {isLoading ? (
-              <motion.span
-                key="loading"
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.6 }}
-                transition={{ duration: 0.15 }}
-              >
-                <Loader2 className="size-4 animate-spin" />
-              </motion.span>
-            ) : isPlaying ? (
-              <motion.span
-                key="pause"
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.6 }}
-                transition={{ duration: 0.12 }}
-              >
-                <Pause className="size-4 fill-current" />
-              </motion.span>
-            ) : (
-              <motion.span
-                key="play"
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.6 }}
-                transition={{ duration: 0.12 }}
-              >
-                <Play className="size-4 fill-current ml-0.5" />
-              </motion.span>
-            )}
-          </AnimatePresence>
+          {renderMainIcon("size-4")}
         </motion.button>
-
         <IconBtn
           onClick={handleNext}
           disabled={isNextDisabled}
-          className="text-foreground/70 hover:text-foreground p-1.5"
-          title="Next"
+          className="p-1.5"
         >
           <SkipForward className="size-4 fill-current" />
         </IconBtn>
@@ -178,140 +163,60 @@ export const PlayerControls = ({
     );
   }
 
-  // ── FULL VARIANT ─────────────────────────────────────────────────────────
   return (
     <div className="flex items-center justify-between w-full max-w-md mx-auto">
-      {/* Shuffle */}
       <IconBtn
-        onClick={handleShuffle}
+        onClick={() => dispatch(toggleShuffle())}
         disabled={!hasQueue}
         active={isShuffling}
-        className="relative text-white/60 hover:text-white p-2"
-        title="Shuffle"
+        className="p-2"
       >
-        <Shuffle className="size-5 lg:size-[22px]" />
+        <Shuffle className="size-5" />
         {isShuffling && (
           <motion.span
-            layoutId="active-dot"
-            className="absolute bottom-1 left-1/2 -translate-x-1/2 size-1 rounded-full bg-primary"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
+            layoutId="dot-s"
+            className="absolute bottom-1 size-1 rounded-full bg-primary"
           />
         )}
       </IconBtn>
 
-      {/* Prev */}
-      <IconBtn
-        onClick={handlePrev}
-        disabled={isPrevDisabled}
-        className="text-white/70 hover:text-white p-2"
-        title="Previous"
-      >
+      <IconBtn onClick={handlePrev} disabled={isPrevDisabled} className="p-2">
         <SkipBack className="size-7 fill-current" />
       </IconBtn>
 
-      {/* Play/Pause — large primary circle */}
       <motion.button
         onClick={togglePlay}
         disabled={!hasQueue}
-        whileHover={hasQueue ? { scale: 1.06 } : {}}
-        whileTap={hasQueue ? { scale: 0.93 } : {}}
-        transition={{ type: "spring", stiffness: 360, damping: 18 }}
-        className="relative flex items-center justify-center rounded-full size-16 lg:size-[72px] bg-white text-black shadow-[0_4px_24px_rgba(255,255,255,0.22)] disabled:opacity-40 disabled:pointer-events-none"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="relative flex items-center justify-center rounded-full size-16 bg-white text-black shadow-xl"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          {isLoading ? (
-            <motion.span
-              key="loading"
-              initial={{ opacity: 0, rotate: -90 }}
-              animate={{ opacity: 1, rotate: 0 }}
-              exit={{ opacity: 0, rotate: 90 }}
-              transition={{ duration: 0.18 }}
-            >
-              <Loader2 className="size-7 animate-spin" />
-            </motion.span>
-          ) : isPlaying ? (
-            <motion.span
-              key="pause"
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.5 }}
-              transition={{ type: "spring", stiffness: 420, damping: 20 }}
-            >
-              <Pause className="size-7 lg:size-8 fill-current" />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="play"
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.5 }}
-              transition={{ type: "spring", stiffness: 420, damping: 20 }}
-            >
-              <Play className="size-7 lg:size-8 fill-current ml-1" />
-            </motion.span>
-          )}
-        </AnimatePresence>
+        {renderMainIcon("size-8")}
       </motion.button>
 
-      {/* Next */}
-      <IconBtn
-        onClick={handleNext}
-        disabled={isNextDisabled}
-        className="text-white/70 hover:text-white p-2"
-        title="Next"
-      >
+      <IconBtn onClick={handleNext} disabled={isNextDisabled} className="p-2">
         <SkipForward className="size-7 fill-current" />
       </IconBtn>
 
-      {/* Repeat */}
       <IconBtn
-        onClick={handleRepeat}
+        onClick={() => dispatch(toggleRepeat())}
         disabled={!hasQueue}
         active={repeatMode !== "off"}
-        className="relative text-white/60 hover:text-white p-2"
-        title="Repeat"
+        className="p-2"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          {repeatMode === "one" ? (
-            <motion.span
-              key="repeat1"
-              initial={{ opacity: 0, scale: 0.7 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.7 }}
-              transition={{ duration: 0.15 }}
-            >
-              <Repeat1 className="size-5 lg:size-[22px] text-primary" />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="repeat"
-              initial={{ opacity: 0, scale: 0.7 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.7 }}
-              transition={{ duration: 0.15 }}
-            >
-              <Repeat
-                className={cn(
-                  "size-5 lg:size-[22px]",
-                  repeatMode !== "off" ? "text-primary" : "",
-                )}
-              />
-            </motion.span>
-          )}
-        </AnimatePresence>
+        {repeatMode === "one" ? (
+          <Repeat1 className="size-5 text-primary" />
+        ) : (
+          <Repeat className="size-5" />
+        )}
         {repeatMode !== "off" && (
           <motion.span
-            className="absolute bottom-1 left-1/2 -translate-x-1/2 size-1 rounded-full bg-primary"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
+            layoutId="dot-r"
+            className="absolute bottom-1 size-1 rounded-full bg-primary"
           />
         )}
       </IconBtn>
     </div>
   );
 };
-
 export default PlayerControls;

@@ -9,4 +9,7 @@ export const playlistKeys = {
   details: () => [...playlistKeys.all, "detail"] as const,
   detail: (slug: string) => [...playlistKeys.details(), slug] as const,
   search: (query: string) => [...playlistKeys.all, "search", query] as const,
+  tracks: () => [...playlistKeys.all, "tracks"] as const,
+  trackList: (idOrSlug: string, params: { page?: number; limit?: number }) =>
+    [...playlistKeys.tracks(), idOrSlug, { params }] as const,
 };
