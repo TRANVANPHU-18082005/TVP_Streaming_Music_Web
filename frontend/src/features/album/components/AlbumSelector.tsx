@@ -1,11 +1,97 @@
-import React, { useState, useMemo } from "react";
-import { Search, Disc, Check, X, Loader2 } from "lucide-react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+  memo,
+} from "react";
+import { Search, Disc, Check, X, Loader2, Music } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Album } from "@/features/album/types";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
+import { IAlbum } from "../types";
+import { Button } from "@/components/ui/button";
 
+// ─── Debounce Hook ────────────────────────────────────────────────────────────
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState<T>(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+// ─── AlbumItem (React.memo) ───────────────────────────────────────────────────
+interface AlbumItemProps {
+  album: IAlbum;
+  isSelected: boolean;
+  onToggle: (id: string) => void;
+}
+
+const AlbumItem = memo(({ album, isSelected, onToggle }: AlbumItemProps) => {
+  return (
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(album._id);
+      }}
+      className={cn(
+        "flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-all duration-150",
+        isSelected
+          ? "bg-primary/10 border-primary/20 text-foreground shadow-sm"
+          : "bg-transparent border-transparent hover:bg-secondary hover:text-secondary-foreground",
+      )}
+    >
+      {/* Cover Image */}
+      <div
+        className={cn(
+          "size-10 rounded-md overflow-hidden shrink-0 border bg-muted",
+          isSelected ? "border-primary/30" : "border-border",
+        )}
+      >
+        {album.coverImage ? (
+          <img
+            src={album.coverImage}
+            alt={album.title}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Music className="size-4 text-muted-foreground" />
+          </div>
+        )}
+      </div>
+
+      {/* Text Info */}
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <p
+          className={cn(
+            "text-xs font-bold truncate leading-tight",
+            isSelected ? "text-primary" : "text-foreground",
+          )}
+        >
+          {album.title}
+        </p>
+        <p className="text-[10px] text-muted-foreground truncate mt-0.5 font-medium">
+          {album.artist?.name || "Unknown Artist"}
+        </p>
+      </div>
+
+      {/* Check Icon */}
+      {isSelected && (
+        <div className="bg-primary/20 p-1 rounded-full shrink-0">
+          <Check className="size-3.5 text-primary stroke-[3]" />
+        </div>
+      )}
+    </div>
+  );
+});
+AlbumItem.displayName = "AlbumItem";
+
+// ─── AlbumSelector ────────────────────────────────────────────────────────────
 interface AlbumSelectorProps {
   value: string;
   onChange: (id: string) => void;
@@ -21,25 +107,55 @@ export const AlbumSelector: React.FC<AlbumSelectorProps> = ({
   error,
   required,
 }) => {
-  const [filter, setFilter] = useState("");
-  const { data, isLoading } = useAlbumsQuery({ limit: 100 });
+  const [inputValue, setInputValue] = useState("");
+  const debouncedFilter = useDebounce(inputValue, 350);
 
-  const filteredAlbums = useMemo(() => {
-    if (!filter) return data?.albums || [];
-    return (
-      data?.albums.filter((album: Album) =>
-        album.title.toLowerCase().includes(filter.toLowerCase()),
-      ) || []
-    );
-  }, [data, filter]);
+  // Server-side search: truyền keyword vào query thay vì filter client-side
+  const { data, isLoading } = useAlbumsQuery({
+    limit: 20,
+    isPublic: true,
+    keyword: debouncedFilter || undefined,
+  });
 
-  const selectedAlbum = useMemo(() => {
-    return data?.albums.find((a: Album) => a._id === value);
-  }, [data, value]);
+  const albums: IAlbum[] = data?.albums || [];
 
-  const handleToggle = (id: string) => {
-    onChange(value === id ? "" : id);
-  };
+  // Lấy thông tin selectedAlbum — fetch riêng nếu không có trong danh sách hiện tại
+  const selectedAlbumInList = useMemo(
+    () => albums.find((a) => a._id === value),
+    [albums, value],
+  );
+
+  // Dùng ref để giữ title của album đã chọn kể cả khi nó không còn trong list
+  const selectedTitleRef = useRef<string>("");
+  useEffect(() => {
+    if (selectedAlbumInList) {
+      selectedTitleRef.current = selectedAlbumInList.title;
+    }
+  }, [selectedAlbumInList]);
+
+  const handleToggle = useCallback(
+    (id: string) => {
+      onChange(value === id ? "" : id);
+    },
+    [value, onChange],
+  );
+
+  const handleClearFilter = useCallback(() => setInputValue(""), []);
+  const handleClearValue = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onChange("");
+    },
+    [onChange],
+  );
+
+  const displayTitle =
+    selectedAlbumInList?.title ||
+    (selectedTitleRef.current
+      ? selectedTitleRef.current
+      : value
+        ? `ID: ...${value.slice(-4)}`
+        : "");
 
   return (
     <div className="space-y-3 w-full">
@@ -48,130 +164,80 @@ export const AlbumSelector: React.FC<AlbumSelectorProps> = ({
         {label && (
           <label
             className={cn(
-              // Thay đổi: Tăng độ đậm (foreground/80) thay vì muted
               "text-xs font-bold uppercase flex gap-1.5 items-center tracking-wider text-foreground/80",
               error && "text-destructive",
             )}
           >
-            <Disc className="size-4" /> {label}{" "}
+            <Disc className="size-4" /> {label}
             {required && <span className="text-destructive text-sm">*</span>}
           </label>
         )}
+
         {value && (
           <Button
             type="button"
-            variant="outline" // Thay đổi: Dùng outline để rõ ràng hơn
+            variant="outline"
             size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange("");
-            }}
-            // Thay đổi: Badge rõ ràng hơn
+            onClick={handleClearValue}
             className="h-7 px-3 text-[10px] font-semibold bg-background border-input hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 gap-2 transition-all shadow-sm"
           >
-            <span className="truncate max-w-[150px]">
-              {selectedAlbum?.title || "ID: " + value.slice(-4)}
-            </span>
-            <X className="size-3" />
+            <span className="truncate max-w-[150px]">{displayTitle}</span>
+            <X className="size-3 shrink-0" />
           </Button>
         )}
       </div>
 
-      {/* Main Container */}
-      {/* Thay đổi: Nền đặc (bg-background) và viền rõ (border-input) */}
+      {/* Main Container — focus-within highlight */}
       <div
         className={cn(
-          "p-3 border border-input rounded-xl bg-background shadow-sm space-y-3 transition-all",
+          "p-3 border border-input rounded-xl bg-background shadow-sm space-y-3 transition-all duration-200",
+          "focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 focus-within:shadow-md",
           error &&
-            "border-destructive ring-1 ring-destructive/20 bg-destructive/5",
+            "border-destructive ring-1 ring-destructive/20 bg-destructive/5 focus-within:border-destructive focus-within:ring-destructive/20",
         )}
       >
         {/* Search Input */}
         <div className="relative group">
-          <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground group-focus-within:text-primary transition-colors duration-150" />
           <Input
             placeholder="Search albums..."
-            // Thay đổi: Input nền sáng/tối rõ ràng
             className="pl-9 pr-8 h-9 text-sm bg-background border-input focus-visible:ring-2 focus-visible:ring-primary/20"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             onClick={(e) => e.stopPropagation()}
           />
-          {filter && (
+          {/* Loading spinner trong search khi đang debounce/fetching */}
+          {isLoading && debouncedFilter ? (
+            <Loader2 className="absolute right-2.5 top-2.5 size-3.5 animate-spin text-muted-foreground" />
+          ) : inputValue ? (
             <button
               type="button"
-              onClick={() => setFilter("")}
+              onClick={handleClearFilter}
               className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground p-0.5 rounded-md hover:bg-muted transition-all"
             >
               <X className="size-3.5" />
             </button>
-          )}
+          ) : null}
         </div>
 
-        {/* List Container */}
+        {/* List */}
         <div className="max-h-52 overflow-y-auto custom-scrollbar pr-1 -mr-1">
-          {isLoading ? (
+          {isLoading && !debouncedFilter ? (
+            // Initial load skeleton
             <div className="py-8 flex justify-center items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="size-4 animate-spin text-primary" /> Loading
-              data...
+              albums...
             </div>
-          ) : filteredAlbums.length > 0 ? (
+          ) : albums.length > 0 ? (
             <div className="space-y-1.5">
-              {filteredAlbums.map((album: Album) => {
-                const isSelected = value === album._id;
-                return (
-                  <div
-                    key={album._id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggle(album._id);
-                    }}
-                    className={cn(
-                      "flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-all",
-                      isSelected
-                        ? // Thay đổi: Màu nền Primary nhạt + Viền Primary rõ ràng
-                          "bg-primary/10 border-primary/20 text-foreground shadow-sm"
-                        : "bg-transparent border-transparent hover:bg-secondary hover:text-secondary-foreground",
-                    )}
-                  >
-                    {/* Cover Image */}
-                    <div
-                      className={cn(
-                        "size-10 rounded-md overflow-hidden shrink-0 border",
-                        isSelected ? "border-primary/30" : "border-border",
-                      )}
-                    >
-                      <img
-                        src={album.coverImage || "/images/default-album.png"}
-                        alt={album.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-
-                    {/* Text Info */}
-                    <div className="flex-1 min-w-0 flex flex-col justify-center">
-                      <p
-                        className={cn(
-                          "text-xs font-bold truncate leading-tight",
-                          isSelected ? "text-primary" : "text-foreground",
-                        )}
-                      >
-                        {album.title}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground truncate mt-0.5 font-medium">
-                        {album.artist?.name || "Unknown Artist"}
-                      </p>
-                    </div>
-
-                    {/* Check Icon */}
-                    {isSelected && (
-                      <div className="bg-primary/20 p-1 rounded-full">
-                        <Check className="size-3.5 text-primary stroke-[3]" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {albums.map((album) => (
+                <AlbumItem
+                  key={album._id}
+                  album={album}
+                  isSelected={value === album._id}
+                  onToggle={handleToggle}
+                />
+              ))}
             </div>
           ) : (
             <div className="py-8 text-center">
@@ -179,14 +245,16 @@ export const AlbumSelector: React.FC<AlbumSelectorProps> = ({
                 No albums found
               </p>
               <p className="text-[10px] text-muted-foreground mt-1">
-                Try adjusting your search
+                {debouncedFilter
+                  ? `No results for "${debouncedFilter}"`
+                  : "Try adjusting your search"}
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Error Message */}
+      {/* Error */}
       {error && (
         <div className="flex items-center gap-1.5 text-destructive animate-in slide-in-from-left-1">
           <span className="text-[11px] font-bold">{error}</span>
@@ -195,4 +263,5 @@ export const AlbumSelector: React.FC<AlbumSelectorProps> = ({
     </div>
   );
 };
+
 export default AlbumSelector;

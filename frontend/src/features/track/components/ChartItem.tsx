@@ -388,8 +388,13 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         dispatch(
           setQueue({
             trackIds: [track._id],
-            initialMetadata: [track],
+            initialMetadata: [],
             startIndex: 0,
+            source: {
+              id: track._id,
+              type: "chart",
+              title: track.title,
+            },
           }),
         );
         dispatch(setIsPlaying(true));

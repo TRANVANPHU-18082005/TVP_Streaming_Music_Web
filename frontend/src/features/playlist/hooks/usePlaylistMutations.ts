@@ -89,7 +89,6 @@ export const usePlaylistMutations = () => {
     mutationFn: (data?: { title?: string; visibility?: string }) =>
       playlistApi.createQuickPlaylist(data),
     onSuccess: (res) => {
-      console.log(res);
       toast.success("Đã tạo danh sách phát mới");
       invalidateList();
       // Phú có thể dùng res.data.slug để redirect user ngay tại đây nếu muốn

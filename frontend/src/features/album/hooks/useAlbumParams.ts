@@ -1,11 +1,11 @@
 import { useMemo, useCallback, useEffect } from "react";
 import { useQueryParams } from "@/hooks/useQueryParams";
 import {
+  AlbumFilterParamsSchemas,
   albumParamsSchema,
-  type AlbumFilterParams,
 } from "../schemas/album.schema";
 
-const DEFAULT_ALBUM_PARAMS: AlbumFilterParams = {
+const DEFAULT_ALBUM_PARAMS: AlbumFilterParamsSchemas = {
   page: 1,
   limit: 10,
   keyword: "",
@@ -61,9 +61,9 @@ export const useAlbumParams = (initialLimit = 10) => {
   );
 
   const handleFilterChange = useCallback(
-    <K extends keyof AlbumFilterParams>(
+    <K extends keyof AlbumFilterParamsSchemas>(
       key: K,
-      value: AlbumFilterParams[K] | null | undefined,
+      value: AlbumFilterParamsSchemas[K] | null | undefined,
     ) => {
       // Nếu giá trị là rỗng, set undefined để xóa key đó khỏi URL cho sạch
       const cleanValue = value === "" ? undefined : value;

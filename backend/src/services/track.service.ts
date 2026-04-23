@@ -1,44 +1,69 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// services/track.service.ts
+// ─────────────────────────────────────────────────────────────────────────────
 import httpStatus from "http-status";
 import mongoose, { Types } from "mongoose";
 import Track, { ITrack } from "../models/Track";
-import User, { IUser } from "../models/User";
+import { IUser } from "../models/User";
 import Artist from "../models/Artist";
 import Album from "../models/Album";
 import Genre from "../models/Genre";
+import Follow from "../models/Follow";
 import ApiError from "../utils/ApiError";
-import { addTranscodeJob, audioQueue } from "../queue/transcodeTrack.queue";
 import { generateUniqueSlug } from "../utils/slug";
 import {
   BulkUpdateTrackInput,
   ChangeStatusInput,
-  CreateTrackInput,
   TrackFilterInput,
-  UpdateTrackInput,
 } from "../validations/track.validation";
 import { deleteFolderFromB2, deleteFromB2 } from "../utils/fileCleanup";
 import { cacheRedis } from "../config/redis";
 import { notifyQueue } from "../queue/notify.queue";
-import Follow from "../models/Follow";
-import { viewQueue } from "../queue/view.queue"; // Đảm bảo chữ q viết thường
+import { viewQueue } from "../queue/view.queue";
 import { CreateTrackDTO, UpdateTrackDTO } from "../dtos/track.dto";
+import { CounterTrack } from "../utils/counter";
+
+// ── Job orchestration — chỉ import từ đây, không import audioQueue trực tiếp
+import {
+  processNewTrack,
+  retryTranscode as jobRetryTranscode,
+  retryLyrics as jobRetryLyrics,
+  retryKaraoke as jobRetryKaraoke,
+  retryMoodCanvas as jobRetryMoodCanvas,
+  retryFullPipeline,
+} from "./Track job.service";
+import {
+  buildCacheKey,
+  invalidateArtistCache,
+  invalidateTrackCache,
+  invalidateTracksCache,
+  withCacheTimeout,
+} from "../utils/cacheHelper";
+import recommendationService from "./recommendation.service";
 
 type MulterS3File = Express.Multer.File & { location: string; key: string };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SOFT_DELETE_GRACE_SECONDS = 30 * 24 * 60 * 60; // 30 ngày
+const DELETED_TRACKS_SET = "cleanup:deleted_tracks";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLASS
+// ─────────────────────────────────────────────────────────────────────────────
+
 class TrackService {
-  /**
-   * Helper: Trích xuất Key từ URL (Sử dụng để xóa file đơn lẻ)
-   */
+  // ── PRIVATE HELPERS ────────────────────────────────────────────────────────
+
   private getB2KeyFromUrl(url: string): string | null {
-    if (!url || !url.includes(process.env.B2_BUCKET_NAME as string))
-      return null;
-    const parts = url.split(`${process.env.B2_BUCKET_NAME}/`);
+    const bucket = process.env.B2_BUCKET_NAME;
+    if (!url || !bucket || !url.includes(bucket)) return null;
+    const parts = url.split(`${bucket}/`);
     return parts.length > 1 ? parts[1] : null;
   }
 
-  /**
-   * Helper: Trích xuất Folder cha từ URL (Sử dụng để xóa trọn bộ audio/hls/cover)
-   * Ví dụ: tracks/slug-123/audio/file.mp3 -> tracks/slug-123
-   */
   private getTrackFolderKey(url: string): string | null {
     const fileKey = this.getB2KeyFromUrl(url);
     if (!fileKey) return null;
@@ -46,16 +71,14 @@ class TrackService {
     return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
   }
 
-  /**
-   * 1. CREATE TRACK (Transaction + Atomic Cleanup + Notification Fan-out)
-   */
+  // ── 1. CREATE TRACK ────────────────────────────────────────────────────────
 
   async createTrack(
     currentUser: IUser,
-    data: CreateTrackDTO, // Sử dụng DTO mới
+    data: CreateTrackDTO,
     files: { [fieldname: string]: Express.Multer.File[] },
   ): Promise<ITrack> {
-    // A. Permission & Artist Check (Giữ nguyên logic của bạn)
+    // ── Artist resolution ────────────────────────────────────────────────────
     let targetArtistId: Types.ObjectId;
     let targetArtistName = "";
 
@@ -74,8 +97,8 @@ class TrackService {
       targetArtistId = artist._id as Types.ObjectId;
       targetArtistName = artist.name;
     }
-
-    // B. File Handling
+    const slug = await generateUniqueSlug(Track, data.title);
+    // ── File handling ────────────────────────────────────────────────────────
     const audioFile = files["audio"]?.[0] as MulterS3File;
     if (!audioFile)
       throw new ApiError(httpStatus.BAD_REQUEST, "Thiếu file Audio");
@@ -90,7 +113,6 @@ class TrackService {
     const fullTrackUrl = formatUrl(audioFile.location, audioFile.key);
     const duration = Number(data.duration) || 0;
 
-    // Artwork logic
     let coverImageUrl = "";
     let coverFileKey = "";
     const coverFile = files["coverImage"]?.[0] as MulterS3File;
@@ -103,34 +125,25 @@ class TrackService {
       if (album) coverImageUrl = album.coverImage;
     }
 
-    const seoSlug = await generateUniqueSlug(Track, data.title);
-
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // C. Create Record với các thuộc tính MỚI
       const track = new Track({
         ...data,
-        slug: seoSlug,
+        slug,
         artist: targetArtistId,
         uploader: currentUser._id,
         trackUrl: fullTrackUrl,
         coverImage: coverImageUrl,
-
-        // --- NEW v2.0 FIELDS ---
         moodVideo: data.moodVideoId
           ? new Types.ObjectId(data.moodVideoId)
           : null,
-        lyricType: data.lyricType || "none",
-        plainLyrics: data.plainLyrics || "", // Chứa LRC hoặc Text thô
-        // -----------------------
 
         duration,
-        fileSize: audioFile.size,
+        fileSize: audioFile.size, // file gốc; HLS size cộng thêm sau transcode
         format: audioFile.mimetype.split("/")[1] || "mp3",
         status: "pending",
-        // Chống lỗi khi truyền string từ FormData
         isPublic: String(data.isPublic) === "true",
         isExplicit: String(data.isExplicit) === "true",
         playCount: 0,
@@ -139,39 +152,35 @@ class TrackService {
 
       await track.save({ session });
 
-      // D. Update Counters (Atomic) - Giữ nguyên logic Album/Artist/Genre
-      await Artist.findByIdAndUpdate(targetArtistId, {
-        $inc: { totalTracks: 1 },
-      }).session(session);
-
-      if (data.genreIds?.length) {
-        await Genre.updateMany(
-          { _id: { $in: data.genreIds } },
-          { $inc: { trackCount: 1 } },
-        ).session(session);
-      }
-
-      if (data.albumId) {
-        await Album.findByIdAndUpdate(data.albumId, {
-          $inc: { totalTracks: 1, totalDuration: duration },
-        }).session(session);
-      }
+      // 3. Update Stats (Đã bọc session)
+      await Promise.all([
+        Artist.findByIdAndUpdate(
+          targetArtistId,
+          { $inc: { totalTracks: 1 } },
+          { session },
+        ),
+        data.genreIds?.length
+          ? Genre.updateMany(
+              { _id: { $in: data.genreIds } },
+              { $inc: { trackCount: 1 } },
+              { session },
+            )
+          : Promise.resolve(),
+        data.albumId
+          ? Album.findByIdAndUpdate(
+              data.albumId,
+              { $inc: { totalTracks: 1, totalDuration: duration } },
+              { session },
+            )
+          : Promise.resolve(),
+      ]);
 
       await session.commitTransaction();
 
-      // ==========================================================
-      // E. QUEUE JOBS (Trigger Worker v2.0)
-      // ==========================================================
-
-      // Gửi đầy đủ thông tin để Worker xử lý HLS + Lyrics + Canvas
-      addTranscodeJob({
-        trackId: track._id.toString(),
-        fileUrl: track.trackUrl,
-      }).catch((err) => console.error("❌ Add Transcode Queue Failed:", err));
-
-      // this.pushNewTrackNotification(track, targetArtistName).catch(
-      //   console.error,
-      // );
+      // ── Post-commit (non-fatal) ───────────────────────────────────────────
+      this.handlePostTrackCreation(track, audioFile, targetArtistName).catch(
+        console.error,
+      );
 
       return track;
     } catch (error) {
@@ -183,31 +192,20 @@ class TrackService {
       await session.endSession();
     }
   }
-
-  /**
-   * Private helper: Tìm fan và đẩy vào hàng chờ thông báo
-   */
-  private async pushNewTrackNotification(track: any, artistName: string) {
-    const followers = await Follow.find({ artistId: track.artist })
-      .select("followerId")
-      .lean();
-    const followerIds = followers.map((f) => f.followerId.toString());
-
-    if (followerIds.length > 0) {
-      await notifyQueue.add("send-new-track", {
-        artistId: track.artist,
-        trackId: track._id,
-        trackTitle: track.title,
-        artistName: artistName,
-        followerIds,
-      });
-      console.log(`🚀 Queued notification for ${followerIds.length} followers`);
-    }
+  private async handlePostTrackCreation(
+    track: ITrack,
+    audioFile: MulterS3File,
+    artistName: string,
+  ) {
+    await Promise.allSettled([
+      CounterTrack.increment(audioFile.size, audioFile.mimetype),
+      invalidateTrackCache(track._id.toString()),
+      processNewTrack(track._id.toString(), track.trackUrl),
+      // Gọi thêm thông báo nếu cần
+    ]);
   }
+  // ── 2. UPDATE TRACK ────────────────────────────────────────────────────────
 
-  /**
-   * 2. UPDATE TRACK (v2.0 - Lifecycle, Canvas & Lyric Sync)
-   */
   async updateTrack(
     trackId: string,
     currentUser: IUser,
@@ -222,14 +220,14 @@ class TrackService {
     if (currentUser.role !== "admin" && !isOwner)
       throw new ApiError(httpStatus.FORBIDDEN, "Không có quyền");
 
-    let filesToRollback: string[] = [];
+    const filesToRollback: string[] = [];
     let oldTrackFolder: string | null = null;
-    let coverToCleanup: { type: "s3" | "cloudinary"; key: string } | null =
-      null;
+    let coverToCleanup: string | null = null;
     let isAudioChanged = false;
+    const oldAudioSize = track.fileSize ?? 0;
 
-    const audioFile = files["audio"]?.[0] as MulterS3File;
-    const coverFile = files["coverImage"]?.[0] as MulterS3File;
+    const audioFile = files["audio"]?.[0] as MulterS3File | undefined;
+    const coverFile = files["coverImage"]?.[0] as MulterS3File | undefined;
 
     if (audioFile) filesToRollback.push(audioFile.key);
     if (coverFile) filesToRollback.push(coverFile.key);
@@ -240,15 +238,15 @@ class TrackService {
     try {
       const oldAlbumId = track.album?.toString();
       const oldDuration = track.duration || 0;
+      const oldArtistId = track.artist.toString();
+      const oldFeaturingIds = track.featuringArtists.map((id) => id.toString());
       const oldGenreIdsStr = track.genres.map((g) => g.toString());
 
-      // 1. Metadata & Slug Sync
       if (data.title && data.title !== track.title) {
         track.title = data.title;
         track.slug = await generateUniqueSlug(Track, data.title, track._id);
       }
 
-      // 2. Cập nhật các trường thông thường & Ép kiểu Boolean từ FormData
       Object.assign(track, {
         ...data,
         isExplicit:
@@ -261,24 +259,65 @@ class TrackService {
             : track.isPublic,
       });
 
-      // 3. NÂNG CẤP v2.0: Cập nhật MoodVideo & Lyrics
       if (data.moodVideoId !== undefined) {
-        // Nếu gửi chuỗi rỗng hoặc "null" -> Chuyển về null (để AI tự match)
-        if (data.moodVideoId === "" || data.moodVideoId === "null") {
-          track.moodVideo = undefined;
-        } else {
-          track.moodVideo = new Types.ObjectId(data.moodVideoId as string);
-        }
+        track.moodVideo =
+          !data.moodVideoId || data.moodVideoId === "null"
+            ? undefined
+            : new Types.ObjectId(data.moodVideoId as string);
       }
 
-      if (data.lyricType) track.lyricType = data.lyricType;
-      if (data.plainLyrics !== undefined) track.plainLyrics = data.plainLyrics;
-
-      // 4. Đồng bộ Duration (Chỉ cập nhật nếu có gửi lên)
       const newDuration = data.duration ? Number(data.duration) : oldDuration;
       track.duration = newDuration;
 
-      // 5. Genre Counter Sync (Giữ nguyên logic cũ rất tốt của Phú)
+      // 2. Sync Counters (Artists, Genre, Album)
+      // --- Artist Sync (Primary + Featuring) ---
+      if (data.artistId || data.featuringArtistIds) {
+        const newArtistId = data.artistId || oldArtistId;
+        const newFeaturingIds = data.featuringArtistIds || oldFeaturingIds;
+
+        // Tránh double-count: Nếu artist chính nằm trong featuring, loại bỏ khỏi featuring
+        const cleanFeaturing = newFeaturingIds.filter(
+          (id) => id !== newArtistId,
+        );
+
+        // Sync Primary
+        if (newArtistId !== oldArtistId) {
+          await Artist.findByIdAndUpdate(oldArtistId, {
+            $inc: { trackCount: -1 },
+          }).session(session);
+          await Artist.findByIdAndUpdate(newArtistId, {
+            $inc: { trackCount: 1 },
+          }).session(session);
+          track.artist = new Types.ObjectId(newArtistId);
+        }
+
+        // Sync Featuring (Diffing)
+        const addedFeat = cleanFeaturing.filter(
+          (id) => !oldFeaturingIds.includes(id),
+        );
+        const removedFeat = oldFeaturingIds.filter(
+          (id) => !cleanFeaturing.includes(id),
+        );
+
+        if (addedFeat.length)
+          await Artist.updateMany(
+            { _id: { $in: addedFeat } },
+            { $inc: { trackCount: 1 } },
+          ).session(session);
+        if (removedFeat.length)
+          await Artist.updateMany(
+            { _id: { $in: removedFeat }, trackCount: { $gt: 0 } },
+            { $inc: { trackCount: -1 } },
+          ).session(session);
+
+        track.featuringArtists = cleanFeaturing.map(
+          (id) => new Types.ObjectId(id),
+        );
+
+        // Invalidate
+        invalidateArtistCache(oldArtistId);
+        invalidateArtistCache(newArtistId);
+      }
       if (data.genreIds) {
         const added = data.genreIds.filter(
           (id) => !oldGenreIdsStr.includes(id),
@@ -297,24 +336,34 @@ class TrackService {
             { _id: { $in: removed }, trackCount: { $gt: 0 } },
             { $inc: { trackCount: -1 } },
           ).session(session);
+
         track.genres = data.genreIds.map((id) => new Types.ObjectId(id));
       }
-
-      // 6. Album Counter Sync
+      // Album counter sync
       if (data.albumId !== undefined) {
         const newAlbumId =
           data.albumId === "" || data.albumId === "null" ? null : data.albumId;
+
         if (newAlbumId !== oldAlbumId) {
-          if (oldAlbumId)
-            await Album.findByIdAndUpdate(oldAlbumId, {
-              $inc: { totalTracks: -1, totalDuration: -oldDuration },
-            }).session(session);
+          const albumOps: Promise<any>[] = [];
+          if (oldAlbumId) {
+            albumOps.push(
+              Album.findByIdAndUpdate(oldAlbumId, {
+                $inc: { totalTracks: -1, totalDuration: -oldDuration },
+              }).session(session),
+            );
+          }
           if (newAlbumId) {
-            await Album.findByIdAndUpdate(newAlbumId, {
-              $inc: { totalTracks: 1, totalDuration: newDuration },
-            }).session(session);
+            albumOps.push(
+              Album.findByIdAndUpdate(newAlbumId, {
+                $inc: { totalTracks: 1, totalDuration: newDuration },
+              }).session(session),
+            );
             track.album = new Types.ObjectId(newAlbumId);
-          } else track.album = null;
+          } else {
+            track.album = null;
+          }
+          await Promise.all(albumOps);
         } else if (newAlbumId && newDuration !== oldDuration) {
           await Album.findByIdAndUpdate(newAlbumId, {
             $inc: { totalDuration: newDuration - oldDuration },
@@ -322,30 +371,61 @@ class TrackService {
         }
       }
 
-      // 7. Media Replacement (Audio & Cover)
+      // Audio replacement
       if (audioFile) {
         oldTrackFolder = this.getTrackFolderKey(track.trackUrl);
         isAudioChanged = true;
         track.trackUrl = audioFile.location;
-        track.status = "pending"; // Reset để transcode lại HLS
+        track.status = "pending";
         track.hlsUrl = "";
+        track.lyricType = "none";
+        track.lyricUrl = undefined;
+        track.plainLyrics = "";
         track.fileSize = audioFile.size;
         track.format = audioFile.mimetype.split("/")[1] || "mp3";
       }
 
+      // Cover replacement
       if (coverFile) {
-        if (track.coverImage) {
-          const key = this.getB2KeyFromUrl(track.coverImage);
-          if (key) coverToCleanup = { type: "s3", key };
-        }
+        const key = this.getB2KeyFromUrl(track.coverImage);
+        if (key) coverToCleanup = key;
         track.coverImage = coverFile.location;
       }
 
       await track.save({ session });
       await session.commitTransaction();
+      if (data.genreIds || data.artistId) {
+        recommendationService.invalidateSimilarCache(trackId);
+      }
+      // ── Post-commit ───────────────────────────────────────────────────────
+      const postCommitTasks: Promise<any>[] = [
+        invalidateTrackCache(track._id.toString()),
+      ];
 
-      // Xóa cache sau khi update thành công
-      await cacheRedis.del(`track:detail:${trackId}`);
+      if (isAudioChanged) {
+        // Bytes counter: trừ cũ, cộng mới
+        const redisPipeline = cacheRedis.pipeline();
+        if (oldAudioSize > 0)
+          redisPipeline.decrby("stats:storage:audio_bytes", oldAudioSize);
+        redisPipeline.incrby("stats:storage:audio_bytes", audioFile!.size);
+        postCommitTasks.push(redisPipeline.exec().catch(() => {}));
+
+        // Queue full pipeline cho audio mới
+        postCommitTasks.push(
+          processNewTrack(track._id.toString(), track.trackUrl),
+        );
+
+        // Cleanup folder cũ trên B2
+        if (oldTrackFolder) {
+          deleteFolderFromB2(oldTrackFolder).catch(console.error);
+        }
+      }
+
+      if (coverToCleanup) {
+        deleteFromB2(coverToCleanup).catch(console.error);
+      }
+
+      await Promise.allSettled(postCommitTasks);
     } catch (error) {
       await session.abortTransaction();
       for (const key of filesToRollback) deleteFromB2(key).catch(console.error);
@@ -354,29 +434,13 @@ class TrackService {
       await session.endSession();
     }
 
-    // 8. HẬU KỲ: Dọn rác & Re-queue
-    if (isAudioChanged && oldTrackFolder) {
-      // Xóa trọn bộ folder HLS cũ
-      deleteFolderFromB2(oldTrackFolder).catch(console.error);
-
-      // Đẩy job mới vào Worker v2.0
-      addTranscodeJob({
-        trackId: track._id.toString(),
-        fileUrl: track.trackUrl,
-      }).catch((err) => console.error("❌ Re-queue Failed:", err));
-    } else if (coverToCleanup && coverToCleanup.type === "s3") {
-      deleteFromB2(coverToCleanup.key).catch(console.error);
-    }
-
     return track;
   }
 
-  /**
-   * 3. DELETE TRACK (Soft Delete + Physical Cleanup)
-   */
+  // ── 3. DELETE TRACK (Soft delete) ──────────────────────────────────────────
   async deleteTrack(trackId: string, currentUser: IUser) {
     const track = await Track.findById(trackId);
-    if (!track || track.isDeleted)
+    if (!track)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy bài hát");
 
     const isOwner = track.uploader.toString() === currentUser._id.toString();
@@ -387,40 +451,163 @@ class TrackService {
     session.startTransaction();
 
     try {
-      await Artist.findByIdAndUpdate(track.artist, {
-        $inc: { totalTracks: -1 },
-      }).session(session);
-      if (track.genres?.length) {
-        await Genre.updateMany(
-          { _id: { $in: track.genres } },
-          { $inc: { trackCount: -1 } },
-        ).session(session);
-      }
-      if (track.album) {
-        await Album.findByIdAndUpdate(track.album, {
-          $inc: { totalTracks: -1, totalDuration: -(track.duration || 0) },
-        }).session(session);
-      }
+      // 1. Trừ thông số trong các bảng liên quan (giữ nguyên logic của bạn)
+      await Promise.all([
+        Artist.findByIdAndUpdate(track.artist, {
+          $inc: { totalTracks: -1 },
+        }).session(session),
+        track.genres?.length
+          ? Genre.updateMany(
+              { _id: { $in: track.genres }, trackCount: { $gt: 0 } },
+              { $inc: { trackCount: -1 } },
+            ).session(session)
+          : null,
+        track.album
+          ? Album.findByIdAndUpdate(track.album, {
+              $inc: { totalTracks: -1, totalDuration: -(track.duration || 0) },
+            }).session(session)
+          : null,
+      ]);
 
-      await Track.findByIdAndUpdate(trackId, { isDeleted: true }, { session });
+      // 2. Xóa cứng khỏi Database
+      await Track.findByIdAndDelete(trackId).session(session);
+
       await session.commitTransaction();
 
-      const trackFolder = this.getTrackFolderKey(track.trackUrl);
-      if (trackFolder) deleteFolderFromB2(trackFolder).catch(console.error);
+      // 3. Xóa file trên B2 (Post-commit)
+      // Lưu ý: folderKey thường được cấu trúc từ trackUrl
+      const folderKey = track.trackUrl.split("/").slice(3, 5).join("/");
+      if (folderKey) await deleteFolderFromB2(folderKey).catch(console.error);
 
       return true;
     } catch (error) {
       await session.abortTransaction();
       throw error;
     } finally {
-      await session.endSession();
+      session.endSession();
     }
   }
+  // async deleteTrack(trackId: string, currentUser: IUser) {
+  //   const track = await Track.findById(trackId);
+  //   if (!track || track.isDeleted)
+  //     throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy bài hát");
 
-  /**
-   * 4. GET TRACKS (Optimized with Lean)
-   */
+  //   const isOwner = track.uploader.toString() === currentUser._id.toString();
+  //   if (currentUser.role !== "admin" && !isOwner)
+  //     throw new ApiError(httpStatus.FORBIDDEN, "Không có quyền");
+
+  //   const session = await mongoose.startSession();
+  //   session.startTransaction();
+
+  //   try {
+  //     // 1. Transactional Updates
+  //     await Promise.all([
+  //       Artist.findByIdAndUpdate(track.artist, {
+  //         $inc: { totalTracks: -1 },
+  //       }).session(session),
+
+  //       track.genres?.length
+  //         ? Genre.updateMany(
+  //             { _id: { $in: track.genres }, trackCount: { $gt: 0 } }, // Thêm $gt: 0 an toàn
+  //             { $inc: { trackCount: -1 } },
+  //           ).session(session)
+  //         : Promise.resolve(),
+
+  //       track.album
+  //         ? Album.findByIdAndUpdate(track.album, {
+  //             $inc: { totalTracks: -1, totalDuration: -(track.duration || 0) },
+  //           }).session(session)
+  //         : Promise.resolve(),
+
+  //       Track.findByIdAndUpdate(
+  //         trackId,
+  //         { isDeleted: true, status: "failed" },
+  //         { session },
+  //       ),
+  //     ]);
+
+  //     await session.commitTransaction();
+
+  //     // 2. Post-commit: Cleanup & Cache
+  //     // Tách riêng để chạy ngầm không chặn response
+  //     this.handlePostTrackDeletion(track).catch(console.error);
+
+  //     return true;
+  //   } catch (error) {
+  //     await session.abortTransaction();
+  //     throw error;
+  //   } finally {
+  //     session.endSession();
+  //   }
+  // }
+
+  private async handlePostTrackDeletion(track: ITrack) {
+    const audioMime = `audio/${track.format === "mp3" ? "mpeg" : track.format}`;
+
+    await Promise.allSettled([
+      CounterTrack.decrement(track.fileSize ?? 0, audioMime),
+      cacheRedis.zadd(
+        DELETED_TRACKS_SET,
+        Date.now() + SOFT_DELETE_GRACE_SECONDS * 1000,
+        JSON.stringify({
+          trackId: track._id.toString(),
+          folderKey: this.getTrackFolderKey(track.trackUrl) ?? "",
+        }),
+      ),
+      invalidateTrackCache(track._id.toString()),
+    ]);
+  }
+
+  // ── 3B. PHYSICAL CLEANUP (cron job gọi hàng ngày) ─────────────────────────
+
+  async physicalCleanupExpiredTracks(): Promise<number> {
+    const now = Date.now();
+    const expired = await cacheRedis.zrangebyscore(
+      DELETED_TRACKS_SET,
+      "-inf",
+      now,
+    );
+    if (!expired.length) return 0;
+
+    let cleaned = 0;
+    for (const raw of expired) {
+      try {
+        const { trackId, folderKey } = JSON.parse(raw) as {
+          trackId: string;
+          folderKey: string;
+        };
+
+        if (folderKey) await deleteFolderFromB2(folderKey);
+        await Track.findByIdAndDelete(trackId);
+        await cacheRedis.zrem(DELETED_TRACKS_SET, raw);
+        cleaned++;
+      } catch (err) {
+        console.error("[Cleanup] Failed to clean track:", err);
+      }
+    }
+
+    console.log(`[Cleanup] Physically deleted ${cleaned} expired tracks`);
+    return cleaned;
+  }
+
+  // ── 4. GET TRACKS ─────────────────────────────────────────────────────────
+
   async getTracks(filter: TrackFilterInput, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
+    const isAdmin = userRole === "admin";
+
+    // 1. CHUẨN HÓA FILTER & CACHE KEY
+    // Loại bỏ các trường rỗng để đảm bảo 1 query chỉ có 1 cache key duy nhất
+    const cleanFilter = Object.fromEntries(
+      Object.entries(filter).filter(([_, v]) => v !== undefined && v !== ""),
+    );
+    const cacheKey = buildCacheKey("track:list", userRole, cleanFilter);
+
+    // 2. KIỂM TRA CACHE (với cơ chế Timeout bảo vệ)
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
+    // 3. LOGIC TRUY VẤN DATABASE (Giữ nguyên logic phân quyền của bạn)
     const {
       page = 1,
       limit = 20,
@@ -431,107 +618,145 @@ class TrackService {
       status,
       sort,
     } = filter;
-
     const skip = (Number(page) - 1) * Number(limit);
 
-    // 1. KHỞI TẠO QUERY GỐC
     const query: any = { isDeleted: false };
-
-    // 2. XỬ LÝ ĐIỀU KIỆN PHÂN QUYỀN VÀ TRẠNG THÁI (Dùng $and để bảo mật)
     const andConditions: any[] = [];
 
-    // Nếu không phải Admin, chỉ thấy nhạc Public/Ready hoặc nhạc mình tự Upload
-    if (currentUser?.role !== "admin") {
+    if (!isAdmin) {
       const visibilityConditions: any[] = [{ isPublic: true, status: "ready" }];
-      if (currentUser) {
-        visibilityConditions.push({ uploader: currentUser._id });
-      }
+      if (currentUser) visibilityConditions.push({ uploader: currentUser._id });
       andConditions.push({ $or: visibilityConditions });
     }
 
-    // 3. XỬ LÝ TÌM KIẾM KEYWORD (Không ghi đè logic ở trên)
+    let useTextScore = false;
     if (keyword) {
-      const safeKeyword = keyword.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-      andConditions.push({
-        $or: [
-          { title: { $regex: safeKeyword, $options: "i" } },
-          { tags: { $regex: safeKeyword, $options: "i" } },
-        ],
-      });
+      if (!sort) {
+        query.$text = { $search: keyword };
+        useTextScore = true;
+      } else {
+        const safe = keyword.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+        andConditions.push({ title: { $regex: `^${safe}`, $options: "i" } });
+      }
     }
 
-    // Gộp các điều kiện phức tạp vào query chính
-    if (andConditions.length > 0) {
-      query.$and = andConditions;
-    }
-
-    // 4. CÁC FILTER ĐƠN LẺ
+    if (andConditions.length > 0) query.$and = andConditions;
     if (status) query.status = status;
-    if (artistId) query.artist = artistId;
+    if (artistId) {
+      query.$or = [{ artist: artistId }, { featuringArtists: artistId }];
+    }
     if (albumId) query.album = albumId;
     if (genreId) query.genres = genreId;
 
-    // 5. CẤU HÌNH SORT
-    let sortOption: any = { createdAt: -1 };
-    if (sort === "oldest") sortOption = { createdAt: 1 };
-    if (sort === "popular") sortOption = { playCount: -1 };
-    if (sort === "name") sortOption = { title: 1 };
+    let sortOption: any = useTextScore
+      ? { score: { $meta: "textScore" }, _id: 1 }
+      : { createdAt: -1 };
 
-    // 6. THỰC THI QUERY (FIX LỖI POPULATE MOODVIDEO)
+    if (!useTextScore) {
+      if (sort === "oldest") sortOption = { createdAt: 1 };
+      if (sort === "popular") sortOption = { playCount: -1, _id: 1 };
+      if (sort === "name") sortOption = { title: 1, _id: 1 };
+    }
+
+    // 4. THỰC THI QUERY & POPULATE
+    let baseQuery = Track.find(query)
+      .populate("artist", "name avatar slug")
+      .populate("featuringArtists", "name slug avatar")
+      .populate("album", "title coverImage slug")
+      .populate("genres", "name slug")
+      .populate({
+        path: "moodVideo",
+        select: "title videoUrl thumbnailUrl slug loop",
+        model: "TrackMoodVideo",
+      })
+      .sort(sortOption)
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+
+    if (useTextScore) {
+      baseQuery = (baseQuery as any).select({ score: { $meta: "textScore" } });
+    }
+
     const [tracksDocs, total] = await Promise.all([
-      Track.find(query)
-        .populate("artist", "name avatar slug")
-        .populate("album", "title coverImage slug")
-        .populate("genres", "name slug color")
-        .populate("featuringArtists", "name slug avatar")
-        // FIX: Dùng đúng tên trường trong Schema (moodVideo) và chỉ định Model
-        .populate({
-          path: "moodVideo",
-          select: "title videoUrl slug",
-          model: "TrackMoodVideo",
-        })
-        .select("-lyrics -description") // Ẩn bớt data nặng để load danh sách nhanh
-        .sort(sortOption)
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
+      baseQuery.exec(),
       Track.countDocuments(query),
     ]);
 
-    // 8. MAPPING DỮ LIỆU CUỐI CÙNG
-    return {
+    const result = {
       data: tracksDocs,
-
       meta: {
         totalItems: total,
         page: Number(page),
         pageSize: Number(limit),
         totalPages: Math.ceil(total / Number(limit)),
+        hasNextPage: skip + Number(limit) < total,
       },
     };
+
+    // 5. THIẾT LẬP CACHE VỚI JITTER (Ngăn chặn Cache Stampede)
+    // TTL: 15 - 20 phút (Artist/Track list ít thay đổi hơn dữ liệu realtime)
+    const ttl = 900 + Math.floor(Math.random() * 300);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Set Track List Error:", err));
+
+    return result;
   }
 
-  /**
-   * 5. GET BY ID / SLUG
-   */
+  // ── 5. GET BY ID / SLUG ───────────────────────────────────────────────────
+
   async getTrackById(slugOrId: string, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
+    const isAdmin = userRole === "admin";
+    const userId = currentUser?._id?.toString();
+
+    // 1. XÂY DỰNG CACHE KEY (Ưu tiên Key đơn giản cho Detail)
+    // Vì Detail thường chỉ check theo Slug/Id và Role, không cần Sort/Filter phức tạp
+    const cacheKey = buildCacheKey(`track:detail:${slugOrId}`, userRole, {});
+
+    // 2. KIỂM TRA CACHE
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) {
+      const track = JSON.parse(cached as string);
+      // Logic phân quyền sau khi lấy từ Cache (Bảo vệ dữ liệu Private)
+      const isOwner = userId && track.uploader?.toString() === userId;
+      if (!track.isPublic && !isOwner && !isAdmin) {
+        throw new ApiError(
+          httpStatus.FORBIDDEN,
+          "Bài hát này đang ở chế độ riêng tư",
+        );
+      }
+      return track;
+    }
+
+    // 3. TRUY VẤN DATABASE NẾU CACHE MISS
     const isId = Types.ObjectId.isValid(slugOrId);
     const query = isId ? { _id: slugOrId } : { slug: slugOrId };
 
     const track = await Track.findOne({ ...query, isDeleted: false })
-      .populate("artist", "name avatar slug bio totalFollowers")
+      .select(
+        "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
+      )
+      .select(
+        "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
+      )
+      .populate("artist", "name avatar slug")
       .populate("featuringArtists", "name slug avatar")
-      .populate("album", "title coverImage releaseYear slug")
-      .populate("genres", "name slug color")
+      .populate("album", "title coverImage slug")
+      .populate("genres", "name slug")
+      .populate({
+        path: "moodVideo",
+        select: "videoUrl loop",
+      })
       .lean();
 
-    if (!track)
+    if (!track) {
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy bài hát");
+    }
 
-    const isOwner =
-      currentUser && track.uploader.toString() === currentUser._id.toString();
-    const isAdmin = currentUser?.role === "admin";
-
+    // 4. KIỂM TRA QUYỀN TRUY CẬP TRƯỚC KHI LƯU CACHE
+    const isOwner = userId && track.uploader?.toString() === userId;
     if (!track.isPublic && !isOwner && !isAdmin) {
       throw new ApiError(
         httpStatus.FORBIDDEN,
@@ -539,66 +764,52 @@ class TrackService {
       );
     }
 
-    return { ...track };
-  }
+    // 5. THIẾT LẬP CACHE (TTL dài vì Detail ít thay đổi hơn List)
+    // Sử dụng Jitter để tránh hết hạn đồng loạt (30 - 40 phút)
+    const ttl = 1800 + Math.floor(Math.random() * 600);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(track), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] Set Track Detail Error:", err));
 
-  /**
-   * 6. RETRY TRANSCODE (Safe Cleanup & Re-queue)
-   */
-  async retryTranscode(trackId: string) {
-    const track = await Track.findById(trackId);
-    if (!track) throw new ApiError(httpStatus.NOT_FOUND, "Track not found");
-
-    // Chặn nếu đang xử lý để tránh xung đột FFmpeg
-    if (track.status === "processing") {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "Bài hát đang trong quá trình xử lý, vui lòng đợi.",
-      );
-    }
-
-    // 1. Dọn rác folder HLS cũ (nếu có) để tránh ghi đè lỗi
-    const trackFolder = this.getTrackFolderKey(track.trackUrl);
-    if (trackFolder) {
-      // Thêm dấu / ở cuối để đảm bảo xóa đúng folder hls
-      deleteFolderFromB2(`${trackFolder}/hls/`).catch(console.error);
-    }
-
-    // 2. Reset trạng thái trong Database
-    track.status = "pending";
-    track.errorReason = "";
-    track.hlsUrl = "";
-    await track.save();
-
-    // 3. Đẩy lại vào Queue với cấu hình tự dọn dẹp
-    await audioQueue.add(
-      "transcode",
-      {
-        trackId: track._id.toString(),
-        fileUrl: track.trackUrl,
-      },
-      {
-        // 🔥 QUAN TRỌNG: Dùng trackId làm jobId để tránh trùng lặp job
-        jobId: `retry-${track._id}-${Date.now()}`,
-        attempts: 3,
-        backoff: { type: "exponential", delay: 5000 },
-        removeOnComplete: true, // Xóa ngay khi xong để tiết kiệm RAM Redis
-        removeOnFail: { count: 10 }, // Chỉ giữ lại 10 bản ghi lỗi gần nhất
-      },
-    );
-    // Sau khi đẩy vào Queue thành công
-    await cacheRedis.del(`track:detail:${trackId}`);
     return track;
   }
 
-  /**
-   * 7. BULK UPDATE (Transaction Required)
-   */
+  // ── 6. RETRY OPERATIONS ───────────────────────────────────────────────────
+  // Delegate hoàn toàn sang track-job.service để đảm bảo consistent guards
+
+  /** Retry toàn bộ pipeline (xoá HLS + lyrics cũ) */
+  async retryFull(trackId: string) {
+    return retryFullPipeline(trackId);
+  }
+
+  /** Retry chỉ HLS transcode — lyrics và mood giữ nguyên */
+  async retryTranscode(trackId: string) {
+    return jobRetryTranscode(trackId);
+  }
+
+  /** Retry lyrics từ đầu (LRCLIB + karaoke fallback chain) */
+  async retryLyrics(trackId: string) {
+    return jobRetryLyrics(trackId);
+  }
+
+  /** Retry chỉ forced alignment (karaoke) — cần plainLyrics trong DB */
+  async retryKaraoke(trackId: string) {
+    return jobRetryKaraoke(trackId);
+  }
+
+  /** Retry mood canvas matching (tags thay đổi) */
+  async retryMoodCanvas(trackId: string) {
+    return jobRetryMoodCanvas(trackId);
+  }
+
+  // ── 7. BULK UPDATE ────────────────────────────────────────────────────────
+
   async bulkUpdateTracks(
     currentUser: IUser,
     trackIds: string[],
     updates: BulkUpdateTrackInput["updates"],
   ) {
+    // 1. Phân quyền
     if (currentUser.role !== "admin") {
       const count = await Track.countDocuments({
         _id: { $in: trackIds },
@@ -608,108 +819,139 @@ class TrackService {
         throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
     }
 
+    // 2. Thu thập dữ liệu TRƯỚC khi Update (để Invalidate cache)
+    const tracksBefore = await Track.find({ _id: { $in: trackIds } })
+      .select("artist album genres duration")
+      .lean();
+
+    if (!tracksBefore.length) return { modifiedCount: 0 };
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // Album Sync Logic for Bulk
+      // 3. Xây dựng Update Payload
+      const updatePayload: any = {};
+      if (updates.status) updatePayload.status = updates.status;
+      if (updates.isPublic !== undefined)
+        updatePayload.isPublic = String(updates.isPublic) === "true";
       if (updates.albumId !== undefined) {
-        const tracks = await Track.find({ _id: { $in: trackIds } })
-          .select("album duration")
-          .session(session);
-        for (const t of tracks) {
-          if (t.album)
-            await Album.findByIdAndUpdate(t.album, {
-              $inc: { totalTracks: -1, totalDuration: -(t.duration || 0) },
-            }).session(session);
-        }
-        if (updates.albumId) {
-          const totalDuration = tracks.reduce(
-            (sum, t) => sum + (t.duration || 0),
-            0,
-          );
-          await Album.findByIdAndUpdate(updates.albumId, {
-            $inc: { totalTracks: trackIds.length, totalDuration },
-          }).session(session);
+        const albumId = updates.albumId;
+
+        if (albumId === "" || albumId === "null" || albumId === null) {
+          updatePayload.album = null; // Mongoose tự hiểu null là xóa liên kết
+        } else {
+          // Lúc này TypeScript biết chắc albumId là một string hợp lệ (không phải null)
+          updatePayload.album = new Types.ObjectId(albumId);
         }
       }
 
-      const updatePayload: any = {};
-      if (updates.albumId !== undefined)
-        updatePayload.album = updates.albumId || null;
-      if (updates.status) updatePayload.status = updates.status;
-      if (updates.isPublic !== undefined)
-        updatePayload.isPublic = updates.isPublic;
+      // 4. Cập nhật Album Counters (BulkWrite tối ưu)
+      if (updates.albumId !== undefined) {
+        const albumChanges = new Map<
+          string,
+          { trackDelta: number; durationDelta: number }
+        >();
+        const totalDuration = tracksBefore.reduce(
+          (sum, t) => sum + (t.duration || 0),
+          0,
+        );
 
+        // Trừ các album cũ
+        for (const t of tracksBefore) {
+          if (t.album) {
+            const id = t.album.toString();
+            const curr = albumChanges.get(id) || {
+              trackDelta: 0,
+              durationDelta: 0,
+            };
+            albumChanges.set(id, {
+              trackDelta: curr.trackDelta - 1,
+              durationDelta: curr.durationDelta - (t.duration || 0),
+            });
+          }
+        }
+        // Cộng album mới
+        if (
+          updates.albumId &&
+          updates.albumId !== "null" &&
+          updates.albumId !== ""
+        ) {
+          const id = updates.albumId;
+          const curr = albumChanges.get(id) || {
+            trackDelta: 0,
+            durationDelta: 0,
+          };
+          albumChanges.set(id, {
+            trackDelta: curr.trackDelta + trackIds.length,
+            durationDelta: curr.durationDelta + totalDuration,
+          });
+        }
+
+        const bulkOps = Array.from(albumChanges.entries()).map(
+          ([id, delta]) => ({
+            updateOne: {
+              filter: { _id: id },
+              update: {
+                $inc: {
+                  totalTracks: delta.trackDelta,
+                  totalDuration: delta.durationDelta,
+                },
+              },
+            },
+          }),
+        );
+        if (bulkOps.length > 0) await Album.bulkWrite(bulkOps, { session });
+      }
+
+      // 5. Thực hiện Update Many
       const result = await Track.updateMany(
         { _id: { $in: trackIds } },
         { $set: updatePayload },
         { session },
       );
+
       await session.commitTransaction();
+
+      Promise.allSettled([
+        invalidateTracksCache(trackIds), // Dọn dẹp cache track chi tiết
+      ]);
+
       return result;
     } catch (error) {
       await session.abortTransaction();
       throw error;
     } finally {
-      await session.endSession();
+      session.endSession();
     }
   }
-  /**
-   * 8. CHANGE TRACK STATUS (Transaction Required)
-   */
+
+  // ── 8. CHANGE STATUS ─────────────────────────────────────────────────────
+
   async changeTrackStatus(trackId: string, newStatus: ChangeStatusInput) {
     const track = await Track.findById(trackId);
-    if (!track) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Track not found");
-    }
-
+    if (!track) throw new ApiError(httpStatus.NOT_FOUND, "Track not found");
     track.status = newStatus.status;
     await track.save();
+    await invalidateTrackCache(track._id.toString());
     return track;
   }
-  /**
-   * 9. RECORD TRACK VIEW (Transaction Required)
-   */
-  async recordTrackView(trackId: string, userId?: string, userIp?: string) {
-    try {
-      // 1. Anti-Spam: 1 User/IP - 1 Bài - 1 View trong 10 phút
-      const spamKey = `limit:view:${trackId}:${userId || userIp}`;
-      const isSpam = await cacheRedis.get(spamKey);
 
-      if (isSpam) {
-        return { status: "ignored", reason: "spam_limit" };
-      }
+  // ── PRIVATE: Fan-out notification ──────────────────────────────────────────
 
-      // 2. Đánh dấu đã đếm view (Hết hạn sau 10 phút)
-      await cacheRedis.set(spamKey, "1", "EX", 600);
-
-      // 3. Tăng buffer trong Redis cho Cron Job quét (track:views:ID)
-      const viewKey = `track:views:${trackId}`;
-      await cacheRedis.incr(viewKey);
-
-      // 4. Đẩy vào Queue để ghi Log chi tiết (Async)
-      // Dùng job name chuẩn để Worker dễ filter
-      await viewQueue.add(
-        "log-listen-history",
-        {
-          trackId,
-          userId,
-          ip: userIp,
-          timestamp: new Date(),
-        },
-        {
-          // Option thêm: tự xóa job khi hoàn thành để đỡ tốn ram Redis
-          removeOnComplete: true,
-        },
-      );
-
-      return { status: "success" };
-    } catch (error) {
-      // Log lỗi nhưng không quăng lỗi ra ngoài làm sập request của user
-      // Vì đếm view là tính năng phụ, không nên làm user không nghe được nhạc
-      console.error("❌ [Service Error] recordTrackView:", error);
-      return { status: "error", message: "Ghi nhận view thất bại" };
+  private async pushNewTrackNotification(track: any, artistName: string) {
+    const followers = await Follow.find({ artistId: track.artist })
+      .select("followerId")
+      .lean();
+    const followerIds = followers.map((f) => f.followerId.toString());
+    if (followerIds.length > 0) {
+      await notifyQueue.add("send-new-track", {
+        artistId: track.artist,
+        trackId: track._id,
+        trackTitle: track.title,
+        artistName,
+        followerIds,
+      });
     }
   }
 }

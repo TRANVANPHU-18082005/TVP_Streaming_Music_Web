@@ -29,7 +29,7 @@ export const getArtistDetail = catchAsync(
     const currentUser = req.user as IUser | undefined;
 
     const currentUserId = currentUser ? currentUser._id.toString() : undefined;
-
+    console.log(req.params.id);
     const albumDetailResult = await artistService.getArtistDetail(
       req.params.id,
       currentUserId,
@@ -44,9 +44,7 @@ export const getArtistDetail = catchAsync(
 
 // 3. ARTIST: GET MY PROFILE
 export const getMyProfile = catchAsync(async (req: Request, res: Response) => {
-  const artist = await Artist.findOne({ user: req.user!._id })
-    .populate("genres", "name slug")
-    .lean();
+  const artist = await Artist.findOne({ user: req.user!._id }).lean();
 
   if (!artist) {
     throw new ApiError(httpStatus.NOT_FOUND, "Bạn chưa có hồ sơ Nghệ sĩ");

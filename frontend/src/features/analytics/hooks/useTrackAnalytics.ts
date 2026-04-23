@@ -1,58 +1,70 @@
 import { useEffect, useRef } from "react";
 import { useSelector } from "react-redux";
 import { selectPlayer } from "@/features/player/slice/playerSlice";
-import { RootState } from "@/store/store";
 import { useSocket } from "@/hooks/useSocket";
+import { useAppSelector } from "@/store/hooks";
+import { getAnonymousId } from "@/utils/analytics-identity";
 
-/**
- * Hook tự động gửi Heartbeat về server mỗi 10 giây.
- * Sử dụng Refs để tránh việc khởi tạo lại Interval khi State thay đổi.
- */
 export const useTrackAnalytics = () => {
   const { socket, isConnected } = useSocket();
-  const { currentTrack, isPlaying } = useSelector(selectPlayer);
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { currentTrackId, isPlaying } = useSelector(selectPlayer);
+  const { user } = useAppSelector((state) => state.auth);
 
-  // Refs để lưu giá trị mới nhất mà không gây chạy lại useEffect
-  const stateRef = useRef({
-    user,
-    currentTrack,
-    isPlaying,
+  // Ref giúp setInterval luôn đọc được giá trị mới nhất mà không bị "stale closure"
+  const infoRef = useRef({
+    userId: user?.id || user?._id || null,
+    trackId: currentTrackId,
+    isPlaying: isPlaying,
   });
 
-  // Cập nhật Ref mỗi khi State từ Redux thay đổi
+  // Cập nhật ref mỗi khi state thay đổi
   useEffect(() => {
-    stateRef.current = { user, currentTrack, isPlaying };
-  }, [user, currentTrack, isPlaying]);
+    infoRef.current = {
+      userId: user?.id || user?._id || null,
+      trackId: currentTrackId,
+      isPlaying: isPlaying,
+    };
+  }, [user, currentTrackId, isPlaying]);
 
   useEffect(() => {
     if (!socket || !isConnected) return;
 
-    const sendHeartbeat = () => {
-      // 🛡️ Kiểm tra nếu Tab đang ẩn thì không gửi để tiết kiệm tài nguyên
+    // Lấy ID ẩn danh cố định từ sessionStorage (đã giải thích ở lượt trước)
+    const anonId = getAnonymousId();
+
+    const emitHeartbeat = () => {
+      // Chỉ tab đang mở mới gửi để tránh nhân đôi số liệu khi mở nhiều tab
       if (document.visibilityState !== "visible") return;
 
-      const { user: u, currentTrack: t, isPlaying: p } = stateRef.current;
+      const { userId, trackId, isPlaying } = infoRef.current;
+      const finalUserId = userId || anonId;
 
-      // Chuẩn hóa UserId (Hỗ trợ cả id và _id từ Backend)
-      const realUserId = u?.id || u?._id;
-      const finalUserId = realUserId || `guest_${socket.id}`;
-
-      // Emit tín hiệu về Server
       socket.emit("client_heartbeat", {
         userId: finalUserId,
-        trackId: p && t ? t._id : "", // Nếu đang phát nhạc thì gửi ID bài hát, không thì gửi chuỗi rỗng
+        trackId: isPlaying ? trackId : "",
       });
     };
 
-    // Gửi phát đầu tiên ngay khi kết nối
-    sendHeartbeat();
+    // 1. Gửi ngay lập tức khi mount hoặc trạng thái Play/Pause thay đổi
+    emitHeartbeat();
 
-    // Thiết lập chu kỳ 10 giây
-    const interval = setInterval(sendHeartbeat, 10000);
+    // 2. Thiết lập chu kỳ gửi định kỳ (20s)
+    const interval = setInterval(emitHeartbeat, 20000);
+
+    // 3. Xử lý khi quay lại tab (User quay lại là phải báo Online ngay)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        emitHeartbeat();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [socket, isConnected]);
+    // Dependency: Thêm isPlaying và currentTrackId vào đây để reset interval
+    // và gửi tin nhắn mới ngay khi người dùng nhấn nút hoặc đổi bài.
+  }, [socket, isConnected, isPlaying, currentTrackId]);
 };

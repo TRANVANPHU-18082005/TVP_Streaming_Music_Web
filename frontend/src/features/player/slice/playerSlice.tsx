@@ -15,6 +15,7 @@ import {
 } from "@reduxjs/toolkit";
 import type { RootState } from "@/store/store";
 import { ITrack } from "@/features/track/types";
+import { createContext, useContext } from "react";
 
 // ============================================================================
 // 1. HELPER: SMART SHUFFLE (ID-based, Spotify Style)
@@ -66,6 +67,7 @@ export type QueueSourceType =
   | "genre"
   | "single"
   | "chart"
+  | "search"
   | "collection";
 
 interface QueueSource {
@@ -371,7 +373,32 @@ const playerSlice = createSlice({
         state.repeatMode,
       );
     },
+    reorderQueue: (state, action: PayloadAction<string[]>) => {
+      const newIds = action.payload;
 
+      // Guard: length phải khớp để tránh mất track
+      if (newIds.length !== state.activeQueueIds.length) return;
+
+      state.activeQueueIds = newIds;
+
+      // Tìm lại index của bài đang phát trong mảng đã sắp xếp
+      // Bài đang phát KHÔNG đổi, chỉ vị trí trong queue thay đổi
+      const newIndex = newIds.indexOf(state.currentTrackId ?? "");
+      state.currentIndex = newIndex !== -1 ? newIndex : state.currentIndex;
+
+      // Cập nhật preload vì thứ tự đã đổi
+      state.nextTrackIdPreloaded = resolveNextPreload(
+        state.activeQueueIds,
+        state.currentIndex,
+        state.repeatMode,
+      );
+
+      // Đồng bộ originalQueueIds khi KHÔNG shuffle
+      // (khi shuffle, originalQueueIds giữ nguyên thứ tự album/playlist gốc)
+      if (!state.isShuffling) {
+        state.originalQueueIds = newIds;
+      }
+    },
     // -------------------------------------------------------------------------
     // CONTROLS
     // -------------------------------------------------------------------------
@@ -568,6 +595,7 @@ export const {
   upsertMetadataCache,
   appendQueueIds,
   removeFromQueue,
+  reorderQueue,
   setIsPlaying,
   setLoadingState,
   setDuration,
@@ -616,4 +644,21 @@ export const selectIsTrackCached =
 export const selectQueueLength = (state: RootState): number =>
   state.player.activeQueueIds.length;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GLOBAL SHEET CONTEXT — any child can open a sheet without prop drilling
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface PlayerSheetContextValue {
+  openSheet: (type: "playlist" | "options", track: ITrack) => void;
+  closeSheet: () => void;
+}
+
+export const PlayerSheetContext = createContext<PlayerSheetContextValue>({
+  openSheet: () => {},
+  closeSheet: () => {},
+});
+
+export function usePlayerSheet() {
+  return useContext(PlayerSheetContext);
+}
 export default playerSlice.reducer;

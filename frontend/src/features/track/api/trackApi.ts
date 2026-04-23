@@ -31,17 +31,8 @@ const trackApi = {
   // Admin: Lấy chi tiết bài hát bằng ID
   getTrackDetail: async (id: string) => {
     const { data } = await api.get<ApiResponse<ITrack>>(`/tracks/${id}`);
-    return data.data; // unwrap ApiResponse wrapper
+    return data; // unwrap ApiResponse wrapper
   },
-
-  // // Public: Lấy chi tiết bài hát bằng Slug (Dùng cho SEO/Client)
-  // getDetail: async (slug: string) => {
-  //   // Tùy endpoint backend của bạn, có thể là /tracks/slug/:slug hoặc /tracks/:slug
-  //   const { data } = await api.get<ApiResponse<ITrack>>(
-  //     `/tracks/detail/${slug}`,
-  //   );
-  //   return data;
-  // },
 
   // ==========================================
   // 2. MUTATIONS (Thêm / Sửa / Xóa cơ bản)
@@ -89,16 +80,6 @@ const trackApi = {
     return data;
   },
 
-  // Thử lại tiến trình chuyển đổi file audio (Transcode) nếu bị lỗi
-  retryTranscode: async (id: string) => {
-    // Axios POST bắt buộc có tham số body, truyền {} nếu body rỗng
-    const { data } = await api.post<ApiResponse<ITrack>>(
-      `/tracks/${id}/retry`,
-      {},
-    );
-    return data;
-  },
-
   // Cập nhật hàng loạt (Bulk Update)
   bulkUpdate: async (trackIds: string[], updates: BulkTrackFormValues) => {
     const { data } = await api.patch<ApiResponse<any>>("/tracks/bulk/update", {
@@ -124,6 +105,84 @@ const trackApi = {
       `/tracks/${trackId}/view`,
     );
     return data;
+  },
+  // 1. Retry Full: Xóa sạch làm lại từ đầu (HLS + Lyrics + Mood)
+  retryFull: async (id: string) => {
+    const { data } = await api.post<ApiResponse<ITrack>>(
+      `/tracks/${id}/retry/full`,
+      {},
+    );
+    return data;
+  },
+
+  // 2. Retry Transcode: Chỉ xử lý lại file HLS (âm thanh), giữ nguyên Lyric/Mood
+  retryTranscode: async (id: string) => {
+    const { data } = await api.post<ApiResponse<ITrack>>(
+      `/tracks/${id}/retry/transcode`,
+      {},
+    );
+    return data;
+  },
+
+  // 3. Retry Lyrics: Chỉ tìm lại lời bài hát trên LRCLIB + AI Karaoke
+  retryLyrics: async (id: string) => {
+    const { data } = await api.post<ApiResponse<ITrack>>(
+      `/tracks/${id}/retry/lyrics`,
+      {},
+    );
+    return data;
+  },
+
+  // 4. Retry Karaoke: Chỉ chạy lại AI Forced Alignment (Dùng khi đã có plainLyrics trong DB)
+  retryKaraoke: async (id: string) => {
+    const { data } = await api.post<ApiResponse<ITrack>>(
+      `/tracks/${id}/retry/karaoke`,
+      {},
+    );
+    return data;
+  },
+
+  // 5. Retry Mood: Chỉ tìm lại video nền (Mood Canvas) dựa trên tags
+  retryMood: async (id: string) => {
+    const { data } = await api.post<ApiResponse<ITrack>>(
+      `/tracks/${id}/retry/mood`,
+      {},
+    );
+    return data;
+  },
+  // ==========================================
+  // 5. RECOMMENDATIONS (Gợi ý bài hát)
+  // ==========================================
+
+  /**
+   * Lấy danh sách "Bài hát bạn có thể thích"
+   * @param limit - Số lượng bài trả về
+   * @param excludeTrackId - Loại trừ bài đang phát (nếu có)
+   */
+  getRecommendations: async (limit = 20, excludeTrackId?: string) => {
+    const { data } = await api.get<ApiResponse<{ tracks: ITrack[] }>>(
+      "/tracks/recommendations",
+      {
+        params: { limit, excludeTrackId },
+      },
+    );
+    console.log(data);
+    return data.data; // Trả về { tracks: ITrack[] }
+  },
+
+  /**
+   * Lấy bài hát liên quan (Autoplay Queue)
+   * @param slugOrId - Slug hoặc ID của bài hát gốc
+   * @param limit - Số lượng bài trả về
+   */
+  getSimilarTracks: async (trackId: string, limit = 10) => {
+    const { data } = await api.get<ApiResponse<{ tracks: ITrack[] }>>(
+      `/tracks/${trackId}/similar`,
+      {
+        params: { limit },
+      },
+    );
+    return data.data; // Trả về { tracks: ITrack[] }
   },
 };
 

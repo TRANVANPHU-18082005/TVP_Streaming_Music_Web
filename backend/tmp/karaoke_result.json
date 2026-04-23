@@ -1,0 +1,2404 @@
+{
+  "type": "karaoke",
+  "lines": [
+    {
+      "text": "Có kí ức chưa thể vơi trong lòng",
+      "start": 30000,
+      "end": 40000,
+      "words": [
+        {
+          "word": "Có",
+          "startTime": 30681,
+          "endTime": 31022
+        },
+        {
+          "word": "kí",
+          "startTime": 31022,
+          "endTime": 31483
+        },
+        {
+          "word": "ức",
+          "startTime": 31483,
+          "endTime": 31583
+        },
+        {
+          "word": "chưa",
+          "startTime": 31483,
+          "endTime": 32104
+        },
+        {
+          "word": "thể",
+          "startTime": 32104,
+          "endTime": 32425
+        },
+        {
+          "word": "vơi",
+          "startTime": 32425,
+          "endTime": 32525
+        },
+        {
+          "word": "trong",
+          "startTime": 32425,
+          "endTime": 33988
+        },
+        {
+          "word": "lòng",
+          "startTime": 33988,
+          "endTime": 34248
+        }
+      ]
+    },
+    {
+      "text": "Chuyện tình yêu",
+      "start": 40000,
+      "end": 45000,
+      "words": [
+        {
+          "word": "Chuyện",
+          "startTime": 42149,
+          "endTime": 43835
+        },
+        {
+          "word": "tình",
+          "startTime": 43835,
+          "endTime": 43935
+        },
+        {
+          "word": "yêu",
+          "startTime": 43835,
+          "endTime": 44418
+        }
+      ]
+    },
+    {
+      "text": "Đẹp như khúc ca tôi với người",
+      "start": 45000,
+      "end": 51000,
+      "words": [
+        {
+          "word": "Đẹp",
+          "startTime": 45381,
+          "endTime": 46365
+        },
+        {
+          "word": "như",
+          "startTime": 46365,
+          "endTime": 46726
+        },
+        {
+          "word": "khúc",
+          "startTime": 46726,
+          "endTime": 46967
+        },
+        {
+          "word": "ca",
+          "startTime": 46967,
+          "endTime": 47468
+        },
+        {
+          "word": "tôi",
+          "startTime": 47468,
+          "endTime": 47829
+        },
+        {
+          "word": "với",
+          "startTime": 47829,
+          "endTime": 47929
+        },
+        {
+          "word": "người",
+          "startTime": 47829,
+          "endTime": 48873
+        }
+      ]
+    },
+    {
+      "text": "Em ngân nga anh đàn câu thiết tha",
+      "start": 51000,
+      "end": 56000,
+      "words": [
+        {
+          "word": "Em",
+          "startTime": 51522,
+          "endTime": 52446
+        },
+        {
+          "word": "ngân",
+          "startTime": 52446,
+          "endTime": 52546
+        },
+        {
+          "word": "nga",
+          "startTime": 52446,
+          "endTime": 52566
+        },
+        {
+          "word": "anh",
+          "startTime": 52566,
+          "endTime": 52666
+        },
+        {
+          "word": "đàn",
+          "startTime": 52566,
+          "endTime": 54293
+        },
+        {
+          "word": "câu",
+          "startTime": 54293,
+          "endTime": 55257
+        },
+        {
+          "word": "thiết",
+          "startTime": 55257,
+          "endTime": 55357
+        },
+        {
+          "word": "tha",
+          "startTime": 55257,
+          "endTime": 55759
+        }
+      ]
+    },
+    {
+      "text": "Khúc ca tên cô dâu chú rể",
+      "start": 56000,
+      "end": 59000,
+      "words": [
+        {
+          "word": "Khúc",
+          "startTime": 56383,
+          "endTime": 56564
+        },
+        {
+          "word": "ca",
+          "startTime": 56564,
+          "endTime": 57107
+        },
+        {
+          "word": "tên",
+          "startTime": 57107,
+          "endTime": 57207
+        },
+        {
+          "word": "cô",
+          "startTime": 57107,
+          "endTime": 57812
+        },
+        {
+          "word": "dâu",
+          "startTime": 57812,
+          "endTime": 57912
+        },
+        {
+          "word": "chú",
+          "startTime": 57812,
+          "endTime": 58497
+        },
+        {
+          "word": "rể",
+          "startTime": 58497,
+          "endTime": 58698
+        }
+      ]
+    },
+    {
+      "text": "Là hai ta",
+      "start": 59000,
+      "end": 62000,
+      "words": [
+        {
+          "word": "Là",
+          "startTime": 59564,
+          "endTime": 59926
+        },
+        {
+          "word": "hai",
+          "startTime": 59926,
+          "endTime": 60369
+        },
+        {
+          "word": "ta",
+          "startTime": 60369,
+          "endTime": 60490
+        }
+      ]
+    },
+    {
+      "text": "Anh đâu hay em muốn nơi sang giàu",
+      "start": 62000,
+      "end": 67000,
+      "words": [
+        {
+          "word": "Anh",
+          "startTime": 62964,
+          "endTime": 63064
+        },
+        {
+          "word": "đâu",
+          "startTime": 62964,
+          "endTime": 63928
+        },
+        {
+          "word": "hay",
+          "startTime": 63928,
+          "endTime": 65032
+        },
+        {
+          "word": "em",
+          "startTime": 65032,
+          "endTime": 65153
+        },
+        {
+          "word": "muốn",
+          "startTime": 65153,
+          "endTime": 65253
+        },
+        {
+          "word": "nơi",
+          "startTime": 65153,
+          "endTime": 66679
+        },
+        {
+          "word": "sang",
+          "startTime": 66679,
+          "endTime": 66739
+        },
+        {
+          "word": "giàu",
+          "startTime": 66739,
+          "endTime": 66940
+        }
+      ]
+    },
+    {
+      "text": "Tìm về chốn phồn hoa",
+      "start": 67000,
+      "end": 73000,
+      "words": [
+        {
+          "word": "Tìm",
+          "startTime": 67843,
+          "endTime": 68204
+        },
+        {
+          "word": "về",
+          "startTime": 68204,
+          "endTime": 68525
+        },
+        {
+          "word": "chốn",
+          "startTime": 68525,
+          "endTime": 68846
+        },
+        {
+          "word": "phồn",
+          "startTime": 68846,
+          "endTime": 68946
+        },
+        {
+          "word": "hoa",
+          "startTime": 68846,
+          "endTime": 71635
+        }
+      ]
+    },
+    {
+      "text": "Bỏ anh với khúc nhạc",
+      "start": 73000,
+      "end": 80000,
+      "words": [
+        {
+          "word": "Bỏ",
+          "startTime": 74123,
+          "endTime": 75447
+        },
+        {
+          "word": "anh",
+          "startTime": 75447,
+          "endTime": 76731
+        },
+        {
+          "word": "với",
+          "startTime": 76731,
+          "endTime": 78155
+        },
+        {
+          "word": "khúc",
+          "startTime": 78155,
+          "endTime": 78255
+        },
+        {
+          "word": "nhạc",
+          "startTime": 78155,
+          "endTime": 79599
+        }
+      ]
+    },
+    {
+      "text": "Nơi phương xa họ về đây rước dâu",
+      "start": 80000,
+      "end": 85000,
+      "words": [
+        {
+          "word": "Nơi",
+          "startTime": 80000,
+          "endTime": 80060
+        },
+        {
+          "word": "phương",
+          "startTime": 80060,
+          "endTime": 80321
+        },
+        {
+          "word": "xa",
+          "startTime": 80321,
+          "endTime": 80421
+        },
+        {
+          "word": "họ",
+          "startTime": 80321,
+          "endTime": 81365
+        },
+        {
+          "word": "về",
+          "startTime": 81365,
+          "endTime": 81465
+        },
+        {
+          "word": "đây",
+          "startTime": 81365,
+          "endTime": 82229
+        },
+        {
+          "word": "rước",
+          "startTime": 82229,
+          "endTime": 82831
+        },
+        {
+          "word": "dâu",
+          "startTime": 82831,
+          "endTime": 82932
+        }
+      ]
+    },
+    {
+      "text": "Câu hát chung đôi",
+      "start": 85000,
+      "end": 93000,
+      "words": [
+        {
+          "word": "Câu",
+          "startTime": 89531,
+          "endTime": 90153
+        },
+        {
+          "word": "hát",
+          "startTime": 90153,
+          "endTime": 90253
+        },
+        {
+          "word": "chung",
+          "startTime": 90153,
+          "endTime": 91857
+        },
+        {
+          "word": "đôi",
+          "startTime": 91857,
+          "endTime": 92599
+        }
+      ]
+    },
+    {
+      "text": "Em mới ca nửa chừng",
+      "start": 93000,
+      "end": 97000,
+      "words": [
+        {
+          "word": "Em",
+          "startTime": 93643,
+          "endTime": 93683
+        },
+        {
+          "word": "mới",
+          "startTime": 93683,
+          "endTime": 94266
+        },
+        {
+          "word": "ca",
+          "startTime": 94266,
+          "endTime": 94628
+        },
+        {
+          "word": "nửa",
+          "startTime": 94628,
+          "endTime": 94728
+        },
+        {
+          "word": "chừng",
+          "startTime": 94628,
+          "endTime": 95593
+        }
+      ]
+    },
+    {
+      "text": "Em viết thiệp hồng tên em thì đúng",
+      "start": 97000,
+      "end": 100000,
+      "words": [
+        {
+          "word": "Em",
+          "startTime": 97201,
+          "endTime": 97805
+        },
+        {
+          "word": "viết",
+          "startTime": 97805,
+          "endTime": 98047
+        },
+        {
+          "word": "thiệp",
+          "startTime": 98047,
+          "endTime": 98188
+        },
+        {
+          "word": "hồng",
+          "startTime": 98188,
+          "endTime": 98288
+        },
+        {
+          "word": "tên",
+          "startTime": 98188,
+          "endTime": 98288
+        },
+        {
+          "word": "em",
+          "startTime": 98188,
+          "endTime": 98288
+        },
+        {
+          "word": "thì",
+          "startTime": 98188,
+          "endTime": 99356
+        },
+        {
+          "word": "đúng",
+          "startTime": 99356,
+          "endTime": 99960
+        }
+      ]
+    },
+    {
+      "text": "Nhưng tại sao sai tên anh",
+      "start": 100000,
+      "end": 104000,
+      "words": [
+        {
+          "word": "Nhưng",
+          "startTime": 100040,
+          "endTime": 101126
+        },
+        {
+          "word": "tại",
+          "startTime": 101126,
+          "endTime": 101427
+        },
+        {
+          "word": "sao",
+          "startTime": 101427,
+          "endTime": 101527
+        },
+        {
+          "word": "sai",
+          "startTime": 101427,
+          "endTime": 101527
+        },
+        {
+          "word": "tên",
+          "startTime": 101427,
+          "endTime": 101527
+        },
+        {
+          "word": "anh",
+          "startTime": 101427,
+          "endTime": 103920
+        }
+      ]
+    },
+    {
+      "text": "Ai cắt tơ hồng",
+      "start": 104000,
+      "end": 105500,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 104041,
+          "endTime": 104243
+        },
+        {
+          "word": "cắt",
+          "startTime": 104243,
+          "endTime": 104547
+        },
+        {
+          "word": "tơ",
+          "startTime": 104547,
+          "endTime": 105338
+        },
+        {
+          "word": "hồng",
+          "startTime": 105338,
+          "endTime": 105480
+        }
+      ]
+    },
+    {
+      "text": "Ai gieo tình duyên ta nửa vời",
+      "start": 105500,
+      "end": 107000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 105764,
+          "endTime": 106027
+        },
+        {
+          "word": "gieo",
+          "startTime": 106027,
+          "endTime": 106412
+        },
+        {
+          "word": "tình",
+          "startTime": 106412,
+          "endTime": 106574
+        },
+        {
+          "word": "duyên",
+          "startTime": 106574,
+          "endTime": 106674
+        },
+        {
+          "word": "ta",
+          "startTime": 106574,
+          "endTime": 106674
+        },
+        {
+          "word": "nửa",
+          "startTime": 106574,
+          "endTime": 106939
+        },
+        {
+          "word": "vời",
+          "startTime": 106939,
+          "endTime": 106980
+        }
+      ]
+    },
+    {
+      "text": "Ai hát sai lời ai trật nhịp",
+      "start": 107000,
+      "end": 112000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 107622,
+          "endTime": 107843
+        },
+        {
+          "word": "hát",
+          "startTime": 107843,
+          "endTime": 108165
+        },
+        {
+          "word": "sai",
+          "startTime": 108165,
+          "endTime": 108867
+        },
+        {
+          "word": "lời",
+          "startTime": 108867,
+          "endTime": 108967
+        },
+        {
+          "word": "ai",
+          "startTime": 108867,
+          "endTime": 108967
+        },
+        {
+          "word": "trật",
+          "startTime": 108867,
+          "endTime": 110675
+        },
+        {
+          "word": "nhịp",
+          "startTime": 110675,
+          "endTime": 111880
+        }
+      ]
+    },
+    {
+      "text": "Ai dừng lại khi đang ca",
+      "start": 112000,
+      "end": 116000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 112583,
+          "endTime": 113528
+        },
+        {
+          "word": "dừng",
+          "startTime": 113528,
+          "endTime": 114291
+        },
+        {
+          "word": "lại",
+          "startTime": 114291,
+          "endTime": 115136
+        },
+        {
+          "word": "khi",
+          "startTime": 115136,
+          "endTime": 115236
+        },
+        {
+          "word": "đang",
+          "startTime": 115136,
+          "endTime": 115658
+        },
+        {
+          "word": "ca",
+          "startTime": 115658,
+          "endTime": 115759
+        }
+      ]
+    },
+    {
+      "text": "Đàn sai cung lệch phím",
+      "start": 116000,
+      "end": 120000,
+      "words": [
+        {
+          "word": "Đàn",
+          "startTime": 117166,
+          "endTime": 117809
+        },
+        {
+          "word": "sai",
+          "startTime": 117809,
+          "endTime": 118131
+        },
+        {
+          "word": "cung",
+          "startTime": 118131,
+          "endTime": 119256
+        },
+        {
+          "word": "lệch",
+          "startTime": 119256,
+          "endTime": 119618
+        },
+        {
+          "word": "phím",
+          "startTime": 119618,
+          "endTime": 119839
+        }
+      ]
+    },
+    {
+      "text": "Tất cả là tại anh",
+      "start": 120000,
+      "end": 123000,
+      "words": [
+        {
+          "word": "Tất",
+          "startTime": 120685,
+          "endTime": 121027
+        },
+        {
+          "word": "cả",
+          "startTime": 121027,
+          "endTime": 121369
+        },
+        {
+          "word": "là",
+          "startTime": 121369,
+          "endTime": 121469
+        },
+        {
+          "word": "tại",
+          "startTime": 121369,
+          "endTime": 121469
+        },
+        {
+          "word": "anh",
+          "startTime": 121369,
+          "endTime": 121933
+        }
+      ]
+    },
+    {
+      "text": "Khoác áo vu quy em làm dâu",
+      "start": 123000,
+      "end": 127000,
+      "words": [
+        {
+          "word": "Khoác",
+          "startTime": 123905,
+          "endTime": 124106
+        },
+        {
+          "word": "áo",
+          "startTime": 124106,
+          "endTime": 124628
+        },
+        {
+          "word": "vu",
+          "startTime": 124628,
+          "endTime": 124930
+        },
+        {
+          "word": "quy",
+          "startTime": 124930,
+          "endTime": 125111
+        },
+        {
+          "word": "em",
+          "startTime": 125111,
+          "endTime": 125693
+        },
+        {
+          "word": "làm",
+          "startTime": 125693,
+          "endTime": 126397
+        },
+        {
+          "word": "dâu",
+          "startTime": 126397,
+          "endTime": 126839
+        }
+      ]
+    },
+    {
+      "text": "Lời thề em để đâu",
+      "start": 127000,
+      "end": 130000,
+      "words": [
+        {
+          "word": "Lời",
+          "startTime": 127785,
+          "endTime": 128550
+        },
+        {
+          "word": "thề",
+          "startTime": 128550,
+          "endTime": 128953
+        },
+        {
+          "word": "em",
+          "startTime": 128953,
+          "endTime": 129053
+        },
+        {
+          "word": "để",
+          "startTime": 128953,
+          "endTime": 129698
+        },
+        {
+          "word": "đâu",
+          "startTime": 129698,
+          "endTime": 129839
+        }
+      ]
+    },
+    {
+      "text": "Bên ấy sang giàu",
+      "start": 130000,
+      "end": 137000,
+      "words": [
+        {
+          "word": "Bên",
+          "startTime": 130682,
+          "endTime": 131504
+        },
+        {
+          "word": "ấy",
+          "startTime": 131504,
+          "endTime": 131725
+        },
+        {
+          "word": "sang",
+          "startTime": 131725,
+          "endTime": 132447
+        },
+        {
+          "word": "giàu",
+          "startTime": 132447,
+          "endTime": 134132
+        }
+      ]
+    },
+    {
+      "text": "Đừng bận tâm anh bể dâu",
+      "start": 142000,
+      "end": 152500,
+      "words": [
+        {
+          "word": "Đừng",
+          "startTime": 143603,
+          "endTime": 147791
+        },
+        {
+          "word": "bận",
+          "startTime": 147791,
+          "endTime": 148532
+        },
+        {
+          "word": "tâm",
+          "startTime": 148532,
+          "endTime": 148632
+        },
+        {
+          "word": "anh",
+          "startTime": 148532,
+          "endTime": 148632
+        },
+        {
+          "word": "bể",
+          "startTime": 148532,
+          "endTime": 150697
+        },
+        {
+          "word": "dâu",
+          "startTime": 150697,
+          "endTime": 151137
+        }
+      ]
+    },
+    {
+      "text": "Câu hát ân tình anh một mình",
+      "start": 152500,
+      "end": 163000,
+      "words": [
+        {
+          "word": "Câu",
+          "startTime": 153181,
+          "endTime": 154243
+        },
+        {
+          "word": "hát",
+          "startTime": 154243,
+          "endTime": 154343
+        },
+        {
+          "word": "ân",
+          "startTime": 154243,
+          "endTime": 155666
+        },
+        {
+          "word": "tình",
+          "startTime": 155666,
+          "endTime": 155766
+        },
+        {
+          "word": "anh",
+          "startTime": 155666,
+          "endTime": 158151
+        },
+        {
+          "word": "một",
+          "startTime": 158151,
+          "endTime": 158251
+        },
+        {
+          "word": "mình",
+          "startTime": 158151,
+          "endTime": 161156
+        }
+      ]
+    },
+    {
+      "text": "Giờ ngồi đàn ai nghe đây",
+      "start": 163000,
+      "end": 167000,
+      "words": [
+        {
+          "word": "Giờ",
+          "startTime": 163844,
+          "endTime": 164085
+        },
+        {
+          "word": "ngồi",
+          "startTime": 164085,
+          "endTime": 164990
+        },
+        {
+          "word": "đàn",
+          "startTime": 164990,
+          "endTime": 165090
+        },
+        {
+          "word": "ai",
+          "startTime": 164990,
+          "endTime": 165090
+        },
+        {
+          "word": "nghe",
+          "startTime": 164990,
+          "endTime": 165090
+        },
+        {
+          "word": "đây",
+          "startTime": 164990,
+          "endTime": 166960
+        }
+      ]
+    },
+    {
+      "text": "Đàn so dây chưa kịp",
+      "start": 167000,
+      "end": 172000,
+      "words": [
+        {
+          "word": "Đàn",
+          "startTime": 167924,
+          "endTime": 168847
+        },
+        {
+          "word": "so",
+          "startTime": 168847,
+          "endTime": 169088
+        },
+        {
+          "word": "dây",
+          "startTime": 169088,
+          "endTime": 170675
+        },
+        {
+          "word": "chưa",
+          "startTime": 170675,
+          "endTime": 171398
+        },
+        {
+          "word": "kịp",
+          "startTime": 171398,
+          "endTime": 171839
+        }
+      ]
+    },
+    {
+      "text": "Người đành buông tay",
+      "start": 174000,
+      "end": 177000,
+      "words": [
+        {
+          "word": "Người",
+          "startTime": 174242,
+          "endTime": 175772
+        },
+        {
+          "word": "đành",
+          "startTime": 175772,
+          "endTime": 176396
+        },
+        {
+          "word": "buông",
+          "startTime": 176396,
+          "endTime": 176718
+        },
+        {
+          "word": "tay",
+          "startTime": 176718,
+          "endTime": 176899
+        }
+      ]
+    },
+    {
+      "text": "Anh đâu hay em muốn nơi sang giàu",
+      "start": 177000,
+      "end": 180000,
+      "words": [
+        {
+          "word": "Anh",
+          "startTime": 177000,
+          "endTime": 177100
+        },
+        {
+          "word": "đâu",
+          "startTime": 177000,
+          "endTime": 177040
+        },
+        {
+          "word": "hay",
+          "startTime": 177040,
+          "endTime": 177765
+        },
+        {
+          "word": "em",
+          "startTime": 177765,
+          "endTime": 177906
+        },
+        {
+          "word": "muốn",
+          "startTime": 177906,
+          "endTime": 178006
+        },
+        {
+          "word": "nơi",
+          "startTime": 177906,
+          "endTime": 178490
+        },
+        {
+          "word": "sang",
+          "startTime": 178490,
+          "endTime": 178732
+        },
+        {
+          "word": "giàu",
+          "startTime": 178732,
+          "endTime": 179678
+        }
+      ]
+    },
+    {
+      "text": "Tìm về chốn phồn hoa",
+      "start": 180000,
+      "end": 185000,
+      "words": [
+        {
+          "word": "Tìm",
+          "startTime": 180703,
+          "endTime": 180984
+        },
+        {
+          "word": "về",
+          "startTime": 180984,
+          "endTime": 181365
+        },
+        {
+          "word": "chốn",
+          "startTime": 181365,
+          "endTime": 182791
+        },
+        {
+          "word": "phồn",
+          "startTime": 182791,
+          "endTime": 182891
+        },
+        {
+          "word": "hoa",
+          "startTime": 182791,
+          "endTime": 184317
+        }
+      ]
+    },
+    {
+      "text": "Bỏ anh với khúc nhạc",
+      "start": 185000,
+      "end": 193000,
+      "words": [
+        {
+          "word": "Bỏ",
+          "startTime": 185642,
+          "endTime": 186083
+        },
+        {
+          "word": "anh",
+          "startTime": 186083,
+          "endTime": 190133
+        },
+        {
+          "word": "với",
+          "startTime": 190133,
+          "endTime": 191216
+        },
+        {
+          "word": "khúc",
+          "startTime": 191216,
+          "endTime": 191316
+        },
+        {
+          "word": "nhạc",
+          "startTime": 191216,
+          "endTime": 192479
+        }
+      ]
+    },
+    {
+      "text": "Nơi phương xa họ về đây rước dâu",
+      "start": 193000,
+      "end": 195000,
+      "words": [
+        {
+          "word": "Nơi",
+          "startTime": 193505,
+          "endTime": 193566
+        },
+        {
+          "word": "phương",
+          "startTime": 193566,
+          "endTime": 193909
+        },
+        {
+          "word": "xa",
+          "startTime": 193909,
+          "endTime": 194009
+        },
+        {
+          "word": "họ",
+          "startTime": 193909,
+          "endTime": 194495
+        },
+        {
+          "word": "về",
+          "startTime": 194495,
+          "endTime": 194595
+        },
+        {
+          "word": "đây",
+          "startTime": 194495,
+          "endTime": 194859
+        },
+        {
+          "word": "rước",
+          "startTime": 194859,
+          "endTime": 194939
+        },
+        {
+          "word": "dâu",
+          "startTime": 194939,
+          "endTime": 194980
+        }
+      ]
+    },
+    {
+      "text": "Câu hát chung đôi",
+      "start": 195000,
+      "end": 197000,
+      "words": [
+        {
+          "word": "Câu",
+          "startTime": 196051,
+          "endTime": 196212
+        },
+        {
+          "word": "hát",
+          "startTime": 196212,
+          "endTime": 196312
+        },
+        {
+          "word": "chung",
+          "startTime": 196212,
+          "endTime": 196919
+        },
+        {
+          "word": "đôi",
+          "startTime": 196919,
+          "endTime": 196980
+        }
+      ]
+    },
+    {
+      "text": "Em mới ca nửa chừng",
+      "start": 197000,
+      "end": 198500,
+      "words": [
+        {
+          "word": "Em",
+          "startTime": 197203,
+          "endTime": 197304
+        },
+        {
+          "word": "mới",
+          "startTime": 197304,
+          "endTime": 197811
+        },
+        {
+          "word": "ca",
+          "startTime": 197811,
+          "endTime": 197932
+        },
+        {
+          "word": "nửa",
+          "startTime": 197932,
+          "endTime": 198032
+        },
+        {
+          "word": "chừng",
+          "startTime": 197932,
+          "endTime": 198358
+        }
+      ]
+    },
+    {
+      "text": "Em viết thiệp hồng tên em thì đúng",
+      "start": 198500,
+      "end": 200000,
+      "words": [
+        {
+          "word": "Em",
+          "startTime": 198601,
+          "endTime": 198764
+        },
+        {
+          "word": "viết",
+          "startTime": 198764,
+          "endTime": 198865
+        },
+        {
+          "word": "thiệp",
+          "startTime": 198865,
+          "endTime": 198926
+        },
+        {
+          "word": "hồng",
+          "startTime": 198926,
+          "endTime": 199026
+        },
+        {
+          "word": "tên",
+          "startTime": 198926,
+          "endTime": 199026
+        },
+        {
+          "word": "em",
+          "startTime": 198926,
+          "endTime": 199026
+        },
+        {
+          "word": "thì",
+          "startTime": 198926,
+          "endTime": 199919
+        },
+        {
+          "word": "đúng",
+          "startTime": 199919,
+          "endTime": 199959
+        }
+      ]
+    },
+    {
+      "text": "Nhưng tại sao sai tên anh",
+      "start": 200000,
+      "end": 203000,
+      "words": [
+        {
+          "word": "Nhưng",
+          "startTime": 200906,
+          "endTime": 201128
+        },
+        {
+          "word": "tại",
+          "startTime": 201128,
+          "endTime": 201409
+        },
+        {
+          "word": "sao",
+          "startTime": 201409,
+          "endTime": 201509
+        },
+        {
+          "word": "sai",
+          "startTime": 201409,
+          "endTime": 201509
+        },
+        {
+          "word": "tên",
+          "startTime": 201409,
+          "endTime": 201509
+        },
+        {
+          "word": "anh",
+          "startTime": 201409,
+          "endTime": 202960
+        }
+      ]
+    },
+    {
+      "text": "Ai cắt tơ hồng",
+      "start": 203000,
+      "end": 207000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 203623,
+          "endTime": 203864
+        },
+        {
+          "word": "cắt",
+          "startTime": 203864,
+          "endTime": 204045
+        },
+        {
+          "word": "tơ",
+          "startTime": 204045,
+          "endTime": 205714
+        },
+        {
+          "word": "hồng",
+          "startTime": 205714,
+          "endTime": 206678
+        }
+      ]
+    },
+    {
+      "text": "Ai gieo tình duyên ta nửa vời",
+      "start": 207000,
+      "end": 212000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 207582,
+          "endTime": 207723
+        },
+        {
+          "word": "gieo",
+          "startTime": 207723,
+          "endTime": 208165
+        },
+        {
+          "word": "tình",
+          "startTime": 208165,
+          "endTime": 209068
+        },
+        {
+          "word": "duyên",
+          "startTime": 209068,
+          "endTime": 209168
+        },
+        {
+          "word": "ta",
+          "startTime": 209068,
+          "endTime": 209168
+        },
+        {
+          "word": "nửa",
+          "startTime": 209068,
+          "endTime": 210293
+        },
+        {
+          "word": "vời",
+          "startTime": 210293,
+          "endTime": 210976
+        }
+      ]
+    },
+    {
+      "text": "Ai hát sai lời ai trật nhịp",
+      "start": 212000,
+      "end": 216000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 212382,
+          "endTime": 212462
+        },
+        {
+          "word": "hát",
+          "startTime": 212462,
+          "endTime": 212844
+        },
+        {
+          "word": "sai",
+          "startTime": 212844,
+          "endTime": 214211
+        },
+        {
+          "word": "lời",
+          "startTime": 214211,
+          "endTime": 214311
+        },
+        {
+          "word": "ai",
+          "startTime": 214211,
+          "endTime": 214311
+        },
+        {
+          "word": "trật",
+          "startTime": 214211,
+          "endTime": 215678
+        },
+        {
+          "word": "nhịp",
+          "startTime": 215678,
+          "endTime": 215879
+        }
+      ]
+    },
+    {
+      "text": "Ai dừng lại khi đang ca",
+      "start": 216000,
+      "end": 220000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 216824,
+          "endTime": 217829
+        },
+        {
+          "word": "dừng",
+          "startTime": 217829,
+          "endTime": 219276
+        },
+        {
+          "word": "lại",
+          "startTime": 219276,
+          "endTime": 219598
+        },
+        {
+          "word": "khi",
+          "startTime": 219598,
+          "endTime": 219698
+        },
+        {
+          "word": "đang",
+          "startTime": 219598,
+          "endTime": 219960
+        },
+        {
+          "word": "ca",
+          "startTime": 219960,
+          "endTime": 219980
+        }
+      ]
+    },
+    {
+      "text": "Đàn sai cung lệch phím",
+      "start": 220000,
+      "end": 223000,
+      "words": [
+        {
+          "word": "Đàn",
+          "startTime": 220785,
+          "endTime": 221047
+        },
+        {
+          "word": "sai",
+          "startTime": 221047,
+          "endTime": 221430
+        },
+        {
+          "word": "cung",
+          "startTime": 221430,
+          "endTime": 221732
+        },
+        {
+          "word": "lệch",
+          "startTime": 221732,
+          "endTime": 222154
+        },
+        {
+          "word": "phím",
+          "startTime": 222154,
+          "endTime": 222960
+        }
+      ]
+    },
+    {
+      "text": "Tất cả là tại anh",
+      "start": 223000,
+      "end": 227000,
+      "words": [
+        {
+          "word": "Tất",
+          "startTime": 223945,
+          "endTime": 224789
+        },
+        {
+          "word": "cả",
+          "startTime": 224789,
+          "endTime": 225231
+        },
+        {
+          "word": "là",
+          "startTime": 225231,
+          "endTime": 225331
+        },
+        {
+          "word": "tại",
+          "startTime": 225231,
+          "endTime": 225331
+        },
+        {
+          "word": "anh",
+          "startTime": 225231,
+          "endTime": 226658
+        }
+      ]
+    },
+    {
+      "text": "Khoác áo vu quy em làm dâu",
+      "start": 227000,
+      "end": 228500,
+      "words": [
+        {
+          "word": "Khoác",
+          "startTime": 227000,
+          "endTime": 227345
+        },
+        {
+          "word": "áo",
+          "startTime": 227345,
+          "endTime": 228054
+        },
+        {
+          "word": "vu",
+          "startTime": 228054,
+          "endTime": 228115
+        },
+        {
+          "word": "quy",
+          "startTime": 228115,
+          "endTime": 228257
+        },
+        {
+          "word": "em",
+          "startTime": 228257,
+          "endTime": 228297
+        },
+        {
+          "word": "làm",
+          "startTime": 228297,
+          "endTime": 228378
+        },
+        {
+          "word": "dâu",
+          "startTime": 228378,
+          "endTime": 228459
+        }
+      ]
+    },
+    {
+      "text": "Lời thề em để đâu",
+      "start": 228500,
+      "end": 230000,
+      "words": [
+        {
+          "word": "Lời",
+          "startTime": 228561,
+          "endTime": 229209
+        },
+        {
+          "word": "thề",
+          "startTime": 229209,
+          "endTime": 229331
+        },
+        {
+          "word": "em",
+          "startTime": 229331,
+          "endTime": 229431
+        },
+        {
+          "word": "để",
+          "startTime": 229331,
+          "endTime": 229919
+        },
+        {
+          "word": "đâu",
+          "startTime": 229919,
+          "endTime": 229959
+        }
+      ]
+    },
+    {
+      "text": "Bên ấy sang giàu",
+      "start": 230000,
+      "end": 237000,
+      "words": [
+        {
+          "word": "Bên",
+          "startTime": 230682,
+          "endTime": 231424
+        },
+        {
+          "word": "ấy",
+          "startTime": 231424,
+          "endTime": 231705
+        },
+        {
+          "word": "sang",
+          "startTime": 231705,
+          "endTime": 232748
+        },
+        {
+          "word": "giàu",
+          "startTime": 232748,
+          "endTime": 234774
+        }
+      ]
+    },
+    {
+      "text": "Đừng bận tâm anh bể dâu",
+      "start": 237000,
+      "end": 241000,
+      "words": [
+        {
+          "word": "Đừng",
+          "startTime": 238246,
+          "endTime": 238588
+        },
+        {
+          "word": "bận",
+          "startTime": 238588,
+          "endTime": 239231
+        },
+        {
+          "word": "tâm",
+          "startTime": 239231,
+          "endTime": 239331
+        },
+        {
+          "word": "anh",
+          "startTime": 239231,
+          "endTime": 239331
+        },
+        {
+          "word": "bể",
+          "startTime": 239231,
+          "endTime": 240940
+        },
+        {
+          "word": "dâu",
+          "startTime": 240940,
+          "endTime": 240980
+        }
+      ]
+    },
+    {
+      "text": "Câu hát ân tình anh một mình",
+      "start": 241000,
+      "end": 244000,
+      "words": [
+        {
+          "word": "Câu",
+          "startTime": 241000,
+          "endTime": 241101
+        },
+        {
+          "word": "hát",
+          "startTime": 241101,
+          "endTime": 241201
+        },
+        {
+          "word": "ân",
+          "startTime": 241101,
+          "endTime": 241362
+        },
+        {
+          "word": "tình",
+          "startTime": 241362,
+          "endTime": 241462
+        },
+        {
+          "word": "anh",
+          "startTime": 241362,
+          "endTime": 243094
+        },
+        {
+          "word": "một",
+          "startTime": 243094,
+          "endTime": 243194
+        },
+        {
+          "word": "mình",
+          "startTime": 243094,
+          "endTime": 243899
+        }
+      ]
+    },
+    {
+      "text": "Giờ ngồi đàn ai nghe đây",
+      "start": 244000,
+      "end": 246000,
+      "words": [
+        {
+          "word": "Giờ",
+          "startTime": 244768,
+          "endTime": 245131
+        },
+        {
+          "word": "ngồi",
+          "startTime": 245131,
+          "endTime": 245515
+        },
+        {
+          "word": "đàn",
+          "startTime": 245515,
+          "endTime": 245615
+        },
+        {
+          "word": "ai",
+          "startTime": 245515,
+          "endTime": 245615
+        },
+        {
+          "word": "nghe",
+          "startTime": 245515,
+          "endTime": 245615
+        },
+        {
+          "word": "đây",
+          "startTime": 245515,
+          "endTime": 245980
+        }
+      ]
+    },
+    {
+      "text": "Đàn so dây chưa kịp",
+      "start": 246000,
+      "end": 249000,
+      "words": [
+        {
+          "word": "Đàn",
+          "startTime": 246121,
+          "endTime": 246362
+        },
+        {
+          "word": "so",
+          "startTime": 246362,
+          "endTime": 246725
+        },
+        {
+          "word": "dây",
+          "startTime": 246725,
+          "endTime": 247228
+        },
+        {
+          "word": "chưa",
+          "startTime": 247228,
+          "endTime": 247691
+        },
+        {
+          "word": "kịp",
+          "startTime": 247691,
+          "endTime": 248537
+        }
+      ]
+    },
+    {
+      "text": "Người đành buông tay",
+      "start": 249000,
+      "end": 251000,
+      "words": [
+        {
+          "word": "Người",
+          "startTime": 249162,
+          "endTime": 249889
+        },
+        {
+          "word": "đành",
+          "startTime": 249889,
+          "endTime": 250051
+        },
+        {
+          "word": "buông",
+          "startTime": 250051,
+          "endTime": 250576
+        },
+        {
+          "word": "tay",
+          "startTime": 250576,
+          "endTime": 250960
+        }
+      ]
+    },
+    {
+      "text": "Em viết thiệp hồng tên em thì đúng",
+      "start": 251000,
+      "end": 255000,
+      "words": [
+        {
+          "word": "Em",
+          "startTime": 251181,
+          "endTime": 251382
+        },
+        {
+          "word": "viết",
+          "startTime": 251382,
+          "endTime": 252467
+        },
+        {
+          "word": "thiệp",
+          "startTime": 252467,
+          "endTime": 252869
+        },
+        {
+          "word": "hồng",
+          "startTime": 252869,
+          "endTime": 252969
+        },
+        {
+          "word": "tên",
+          "startTime": 252869,
+          "endTime": 252969
+        },
+        {
+          "word": "em",
+          "startTime": 252869,
+          "endTime": 252969
+        },
+        {
+          "word": "thì",
+          "startTime": 252869,
+          "endTime": 254920
+        },
+        {
+          "word": "đúng",
+          "startTime": 254920,
+          "endTime": 254980
+        }
+      ]
+    },
+    {
+      "text": "Tại sao sai tên anh",
+      "start": 255000,
+      "end": 257500,
+      "words": [
+        {
+          "word": "Tại",
+          "startTime": 255323,
+          "endTime": 256411
+        },
+        {
+          "word": "sao",
+          "startTime": 256411,
+          "endTime": 256511
+        },
+        {
+          "word": "sai",
+          "startTime": 256411,
+          "endTime": 256511
+        },
+        {
+          "word": "tên",
+          "startTime": 256411,
+          "endTime": 256511
+        },
+        {
+          "word": "anh",
+          "startTime": 256411,
+          "endTime": 257419
+        }
+      ]
+    },
+    {
+      "text": "Ai cắt tơ hồng",
+      "start": 257500,
+      "end": 260000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 257560,
+          "endTime": 258145
+        },
+        {
+          "word": "cắt",
+          "startTime": 258145,
+          "endTime": 258266
+        },
+        {
+          "word": "tơ",
+          "startTime": 258266,
+          "endTime": 258831
+        },
+        {
+          "word": "hồng",
+          "startTime": 258831,
+          "endTime": 259577
+        }
+      ]
+    },
+    {
+      "text": "Ai gieo tình duyên ta nửa vời",
+      "start": 260000,
+      "end": 264000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 260080,
+          "endTime": 260704
+        },
+        {
+          "word": "gieo",
+          "startTime": 260704,
+          "endTime": 261407
+        },
+        {
+          "word": "tình",
+          "startTime": 261407,
+          "endTime": 262774
+        },
+        {
+          "word": "duyên",
+          "startTime": 262774,
+          "endTime": 262874
+        },
+        {
+          "word": "ta",
+          "startTime": 262774,
+          "endTime": 262874
+        },
+        {
+          "word": "nửa",
+          "startTime": 262774,
+          "endTime": 263879
+        },
+        {
+          "word": "vời",
+          "startTime": 263879,
+          "endTime": 263980
+        }
+      ]
+    },
+    {
+      "text": "Ai hát sai lời ai trật nhịp",
+      "start": 264000,
+      "end": 268000,
+      "words": [
+        {
+          "word": "Ai",
+          "startTime": 264020,
+          "endTime": 264060
+        },
+        {
+          "word": "hát",
+          "startTime": 264060,
+          "endTime": 264201
+        },
+        {
+          "word": "sai",
+          "startTime": 264201,
+          "endTime": 265327
+        },
+        {
+          "word": "lời",
+          "startTime": 265327,
+          "endTime": 265427
+        },
+        {
+          "word": "ai",
+          "startTime": 265327,
+          "endTime": 265427
+        },
+        {
+          "word": "trật",
+          "startTime": 265327,
+          "endTime": 267819
+        },
+        {
+          "word": "nhịp",
+          "startTime": 267819,
+          "endTime": 267960
+        }
+      ]
+    },
+    {
+      "text": "Dừng lại khi đang ca",
+      "start": 268000,
+      "end": 272000,
+      "words": [
+        {
+          "word": "Dừng",
+          "startTime": 268080,
+          "endTime": 268503
+        },
+        {
+          "word": "lại",
+          "startTime": 268503,
+          "endTime": 269427
+        },
+        {
+          "word": "khi",
+          "startTime": 269427,
+          "endTime": 269527
+        },
+        {
+          "word": "đang",
+          "startTime": 269427,
+          "endTime": 270271
+        },
+        {
+          "word": "ca",
+          "startTime": 270271,
+          "endTime": 270352
+        }
+      ]
+    },
+    {
+      "text": "Đàn sai cung lệch phím",
+      "start": 272000,
+      "end": 276000,
+      "words": [
+        {
+          "word": "Đàn",
+          "startTime": 272905,
+          "endTime": 274251
+        },
+        {
+          "word": "sai",
+          "startTime": 274251,
+          "endTime": 274573
+        },
+        {
+          "word": "cung",
+          "startTime": 274573,
+          "endTime": 274935
+        },
+        {
+          "word": "lệch",
+          "startTime": 274935,
+          "endTime": 275538
+        },
+        {
+          "word": "phím",
+          "startTime": 275538,
+          "endTime": 275920
+        }
+      ]
+    },
+    {
+      "text": "Tất cả là tại anh",
+      "start": 276000,
+      "end": 279000,
+      "words": [
+        {
+          "word": "Tất",
+          "startTime": 276403,
+          "endTime": 276664
+        },
+        {
+          "word": "cả",
+          "startTime": 276664,
+          "endTime": 277007
+        },
+        {
+          "word": "là",
+          "startTime": 277007,
+          "endTime": 277107
+        },
+        {
+          "word": "tại",
+          "startTime": 277007,
+          "endTime": 277107
+        },
+        {
+          "word": "anh",
+          "startTime": 277007,
+          "endTime": 278416
+        }
+      ]
+    },
+    {
+      "text": "Khoác áo vu quy em làm dâu",
+      "start": 279000,
+      "end": 282000,
+      "words": [
+        {
+          "word": "Khoác",
+          "startTime": 279564,
+          "endTime": 279926
+        },
+        {
+          "word": "áo",
+          "startTime": 279926,
+          "endTime": 280268
+        },
+        {
+          "word": "vu",
+          "startTime": 280268,
+          "endTime": 280631
+        },
+        {
+          "word": "quy",
+          "startTime": 280631,
+          "endTime": 280772
+        },
+        {
+          "word": "em",
+          "startTime": 280772,
+          "endTime": 280953
+        },
+        {
+          "word": "làm",
+          "startTime": 280953,
+          "endTime": 281356
+        },
+        {
+          "word": "dâu",
+          "startTime": 281356,
+          "endTime": 281617
+        }
+      ]
+    },
+    {
+      "text": "Lời thề em để đâu",
+      "start": 282000,
+      "end": 286000,
+      "words": [
+        {
+          "word": "Lời",
+          "startTime": 282462,
+          "endTime": 283146
+        },
+        {
+          "word": "thề",
+          "startTime": 283146,
+          "endTime": 283226
+        },
+        {
+          "word": "em",
+          "startTime": 283226,
+          "endTime": 283326
+        },
+        {
+          "word": "để",
+          "startTime": 283226,
+          "endTime": 284191
+        },
+        {
+          "word": "đâu",
+          "startTime": 284191,
+          "endTime": 285055
+        }
+      ]
+    },
+    {
+      "text": "Bên ấy sang giàu",
+      "start": 286000,
+      "end": 290000,
+      "words": [
+        {
+          "word": "Bên",
+          "startTime": 286623,
+          "endTime": 287246
+        },
+        {
+          "word": "ấy",
+          "startTime": 287246,
+          "endTime": 287528
+        },
+        {
+          "word": "sang",
+          "startTime": 287528,
+          "endTime": 288070
+        },
+        {
+          "word": "giàu",
+          "startTime": 288070,
+          "endTime": 289015
+        }
+      ]
+    },
+    {
+      "text": "Đừng bận tâm anh bể dâu",
+      "start": 290000,
+      "end": 293500,
+      "words": [
+        {
+          "word": "Đừng",
+          "startTime": 290704,
+          "endTime": 291126
+        },
+        {
+          "word": "bận",
+          "startTime": 291126,
+          "endTime": 291207
+        },
+        {
+          "word": "tâm",
+          "startTime": 291207,
+          "endTime": 291307
+        },
+        {
+          "word": "anh",
+          "startTime": 291207,
+          "endTime": 291307
+        },
+        {
+          "word": "bể",
+          "startTime": 291207,
+          "endTime": 292132
+        },
+        {
+          "word": "dâu",
+          "startTime": 292132,
+          "endTime": 292172
+        }
+      ]
+    },
+    {
+      "text": "Câu hát ân tình anh một mình",
+      "start": 293500,
+      "end": 297000,
+      "words": [
+        {
+          "word": "Câu",
+          "startTime": 293520,
+          "endTime": 293862
+        },
+        {
+          "word": "hát",
+          "startTime": 293862,
+          "endTime": 293962
+        },
+        {
+          "word": "ân",
+          "startTime": 293862,
+          "endTime": 293902
+        },
+        {
+          "word": "tình",
+          "startTime": 293902,
+          "endTime": 294002
+        },
+        {
+          "word": "anh",
+          "startTime": 293902,
+          "endTime": 294928
+        },
+        {
+          "word": "một",
+          "startTime": 294928,
+          "endTime": 295028
+        },
+        {
+          "word": "mình",
+          "startTime": 294928,
+          "endTime": 296920
+        }
+      ]
+    },
+    {
+      "text": "Giờ ngồi đàn ai nghe đây",
+      "start": 298000,
+      "end": 302000,
+      "words": [
+        {
+          "word": "Giờ",
+          "startTime": 298201,
+          "endTime": 298543
+        },
+        {
+          "word": "ngồi",
+          "startTime": 298543,
+          "endTime": 299809
+        },
+        {
+          "word": "đàn",
+          "startTime": 299809,
+          "endTime": 299909
+        },
+        {
+          "word": "ai",
+          "startTime": 299809,
+          "endTime": 299909
+        },
+        {
+          "word": "nghe",
+          "startTime": 299809,
+          "endTime": 299909
+        },
+        {
+          "word": "đây",
+          "startTime": 299809,
+          "endTime": 301940
+        }
+      ]
+    },
+    {
+      "text": "Đàn so dây chưa kịp",
+      "start": 302000,
+      "end": 306000,
+      "words": [
+        {
+          "word": "Đàn",
+          "startTime": 302141,
+          "endTime": 303166
+        },
+        {
+          "word": "so",
+          "startTime": 303166,
+          "endTime": 304533
+        },
+        {
+          "word": "dây",
+          "startTime": 304533,
+          "endTime": 304754
+        },
+        {
+          "word": "chưa",
+          "startTime": 304754,
+          "endTime": 305075
+        },
+        {
+          "word": "kịp",
+          "startTime": 305075,
+          "endTime": 305920
+        }
+      ]
+    },
+    {
+      "text": "Người đành buông tay",
+      "start": 306000,
+      "end": 310000,
+      "words": [
+        {
+          "word": "Người",
+          "startTime": 306161,
+          "endTime": 307889
+        },
+        {
+          "word": "đành",
+          "startTime": 307889,
+          "endTime": 308432
+        },
+        {
+          "word": "buông",
+          "startTime": 308432,
+          "endTime": 308915
+        },
+        {
+          "word": "tay",
+          "startTime": 308915,
+          "endTime": 309558
+        }
+      ]
+    },
+    {
+      "text": "Em bỏ anh rồi người ơi",
+      "start": 310000,
+      "end": 314000,
+      "words": [
+        {
+          "word": "Em",
+          "startTime": 310261,
+          "endTime": 310523
+        },
+        {
+          "word": "bỏ",
+          "startTime": 310523,
+          "endTime": 310764
+        },
+        {
+          "word": "anh",
+          "startTime": 310764,
+          "endTime": 311186
+        },
+        {
+          "word": "rồi",
+          "startTime": 311186,
+          "endTime": 311286
+        },
+        {
+          "word": "người",
+          "startTime": 311186,
+          "endTime": 311286
+        },
+        {
+          "word": "ơi",
+          "startTime": 311186,
+          "endTime": 311407
+        }
+      ]
+    }
+  ]
+}

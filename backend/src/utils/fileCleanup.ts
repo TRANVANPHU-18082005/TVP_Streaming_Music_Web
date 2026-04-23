@@ -51,26 +51,35 @@ export const deleteFolderFromB2 = async (prefix: string) => {
   const folderPrefix = prefix.endsWith("/") ? prefix : `${prefix}/`;
 
   try {
-    const listCommand = new ListObjectsV2Command({
-      Bucket: process.env.B2_BUCKET_NAME,
-      Prefix: folderPrefix,
-    });
+    let continuationToken: string | undefined;
 
-    const listResult = await s3.send(listCommand);
-    if (!listResult.Contents || listResult.Contents.length === 0) return;
+    do {
+      const listCommand = new ListObjectsV2Command({
+        Bucket: process.env.B2_BUCKET_NAME,
+        Prefix: folderPrefix,
+        ContinuationToken: continuationToken,
+      });
 
-    const deleteCommand = new DeleteObjectsCommand({
-      Bucket: process.env.B2_BUCKET_NAME,
-      Delete: {
-        Objects: listResult.Contents.map((obj) => ({ Key: obj.Key })),
-        Quiet: true,
-      },
-    });
+      const listResult = await s3.send(listCommand);
+      if (!listResult.Contents || listResult.Contents.length === 0) break;
 
-    await s3.send(deleteCommand);
-    console.log(
-      `✅ [B2] Purged Folder: ${folderPrefix} (${listResult.Contents.length} items)`,
-    );
+      const deleteCommand = new DeleteObjectsCommand({
+        Bucket: process.env.B2_BUCKET_NAME,
+        Delete: {
+          Objects: listResult.Contents.map((obj) => ({ Key: obj.Key })),
+          Quiet: true,
+        },
+      });
+
+      await s3.send(deleteCommand);
+      console.log(
+        `✅ [B2] Purged batch: ${folderPrefix} (${listResult.Contents.length} items)`,
+      );
+
+      continuationToken = listResult.IsTruncated
+        ? listResult.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
   } catch (error) {
     console.error(`❌ [B2] Error purging folder (${folderPrefix}):`, error);
   }

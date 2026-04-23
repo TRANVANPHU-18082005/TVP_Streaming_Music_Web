@@ -1,7 +1,5 @@
-import React, { useCallback, useMemo, memo } from "react";
+import React, { useMemo, memo } from "react";
 import { ListMusic } from "lucide-react";
-import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
 
 import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
 import MusicResult from "@/components/ui/Result";
@@ -10,18 +8,13 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import PlaylistFilter from "@/features/playlist/components/PlaylistFilter";
 import { usePlaylistParams } from "@/features/playlist/hooks/usePlaylistParams";
 import { usePlaylistsQuery } from "@/features/playlist/hooks/usePlaylistsQuery";
-import playlistApi from "@/features/playlist/api/playlistApi";
-import { playlistKeys } from "@/features/playlist/utils/playlistKeys";
-import { useAppDispatch } from "@/store/hooks";
-import {
-  Playlistpageskeleton,
-  setIsPlaying,
-  setQueue,
-  useSyncInteractions,
-} from "@/features";
+
+import { Playlistpageskeleton, useSyncInteractions } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -105,38 +98,6 @@ const PlaylistGrid = memo(({ children }: { children: React.ReactNode }) => (
 PlaylistGrid.displayName = "PlaylistGrid";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMPTY PLAYLISTS — context-aware, matches all v4.0 catalog pages
-// ─────────────────────────────────────────────────────────────────────────────
-const EmptyPlaylists = memo(
-  ({ isFiltering, keyword }: { isFiltering: boolean; keyword?: string }) => (
-    <div
-      className={cn(
-        "card-base border-dashed shadow-none",
-        "flex items-center justify-center min-h-[380px]",
-        "animate-fade-in",
-      )}
-    >
-      <MusicResult
-        status="empty"
-        title={isFiltering ? "Không tìm thấy kết quả" : "Chưa có playlist nào"}
-        description={
-          isFiltering && keyword
-            ? `Không có playlist nào phù hợp với "${keyword}". Hãy thử từ khoá khác.`
-            : "Chưa có playlist nào phù hợp với điều kiện hiện tại."
-        }
-        icon={
-          <ListMusic
-            className="size-10 text-muted-foreground/30"
-            aria-hidden="true"
-          />
-        }
-      />
-    </div>
-  ),
-);
-EmptyPlaylists.displayName = "EmptyPlaylists";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // PAGINATION STRIP — single glass-frosted wrapper (no double-wrap anti-pattern)
 // ─────────────────────────────────────────────────────────────────────────────
 const PaginationStrip = memo(
@@ -178,9 +139,6 @@ PaginationStrip.displayName = "PaginationStrip";
 // PLAYLIST PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 const PlaylistPage: React.FC = () => {
-  const queryClient = useQueryClient();
-  const dispatch = useAppDispatch();
-
   const {
     filterParams,
     handleSearch,
@@ -189,7 +147,7 @@ const PlaylistPage: React.FC = () => {
     clearFilters,
   } = usePlaylistParams(24);
 
-  const { data, isLoading, isError } = usePlaylistsQuery(filterParams);
+  const { data, isLoading, isError, refetch } = usePlaylistsQuery(filterParams);
 
   const playlists = useMemo(() => data?.playlists ?? [], [data?.playlists]);
   const meta = useMemo(
@@ -206,31 +164,6 @@ const PlaylistPage: React.FC = () => {
    * Play handler — no throw, no artificial delay (v4.0-prev fixes preserved).
    * useCallback prevents new ref breaking PublicPlaylistCard memo.
    */
-  const handlePlayPlaylist = useCallback(
-    async (playlistId: string) => {
-      try {
-        const res = await queryClient.fetchQuery({
-          queryKey: playlistKeys.detail(playlistId),
-          queryFn: () => playlistApi.getById(playlistId),
-          staleTime: 5 * 60 * 1000,
-        });
-
-        const tracks = res.data?.tracks;
-
-        if (!tracks?.length) {
-          toast.error("This playlist has no tracks yet!");
-          return;
-        }
-
-        dispatch(setQueue({ tracks, startIndex: 0 }));
-        dispatch(setIsPlaying(true));
-        toast.success(`Playing ${tracks.length} tracks from playlist`);
-      } catch {
-        toast.error("Could not load tracks. Please try again.");
-      }
-    },
-    [queryClient, dispatch],
-  );
 
   /** Stable handler object — prevents PlaylistFilter re-render on grid updates */
   const stableFilterHandlers = useMemo(
@@ -246,27 +179,40 @@ const PlaylistPage: React.FC = () => {
   const hasResults = playlists.length > 0;
   const isFiltering = Boolean(filterParams.keyword);
 
+  const onBack = useSmartBack();
+  const isOffline = !navigator.onLine;
   // ── Error state ─────────────────────────────────────────────────────────
-  if (isError) {
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Playlistpageskeleton cardCount={meta.pageSize || 18} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
     return (
-      <div className="relative min-h-screen flex items-center justify-center px-4 pb-28">
-        <div className="card-base shadow-elevated p-8 max-w-md w-full text-center animate-scale-in">
-          <MusicResult
-            status="error"
-            title="Could not load playlists"
-            description="The server encountered an error. Please check your connection and try again."
-            secondaryAction={{
-              label: "Reload",
-              onClick: () => window.location.reload(),
-            }}
-          />
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
         </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
+        />
       </div>
     );
   }
-  if (isLoading && playlists.length === 0) {
-    return <Playlistpageskeleton cardCount={meta.pageSize || 24} />;
-  }
+
   return (
     <div className="relative min-h-screen pb-28">
       <SectionAmbient />
@@ -307,10 +253,19 @@ const PlaylistPage: React.FC = () => {
               <CardSkeleton count={skeletonCount} />
             </PlaylistGrid>
           ) : !hasResults ? (
-            <EmptyPlaylists
-              isFiltering={isFiltering}
-              keyword={filterParams.keyword}
-            />
+            !isLoading && !isFiltering ? (
+              <MusicResult
+                variant="empty-playlists"
+                description="Album hiện đang trống"
+              />
+            ) : (
+              <MusicResult
+                variant="empty-playlists"
+                description="Không có kết quả! Thử bộ lọc khác "
+                onClearFilters={clearFilters}
+                onBack={onBack}
+              />
+            )
           ) : (
             <PlaylistGrid>
               {playlists.map((playlist, index) => (
@@ -319,10 +274,7 @@ const PlaylistPage: React.FC = () => {
                   className="animate-fade-up animation-fill-both"
                   style={{ animationDelay: `${staggerDelay(index)}ms` }}
                 >
-                  <PublicPlaylistCard
-                    playlist={playlist}
-                    onPlay={() => handlePlayPlaylist(playlist._id)}
-                  />
+                  <PublicPlaylistCard playlist={playlist} />
                 </div>
               ))}
             </PlaylistGrid>

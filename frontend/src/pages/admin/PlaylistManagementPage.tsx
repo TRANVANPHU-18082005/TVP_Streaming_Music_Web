@@ -19,7 +19,10 @@ import PlaylistModal from "@/features/playlist/components/PlaylistModal";
 import { usePlaylistParams } from "@/features/playlist/hooks/usePlaylistParams";
 import { usePlaylistsQuery } from "@/features/playlist/hooks/usePlaylistsQuery";
 import { usePlaylistMutations } from "@/features/playlist/hooks/usePlaylistMutations";
-import { type Playlist } from "@/features/playlist/types";
+import { IPlaylist, Playlistpageskeleton } from "@/features";
+
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 const PlaylistManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL Source of Truth) ---
@@ -32,7 +35,7 @@ const PlaylistManagementPage = () => {
   } = usePlaylistParams(APP_CONFIG.PAGINATION_LIMIT || 12);
 
   // --- 2. DATA FETCHING (Read) ---
-  const { data, isLoading } = usePlaylistsQuery(filterParams);
+  const { data, isLoading, isError, refetch } = usePlaylistsQuery(filterParams);
 
   // --- 3. MUTATIONS (Write) ---
   const {
@@ -44,8 +47,8 @@ const PlaylistManagementPage = () => {
 
   // --- 4. LOCAL UI STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [playlistToEdit, setPlaylistToEdit] = useState<Playlist | null>(null);
-  const [playlistToDelete, setPlaylistToDelete] = useState<Playlist | null>(
+  const [playlistToEdit, setPlaylistToEdit] = useState<IPlaylist | null>(null);
+  const [playlistToDelete, setPlaylistToDelete] = useState<IPlaylist | null>(
     null,
   );
 
@@ -55,7 +58,7 @@ const PlaylistManagementPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (playlist: Playlist) => {
+  const handleOpenEdit = (playlist: IPlaylist) => {
     setPlaylistToEdit(playlist);
     setIsModalOpen(true);
   };
@@ -92,7 +95,43 @@ const PlaylistManagementPage = () => {
     page: 1,
     pageSize: 12,
   };
+  const skeletonCount = meta.pageSize || APP_CONFIG.PAGINATION_LIMIT;
+  const hasResults = playlists.length > 0;
+  const isFiltering = Boolean(filterParams.keyword);
 
+  const onBack = useSmartBack();
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Playlistpageskeleton cardCount={meta.pageSize || 18} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
+    return (
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
+        />
+      </div>
+    );
+  }
   return (
     <div className="space-y-8 pb-12">
       {/* --- HEADER --- */}
@@ -126,11 +165,25 @@ const PlaylistManagementPage = () => {
       {isLoading ? (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
           {/* Render 10 cái skeleton với hiệu ứng wave */}
-          <CardSkeleton count={10} />
+          <CardSkeleton count={skeletonCount} />
         </div>
-      ) : playlists.length > 0 ? (
+      ) : !hasResults ? (
+        !isLoading && !isFiltering ? (
+          <MusicResult
+            variant="empty-playlists"
+            description="Album hiện đang trống"
+          />
+        ) : (
+          <MusicResult
+            variant="empty-playlists"
+            description="Không có kết quả! Thử bộ lọc khác "
+            onClearFilters={handleReset}
+            onBack={onBack}
+          />
+        )
+      ) : (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6 animate-in fade-in duration-500">
-          {playlists.map((playlist: Playlist) => (
+          {playlists.map((playlist: IPlaylist) => (
             <PlaylistCard
               key={playlist._id}
               playlist={playlist}
@@ -138,14 +191,6 @@ const PlaylistManagementPage = () => {
               onDelete={() => setPlaylistToDelete(playlist)}
             />
           ))}
-        </div>
-      ) : (
-        <div className="bg-muted/5 rounded-xl border border-dashed border-border">
-          <MusicResult
-            status="empty"
-            title="No playlists found"
-            description="Try changing the filter or create a new playlist."
-          />
         </div>
       )}
 

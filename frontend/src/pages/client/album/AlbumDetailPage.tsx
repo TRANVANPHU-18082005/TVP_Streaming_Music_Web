@@ -6,14 +6,11 @@ import {
   Pause,
   MoreHorizontal,
   Share2,
-  AlertCircle,
   ListMusic,
   Plus,
-  Music4,
   Loader2,
   ChevronLeft,
   Shuffle,
-  RefreshCw,
   Disc3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,6 +41,8 @@ import { formatDuration } from "@/utils/track-helper";
 import { buildPalette, Palette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
+import MusicResult from "@/components/ui/Result";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -97,104 +96,6 @@ const AlbumStats = memo<{
   );
 });
 AlbumStats.displayName = "AlbumStats";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AlbumEmptyTracks
-// ─────────────────────────────────────────────────────────────────────────────
-
-const AlbumEmptyTracks = memo<{ compact?: boolean }>(({ compact }) => (
-  <div
-    className={cn(
-      "flex flex-col items-center justify-center text-center",
-      compact ? "py-10 px-4" : "py-20 px-6",
-    )}
-    role="status"
-  >
-    <div
-      className={cn(
-        "rounded-full bg-muted/40 border border-dashed border-muted-foreground/20 flex items-center justify-center mb-4",
-        compact ? "size-14" : "size-20",
-      )}
-    >
-      <Music4
-        className={cn(
-          "text-muted-foreground/30",
-          compact ? "size-6" : "size-9",
-        )}
-        aria-hidden="true"
-      />
-    </div>
-    <h3
-      className={cn(
-        "font-black uppercase tracking-widest text-foreground/80 mb-2",
-        compact ? "text-sm" : "text-base",
-      )}
-    >
-      Chưa có bài hát
-    </h3>
-    <p
-      className={cn(
-        "text-muted-foreground font-medium leading-relaxed max-w-xs",
-        compact ? "text-xs" : "text-sm",
-      )}
-    >
-      Đĩa nhạc này chưa có bài hát nào. Nghệ sĩ có thể đang cập nhật.
-    </p>
-  </div>
-));
-AlbumEmptyTracks.displayName = "AlbumEmptyTracks";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AlbumErrorState
-// ─────────────────────────────────────────────────────────────────────────────
-
-const AlbumErrorState = memo<{ onBack: () => void; onRetry: () => void }>(
-  ({ onBack, onRetry }) => (
-    <div
-      className="flex flex-col items-center justify-center min-h-[60vh] gap-7 text-center px-6"
-      role="alert"
-      aria-live="assertive"
-    >
-      <div className="relative">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-destructive/15 blur-3xl rounded-full scale-150 pointer-events-none"
-        />
-        <div className="relative z-10 size-24 rounded-2xl bg-background border-2 border-muted flex items-center justify-center shadow-xl">
-          <AlertCircle
-            className="size-10 text-muted-foreground/60"
-            aria-hidden="true"
-          />
-        </div>
-      </div>
-      <div className="space-y-2 max-w-sm">
-        <h2 className="text-2xl sm:text-3xl font-black tracking-tighter text-foreground">
-          Không tìm thấy đĩa nhạc
-        </h2>
-        <p className="text-sm text-muted-foreground font-medium leading-relaxed">
-          Đĩa nhạc không tồn tại, đã bị xóa, hoặc chuyển về chế độ riêng tư.
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onRetry}
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-border/60 text-sm font-bold text-foreground/80 hover:bg-muted/60 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        >
-          <RefreshCw className="size-3.5" aria-hidden="true" /> Thử lại
-        </button>
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        >
-          <ChevronLeft className="size-4" aria-hidden="true" /> Quay lại
-        </button>
-      </div>
-    </div>
-  ),
-);
-AlbumErrorState.displayName = "AlbumErrorState";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AlbumContextMenu
@@ -650,11 +551,8 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
     [album?.themeColor],
   );
   const totalDurationSec = useMemo(
-    () =>
-      album?.totalDuration != null
-        ? album.totalDuration
-        : allTracks.reduce((s, t) => s + (t.duration ?? 0), 0),
-    [album?.totalDuration, allTracks],
+    () => allTracks.reduce((s, t) => s + (t.duration ?? 0), 0),
+    [allTracks],
   );
 
   const genres = useMemo(
@@ -672,7 +570,13 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
 
   const handleBack = useCallback(() => {
     if (isEmbedded && onClose) onClose();
-    else navigate(-1);
+    else {
+      if (window.history.length > 1) {
+        navigate(-1);
+      } else {
+        navigate("/", { replace: true });
+      }
+    }
   }, [isEmbedded, onClose, navigate]);
 
   const handleNavigateArtist = useCallback(() => {
@@ -730,15 +634,36 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
   );
 
   // ── Render guards ─────────────────────────────────────────────────────────
-
-  if (isLoading) return <AlbumDetailSkeleton />;
-
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !album) {
+    return <AlbumDetailSkeleton />;
+  }
+  // Switching
+  if (isLoading && album) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
   if (isError || !album) {
     return (
-      <AlbumErrorState
-        onBack={() => (isEmbedded && onClose ? onClose() : navigate("/albums"))}
-        onRetry={() => refetch()}
-      />
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={handleBack}
+        />
+      </div>
     );
   }
 

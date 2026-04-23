@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import authApi from "@/features/auth/api/authApi";
-import { PulseLoader } from "@/components/ui/MusicLoadingEffects";
+
 import { login } from "@/features";
 import { toast } from "sonner";
 import { useAppDispatch } from "@/store/hooks";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 const GoogleCallbackPage = () => {
   const [searchParams] = useSearchParams();
@@ -51,7 +52,13 @@ const GoogleCallbackPage = () => {
     }
   }, [searchParams, dispatch, navigate]);
 
-  return <PulseLoader fullscreen text="Đang đăng nhập với Google..." />;
+  return (
+    <WaveformLoader
+      glass={false}
+      fullscreen
+      text="Đang đăng nhập với Google..."
+    />
+  );
 };
 
 export default GoogleCallbackPage;

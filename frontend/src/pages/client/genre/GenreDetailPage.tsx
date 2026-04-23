@@ -48,6 +48,9 @@ import { buildPalette, Palette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 
+import MusicResult from "@/components/ui/Result";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+
 dayjs.extend(relativeTime);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -630,11 +633,16 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
 
   const handleBack = useCallback(() => {
     if (isEmbedded && onClose) onClose();
-    else navigate(-1);
+    else {
+      if (window.history.length > 1) {
+        navigate(-1);
+      } else {
+        navigate("/", { replace: true });
+      }
+    }
   }, [isEmbedded, onClose, navigate]);
 
   // ── Shared props ──────────────────────────────────────────────────────────
-  console.log(isFetching, totalItems);
   const sharedActionBarProps: ActionBarProps = useMemo(
     () => ({
       palette,
@@ -683,15 +691,37 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
   );
 
   // ── Render guards ─────────────────────────────────────────────────────────
-
-  if (isLoading) return <Genredetailskeleton />;
-
+  // ── Render guards ─────────────────────────────────────────────────────────
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !genre) {
+    return <Genredetailskeleton />;
+  }
+  // Switching
+  if (isLoading && genre) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
   if (isError || !genre) {
     return (
-      <GenreNotFound
-        onBack={() => (isEmbedded && onClose ? onClose() : navigate("/genres"))}
-        onRetry={() => refetch()}
-      />
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={handleBack}
+        />
+      </div>
     );
   }
 

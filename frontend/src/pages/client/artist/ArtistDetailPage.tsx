@@ -42,18 +42,15 @@ import {
   useArtistDetail,
   useArtistTracksInfinite,
 } from "@/features/artist/hooks/useArtistsQuery";
-import {
-  Artistdetailskeleton,
-  FollowButton,
-  IAlbum,
-  IGenre,
-  ITrack,
-} from "@/features";
+import { Artistdetailskeleton, FollowButton, IAlbum, ITrack } from "@/features";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useArtistPlayback } from "@/features/player/hooks/useArtistPlayback";
 import { buildPalette, Palette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
+
+import MusicResult from "@/components/ui/Result";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPRING PRESETS — same as AlbumDetailPage
@@ -671,7 +668,6 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
     error: tracksError,
     refetch: refetchTracks,
   } = useArtistTracksInfinite(artist?._id);
-
   const {
     togglePlayArtist,
     shuffleArtist,
@@ -718,7 +714,13 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
 
   const handleBack = useCallback(() => {
     if (isEmbedded && onClose) onClose();
-    else navigate(-1);
+    else {
+      if (window.history.length > 1) {
+        navigate(-1);
+      } else {
+        navigate("/", { replace: true });
+      }
+    }
   }, [isEmbedded, onClose, navigate]);
 
   // ── Shared props ──────────────────────────────────────────────────────────
@@ -771,17 +773,37 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
   );
 
   // ── Render guards ─────────────────────────────────────────────────────────
-
-  if (isLoading) return <Artistdetailskeleton />;
-
+  // ── Render guards ─────────────────────────────────────────────────────────
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !artist) {
+    return <Artistdetailskeleton />;
+  }
+  // Switching
+  if (isLoading && artist) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
   if (isError || !artist) {
     return (
-      <ArtistNotFound
-        onBack={() =>
-          isEmbedded && onClose ? onClose() : navigate("/artists")
-        }
-        onRetry={() => refetch()}
-      />
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={handleBack}
+        />
+      </div>
     );
   }
 
@@ -1070,25 +1092,6 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                 )}
               </div>
 
-              {/* Genre tags */}
-              {artist.genres?.length > 0 && (
-                <motion.div
-                  className="flex flex-wrap items-center justify-center md:justify-start gap-1.5 mt-0.5"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.28, duration: 0.4 }}
-                >
-                  {artist.genres.slice(0, 5).map((g: IGenre) => (
-                    <span
-                      key={g._id ?? String(g)}
-                      className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-background/25 backdrop-blur-sm border border-white/[0.12] text-foreground/75"
-                    >
-                      {g.name ?? String(g)}
-                    </span>
-                  ))}
-                </motion.div>
-              )}
-
               {/* Playing status pill — mirrors AlbumDetailPage */}
               <AnimatePresence>
                 {isThisAristActive && (
@@ -1372,20 +1375,6 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                     <p className="text-[10px] font-black text-muted-foreground/50 uppercase tracking-widest italic">
                       Tiểu sử đang cập nhật
                     </p>
-                  </div>
-                )}
-
-                {artist.genres?.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-5 mt-5 border-t border-border/40">
-                    {artist.genres.map((g: IGenre) => (
-                      <Badge
-                        key={g._id ?? String(g)}
-                        variant="secondary"
-                        className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border border-border/30 hover:bg-primary/[0.15] hover:text-primary transition-colors cursor-default"
-                      >
-                        {g.name ?? String(g)}
-                      </Badge>
-                    ))}
                   </div>
                 )}
               </section>

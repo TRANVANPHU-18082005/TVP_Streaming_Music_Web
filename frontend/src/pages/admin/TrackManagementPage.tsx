@@ -33,6 +33,10 @@ import { APP_CONFIG } from "@/config/constants";
 import { ITrack } from "@/features/track/types";
 import { useAdminTracks } from "@/features/track/hooks/useTracksQuery";
 
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { Genrepageskeleton } from "@/features";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+
 const TrackManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL) ---
   const {
@@ -44,14 +48,18 @@ const TrackManagementPage = () => {
   } = useTrackParams(APP_CONFIG.PAGINATION_LIMIT);
 
   // --- 2. DATA FETCHING (Read) ---
-  const { data, isLoading } = useAdminTracks(filterParams);
-
+  const { data, isLoading, isError, refetch } = useAdminTracks(filterParams);
+  console.log(data);
   // --- 3. MUTATIONS (Write) ---
   const {
     createTrackAsync,
     updateTrackAsync,
     deleteTrack,
+    retryFull,
     retryTranscode,
+    retryLyrics,
+    retryKaraoke,
+    retryMood,
     bulkUpdateTrack,
     isMutating,
   } = useTrackMutations();
@@ -108,10 +116,6 @@ const TrackManagementPage = () => {
     }
   };
 
-  const handleRetryTranscode = (track: ITrack) => {
-    retryTranscode(track._id);
-  };
-
   const handleBulkSubmit = (data: BulkTrackFormValues) => {
     // Clean undefined values
     const cleanData = Object.fromEntries(
@@ -139,7 +143,42 @@ const TrackManagementPage = () => {
     page: 1,
     pageSize: APP_CONFIG.PAGINATION_LIMIT,
   };
-  console.log("Rendering TrackManagementPage with tracks:", tracks);
+  const onBack = useSmartBack();
+  const hasResults = tracks.length > 0;
+  const isFiltering = Boolean(filterParams.keyword);
+
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Genrepageskeleton cardCount={meta.pageSize} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
+    return (
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
+        />
+      </div>
+    );
+  }
   return (
     <div className="space-y-8 pb-32">
       {/* HEADER */}
@@ -165,7 +204,6 @@ const TrackManagementPage = () => {
         />
       </div>
 
-      {/* TABLE CONTENT */}
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <Table>
@@ -188,21 +226,31 @@ const TrackManagementPage = () => {
               />
             </TableBody>
           </Table>
-        ) : tracks.length === 0 ? (
-          <div className="py-16">
+        ) : !hasResults ? (
+          !isLoading && !isFiltering ? (
             <MusicResult
-              status="empty"
-              title="No tracks found"
-              description="Upload a new track or adjust filters."
+              variant="empty-genres"
+              description="Genre hiện đang trống"
             />
-          </div>
+          ) : (
+            <MusicResult
+              variant="empty-genres"
+              description="Không có kết quả! Thử bộ lọc khác "
+              onClearFilters={clearFilters}
+              onBack={onBack}
+            />
+          )
         ) : (
           <TrackTable
             tracks={tracks}
             isLoading={isLoading}
             onEdit={handleOpenEdit}
             onDelete={setTrackToDelete}
-            onRetry={handleRetryTranscode}
+            retryFull={retryFull}
+            retryTranscode={retryTranscode}
+            retryLyrics={retryLyrics}
+            retryKaraoke={retryKaraoke}
+            retryMood={retryMood}
             startIndex={
               (meta.page - 1) * (meta.pageSize ?? APP_CONFIG.PAGINATION_LIMIT)
             }

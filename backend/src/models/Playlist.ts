@@ -1,52 +1,50 @@
-import mongoose, { Schema, Document } from "mongoose";
+// models/Playlist.ts
+
+import mongoose, { Schema, Document, Model } from "mongoose";
+import { generateUniqueSlug } from "../utils/slug";
+import themeColorService from "../services/themeColor.service";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface IPlaylist extends Document {
-  // ... (Các trường cơ bản)
   title: string;
   slug: string;
   description: string;
-
-  // 1. Media & Visuals
   coverImage: string;
-  themeColor: string; // Màu chủ đạo (Hex) cho UI Gradient
-
-  // 2. Ownership & Collaboration (Nâng cấp)
-  user: mongoose.Types.ObjectId; // Owner
-  collaborators: mongoose.Types.ObjectId[]; // Danh sách user được quyền sửa
-
-  // 3. Content
+  themeColor: string;
+  user: mongoose.Types.ObjectId;
+  collaborators: mongoose.Types.ObjectId[];
   tracks: mongoose.Types.ObjectId[];
-
-  // 4. Stats (Denormalized)
   totalTracks: number;
   totalDuration: number;
-  followersCount: number; // Số người theo dõi (Add to Library)
   playCount: number; // Tổng lượt nghe của playlist này
-
-  // 5. Classification
+  likeCount: number;
   tags: string[];
-  type: "playlist" | "album" | "radio" | "mix"; // Phân loại playlist
+  type: "playlist" | "album" | "radio" | "mix";
   publishAt: Date;
-  // 6. Privacy & Settings
-  visibility: "public" | "private" | "unlisted"; // Quyền riêng tư nâng cao
-  isSystem: boolean; // Playlist do hệ thống tạo (Editor's Choice)
-
+  visibility: "public" | "private" | "unlisted";
+  isSystem: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
+export interface IPlaylistModel extends Model<IPlaylist> {
+  calculateStats(playlistId: string): Promise<void>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEMA
+// ─────────────────────────────────────────────────────────────────────────────
+
 const PlaylistSchema = new Schema<IPlaylist>(
   {
     title: { type: String, required: true, trim: true, maxlength: 100 },
-
-    // Slug unique kết hợp user (User A đặt tên "Chill" được, User B cũng đặt "Chill" được)
-    // Hoặc xử lý slug unique global (thêm random string đuôi)
     slug: { type: String, required: true, unique: true },
-
     description: { type: String, default: "", maxlength: 1000 },
-
-    coverImage: { type: String, default: "" }, // Nếu rỗng, FE tự tạo collage từ 4 bài đầu
-    themeColor: { type: String, default: "#1db954" }, // Màu mặc định
+    coverImage: { type: String, default: "" },
+    themeColor: { type: String, default: "#1db954" },
 
     user: {
       type: Schema.Types.ObjectId,
@@ -54,61 +52,125 @@ const PlaylistSchema = new Schema<IPlaylist>(
       required: true,
       index: true,
     },
-
-    // 🔥 TÍNH NĂNG COLLAB (Cho phép bạn bè cùng edit)
     collaborators: [{ type: Schema.Types.ObjectId, ref: "User" }],
 
+    // Mảng ID bài hát — thứ tự có ý nghĩa (playlist ordering)
     tracks: [{ type: Schema.Types.ObjectId, ref: "Track" }],
 
-    // --- COUNTERS ---
     totalTracks: { type: Number, default: 0, min: 0 },
     totalDuration: { type: Number, default: 0, min: 0 },
-    followersCount: { type: Number, default: 0, min: 0 }, // Thay likeCount bằng followersCount chuẩn hơn
     playCount: { type: Number, default: 0, min: 0 },
-
-    tags: [{ type: String, trim: true }],
-
-    // --- CLASSIFICATION ---
+    likeCount: { type: Number, default: 0, min: 0 },
+    tags: [{ type: String, trim: true, lowercase: true }],
     type: {
       type: String,
-      enum: ["playlist", "radio", "mix"], // Mix: Dạng Daily Mix do AI tạo
+      enum: ["playlist", "album", "radio", "mix"],
       default: "playlist",
     },
     publishAt: { type: Date, default: Date.now, index: true },
-    // --- PRIVACY ---
-    // Thay isPublic boolean bằng enum xịn hơn
     visibility: {
       type: String,
       enum: ["public", "private", "unlisted"],
       default: "public",
       index: true,
     },
-
     isSystem: { type: Boolean, default: false },
   },
   {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
-// --- INDEXING STRATEGY ---
+// ─────────────────────────────────────────────────────────────────────────────
+// INDEXES
+// ─────────────────────────────────────────────────────────────────────────────
 
-// 1. Text Search (Tìm kiếm)
 PlaylistSchema.index({ title: "text", tags: "text" });
-
-// 2. User Library (Lấy playlist của tôi)
 PlaylistSchema.index({ user: 1, createdAt: -1 });
-
-// 3. Explore / Trending (Tìm playlist Public, Hot nhất)
-PlaylistSchema.index({
-  visibility: 1,
-  isSystem: 1,
-  followersCount: -1,
-});
-
-// 4. Tìm playlist theo thể loại (Tags)
+PlaylistSchema.index({ visibility: 1, isSystem: 1, followersCount: -1 });
 PlaylistSchema.index({ tags: 1, visibility: 1 });
 
-export default mongoose.model<IPlaylist>("Playlist", PlaylistSchema);
+// FIX: Thêm index cho collaborators — frequent query trong phân quyền
+PlaylistSchema.index({ collaborators: 1 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MIDDLEWARE
+// ─────────────────────────────────────────────────────────────────────────────
+
+PlaylistSchema.pre("save", async function () {
+  const playlist = this as any;
+
+  // 1. SEO slug — dùng generateUniqueSlug để đảm bảo không collision
+  if (playlist.isModified("title")) {
+    const PlaylistModel = playlist.constructor as mongoose.Model<IPlaylist>;
+    playlist.slug = await generateUniqueSlug(
+      PlaylistModel,
+      playlist.title,
+      playlist.isNew ? undefined : playlist._id,
+    );
+  }
+
+  // 2. ThemeColor từ cover image
+  if (playlist.isModified("coverImage") && playlist.coverImage) {
+    // CHỈ auto-extract nếu themeColor KHÔNG bị sửa đổi trong cùng một thao tác lưu
+    // Nếu Admin gửi data.themeColor, nó đã bị modified trước khi tới pre("save")
+    if (!playlist.isModified("themeColor")) {
+      try {
+        playlist.themeColor = await themeColorService.extractThemeColor(
+          playlist.coverImage,
+        );
+      } catch {
+        playlist.themeColor = "#1db954";
+      }
+    }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATIC: calculateStats
+// ─────────────────────────────────────────────────────────────────────────────
+
+PlaylistSchema.statics.calculateStats = async function (
+  playlistId: string,
+): Promise<void> {
+  const Track = mongoose.model("Track");
+  const playlist = await this.findById(playlistId).select("tracks").lean();
+
+  if (!playlist || !(playlist as any).tracks?.length) {
+    await this.findByIdAndUpdate(playlistId, {
+      totalTracks: 0,
+      totalDuration: 0,
+    });
+    return;
+  }
+
+  const [result] = await Track.aggregate([
+    {
+      $match: {
+        _id: { $in: (playlist as any).tracks },
+        status: "ready",
+        isDeleted: false,
+        isPublic: true, // FIX: chỉ tính tracks public và ready
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalTracks: { $sum: 1 },
+        totalDuration: { $sum: { $ifNull: ["$duration", 0] } },
+      },
+    },
+  ]);
+
+  await (this as Model<IPlaylist>).findByIdAndUpdate(playlistId, {
+    totalTracks: result?.totalTracks ?? 0,
+    totalDuration: result?.totalDuration ?? 0,
+  });
+};
+
+export default mongoose.model<IPlaylist, IPlaylistModel>(
+  "Playlist",
+  PlaylistSchema,
+);

@@ -1,77 +1,47 @@
-import { useCallback, useMemo } from "react";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { setIsPlaying, selectPlayer } from "@/features/player";
-import { usePlayCollection } from "./usePlayCollection";
+/**
+ * useAlbumPlayback
+ * Thin wrapper của useCollectionPlayback cho Album.
+ */
+import { useMemo } from "react";
 
-import { IAlbum } from "@/features/album/types";
-import { albumKeys } from "@/features/album";
+import {
+  CollectionPlaybackReturn,
+  useCollectionPlayback,
+} from "./Usecollectionplayback";
+
+import { albumKeys, IAlbum } from "@/features";
 import albumApi from "@/features/album/api/albumApi";
 
-export const useAlbumPlayback = (album: IAlbum | undefined) => {
-  const dispatch = useAppDispatch();
-  const { currentSource, isPlaying } = useAppSelector(selectPlayer);
-  const { play, isFetching } = usePlayCollection();
+export interface UseAlbumPlaybackReturn {
+  togglePlayAlbum: CollectionPlaybackReturn["togglePlay"];
+  shuffleAlbum: CollectionPlaybackReturn["shuffle"];
+  isThisAlbumActive: boolean;
+  isThisAlbumPlaying: boolean;
+  isFetching: boolean;
+}
 
-  /**
-   * 1. Xác định trạng thái Album (Memoized)
-   */
-  const isThisAlbumActive = useMemo(() => {
-    if (!album?._id || !currentSource?.id) return false;
-    return currentSource.id === album._id && currentSource.type === "album";
-  }, [currentSource?.id, currentSource?.type, album?._id]);
-
-  const isThisAlbumPlaying = isThisAlbumActive && isPlaying;
-
-  /**
-   * 2. Phát Album thông thường (hoặc Toggle Play/Pause)
-   * @param index: Vị trí bài hát muốn phát (mặc định là 0)
-   */
-  const togglePlayAlbum = useCallback(
-    (e?: React.MouseEvent | React.KeyboardEvent, index = 0) => {
-      e?.stopPropagation();
-      if (!album?._id) return;
-
-      if (isThisAlbumActive) {
-        dispatch(setIsPlaying(!isPlaying));
-      } else {
-        play({
-          queryKey: albumKeys.detail(album._id),
-          fetchFn: () => albumApi.getDetail(album._id),
-          sourceType: "album",
-          startIndex: index,
-          collectionName: album.title,
-          shuffle: false, // Phát theo thứ tự
-        });
-      }
-    },
-    [isThisAlbumActive, isPlaying, album, play, dispatch],
+export const useAlbumPlayback = (
+  album: IAlbum | undefined,
+): UseAlbumPlaybackReturn => {
+  const config = useMemo(
+    () => ({
+      collectionId: album?._id,
+      collectionName: album?.title,
+      collectionType: "album" as const,
+      queryKey: album?._id ? albumKeys.detail(album._id) : [],
+      fetchFn: () => albumApi.getDetail(album!._id),
+    }),
+    [album?._id, album?.title],
   );
 
-  /**
-   * 3. Phát Shuffle Album (Dành riêng cho nút Shuffle ở trang Detail)
-   */
-  const shuffleAlbum = useCallback(
-    (e?: React.MouseEvent | React.KeyboardEvent) => {
-      e?.stopPropagation();
-      if (!album?._id) return;
-
-      play({
-        queryKey: albumKeys.detail(album._id),
-        fetchFn: () => albumApi.getDetail(album._id),
-        sourceType: "album",
-        startIndex: -1, // Truyền -1 để báo hiệu chọn ngẫu nhiên bài đầu tiên
-        collectionName: album.title,
-        shuffle: true, // Kích hoạt flag shuffle
-      });
-    },
-    [album, play],
-  );
+  const { togglePlay, shuffle, isActive, isPlaying, isFetching } =
+    useCollectionPlayback(config);
 
   return {
-    togglePlayAlbum,
-    shuffleAlbum, // Thêm hàm này để dùng ở Hero trang Detail
-    isThisAlbumActive,
-    isThisAlbumPlaying,
+    togglePlayAlbum: togglePlay,
+    shuffleAlbum: shuffle,
+    isThisAlbumActive: isActive,
+    isThisAlbumPlaying: isPlaying,
     isFetching,
   };
 };

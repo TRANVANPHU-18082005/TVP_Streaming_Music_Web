@@ -74,14 +74,6 @@ const albumBaseSchema = z.object({
     .trim()
     .min(1, "Vui lòng chọn nghệ sĩ"),
 
-  genreIds: z
-    .array(z.string().trim().min(1), {
-      required_error: "Vui lòng chọn thể loại",
-    })
-    .min(1, "Vui lòng chọn ít nhất 1 thể loại")
-    .max(5, "Chỉ được chọn tối đa 5 thể loại")
-    .default([]),
-
   tags: z
     .array(
       z
@@ -100,37 +92,12 @@ const albumBaseSchema = z.object({
     .regex(/^#([0-9A-F]{3}){1,2}$/i, "Mã màu HEX không hợp lệ (VD: #1db954)")
     .default("#1db954"),
 
-  // ── 4. METADATA PHÁT HÀNH ─────────────────────────────────────────────────
-  /**
-   * releaseDate: nhận string từ <input type="date"> (YYYY-MM-DD),
-   * coerce → Date để validate, transform về YYYY-MM-DD string.
-   *
-   * FIX: Date.parse("abc 2024") === valid trong bản cũ.
-   * z.coerce.date() reject chuỗi không đúng format → an toàn hơn.
-   *
-   * NOTE: Bỏ rule "không được ở tương lai" ở đây vì album có thể
-   * pre-order (releaseDate trong tương lai). Nếu cần, thêm vào
-   * superRefine bên dưới theo từng context.
-   */
   releaseDate: z
     .string({ required_error: "Vui lòng chọn ngày phát hành" })
     .trim()
     .min(1, "Vui lòng chọn ngày phát hành")
     .pipe(z.coerce.date({ invalid_type_error: "Định dạng ngày không hợp lệ" }))
     .transform((d) => d.toISOString().split("T")[0]),
-
-  label: optionalString(100, "Hãng đĩa tối đa 100 ký tự"),
-  copyright: optionalString(150, "Bản quyền tối đa 150 ký tự"),
-
-  upc: z
-    .string()
-    .trim()
-    .regex(/^\d*$/, "Mã UPC/EAN chỉ được chứa các chữ số")
-    .max(14, "Mã UPC tối đa 14 số")
-    .optional()
-    .nullable()
-    .transform((val) => (val === "" ? undefined : val) ?? undefined),
-
   // ── 5. CÀI ĐẶT ────────────────────────────────────────────────────────────
   isPublic: z.boolean().default(false),
 });
@@ -266,4 +233,4 @@ export type AlbumListResponse = z.infer<typeof albumListResponseSchema>;
 export type AlbumCreateFormValues = z.infer<typeof albumCreateSchema>;
 export type AlbumEditFormValues = z.infer<typeof albumEditSchema>;
 export type AlbumFormValues = AlbumCreateFormValues | AlbumEditFormValues;
-export type AlbumFilterParams = z.infer<typeof albumParamsSchema>;
+export type AlbumFilterParamsSchemas = z.infer<typeof albumParamsSchema>;

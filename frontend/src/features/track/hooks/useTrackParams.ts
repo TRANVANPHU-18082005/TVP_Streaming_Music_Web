@@ -10,11 +10,10 @@ const DEFAULT_PARAMS: TrackFilterParams = {
   limit: 10,
   keyword: undefined,
   sort: "newest",
-  status: "all",
+  status: undefined,
   genreId: undefined,
   albumId: undefined,
   artistId: undefined,
-  isPublic: undefined,
 };
 
 export const useTrackParams = (initialLimit = 10) => {

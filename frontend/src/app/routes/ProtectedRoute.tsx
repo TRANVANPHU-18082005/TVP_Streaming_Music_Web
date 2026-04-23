@@ -1,6 +1,7 @@
-import { EqualizerLoader } from "@/components/ui/MusicLoadingEffects";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import MusicResult from "@/components/ui/Result";
 import { useAppSelector } from "@/store/hooks";
+import { AlertCircle, LogInIcon } from "lucide-react";
 import React from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 
@@ -16,51 +17,62 @@ const ProtectedRoute: React.FC<{ requiredRole?: string }> = ({
   const { token, user, isAuthChecking } = useAppSelector((state) => state.auth);
   // 1️⃣ Đang xác thực (ví dụ đang gọi refreshToken)
   if (isAuthChecking) {
-    return <EqualizerLoader text="Đang xác thực..." fullscreen />;
+    return <WaveformLoader glass={false} text="Đang xác thực..." fullscreen />;
   }
 
   // 2️⃣ Chưa đăng nhập → yêu cầu login
   if (!token) {
     return (
-      <MusicResult
-        isFullScreen
-        status="403"
-        title="Yêu cầu đăng nhập"
-        description="Vui lòng đăng nhập để truy cập nội dung này."
-        primaryAction={{
-          label: "Đăng nhập",
-          onClick: () => navigate("/login"),
-        }}
-      />
+      <div className="section-container min-h-screen flex items-center justify-center">
+        <MusicResult
+          variant="no-permission"
+          title="Yêu cầu đăng nhập"
+          description="Vui lòng đăng nhập để truy cập nội dung này."
+          action={{
+            label: "Đăng nhập",
+            icon: LogInIcon,
+            onClick: () => {},
+            variant: "primary",
+          }}
+        />
+      </div>
     );
   }
   if (user?.mustChangePassword) {
     return (
-      <MusicResult
-        isFullScreen
-        status="warning"
-        title="Cảnh báo bảo mật"
-        description="Bạn phải đổi mật khẩu lần đầu để đảm bảo an toàn."
-        primaryAction={{
-          label: "Đổi mật khẩu ngay",
-          onClick: () => navigate("/force-change-password"),
-        }}
-      />
+      <div className="section-container min-h-screen flex items-center justify-center">
+        <MusicResult
+          variant="custom"
+          icon={AlertCircle}
+          title="Cảnh báo bảo mật"
+          wave="--wave-4"
+          description="Bạn phải đổi mật khẩu lần đầu để đảm bảo an toàn."
+          action={{
+            label: "Đổi mật khẩu",
+            icon: LogInIcon,
+            onClick: () => {
+              navigate("/force-change-password");
+            },
+            variant: "primary",
+          }}
+        />
+      </div>
     );
   }
   // 3️⃣ Kiểm tra role (nếu route có yêu cầu)
   if (requiredRole && user?.role !== requiredRole) {
     return (
-      <MusicResult
-        isFullScreen
-        status="403"
-        title="403 - Không có quyền truy cập"
-        description="Xin lỗi! Bạn không có quyền vào trang này."
-        primaryAction={{
-          label: "Quay lại trang chủ",
-          onClick: () => navigate("/"),
-        }}
-      />
+      <div className="section-container min-h-screen flex items-center justify-center">
+        <MusicResult
+          variant="no-permission"
+          action={{
+            label: "Quay lại trang chủ",
+            icon: LogInIcon,
+            onClick: () => navigate("/"),
+            variant: "primary",
+          }}
+        />
+      </div>
     );
   }
 

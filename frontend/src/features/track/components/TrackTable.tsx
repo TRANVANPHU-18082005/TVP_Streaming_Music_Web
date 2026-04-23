@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Clock, Music2, Hash } from "lucide-react";
+import { Clock, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { setQueue, setIsPlaying } from "@/features/player";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -34,7 +34,11 @@ interface TrackTableProps {
   onSelectAll: (checked: boolean) => void;
   onEdit: (track: ITrack) => void;
   onDelete: (track: ITrack) => void;
-  onRetry: (track: ITrack) => Promise<void>;
+  retryFull: (trackId: string) => void;
+  retryTranscode: (trackId: string) => void;
+  retryLyrics: (trackId: string) => void;
+  retryKaraoke: (trackId: string) => void;
+  retryMood: (trackId: string) => void;
 }
 
 // ─── Column header config — single source of truth ───────────────────────────
@@ -60,13 +64,9 @@ const EmptyState = memo(() => (
   <TableRow className="hover:bg-transparent border-none">
     <TableCell colSpan={8} className="h-[400px] p-0">
       <div className="flex flex-col items-center justify-center h-full gap-4 animate-fade-up">
-        <div className="size-16 rounded-2xl bg-muted/50 border border-border/30 flex items-center justify-center">
-          <Music2 className="size-7 text-muted-foreground/40" />
-        </div>
         <MusicResult
-          status="empty"
-          title="Your library is empty"
-          description="No tracks match your current selection or filters."
+          variant="empty-tracks"
+          description="Tracks hiện đang trống"
         />
       </div>
     </TableCell>
@@ -154,10 +154,14 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   onSelectAll,
   onEdit,
   onDelete,
-  onRetry,
+  retryFull,
+  retryTranscode,
+  retryLyrics,
+  retryKaraoke,
+  retryMood,
 }) => {
   const dispatch = useAppDispatch();
-  const { currentTrack, isPlaying } = useAppSelector((s) => s.player);
+  const { currentTrackId, isPlaying } = useAppSelector((s) => s.player);
 
   // ── Selection state ──────────────────────────────────────────────────────
   const { isAllSelected, isIndeterminate } = useMemo(() => {
@@ -171,13 +175,27 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   // ── Spotify-style play: toggle if active, else start queue at index ───────
   const handlePlayTrack = useCallback(
     (track: ITrack, index: number) => {
-      if (currentTrack?._id === track._id) {
+      if (currentTrackId === track._id) {
         dispatch(setIsPlaying(!isPlaying));
-        return;
+      } else {
+        dispatch(
+          setQueue({
+            trackIds: track._id ? [track._id] : [],
+            initialMetadata: [track],
+            startIndex: index,
+            isShuffling: false,
+            source: {
+              id: track._id,
+              type: "single",
+              title: track.title,
+              // Tự động thêm chữ 's' vào sourceType để match với route (ví dụ: /albums/, /playlists/)
+              url: ``,
+            },
+          }),
+        );
       }
-      dispatch(setQueue({ tracks, startIndex: index }));
     },
-    [currentTrack?._id, isPlaying, tracks, dispatch],
+    [currentTrackId, dispatch, isPlaying],
   );
 
   return (
@@ -210,14 +228,18 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                 key={track._id}
                 track={track}
                 index={startIndex + i}
-                isActive={currentTrack?._id === track._id}
+                isActive={currentTrackId === track._id}
                 isPlaying={isPlaying}
                 isSelected={selectedIds.includes(track._id)}
                 onSelect={onSelectOne}
                 onPlay={() => handlePlayTrack(track, i)}
                 onEdit={onEdit}
                 onDelete={onDelete}
-                onRetry={onRetry}
+                retryFull={retryFull}
+                retryTranscode={retryTranscode}
+                retryLyrics={retryLyrics}
+                retryKaraoke={retryKaraoke}
+                retryMood={retryMood}
               />
             ))
           ) : (

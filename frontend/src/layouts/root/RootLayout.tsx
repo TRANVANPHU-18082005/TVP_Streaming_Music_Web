@@ -1,7 +1,7 @@
 // src/layouts/RootLayout.tsx
 import { Outlet } from "react-router-dom";
 import { useInitAuth } from "@/features/auth";
-import { PulseLoader } from "@/components/ui/MusicLoadingEffects";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { MusicPlayer } from "@/features/player/components/MusicPlayer";
 import { useAppSelector } from "@/store/hooks";
 
@@ -15,10 +15,10 @@ const RootLayout = () => {
   // 3. Splash Screen: Chặn render Outlet cho đến khi xác định được danh tính (User hoặc Guest)
   if (isAuthChecking) {
     return (
-      <PulseLoader
+      <WaveformLoader
+        glass={false}
         fullscreen
         text="Đang kết nối hệ thống..."
-        className="dark:bg-[#0a0a0a]" // Đảm bảo background khớp với theme app
       />
     );
   }
@@ -26,7 +26,6 @@ const RootLayout = () => {
   return (
     <div className="relative min-h-screen">
       <main className="">
-        {" "}
         {/* Thêm padding bottom để không bị Player đè mất nội dung cuối trang */}
         <Outlet />
       </main>

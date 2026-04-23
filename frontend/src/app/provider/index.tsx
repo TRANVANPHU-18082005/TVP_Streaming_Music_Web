@@ -16,7 +16,7 @@ import { RouterProvider } from "react-router-dom";
 import { router } from "@/app/routes/route";
 
 // --- Components ---
-import { EqualizerLoader } from "@/components/ui/MusicLoadingEffects";
+import { RadioLoader } from "@/components/ui/MusicLoadingEffects";
 import { AppProviders } from "@/app/provider/appProvider";
 
 // ============================================================================
@@ -31,7 +31,9 @@ export const AppWithRouter = () => (
      * Hiển thị loader khi người dùng tải các chunk JS mới.
      */}
     <Suspense
-      fallback={<EqualizerLoader fullscreen text="Đang tải tài nguyên..." />}
+      fallback={
+        <RadioLoader glass={false} fullscreen text="Đang tải tài nguyên..." />
+      }
     >
       <RouterProvider router={router} />
     </Suspense>

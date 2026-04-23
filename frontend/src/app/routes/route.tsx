@@ -10,7 +10,6 @@ import {
   AlbumManagementPage,
   AnalyticPage,
   ArtistManagementPage,
-  BrowsePage,
   DashboardPage,
   GenreManagementPage,
   HomePage,
@@ -33,6 +32,7 @@ import {
 import { TopChartPage } from "@/pages/client/TopChartPage.tsx";
 import { GenreClientRoutes } from "@/features/genre/routes";
 import MoodVideoManagementPage from "@/pages/admin/MoodVideoManagementPage";
+import { trackRoutes } from "@/features/track/routes";
 
 export const router = createBrowserRouter([
   {
@@ -57,7 +57,6 @@ export const router = createBrowserRouter([
         element: <ClientLayout />,
         children: [
           { index: true, element: <HomePage /> },
-          { path: CLIENT_PATHS.BROWSE, element: <BrowsePage /> },
           { path: CLIENT_PATHS.SEARCH, element: <SearchPage /> },
           { path: CLIENT_PATHS.CHART_TOP, element: <TopChartPage /> },
 
@@ -76,6 +75,8 @@ export const router = createBrowserRouter([
               //   path: CLIENT_PATHS.CLAIM_PROFILE,
               //   element: <ClaimProfilePage />,
               // },
+              ...trackRoutes,
+
               { path: CLIENT_PATHS.SETTINGS, element: <SettingsPage /> },
               ...protectedAuthRoutes,
             ],

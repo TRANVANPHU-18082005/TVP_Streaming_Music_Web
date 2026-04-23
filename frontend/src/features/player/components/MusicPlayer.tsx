@@ -11,6 +11,7 @@ import { useCrossTabSync } from "@/features/player/hooks/useCrossTabSync";
 import { useTrackMetadataResolver } from "../hooks/useTrackMetadataResolver";
 import { MiniPlayer } from "./MiniPlayer";
 import { FullPlayer } from "./FullPlayer";
+import { useTrackListeners } from "../hooks/useTrackListeners";
 
 export function MusicPlayer() {
   // selectCurrentTrack = O(1) lookup: cache[currentTrackId]
@@ -18,7 +19,7 @@ export function MusicPlayer() {
   const currentTrack = useSelector(selectCurrentTrack);
 
   // duration lấy từ Redux — được set bởi useAudioPlayer khi audio loadedmetadata
-  const { duration } = useSelector(selectPlayer);
+  const { isPlaying, duration } = useSelector(selectPlayer);
 
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -42,7 +43,7 @@ export function MusicPlayer() {
   //   - nextTrackIdPreloaded thay đổi → preload silent
   //   - dùng fetchingRef (Set) để không duplicate request cùng 1 ID
   useTrackMetadataResolver();
-
+  const listenCount = useTrackListeners(currentTrack?._id, isPlaying);
   // Scroll lock khi FullPlayer mở — đặt SAU hooks để không vi phạm rules of hooks
   useEffect(() => {
     if (!isExpanded) return;
@@ -85,6 +86,8 @@ export function MusicPlayer() {
         }
       >
         <MiniPlayer
+          isPlaying={isPlaying}
+          duration={duration}
           track={currentTrack}
           currentTime={currentTime}
           getCurrentTime={getCurrentTime}
@@ -101,6 +104,8 @@ export function MusicPlayer() {
       <AnimatePresence>
         {isExpanded && (
           <FullPlayer
+            listenCount={listenCount}
+            isPlaying={isPlaying}
             key="full-player"
             track={currentTrack}
             currentTime={currentTime}

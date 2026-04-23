@@ -1,36 +1,11 @@
-/**
- * GenreSelector.tsx — Hierarchical genre picker (filter + form variants)
- *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * IMPROVEMENTS
- *   • `buildFlatTree` extracted to module scope (pure function) — the original
- *     was defined inside the module but still recreated the tree on every
- *     `displayGenres` useMemo call. Now it's truly stable.
- *
- *   • `selectedIds` normalization memo: `Array.isArray(value)` guard is
- *     preserved; the deps array is `[value]` not `[value, singleSelect]`
- *     since `singleSelect` doesn't affect the normalization.
- *
- *   • Genre list item click: moved from `onClick` on a `<div>` to a `<button>`
- *     — fixes the accessible role/keyboard navigation anti-pattern.
- *     ARIA: `aria-selected` on each option, `role="listbox"` on the container.
- *
- *   • Search input: `role="searchbox"` + `aria-label`.
- *
- *   • Color dot: explicit `aria-hidden="true"`.
- *
- *   • Loading state: `role="status"` + `aria-live="polite"`.
- *
- *   • Empty state: `role="status"`.
- *
- *   • Multi-select badge X: `type="button"` + `aria-label`.
- *
- *   • `handleSelect` is `useCallback` with stable deps.
- */
-
-import React, { useState, useMemo, useCallback, memo } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  memo,
+} from "react";
 import {
   Search,
   Check,
@@ -41,21 +16,27 @@ import {
   Folder,
   ListFilter,
   Layers,
+  Minus,
 } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { useGenreTreeQuery } from "@/features/genre/hooks/useGenresQuery";
-import type { Genre } from "@/features/genre/types";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { IGenre } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
-type GenreNode = Genre & {
+type SelectionState = "none" | "full" | "indeterminate";
+
+type GenreNode = IGenre & {
   level: number;
   isDisabled: boolean;
   hasChildren: boolean;
+  /** All descendant IDs (used for indeterminate calc) */
+  descendantIds: string[];
 };
 
 interface GenreSelectorProps {
@@ -72,85 +53,159 @@ interface GenreSelectorProps {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TREE BUILDER — pure function, module scope, never recreated
+// A. TREE BUILDER — O(n) using Map, no nested .filter()
 // ─────────────────────────────────────────────────────────────────────────────
 
 const buildFlatTree = (
-  items: Genre[],
+  items: IGenre[],
   excludeIds: string[] = [],
-  parentId: string | null = null,
-  level = 0,
 ): GenreNode[] => {
-  const result: GenreNode[] = [];
+  // Step 1 — index by _id  → O(n)
 
-  const children = items
-    .filter((item) => {
-      const pId =
-        typeof item.parentId === "object" && item.parentId
-          ? (item.parentId as any)._id
-          : item.parentId;
-      return (pId || null) === parentId;
-    })
-    .sort((a, b) => (a.priority > b.priority ? -1 : 1));
+  // Step 2 — group children by parentId  → O(n)
+  const childrenOf = new Map<string | null, IGenre[]>();
+  for (const item of items) {
+    const pid =
+      typeof item.parentId === "object" && item.parentId !== null
+        ? (item.parentId as any)._id
+        : ((item.parentId as string | null) ?? null);
 
-  for (const child of children) {
-    if (excludeIds.includes(child._id)) continue;
-
-    const hasChildren = items.some((i) => {
-      const pId =
-        typeof i.parentId === "object" && i.parentId
-          ? (i.parentId as any)._id
-          : i.parentId;
-      return (pId || null) === child._id;
-    });
-
-    result.push({ ...child, level, isDisabled: false, hasChildren });
-    result.push(...buildFlatTree(items, excludeIds, child._id, level + 1));
+    if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+    childrenOf.get(pid)!.push(item);
   }
 
+  // Step 3 — sort each sibling group by priority desc
+  for (const [, siblings] of childrenOf) {
+    siblings.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  }
+
+  // Step 4 — collect all descendant IDs for a node  → cached via closure
+  const descendantsCache = new Map<string, string[]>();
+  const getDescendantIds = (id: string): string[] => {
+    if (descendantsCache.has(id)) return descendantsCache.get(id)!;
+    const kids = childrenOf.get(id) ?? [];
+    const result: string[] = [];
+    for (const kid of kids) {
+      result.push(kid._id, ...getDescendantIds(kid._id));
+    }
+    descendantsCache.set(id, result);
+    return result;
+  };
+
+  // Step 5 — DFS traverse to build flat list  → O(n)
+  const result: GenreNode[] = [];
+  const excludeSet = new Set(excludeIds);
+
+  const traverse = (parentId: string | null, level: number) => {
+    const children = childrenOf.get(parentId) ?? [];
+    for (const child of children) {
+      if (excludeSet.has(child._id)) continue;
+      const descendantIds = getDescendantIds(child._id);
+      const hasChildren = (childrenOf.get(child._id)?.length ?? 0) > 0;
+      result.push({
+        ...child,
+        level,
+        isDisabled: false,
+        hasChildren,
+        descendantIds,
+      });
+      traverse(child._id, level + 1);
+    }
+  };
+
+  traverse(null, 0);
   return result;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GENRE ROW — memoized individual row
-// Changed from clickable <div> to <button> for keyboard + ARIA compliance.
+// D. INDETERMINATE STATE CALCULATOR
+// ─────────────────────────────────────────────────────────────────────────────
+
+const getSelectionState = (
+  genre: GenreNode,
+  selectedSet: Set<string>,
+): SelectionState => {
+  if (selectedSet.has(genre._id)) return "full";
+  if (!genre.hasChildren) return "none";
+  const selectedDescendants = genre.descendantIds.filter((id) =>
+    selectedSet.has(id),
+  );
+  if (selectedDescendants.length === 0) return "none";
+  if (selectedDescendants.length === genre.descendantIds.length) return "full";
+  return "indeterminate";
+};
+
+const getSelectedChildCount = (
+  genre: GenreNode,
+  selectedSet: Set<string>,
+): number => {
+  return genre.descendantIds.filter((id) => selectedSet.has(id)).length;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENRE ROW — memoized
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface GenreRowProps {
   genre: GenreNode;
-  isSelected: boolean;
+  selectionState: SelectionState;
+  selectedChildCount: number;
+  isFocused: boolean;
   searchTerm: string;
   onSelect: (id: string) => void;
+  rowRef?: (el: HTMLButtonElement | null) => void;
 }
 
 const GenreRow = memo(
-  ({ genre, isSelected, searchTerm, onSelect }: GenreRowProps) => {
+  ({
+    genre,
+    selectionState,
+    selectedChildCount,
+    isFocused,
+    searchTerm,
+    onSelect,
+    rowRef,
+  }: GenreRowProps) => {
     const indent = searchTerm ? 0 : genre.level * 20;
+    const isSelected = selectionState === "full";
+    const isIndet = selectionState === "indeterminate";
 
     return (
       <button
+        ref={rowRef}
         type="button"
         role="option"
         aria-selected={isSelected}
+        tabIndex={isFocused ? 0 : -1}
         onClick={() => onSelect(genre._id)}
         className={cn(
-          "flex items-center gap-2 w-full text-left rounded-sm text-sm transition-colors duration-100 select-none py-2 pr-3",
+          "flex items-center gap-2 w-full text-left rounded-sm text-sm transition-all duration-150 select-none py-2 pr-3",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
-          isSelected
-            ? "bg-primary/10 text-primary font-semibold"
-            : "hover:bg-muted/50 text-foreground",
+          // Full selected: nổi bật nhất
+          isSelected && "bg-primary/10 text-primary font-semibold",
+          // Indeterminate: border trái + bg nhẹ — báo hiệu có con đang được chọn
+          isIndet &&
+            "bg-primary/[0.04] text-foreground border-l-2 border-primary/40",
+          // Default
+          !isSelected && !isIndet && "hover:bg-muted/50 text-foreground",
+          isFocused && !isSelected && !isIndet && "bg-muted/50",
         )}
         style={{ paddingLeft: `${12 + indent}px` }}
       >
         {/* Tree indent icon */}
         {!searchTerm && (
           <span
-            className="text-muted-foreground/35 shrink-0"
+            className={cn(
+              "shrink-0 transition-colors duration-150",
+              isIndet ? "text-primary/50" : "text-muted-foreground/35",
+            )}
             aria-hidden="true"
           >
             {genre.level === 0 ? (
               genre.hasChildren ? (
-                <FolderOpen className="size-3.5" />
+                <FolderOpen
+                  className={cn("size-3.5", isIndet && "text-primary/55")}
+                />
               ) : (
                 <Folder className="size-3.5" />
               )
@@ -161,18 +216,47 @@ const GenreRow = memo(
         )}
 
         {/* Color dot + name */}
-        <div className="flex-1 flex items-center gap-2 truncate">
+        <div className="flex-1 flex items-center gap-2 truncate min-w-0">
           <span
-            className="size-2 rounded-full shrink-0"
+            className={cn(
+              "size-2 rounded-full shrink-0 transition-all duration-150",
+              // Dot có ring glow khi indeterminate — visual cue rõ ràng
+              isIndet && "ring-2 ring-primary/20 ring-offset-[1.5px]",
+            )}
             style={{ backgroundColor: genre.color || "#888" }}
             aria-hidden="true"
           />
-          <span className="truncate">{genre.name}</span>
+          <span
+            className={cn(
+              "truncate transition-colors duration-150",
+              isIndet && "text-foreground/75",
+            )}
+          >
+            {genre.name}
+          </span>
         </div>
 
-        {/* Selected check */}
+        {/* Indeterminate: badge số con được chọn */}
+        {isIndet && selectedChildCount > 0 && (
+          <span
+            className="shrink-0 text-[10px] font-bold text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full leading-none tabular-nums"
+            aria-label={`${selectedChildCount} sub-genres selected`}
+          >
+            {selectedChildCount}
+          </span>
+        )}
+
+        {/* Full selected checkmark */}
         {isSelected && (
           <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
+        )}
+
+        {/* Indeterminate dash */}
+        {isIndet && (
+          <Minus
+            className="size-4 shrink-0 text-primary/45"
+            aria-hidden="true"
+          />
         )}
       </button>
     );
@@ -181,7 +265,7 @@ const GenreRow = memo(
 GenreRow.displayName = "GenreRow";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SPECIAL OPTION ROW — "All levels" / "Root only" options
+// SPECIAL OPTION ROW
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SpecialOptionProps {
@@ -239,30 +323,30 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const { data: genres, isLoading } = useGenreTreeQuery();
 
-  // Normalize value → string[] for uniform selection checks
+  // ── Normalize selection ──────────────────────────────────────────────────
   const selectedIds = useMemo<string[]>(() => {
     if (Array.isArray(value)) return value;
     if (typeof value === "string") return [value];
     return [];
   }, [value]);
 
-  // Build flat tree or flat search results
-  const displayGenres = useMemo<GenreNode[]>(() => {
-    if (!genres) return [];
-    if (searchTerm) {
-      return genres
-        .filter((g) => g.name.toLowerCase().includes(searchTerm.toLowerCase()))
-        .map((g) => ({
-          ...g,
-          level: 0,
-          isDisabled: false,
-          hasChildren: false,
-        }));
-    }
-    return buildFlatTree(genres, excludeIds);
-  }, [genres, searchTerm, excludeIds]);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
-  // Toggle selection — single or multi mode
+  // ── Build tree / search list (A — O(n)) ─────────────────────────────────
+  const flatTree = useMemo<GenreNode[]>(() => {
+    if (!genres) return [];
+    return buildFlatTree(genres, excludeIds);
+  }, [genres, excludeIds]);
+
+  const displayGenres = useMemo<GenreNode[]>(() => {
+    if (!searchTerm) return flatTree;
+    const lower = searchTerm.toLowerCase();
+    return flatTree
+      .filter((g) => g.name.toLowerCase().includes(lower))
+      .map((g) => ({ ...g, level: 0 }));
+  }, [flatTree, searchTerm]);
+
+  // ── Toggle ───────────────────────────────────────────────────────────────
   const handleSelect = useCallback(
     (id: string | null | undefined) => {
       if (singleSelect) {
@@ -270,13 +354,59 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
         return;
       }
       if (!id) return;
-      const isSelected = selectedIds.includes(id);
+      const isSelected = selectedSet.has(id);
       onChange(
         isSelected ? selectedIds.filter((x) => x !== id) : [...selectedIds, id],
       );
     },
-    [singleSelect, value, selectedIds, onChange],
+    [singleSelect, value, selectedIds, selectedSet, onChange],
   );
+
+  // ── C. Keyboard navigation ───────────────────────────────────────────────
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const rowRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const listContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setFocusedIndex(-1);
+  }, [searchTerm]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(e.key))
+        return;
+      e.preventDefault();
+
+      const total = displayGenres.length;
+      if (total === 0) return;
+
+      if (e.key === "ArrowDown") {
+        setFocusedIndex((prev) => {
+          const next = prev < total - 1 ? prev + 1 : 0;
+          rowRefs.current.get(next)?.focus();
+          return next;
+        });
+      } else if (e.key === "ArrowUp") {
+        setFocusedIndex((prev) => {
+          const next = prev > 0 ? prev - 1 : total - 1;
+          rowRefs.current.get(next)?.focus();
+          return next;
+        });
+      } else if ((e.key === "Enter" || e.key === " ") && focusedIndex >= 0) {
+        handleSelect(displayGenres[focusedIndex]._id);
+      }
+    },
+    [displayGenres, focusedIndex, handleSelect],
+  );
+
+  // ── B. Virtual scroll via @tanstack/react-virtual ───────────────────────
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: displayGenres.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36,
+    overscan: 5,
+  });
 
   return (
     <div className={cn("space-y-2 w-full", className)}>
@@ -298,6 +428,7 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
           "transition-all focus-within:ring-1 focus-within:ring-primary/30",
           error && "border-destructive focus-within:ring-destructive/25",
         )}
+        onKeyDown={handleKeyDown}
       >
         {/* Search */}
         <div className="relative border-b border-border/50">
@@ -309,11 +440,21 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
             type="search"
             role="searchbox"
             aria-label="Search genres"
-            className="w-full h-9 pl-9 pr-4 text-sm bg-transparent border-none outline-none placeholder:text-muted-foreground/50"
+            className="w-full h-9 pl-9 pr-9 text-sm bg-transparent border-none outline-none placeholder:text-muted-foreground/50"
             placeholder={placeholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Option list */}
@@ -321,7 +462,8 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
           role="listbox"
           aria-multiselectable={!singleSelect}
           aria-label="Genre options"
-          className="max-h-[240px] overflow-y-auto scrollbar-thin p-1"
+          ref={listContainerRef}
+          className="p-1"
         >
           {isLoading ? (
             <div
@@ -336,10 +478,10 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
               Loading genres…
             </div>
           ) : (
-            <div className="space-y-0.5">
-              {/* Special options — only when not in search mode */}
+            <>
+              {/* Special options — only outside search */}
               {!searchTerm && (
-                <>
+                <div className="mb-0.5 space-y-0.5">
                   {variant === "filter" && (
                     <SpecialOption
                       icon={ListFilter}
@@ -348,7 +490,6 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
                       onClick={() => handleSelect(undefined)}
                     />
                   )}
-
                   <SpecialOption
                     icon={variant === "filter" ? FolderOpen : Layers}
                     label={
@@ -366,30 +507,72 @@ export const GenreSelector: React.FC<GenreSelectorProps> = ({
                       variant === "filter" ? "text-purple-500" : "text-primary"
                     }
                   />
-                </>
-              )}
-
-              {/* Genre rows */}
-              {displayGenres.map((genre) => (
-                <GenreRow
-                  key={genre._id}
-                  genre={genre}
-                  isSelected={selectedIds.includes(genre._id)}
-                  searchTerm={searchTerm}
-                  onSelect={handleSelect}
-                />
-              ))}
-
-              {/* Empty state */}
-              {displayGenres.length === 0 && !isLoading && (
-                <div
-                  role="status"
-                  className="py-8 text-center text-[11px] font-semibold text-muted-foreground/45 uppercase tracking-wide"
-                >
-                  No genres found
                 </div>
               )}
-            </div>
+
+              {/* B. Virtualized genre rows */}
+              <div
+                ref={parentRef}
+                className="max-h-[240px] overflow-y-auto scrollbar-thin"
+              >
+                {displayGenres.length === 0 ? (
+                  <div
+                    role="status"
+                    className="py-8 text-center text-[11px] font-semibold text-muted-foreground/45 uppercase tracking-wide"
+                  >
+                    No genres found
+                  </div>
+                ) : (
+                  /* Virtual container */
+                  <div
+                    style={{
+                      height: `${virtualizer.getTotalSize()}px`,
+                      position: "relative",
+                    }}
+                  >
+                    {virtualizer.getVirtualItems().map((virtualRow) => {
+                      const genre = displayGenres[virtualRow.index];
+                      const state = singleSelect
+                        ? selectedSet.has(genre._id)
+                          ? "full"
+                          : "none"
+                        : getSelectionState(genre, selectedSet);
+
+                      const childCount =
+                        !singleSelect && state === "indeterminate"
+                          ? getSelectedChildCount(genre, selectedSet)
+                          : 0;
+
+                      return (
+                        <div
+                          key={virtualRow.key}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                        >
+                          <GenreRow
+                            genre={genre}
+                            selectionState={state}
+                            selectedChildCount={childCount}
+                            isFocused={focusedIndex === virtualRow.index}
+                            searchTerm={searchTerm}
+                            onSelect={handleSelect}
+                            rowRef={(el) => {
+                              if (el) rowRefs.current.set(virtualRow.index, el);
+                              else rowRefs.current.delete(virtualRow.index);
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>

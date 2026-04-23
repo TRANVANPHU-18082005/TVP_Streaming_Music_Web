@@ -1,55 +1,91 @@
-// src/types/socket.ts
+// --- PHÂN TÁCH DỮ LIỆU CHI TIẾT ---
 
-// 1. Sự kiện Server gửi xuống Client (Listen)
+import { PlayInteraction, RealtimeStats } from "@/features";
+
+export interface NotificationData {
+  id?: string;
+  message: string;
+  type: "like" | "follow" | "system" | "new_track";
+  trackId?: string;
+  senderName?: string;
+  senderAvatar?: string;
+  link?: string;
+  createdAt?: string | Date;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. SERVER TO CLIENT EVENTS (Server nói - Client nghe)
+// ─────────────────────────────────────────────────────────────────────────────
 export interface ServerToClientEvents {
+  // Connection Trạng thái
   connect: () => void;
   disconnect: () => void;
 
-  // Analytics
+  // Real-time Analytics (Dashboard Admin)
   admin_analytics_update: (data: RealtimeStats) => void;
-  chart_update: (data: any) => void; // Thường là object { items, chart } như hook useRealtimeChart đã dùng
 
-  // Đếm người nghe realtime
+  // Bảng xếp hạng thời gian thực
+  chart_update: (data: { items: any[]; lastUpdate: string }) => void;
+
+  // Chỉ số người nghe cho bài hát cụ thể
   listeners_count: (count: number) => void;
 
-  // 🔥 NOTIFICATION (Cần thêm vào đây)
-  // Khớp với: io.to(uid).emit("notification_received", ...) ở Worker
-  notification_received: (data: {
-    message: string;
-    trackId?: string;
-    type?: string;
-    link?: string;
-  }) => void;
+  // Hệ thống Thông báo (Real-time Push)
+  // Khớp với Worker/Service gửi tới từng User Id cụ thể
+  notification_received: (data: NotificationData) => void;
 
-  // Đồng bộ trạng thái đã đọc (nếu có dùng socket logic bổ sung)
+  // Phản hồi khi Client thực hiện hành động
   notifications_marked_as_read_success: () => void;
+
+  // Các thông báo lỗi hệ thống (nếu có)
+  socket_error: (error: { message: string; code?: string }) => void;
 }
 
-// 2. Sự kiện Client gửi lên Server (Emit)
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. CLIENT TO SERVER EVENTS (Client nói - Server nghe)
+// ─────────────────────────────────────────────────────────────────────────────
 export interface ClientToServerEvents {
-  // Analytics
-  client_heartbeat: (data: { userId: string; trackId: string }) => void;
+  // Analytics & Heartbeat
+  // trackId gửi lên chuỗi rỗng nếu user không nghe nhạc
+  client_heartbeat: (data: {
+    userId?: string;
+    trackId?: string;
+    timestamp?: number;
+  }) => void;
 
-  // Admin & Chart
+  // Tham gia / Rời các khu vực đặc biệt
   join_admin_dashboard: () => void;
   leave_admin_dashboard: () => void;
+
   join_chart_page: () => void;
   leave_chart_page: () => void;
 
-  // Báo cáo nghe nhạc
+  // Ghi nhận lượt nghe (Kích hoạt BullMQ & Anti-spam)
   track_play: (data: { trackId: string; userId?: string }) => void;
+  interact_play: (data: PlayInteraction) => void;
 
-  // Tham gia phòng nghe nhạc cụ thể
+  // Đăng ký nghe một bài hát (Vào phòng track:id)
   listening_track: (trackId: string) => void;
 
-  // 🔥 NOTIFICATION ACTIONS (Cần thêm vào đây)
-  // Khớp với socket.on("mark_notifications_read") ở Backend
+  // Hủy đăng ký nghe (Khi Pause hoặc Chuyển bài)
+  leave_track: (trackId: string) => void;
+
+  // Hành động với Thông báo
   mark_notifications_read: () => void;
+
+  // Gia nhập phòng riêng (Thường tự động dựa trên userId khi connect)
+  join_room: (roomName: string) => void;
 }
 
-export interface RealtimeStats {
-  activeUsers: number;
-  nowListening: any[];
-  trending: any[];
-  geoData?: any[]; // Thêm nếu bạn có làm bản đồ user
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. SOCKET DATA (Dành cho Backend - socket.data)
+// Dùng để lưu trữ thông tin tạm thời trên instance của socket đó
+// ─────────────────────────────────────────────────────────────────────────────
+export interface InterServerEvents {
+  ping: () => void;
+}
+
+export interface SocketData {
+  userId: string;
+  ip: string;
 }

@@ -13,7 +13,6 @@ import {
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import { getInitialsTextAvartar } from "@/utils/genTextAvartar";
-import type { User } from "@/features/user/types";
 
 // --- UI Components ---
 import { Button } from "@/components/ui/button";
@@ -49,6 +48,9 @@ import UserModal from "@/features/user/components/UserModal";
 import { useUserParams } from "@/features/user/hooks/useUserParams";
 import { useUsersQuery } from "@/features/user/hooks/useUsersQuery";
 import { useUserMutations } from "@/features/user/hooks/useUserMutations";
+import { Genrepageskeleton, IUser } from "@/features";
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 const UsersManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL) ---
@@ -61,7 +63,7 @@ const UsersManagementPage = () => {
   } = useUserParams(APP_CONFIG.PAGINATION_LIMIT);
 
   // --- 2. DATA FETCHING ---
-  const { data, isLoading, isError } = useUsersQuery(filterParams);
+  const { data, isLoading, isError, refetch } = useUsersQuery(filterParams);
   console.log("Fetched users data:", data);
   // --- 3. MUTATIONS ---
   const {
@@ -74,9 +76,9 @@ const UsersManagementPage = () => {
 
   // --- 4. LOCAL UI STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [userToEdit, setUserToEdit] = useState<User | null>(null);
-  const [userToBlock, setUserToBlock] = useState<User | null>(null);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToEdit, setUserToEdit] = useState<IUser | null>(null);
+  const [userToBlock, setUserToBlock] = useState<IUser | null>(null);
+  const [userToDelete, setUserToDelete] = useState<IUser | null>(null);
 
   // Bóc tách data an toàn
   const userData = data?.users || [];
@@ -93,7 +95,7 @@ const UsersManagementPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (user: User) => {
+  const handleOpenEdit = (user: IUser) => {
     setUserToEdit(user);
     setIsModalOpen(true);
   };
@@ -156,14 +158,37 @@ const UsersManagementPage = () => {
     );
   };
 
-  // Nếu API lỗi nặng
-  if (isError) {
+  const onBack = useSmartBack();
+  const hasResults = userData.length > 0;
+  const isFiltering = Boolean(filterParams.keyword);
+
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  if (isLoading && !hasResults) {
+    return <Genrepageskeleton cardCount={meta.pageSize} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
     return (
-      <div className="h-[60vh] flex items-center justify-center">
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
         <MusicResult
-          status="error"
-          title="Failed to load users"
-          description="Please try again later."
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
         />
       </div>
     );
@@ -193,44 +218,42 @@ const UsersManagementPage = () => {
           onReset={clearFilters}
         />
       </div>
-
-      {/* --- TABLE CONTENT --- */}
-      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead className="w-[300px]">User Info</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="hidden md:table-cell">
-                Joined Date
-              </TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableSkeleton
-                rows={meta.pageSize || APP_CONFIG.PAGINATION_LIMIT}
-                cols={5}
-                hasAvatar={true}
-              />
-            ) : userData.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="h-[400px]">
-                  <MusicResult
-                    status="empty"
-                    title="No users found"
-                    description="Try adjusting your search or filters to find what you're looking for."
-                    secondaryAction={{
-                      label: "Clear Filters",
-                      onClick: clearFilters,
-                    }}
-                  />
-                </TableCell>
+      {isLoading ? (
+        <TableSkeleton
+          rows={meta.pageSize || APP_CONFIG.PAGINATION_LIMIT}
+          cols={5}
+          hasAvatar={true}
+        />
+      ) : !hasResults ? (
+        !isLoading && !isFiltering ? (
+          <MusicResult
+            variant="empty-genres"
+            description="Genre hiện đang trống"
+          />
+        ) : (
+          <MusicResult
+            variant="empty-genres"
+            description="Không có kết quả! Thử bộ lọc khác "
+            onClearFilters={clearFilters}
+            onBack={onBack}
+          />
+        )
+      ) : (
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="w-[300px]">User Info</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="hidden md:table-cell">
+                  Joined Date
+                </TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : (
-              userData.map((user: User) => (
+            </TableHeader>
+            <TableBody>
+              {userData.map((user: IUser) => (
                 <TableRow key={user._id} className="group">
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -325,12 +348,11 @@ const UsersManagementPage = () => {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       {/* --- PAGINATION --- */}
 
       {!isLoading && userData.length > 0 && (

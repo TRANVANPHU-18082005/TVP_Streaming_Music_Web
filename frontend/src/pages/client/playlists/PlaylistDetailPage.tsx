@@ -68,6 +68,8 @@ import { formatDuration } from "@/utils/track-helper";
 import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
+import MusicResult from "@/components/ui/Result";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 dayjs.extend(relativeTime);
 
@@ -856,11 +858,8 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
   );
 
   const totalDurationSec = useMemo(
-    () =>
-      playlist?.totalDuration != null
-        ? playlist.totalDuration
-        : allTracks.reduce((s, t) => s + (t.duration ?? 0), 0),
-    [playlist?.totalDuration, allTracks],
+    () => allTracks.reduce((s, t) => s + (t.duration ?? 0), 0),
+    [allTracks],
   );
 
   const { className: titleCls, style: titleStyle } = useTitleStyle(
@@ -878,7 +877,13 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
 
   const handleBack = useCallback(() => {
     if (isEmbedded && onClose) onClose();
-    else navigate(-1);
+    else {
+      if (window.history.length > 1) {
+        navigate(-1);
+      } else {
+        navigate("/", { replace: true });
+      }
+    }
   }, [isEmbedded, onClose, navigate]);
 
   const handleSubmitForm = useCallback(
@@ -955,17 +960,37 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
   );
 
   // ── Render guards ─────────────────────────────────────────────────────────
-
-  if (isLoading) return <PlaylistDetailSkeleton variant={variant} />;
-
+  // ── Render guards ─────────────────────────────────────────────────────────
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !playlist) {
+    return <PlaylistDetailSkeleton />;
+  }
+  // Switching
+  if (isLoading && playlist) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
   if (isError || !playlist) {
     return (
-      <PlaylistNotFound
-        onBack={() =>
-          isEmbedded && onClose ? onClose() : navigate("/playlists")
-        }
-        onRetry={() => refetch()}
-      />
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={handleBack}
+        />
+      </div>
     );
   }
 

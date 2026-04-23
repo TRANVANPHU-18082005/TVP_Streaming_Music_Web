@@ -42,12 +42,14 @@ import UserPlaylistModal from "@/features/playlist/components/UserPlaylistModal"
 import { cn } from "@/lib/utils";
 import {
   IAlbum,
+  IMyPlaylist,
   IPlaylist,
   PublicAlbumCard,
   PublicPlaylistCard,
   TrackList,
   useMyPlaylists,
 } from "@/features";
+import { Link } from "react-router-dom";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
@@ -363,6 +365,7 @@ const RecentlyPlayedTrackList = memo(() => {
   return (
     <TrackList
       {...trackListProps}
+      moodColor="primary"
       maxHeight={400}
       skeletonCount={8}
       staggerAnimation
@@ -436,6 +439,7 @@ const FavouriteTrackList = memo(() => {
   return (
     <TrackList
       {...trackListProps}
+      moodColor="primary"
       maxHeight={400}
       skeletonCount={10}
       staggerAnimation
@@ -455,7 +459,7 @@ export default function ProfilePage() {
   const { data: dashboard, isLoading: isDashboardLoading } =
     useProfileDashboard();
   const { data: myPlaylists } = useMyPlaylists();
-
+  console.log(myPlaylists);
   const userInitials = useMemo(
     () =>
       user?.fullName
@@ -774,7 +778,8 @@ export default function ProfilePage() {
                         title="Nghe gần đây"
                         iconColor="hsl(var(--success))"
                         action={
-                          <button
+                          <Link
+                            to="/tracks/history"
                             type="button"
                             className="group flex items-center gap-1 shrink-0 mt-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200"
                           >
@@ -783,7 +788,7 @@ export default function ProfilePage() {
                               className="size-4 transition-transform duration-200 group-hover:translate-x-0.5"
                               aria-hidden="true"
                             />
-                          </button>
+                          </Link>
                         }
                       />
                       <RecentlyPlayedTrackList />
@@ -905,13 +910,14 @@ export default function ProfilePage() {
                       <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
                         Tìm nhạc mới dựa trên thói quen nghe của bạn.
                       </p>
-                      <button
+                      <Link
                         type="button"
+                        to="/chart-top"
                         className="btn-outline btn-sm w-full gap-1.5"
                       >
                         <TrendingUp className="size-3.5" aria-hidden="true" />
                         Xem bảng xếp hạng
-                      </button>
+                      </Link>
                     </div>
                   </aside>
                 </motion.div>
@@ -954,7 +960,7 @@ export default function ProfilePage() {
                         description="Tạo playlist đầu tiên để bắt đầu."
                       />
                     ) : (
-                      myPlaylists?.map((p: IPlaylist, i: number) => (
+                      myPlaylists?.map((p: IMyPlaylist, i: number) => (
                         <motion.div
                           key={p._id}
                           initial={{ opacity: 0, y: 12 }}

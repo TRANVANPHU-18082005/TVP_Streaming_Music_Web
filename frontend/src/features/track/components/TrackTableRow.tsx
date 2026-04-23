@@ -53,7 +53,11 @@ interface TrackTableRowProps {
   onPlay: () => void;
   onEdit: (track: ITrack) => void;
   onDelete: (track: ITrack) => void;
-  onRetry: (track: ITrack) => Promise<void>;
+  retryFull: (trackId: string) => void;
+  retryTranscode: (trackId: string) => void;
+  retryLyrics: (trackId: string) => void;
+  retryKaraoke: (trackId: string) => void;
+  retryMood: (trackId: string) => void;
 }
 
 // ─── Equalizer animation (CSS-in-JS for isolation) ───────────────────────────
@@ -114,7 +118,7 @@ const TrackCover = memo(
             "size-full object-cover transition-all duration-300",
             isActive ? "brightness-50 scale-105" : "brightness-100",
             canPlay &&
-              "group-hover/cover:brightness-50 group-hover/cover:scale-105",
+            "group-hover/cover:brightness-50 group-hover/cover:scale-105",
           )}
         />
       )}
@@ -227,24 +231,90 @@ export const TrackTableRow = memo(
     onPlay,
     onEdit,
     onDelete,
-    onRetry,
+    retryFull,
+    retryTranscode,
+    retryLyrics,
+    retryKaraoke,
+    retryMood,
   }: TrackTableRowProps) => {
     const [isRetrying, setIsRetrying] = useState(false);
 
-    const handleRetry = useCallback(
+    const handleFullRetry = useCallback(
       async (e: React.MouseEvent) => {
         e.stopPropagation();
         if (isRetrying) return;
         setIsRetrying(true);
         try {
-          await onRetry(track);
+          await retryFull(track._id);
           toast.success("Track queued for reprocessing");
         } catch {
           toast.error("Retry failed — please try again");
           setIsRetrying(false);
         }
       },
-      [isRetrying, onRetry, track],
+      [isRetrying, retryFull, track],
+    );
+    const handleTranscodeRetry = useCallback(
+      async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isRetrying) return;
+        setIsRetrying(true);
+        try {
+          await retryTranscode(track._id);
+          toast.success("Track queued for reprocessing");
+        } catch {
+          toast.error("Retry failed — please try again");
+          setIsRetrying(false);
+        }
+      },
+      [isRetrying, retryTranscode, track],
+    );
+    const handleLyricRetry = useCallback(
+      async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isRetrying) return;
+        setIsRetrying(true);
+        try {
+          await retryLyrics(track._id);
+          toast.success("Track queued for reprocessing");
+        } catch {
+          toast.error("Retry failed — please try again");
+          setIsRetrying(false);
+        }
+      },
+      [isRetrying, retryLyrics, track],
+    );
+    const handleMoodRetry = useCallback(
+      async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isRetrying) return;
+        setIsRetrying(true);
+        try {
+          await retryMood(track._id);
+          toast.success("Track queued for reprocessing");
+        } catch {
+          toast.error("Retry failed — please try again");
+          setIsRetrying(false);
+        }
+      },
+      [isRetrying, retryMood, track],
+    );
+    const handleKaraokeRetry = useCallback(
+      async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isRetrying) return;
+        setIsRetrying(true);
+        try {
+          console.log(track);
+          await retryKaraoke(track._id);
+          toast.success("Track queued for reprocessing");
+        } catch (err: any) {
+          console.log(err);
+          toast.error("Retry failed — please try again");
+          setIsRetrying(false);
+        }
+      },
+      [isRetrying, retryKaraoke, track],
     );
 
     const handleCopyId = useCallback(
@@ -288,10 +358,10 @@ export const TrackTableRow = memo(
           "hover:bg-muted/30",
           // States
           isActive &&
-            !isFailed && [
-              "bg-primary/[0.04] hover:bg-primary/[0.07]",
-              "border-b-primary/10",
-            ],
+          !isFailed && [
+            "bg-primary/[0.04] hover:bg-primary/[0.07]",
+            "border-b-primary/10",
+          ],
           isSelected && "bg-secondary/20 hover:bg-secondary/30",
           isFailed && "bg-destructive/[0.03] hover:bg-destructive/[0.06]",
           // Active left accent via pseudo — achieved via shadow trick
@@ -430,7 +500,7 @@ export const TrackTableRow = memo(
           <StatusCell
             track={track}
             isRetrying={isRetrying}
-            onRetry={handleRetry}
+            onRetry={handleFullRetry}
           />
         </TableCell>
 
@@ -469,6 +539,41 @@ export const TrackTableRow = memo(
               >
                 <Edit className="size-3.5 opacity-70" />
                 Edit track
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleFullRetry}
+                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+              >
+                <Edit className="size-3.5 opacity-70" />
+                Full retry
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleTranscodeRetry}
+                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+              >
+                <Edit className="size-3.5 opacity-70" />
+                Transcode
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleLyricRetry}
+                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+              >
+                <Edit className="size-3.5 opacity-70" />
+                lyrics
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleKaraokeRetry}
+                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+              >
+                <Edit className="size-3.5 opacity-70" />
+                Karaoke
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleMoodRetry}
+                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+              >
+                <Edit className="size-3.5 opacity-70" />
+                Mood
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleCopyId}

@@ -1,20 +1,18 @@
 import React from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { cn } from "@/lib/utils";
-import type { ArtistFormValues } from "@/features/artist/schemas/artist.schema";
-import type { Artist } from "@/features/artist/types";
 import { UserSelector } from "@/features/user/components/UserSelector";
-import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { TagInput } from "@/components/ui/tag-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle } from "lucide-react";
 import { NationalitySelector } from "@/components/ui/NationalitySelector";
+import { ArtistEditFormValues, IArtist } from "@/features";
 
 interface InfoSectionProps {
-  form: UseFormReturn<ArtistFormValues>;
-  artistToEdit?: Artist | null;
+  form: UseFormReturn<ArtistEditFormValues>;
+  artistToEdit?: IArtist | null;
 }
 
 const InfoSection: React.FC<InfoSectionProps> = ({ form, artistToEdit }) => {
@@ -155,37 +153,6 @@ const InfoSection: React.FC<InfoSectionProps> = ({ form, artistToEdit }) => {
             )}
           />
         </div>
-      </div>
-
-      {/* ==================== 5. THỂ LOẠI (GENRES) ==================== */}
-      <div>
-        <Label className={labelClass}>
-          Thể loại âm nhạc <span className="text-destructive">*</span>
-        </Label>
-        <Controller
-          name="genreIds"
-          control={control}
-          render={({ field, fieldState }) => (
-            <GenreSelector
-              value={field.value}
-              onChange={(val) => {
-                field.onChange(val);
-                setValue("genreIds", val, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                });
-              }}
-              error={fieldState.error?.message}
-              variant="form"
-            />
-          )}
-        />
-        {errors.genreIds?.message &&
-          typeof errors.genreIds.message === "string" && (
-            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1">
-              <AlertCircle className="size-3.5" /> {errors.genreIds.message}
-            </p>
-          )}
       </div>
 
       {/* ==================== 6. TIỂU SỬ (BIO) ==================== */}

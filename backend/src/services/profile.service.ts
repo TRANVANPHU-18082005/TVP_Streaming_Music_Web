@@ -8,6 +8,7 @@ import User from "../models/User";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 import logger from "../utils/logger";
+import Track from "../models/Track";
 
 class ProfileService {
   /**
@@ -172,13 +173,76 @@ class ProfileService {
       throw new ApiError(httpStatus.NOT_FOUND, "Người dùng không tồn tại");
     return user;
   }
-  async getLikedTracks(userId: string, query: any) {
-    const { page = 1, limit = 20 } = query;
-    const [likedTracks] = await Promise.all([
-      this.getLikedContent(userId, "track", page, limit),
+  async getLikedTracks(
+    userId: string,
+    filter: { page?: number; limit?: number },
+  ) {
+    const page = Number(filter.page) || 1;
+    const limit = Number(filter.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // 1. Lấy danh sách trackId đã like, sắp xếp theo thời gian like mới nhất
+    // Lưu ý: Chỉ query đúng type 'track'
+    const [likes, total] = await Promise.all([
+      Like.find({
+        userId: new mongoose.Types.ObjectId(userId),
+        targetType: "track",
+      })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Like.countDocuments({
+        userId: new mongoose.Types.ObjectId(userId),
+        targetType: "track",
+      }),
     ]);
-    logger.debug("Favourite Track: " + likedTracks);
-    return likedTracks;
+
+    const trackIds = likes.map((like) => like.targetId);
+
+    // 2. Lấy chi tiết track chuẩn chỉnh (Dùng chung cấu trúc populate/select)
+    const tracks = await Track.find({
+      _id: { $in: trackIds },
+      status: "ready", // Chỉ lấy bài đã sẵn sàng
+      isDeleted: false,
+    })
+      .select(
+        "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
+      )
+      .select(
+        "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
+      )
+      .populate("artist", "name avatar slug")
+      .populate("featuringArtists", "name slug avatar")
+      .populate("album", "title coverImage slug")
+      .populate("genres", "name slug")
+      .populate({ path: "moodVideo", select: "videoUrl loop" })
+      .lean();
+
+    // 3. Mapping: Giữ thứ tự theo thời gian Like và đính kèm likedAt
+    const likedTracksMap = new Map(
+      likes.map((l) => [l.targetId.toString(), l.createdAt]),
+    );
+
+    const sortedTracks = trackIds
+      .map((id) => {
+        const track = tracks.find((t) => t._id.toString() === id.toString());
+        if (!track) return null;
+        // Đính kèm thời gian đã like vào track object
+        return { ...track, likedAt: likedTracksMap.get(id.toString()) };
+      })
+      .filter(Boolean);
+
+    return {
+      data: sortedTracks,
+      meta: {
+        totalItems: total,
+        page,
+        pageSize: limit,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: skip + limit < total,
+      },
+    };
   }
   /**
    * 5. TỔNG HỢP DASHBOARD
@@ -225,107 +289,59 @@ class ProfileService {
   //
   async getRecentlyPlayed(
     userId: string,
-    query: { page?: number; limit?: number } = {},
+    filter: { page?: number; limit?: number },
   ) {
-    const page = Number(query.page) || 1;
-    const limit = Number(query.limit) || 20;
+    const page = Number(filter.page) || 1;
+    const limit = Number(filter.limit) || 20;
     const skip = (page - 1) * limit;
 
-    // Sử dụng Facet để lấy cả DATA và TOTAL COUNT trong 1 lần query duy nhất (Tối ưu nhất cho Aggregate)
-    const results = await PlayLog.aggregate([
-      // 1. Lọc theo User (Cần có Index: { userId: 1, listenedAt: -1 })
-      {
-        $match: {
-          userId: new mongoose.Types.ObjectId(userId),
-        },
-      },
-
-      // 2. Sắp xếp log mới nhất lên đầu để lấy đúng bản ghi 'vừa nghe'
+    // 1. Lấy danh sách trackId duy nhất đã nghe, sắp xếp theo thời gian mới nhất
+    const logs = await PlayLog.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
       { $sort: { listenedAt: -1 } },
-
-      // 3. Nhóm để tránh trùng bài hát
       {
-        $group: {
-          _id: "$trackId",
-          lastListenedAt: { $first: "$listenedAt" },
-        },
+        $group: { _id: "$trackId", lastListenedAt: { $first: "$listenedAt" } },
       },
-
-      // 4. Sắp xếp lại danh sách sau khi đã loại bỏ trùng lặp
       { $sort: { lastListenedAt: -1 } },
-
-      // 5. PHÂN TRANG & ĐẾM TỔNG (Sử dụng $facet)
-      {
-        $facet: {
-          metadata: [{ $count: "total" }],
-          data: [
-            { $skip: skip },
-            { $limit: limit },
-            // 6. JOIN lấy thông tin chi tiết
-            {
-              $lookup: {
-                from: "tracks",
-                localField: "_id",
-                foreignField: "_id",
-                as: "trackDetails",
-              },
-            },
-            { $unwind: "$trackDetails" },
-            // 7. Security Match
-            // {
-            //   $match: {
-            //     "trackDetails.status": "ready",
-            //     "trackDetails.isDeleted": false,
-            //   },
-            // },
-            // 8. JOIN lấy Artist
-            {
-              $lookup: {
-                from: "artists",
-                localField: "trackDetails.artist",
-                foreignField: "_id",
-                as: "artistInfo",
-              },
-            },
-            {
-              $unwind: {
-                path: "$artistInfo",
-                preserveNullAndEmptyArrays: true,
-              },
-            },
-            // 9. Format Output
-            {
-              $project: {
-                _id: "$_id",
-                listenedAt: "$lastListenedAt",
-                title: "$trackDetails.title",
-                slug: "$trackDetails.slug",
-                hlsUrl: "$trackDetails.hlsUrl",
-                coverImage: "$trackDetails.coverImage",
-                duration: "$trackDetails.duration",
-                playCount: "$trackDetails.playCount",
-                isExplicit: "$trackDetails.isExplicit",
-                artist: {
-                  _id: "$artistInfo._id",
-                  name: "$artistInfo.name",
-                  slug: "$artistInfo.slug",
-                },
-              },
-            },
-          ],
-        },
-      },
+      { $skip: skip },
+      { $limit: limit },
     ]);
 
-    const total = results[0]?.metadata[0]?.total || 0;
-    const tracks = results[0]?.data || [];
+    const trackIds = logs.map((log) => log._id);
+    const total = await PlayLog.distinct("trackId", {
+      userId: new mongoose.Types.ObjectId(userId),
+    }).then((ids) => ids.length);
+
+    // 2. Lấy chi tiết track bằng .find() với cấu trúc .select() và .populate() như getAlbumTracks
+    const tracks = await Track.find({
+      _id: { $in: trackIds },
+      status: "ready",
+      isDeleted: false,
+    })
+      .select(
+        "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
+      )
+      .select(
+        "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
+      )
+      .populate("artist", "name avatar slug")
+      .populate("featuringArtists", "name slug avatar")
+      .populate("album", "title coverImage slug")
+      .populate("genres", "name slug")
+      .populate({ path: "moodVideo", select: "videoUrl loop" })
+      .lean();
+
+    // 3. Sắp xếp lại danh sách theo thứ tự lastListenedAt (vì find { $in } không giữ thứ tự)
+    const sortedTracks = trackIds
+      .map((id) => tracks.find((t) => t._id.toString() === id.toString()))
+      .filter(Boolean);
 
     return {
-      data: tracks,
+      data: sortedTracks,
       meta: {
         totalItems: total,
-        page: Number(page),
-        limit: Number(limit),
+        page,
+        pageSize: limit,
         totalPages: Math.ceil(total / limit),
         hasNextPage: skip + limit < total,
       },

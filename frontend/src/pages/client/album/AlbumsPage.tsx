@@ -1,6 +1,5 @@
-import React, { useCallback, useMemo, memo } from "react";
-import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import React, { useMemo, memo } from "react";
+
 import { Disc3 } from "lucide-react";
 
 import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
@@ -10,18 +9,14 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import AlbumFilter from "@/features/album/components/AlbumFilter";
 import { useAlbumParams } from "@/features/album/hooks/useAlbumParams";
 import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
-import albumApi from "@/features/album/api/albumApi";
-import { albumKeys } from "@/features/album/utils/albumKeys";
-import { useAppDispatch } from "@/store/hooks";
-import {
-  Albumpageskeleton,
-  setIsPlaying,
-  setQueue,
-  useSyncInteractions,
-} from "@/features";
+
+import { Albumpageskeleton, useSyncInteractions } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
+
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -107,32 +102,6 @@ const AlbumGrid = memo(({ children }: { children: React.ReactNode }) => (
 AlbumGrid.displayName = "AlbumGrid";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMPTY STATE — context-aware, matches FeaturedAlbums empty card style
-// ─────────────────────────────────────────────────────────────────────────────
-const EmptyAlbums = memo(
-  ({ isFiltering, keyword }: { isFiltering: boolean; keyword?: string }) => (
-    <div
-      className={cn(
-        "card-base border-dashed shadow-none",
-        "flex items-center justify-center min-h-[380px]",
-        "animate-fade-in",
-      )}
-    >
-      <MusicResult
-        status="empty"
-        title={isFiltering ? "Không tìm thấy kết quả" : "Chưa có album nào"}
-        description={
-          isFiltering && keyword
-            ? `Không có album nào phù hợp với "${keyword}". Hãy thử từ khoá khác.`
-            : "Hệ thống chưa có đĩa nhạc nào thoả mãn điều kiện này."
-        }
-      />
-    </div>
-  ),
-);
-EmptyAlbums.displayName = "EmptyAlbums";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // PAGINATION STRIP — glass-frosted panel, single wrapper (v3.2 had double)
 // ─────────────────────────────────────────────────────────────────────────────
 const PaginationStrip = memo(
@@ -174,18 +143,15 @@ PaginationStrip.displayName = "PaginationStrip";
 // ALBUM PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 const AlbumPage: React.FC = () => {
-  const queryClient = useQueryClient();
-  const dispatch = useAppDispatch();
-
   const {
     filterParams,
     handleSearch,
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useAlbumParams(24);
+  } = useAlbumParams(APP_CONFIG.PAGINATION_LIMIT || 12);
 
-  const { data, isLoading, isError } = useAlbumsQuery(filterParams);
+  const { data, isLoading, isError, refetch } = useAlbumsQuery(filterParams);
 
   const albums = useMemo(() => data?.albums ?? [], [data?.albums]);
   const meta = useMemo(
@@ -199,31 +165,6 @@ const AlbumPage: React.FC = () => {
    * Play handler — no throw, no artificial delay (v3.2 fixes preserved).
    * useCallback prevents new function reference breaking PublicAlbumCard memo.
    */
-  const handlePlayAlbum = useCallback(
-    async (albumId: string) => {
-      try {
-        const res = await queryClient.fetchQuery({
-          queryKey: albumKeys.detail(albumId),
-          queryFn: () => albumApi.getById(albumId),
-          staleTime: 5 * 60 * 1000,
-        });
-
-        const tracks = res.data?.tracks;
-
-        if (!tracks?.length) {
-          toast.error("Album này hiện chưa có bài hát nào!");
-          return;
-        }
-
-        dispatch(setQueue({ tracks, startIndex: 0 }));
-        dispatch(setIsPlaying(true));
-        toast.success(`Đang phát ${tracks.length} bài từ album`);
-      } catch {
-        toast.error("Không thể tải nhạc. Vui lòng thử lại.");
-      }
-    },
-    [queryClient, dispatch],
-  );
 
   /** Stable handler object — prevents AlbumFilter re-render on grid updates */
   const stableFilterHandlers = useMemo(
@@ -234,49 +175,43 @@ const AlbumPage: React.FC = () => {
     }),
     [handleSearch, handleFilterChange, clearFilters],
   );
-
   const skeletonCount = meta.pageSize || APP_CONFIG.PAGINATION_LIMIT;
   const hasResults = albums.length > 0;
+  const onBack = useSmartBack();
   const isFiltering = Boolean(filterParams.keyword);
-
+  const isOffline = !navigator.onLine;
   // ── Error state ─────────────────────────────────────────────────────────
-  if (isError) {
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Albumpageskeleton cardCount={meta.pageSize || 18} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
     return (
-      <div className="relative min-h-screen pb-28 pb-28">
-        <main
-          className="section-container space-y-6 sm:space-y-8"
-          aria-labelledby="album-page-heading"
-        >
-          <section
-            className="min-h-[50vh]"
-            aria-label="Danh sách album"
-            aria-busy={isLoading}
-          >
-            <div
-              className={cn(
-                "card-base border-dashed shadow-none",
-                "flex items-center justify-center min-h-[380px]",
-                "animate-fade-in",
-              )}
-            >
-              <MusicResult
-                status="error"
-                title="Không thể tải danh sách Album"
-                description="Máy chủ gặp sự cố. Vui lòng kiểm tra kết nối và thử lại."
-                secondaryAction={{
-                  label: "Tải lại",
-                  onClick: () => window.location.reload(),
-                }}
-              />
-            </div>
-          </section>
-        </main>
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
+        />
       </div>
     );
   }
-  if (isLoading && albums.length === 0) {
-    return <Albumpageskeleton cardCount={meta.pageSize || 18} />;
-  }
+
   return (
     <div className="relative min-h-screen pb-28">
       <SectionAmbient />
@@ -317,10 +252,19 @@ const AlbumPage: React.FC = () => {
               <CardSkeleton count={skeletonCount} />
             </AlbumGrid>
           ) : !hasResults ? (
-            <EmptyAlbums
-              isFiltering={isFiltering}
-              keyword={filterParams.keyword}
-            />
+            !isLoading && !isFiltering ? (
+              <MusicResult
+                variant="empty-albums"
+                description="Album hiện đang trống"
+              />
+            ) : (
+              <MusicResult
+                variant="empty-albums"
+                description="Không có kết quả! Thử bộ lọc khác "
+                onClearFilters={clearFilters}
+                onBack={onBack}
+              />
+            )
           ) : (
             <AlbumGrid>
               {albums.map((album, index) => (
@@ -329,10 +273,7 @@ const AlbumPage: React.FC = () => {
                   className="animate-fade-up animation-fill-both"
                   style={{ animationDelay: `${staggerDelay(index)}ms` }}
                 >
-                  <PublicAlbumCard
-                    album={album}
-                    onPlay={() => handlePlayAlbum(album._id)}
-                  />
+                  <PublicAlbumCard album={album} />
                 </div>
               ))}
             </AlbumGrid>

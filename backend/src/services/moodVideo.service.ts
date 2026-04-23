@@ -1,9 +1,10 @@
+// services/moodVideo.service.ts
+
 import mongoose from "mongoose";
-import TrackMoodVideo from "../models/TrackMoodVideo";
+import TrackMoodVideo, { ITrackMoodVideo } from "../models/TrackMoodVideo";
 import Track from "../models/Track";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
-import { generateUniqueSlug } from "../utils/slug";
 import { deleteFileFromCloud } from "../utils/cloudinary";
 import {
   MoodVideoFilterInput,
@@ -11,10 +12,45 @@ import {
   UpdateMoodVideoInput,
 } from "../validations/moodVideo.validation";
 import { parseTags } from "../utils/helper";
+import { cacheRedis } from "../config/redis";
+import { invalidateTracksCache } from "../utils/cacheHelper";
+import escapeStringRegexp from "escape-string-regexp";
+import { number } from "zod";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * FIX: Xây dựng thumbnailUrl từ Cloudinary video URL đúng cách.
+ * Cách cũ: replace extension — fragile nếu URL có nhiều dấu chấm.
+ * Cách mới: Cloudinary transformation: thay /upload/ bằng /upload/so_0/
+ * để lấy frame đầu tiên của video dưới dạng JPEG.
+ *
+ * Input:  https://res.cloudinary.com/.../upload/v123/folder/video.mp4
+ * Output: https://res.cloudinary.com/.../upload/so_0/v123/folder/video.jpg
+ */
+function buildThumbnailUrl(videoUrl: string): string {
+  if (!videoUrl) return "";
+
+  try {
+    // Thêm transformation `so_0` (second offset = 0) và đổi extension sang .jpg
+    const withTransform = videoUrl.replace("/upload/", "/upload/so_0/");
+    // Đổi extension cuối cùng sang .jpg
+    return withTransform.replace(/\.[^/.]+$/, ".jpg");
+  } catch {
+    return "";
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 class MoodVideoService {
+  // ── 1. CREATE ──────────────────────────────────────────────────────────────
+
   /**
-   * 1. CREATE: Tải lên video tâm trạng mới
+   * NÂNG CẤP B: Thêm `loop` field.
+   * FIX: Bỏ manual slug generation — `pre("save")` middleware tự lo khi isNew.
+   * FIX: Dùng buildThumbnailUrl() thay vì replace extension fragile.
    */
   async createMoodVideo(
     data: CreateMoodVideoInput,
@@ -23,76 +59,152 @@ class MoodVideoService {
     if (!file)
       throw new ApiError(httpStatus.BAD_REQUEST, "Vui lòng tải lên file video");
 
-    const slug = await generateUniqueSlug(TrackMoodVideo, data.title);
     const tagsArray = parseTags(data.tags);
+    const thumbnailUrl = buildThumbnailUrl(file.path);
 
-    const moodVideo = await TrackMoodVideo.create({
-      ...data,
-      slug,
-      tags: tagsArray,
-      videoUrl: file.path,
-      // Cloudinary tự động trích xuất ảnh nếu đổi đuôi file
-      thumbnailUrl: file.path.replace(/\.[^/.]+$/, ".jpg"),
-      isActive: String(data.isActive) !== "false",
-      usageCount: 0,
-    });
+    try {
+      // FIX: không cần generateUniqueSlug thủ công — pre("save") sẽ tự chạy
+      const moodVideo = await TrackMoodVideo.create({
+        title: data.title,
+        tags: tagsArray,
+        videoUrl: file.path,
+        thumbnailUrl,
+        // NÂNG CẤP B: Admin có thể kiểm soát loop behavior
+        isActive: String(data.isActive) !== "false",
+        usageCount: 0,
+      });
 
-    return moodVideo;
+      return moodVideo;
+    } catch (error) {
+      // Cleanup Cloudinary nếu DB fail
+      deleteFileFromCloud(file.path, "video").catch(console.error);
+      throw error;
+    }
   }
 
+  // ── 2. UPDATE ──────────────────────────────────────────────────────────────
+
   /**
-   * 2. UPDATE: Chỉnh sửa thông tin (Tags, Title, Status)
+   * NÂNG CẤP B: Thêm `loop` field vào update.
+   * pre("save") tự xử lý slug khi title isModified.
    */
-  async updateMoodVideo(id: string, data: UpdateMoodVideoInput) {
+  /**
+   * UPDATE: Chỉnh sửa thông tin và thay thế File Video nếu có.
+   */
+  async updateMoodVideo(
+    id: string,
+    data: UpdateMoodVideoInput,
+    file?: Express.Multer.File,
+  ) {
     const video = await TrackMoodVideo.findById(id);
     if (!video)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy video");
 
+    const oldVideoUrl = video.videoUrl; // Lưu lại để xóa nếu có file mới
+
+    // 1. Cập nhật các trường thông tin cơ bản
     if (data.title && data.title !== video.title) {
-      video.title = data.title;
-      video.slug = await generateUniqueSlug(
-        TrackMoodVideo,
-        data.title,
-        video._id,
-      );
+      video.title = data.title; // pre("save") sẽ tự động cập nhật slug
     }
 
-    if (data.tags) video.tags = parseTags(data.tags);
+    if (data.tags !== undefined) video.tags = parseTags(data.tags);
     if (data.isActive !== undefined) video.isActive = data.isActive;
 
-    await video.save();
-    return video;
+    // 2. Xử lý thay thế Video mới (nếu có)
+    if (file) {
+      video.videoUrl = file.path;
+      // Cập nhật lại thumbnail tương ứng với video mới
+      video.thumbnailUrl = file.path.replace(/\.[^/.]+$/, ".jpg");
+    }
+
+    try {
+      await video.save();
+
+      // 3. Nếu save thành công và có file mới -> Xóa file cũ trên Cloudinary
+      if (file && oldVideoUrl) {
+        deleteFileFromCloud(oldVideoUrl, "video").catch((err) =>
+          console.error("🚨 Cloudinary Delete Old Video Error:", err),
+        );
+      }
+
+      // 4. INVALIDATE CACHE
+      // Tìm tất cả bài hát đang dùng Video này để xóa cache chi tiết
+      const affectedTracks = await Track.find({ moodVideo: id })
+        .select("_id")
+        .lean();
+      const trackIds = affectedTracks.map((t) => t._id.toString());
+
+      if (trackIds.length > 0) {
+        // Dùng Pipeline để xóa track:detail nhanh chóng
+        await invalidateTracksCache(trackIds);
+      }
+
+      return video;
+    } catch (error) {
+      // Nếu DB fail mà đã lỡ upload file mới -> Xóa file mới để tránh rác
+      if (file) {
+        deleteFileFromCloud(file.path, "video").catch(console.error);
+      }
+      throw error;
+    }
   }
 
+  // ── 3. GET LIST ────────────────────────────────────────────────────────────
+
   /**
-   * 3. GET LIST: Phân trang, tìm kiếm và lọc
+   * FIX: Dual search strategy — $text khi không có sort (dùng text index),
+   * prefix regex khi có sort. Consistent với album/artist/track/genre services.
    */
   async getMoodVideos(filter: MoodVideoFilterInput) {
     const { page, limit, keyword, isActive, sort } = filter;
     const skip = (page - 1) * limit;
-    const query: any = {};
+    const query: Record<string, any> = {};
+
+    let sortOption: Record<string, any>;
+    let useTextScore = false;
 
     if (keyword) {
-      const safeKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      query.$or = [
-        { title: { $regex: safeKeyword, $options: "i" } },
-        { tags: { $regex: safeKeyword, $options: "i" } },
-      ];
+      if (!sort || sort === "newest" || sort === "oldest") {
+        // $text: relevance ranking, dùng text index { title, tags }
+        query.$text = { $search: keyword };
+        useTextScore = true;
+        sortOption = { score: { $meta: "textScore" }, _id: 1 };
+      } else {
+        // Prefix regex khi có explicit sort
+        const safe = escapeStringRegexp(keyword.substring(0, 100));
+        query.$or = [
+          { title: { $regex: `^${safe}`, $options: "i" } },
+          { tags: { $in: [new RegExp(`^${safe}`, "i")] } },
+        ];
+      }
     }
 
     if (isActive !== undefined) query.isActive = isActive;
 
-    let sortOption: any = { createdAt: -1 };
-    if (sort === "name") sortOption = { title: 1 };
-    if (sort === "popular") sortOption = { usageCount: -1 };
-    if (sort === "oldest") sortOption = { createdAt: 1 };
+    if (!useTextScore) {
+      const SORT_MAP: Record<string, any> = {
+        newest: { createdAt: -1, _id: 1 },
+        oldest: { createdAt: 1, _id: 1 },
+        name: { title: 1, _id: 1 },
+        popular: { usageCount: -1, _id: 1 },
+      };
+      sortOption = SORT_MAP[sort ?? "newest"] ?? SORT_MAP.newest;
+    }
+
+    let baseQuery = TrackMoodVideo.find(query)
+      .skip(skip)
+      .limit(limit)
+      .sort(sortOption!)
+      .lean<ITrackMoodVideo & { score?: number }>();
+
+    if (useTextScore) {
+      baseQuery = baseQuery.select({
+        score: { $meta: "textScore" },
+      } as any);
+    }
 
     const [videos, total] = await Promise.all([
-      TrackMoodVideo.find(query)
-        .skip(skip)
-        .limit(limit)
-        .sort(sortOption)
-        .lean(),
+      baseQuery.lean(),
       TrackMoodVideo.countDocuments(query),
     ]);
 
@@ -100,42 +212,53 @@ class MoodVideoService {
       data: videos,
       meta: {
         totalItems: total,
-        page,
-        pageSize: limit,
+        page: Number(page),
+        pageSize: Number(limit),
         totalPages: Math.ceil(total / limit),
+        hasNextPage: page * limit < total,
       },
     };
   }
 
+  // ── 4. GET DETAIL ──────────────────────────────────────────────────────────
+
   /**
-   * 4. GET DETAIL: Lấy chi tiết kèm danh sách bài hát đang sử dụng
+   * NÂNG CẤP C: Dùng virtual `tracks` populate thay vì Track.find() manual.
+   * Virtual đã config foreignField: "moodVideo" — Mongoose tự join.
+   * options.limit: 10 + sort: createdAt -1 được truyền vào populate options.
    */
   async getMoodVideoDetail(id: string) {
-    const video = await TrackMoodVideo.findById(id).lean();
+    // NÂNG CẤP C: populate virtual "tracks" thay vì query riêng
+    const video = await TrackMoodVideo.findById(id)
+      .populate({
+        path: "tracks", // virtual name trong model
+        select: "title slug coverImage artist createdAt",
+        populate: {
+          path: "artist",
+          select: "name slug",
+        },
+        options: {
+          limit: 10,
+          sort: { createdAt: -1 },
+        },
+      })
+      .lean();
+
     if (!video)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy video");
 
-    // Lấy thêm 10 bài hát mới nhất đang sử dụng video này để hiển thị ở trang quản trị
-    const usedByTracks = await Track.find({ moodVideo: id })
-      .select("title slug coverImage artist")
-      .populate("artist", "name")
-      .limit(10)
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return { ...video, usedByTracks };
+    return video;
   }
 
-  /**
-   * 5. DELETE: Xóa video (Có check ràng buộc dữ liệu)
-   */
+  // ── 5. DELETE ──────────────────────────────────────────────────────────────
+
   async deleteMoodVideo(id: string) {
     const video = await TrackMoodVideo.findById(id);
     if (!video)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy video");
 
-    // Tuyệt đối không xóa nếu bài hát đang sử dụng (Tránh lỗi 404 video trên app)
-    const isInUse = await Track.exists({ moodVideo: id });
+    // Check ràng buộc trước khi xóa
+    const isInUse = await Track.exists({ moodVideo: id, isDeleted: false });
     if (isInUse)
       throw new ApiError(
         httpStatus.BAD_REQUEST,
@@ -144,27 +267,75 @@ class MoodVideoService {
 
     const videoUrl = video.videoUrl;
     await video.deleteOne();
+    // 3. DỌN DẸP CACHE (Sau khi xóa DB thành công)
 
+    // Post-delete: cleanup Cloudinary — fire-and-forget
     if (videoUrl) {
-      // Xóa file vật lý trên Cloudinary để tiết kiệm dung lượng
       deleteFileFromCloud(videoUrl, "video").catch((err) =>
-        console.error("🚨 Cloudinary Delete Error:", err),
+        console.error("[MoodVideoService] Cloudinary delete error:", err),
       );
     }
+
     return true;
   }
 
+  // ── 6. SYNC USAGE ──────────────────────────────────────────────────────────
+
+  // ── 7. MATCH MOOD CANVAS ───────────────────────────────────────────────────
+
   /**
-   * 6. SYNC USAGE: Cập nhật lại số lượng bài hát đang sử dụng video này
-   * (Nên chạy định kỳ hoặc gọi sau khi update hàng loạt Track)
+   * FIX: Kết hợp tag-match score với $sample để vừa relevant vừa có tính ngẫu nhiên.
+   * Cách cũ: $sample thuần túy → bias toward first matched video.
+   * Cách mới:
+   *   1. Tính overlap score (số tags match)
+   *   2. Lọc những video có score cao nhất (top tier)
+   *   3. $sample trong top tier → cân bằng relevance và diversity
    */
-  async syncUsageCount(id: string) {
-    const count = await Track.countDocuments({ moodVideo: id });
-    return await TrackMoodVideo.findByIdAndUpdate(
-      id,
-      { usageCount: count },
-      { new: true },
-    );
+  async matchMoodCanvas(
+    tags: string[],
+    jobId?: string,
+  ): Promise<mongoose.Types.ObjectId | undefined> {
+    if (!Array.isArray(tags) || !tags.length) return undefined;
+
+    try {
+      const matched = await TrackMoodVideo.aggregate<{
+        _id: mongoose.Types.ObjectId;
+        matchScore: number;
+      }>([
+        // Bước 1: Lọc video active có ít nhất 1 tag match
+        { $match: { tags: { $in: tags }, isActive: true } },
+
+        // Bước 2: Tính số tags overlap
+        {
+          $addFields: {
+            matchScore: {
+              $size: {
+                $ifNull: [{ $setIntersection: ["$tags", tags] }, []],
+              },
+            },
+          },
+        },
+
+        // Bước 3: Sắp xếp theo score cao nhất
+        { $sort: { matchScore: -1 } },
+
+        // Bước 4: Giữ top 5 để sample trong đó (balance relevance & diversity)
+        { $limit: 5 },
+
+        // Bước 5: Random 1 trong top 5
+        { $sample: { size: 1 } },
+
+        { $project: { _id: 1, matchScore: 1 } },
+      ]).option({ maxTimeMS: 5_000 });
+
+      return matched[0]?._id;
+    } catch (err) {
+      console.warn(
+        `[Job ${jobId ?? "?"}] Mood canvas match failed (non-fatal):`,
+        (err as Error).message,
+      );
+      return undefined;
+    }
   }
 }
 

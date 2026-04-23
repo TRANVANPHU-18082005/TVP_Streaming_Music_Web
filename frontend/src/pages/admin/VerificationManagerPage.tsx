@@ -52,7 +52,6 @@ export const VerificationManager = () => {
   } = useVerification();
   const totalPages = meta.totalPages || 0;
   const totalItems = meta.totalItems || 0;
-  console.log("Verification Requests:", requests, meta);
   // State Modal
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -76,7 +75,7 @@ export const VerificationManager = () => {
           setIsRejectMode(false);
           setRejectReason("");
         },
-      }
+      },
     );
   };
 
@@ -116,7 +115,7 @@ export const VerificationManager = () => {
                 }
                 className={cn(
                   "capitalize font-bold border-input",
-                  filterParams.status === status && "shadow-md"
+                  filterParams.status === status && "shadow-md",
                 )}
               >
                 {status}
@@ -199,7 +198,7 @@ export const VerificationManager = () => {
                       variant="outline"
                       className={cn(
                         "capitalize font-bold shadow-sm px-2.5 py-0.5",
-                        statusColors[req.status as keyof typeof statusColors]
+                        statusColors[req.status as keyof typeof statusColors],
                       )}
                     >
                       {statusIcons[req.status as keyof typeof statusIcons]}
@@ -308,7 +307,7 @@ export const VerificationManager = () => {
                             >
                               {link}
                             </a>
-                          )
+                          ),
                         )}
                       </div>
                     </div>
@@ -352,7 +351,7 @@ export const VerificationManager = () => {
                           onClick={() =>
                             window.open(
                               selectedRequest.idCardImages[0],
-                              "_blank"
+                              "_blank",
                             )
                           }
                         />
@@ -370,7 +369,7 @@ export const VerificationManager = () => {
                           onClick={() =>
                             window.open(
                               selectedRequest.idCardImages[1],
-                              "_blank"
+                              "_blank",
                             )
                           }
                         />
@@ -434,7 +433,7 @@ export const VerificationManager = () => {
                     "w-full text-center py-3 rounded-lg font-bold uppercase tracking-wide border",
                     selectedRequest.status === "approved"
                       ? "bg-emerald-500/10 text-emerald-600 border-emerald-200"
-                      : "bg-red-500/10 text-red-600 border-red-200"
+                      : "bg-red-500/10 text-red-600 border-red-200",
                   )}
                 >
                   Request already processed: {selectedRequest.status}

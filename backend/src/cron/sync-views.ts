@@ -1,120 +1,275 @@
-import cron from "node-cron";
-import { cacheRedis } from "../config/redis"; // 🔥 FIX 1: Dùng đúng ống cacheRedis
+import * as cron from "node-cron";
+import { cacheRedis } from "../config/redis";
 import Track from "../models/Track";
+import Album from "../models/Album";
+import Playlist from "../models/Playlist";
+import Artist from "../models/Artist";
+import Genre from "../models/Genre";
+import logger from "../utils/logger";
 
-let isSyncing = false;
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const BATCH_SIZE = 500;
+const SCAN_COUNT = 200; // Hint per SCAN iteration (tăng throughput)
+const CRON_SCHEDULE = "*/5 * * * *";
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+const VIEW_KEY_PREFIX = "views:";
+const LOCK_KEY = "lock:viewSync";
+const LOCK_TTL_SECONDS = 270; // 4.5 phút < 5 phút cron interval
 
-export const startViewSyncJob = () => {
-  cron.schedule(
-    "*/5 * * * *",
-    async () => {
-      // 1. Concurrency Guard
-      if (isSyncing) {
-        console.log("⚠️ [SyncView] Previous job running. Skip.");
-        return;
-      }
+// ─── Model Registry ───────────────────────────────────────────────────────────
 
-      isSyncing = true;
-      console.log("⏳ [SyncView] Starting sync...");
-      const startTime = Date.now();
+type SupportedModelType = "track" | "album" | "playlist" | "artist" | "genre";
 
-      try {
-        // 2. Sử dụng Async Iterator (Cách chuẩn nhất để loop Stream)
-        const stream = cacheRedis.scanStream({
-          // 🔥 FIX 1
-          match: "track:views:*",
-          count: 100,
-        });
+const MODEL_MAP: Record<SupportedModelType, any> = {
+  track: Track,
+  album: Album,
+  playlist: Playlist,
+  artist: Artist,
+  genre: Genre,
+} as const;
 
-        let keysBatch: string[] = [];
+const SUPPORTED_TYPES = new Set(Object.keys(MODEL_MAP));
 
-        for await (const resultKeys of stream) {
-          if (resultKeys.length > 0) {
-            keysBatch.push(...resultKeys);
-          }
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-          // Nếu batch đầy thì xử lý ngay
-          if (keysBatch.length >= BATCH_SIZE) {
-            await processBatch(keysBatch);
-            keysBatch = []; // Reset
-          }
-        }
+interface GroupedOps {
+  ops: object[];
+  redisKeys: string[];
+  redisViews: number[];
+}
 
-        // Xử lý nốt số dư còn lại (nếu có)
-        if (keysBatch.length > 0) {
-          await processBatch(keysBatch);
-        }
+interface SyncMetrics {
+  totalKeys: number;
+  processedKeys: number;
+  skippedKeys: number;
+  failedTypes: string[];
+  durationMs: number;
+}
 
-        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-        console.log(`✅ [SyncView] Done in ${duration}s`);
-      } catch (error) {
-        console.error("❌ [SyncView] Critical Error:", error);
-      } finally {
-        // Luôn mở khóa ở finally để tránh Deadlock nếu code crash giữa chừng
-        isSyncing = false;
-      }
-    },
-    {
-      timezone: "Asia/Ho_Chi_Minh",
-    },
-  );
-};
+// ─── Distributed Lock ─────────────────────────────────────────────────────────
 
 /**
- * Hàm xử lý Batch (Nguyên bản logic của bạn rất tốt)
+ * Dùng Redis SET NX EX thay vì biến in-memory `isSyncing`.
+ * Giải quyết race condition khi scale nhiều instance.
  */
-async function processBatch(keys: string[]) {
-  if (keys.length === 0) return;
+async function acquireLock(): Promise<boolean> {
+  const result = await cacheRedis.set(
+    LOCK_KEY,
+    "1",
+    "EX",
+    LOCK_TTL_SECONDS,
+    "NX",
+  );
+  return result === "OK";
+}
 
+async function releaseLock(): Promise<void> {
+  await cacheRedis.del(LOCK_KEY);
+}
+
+// ─── Key Parsing ──────────────────────────────────────────────────────────────
+
+interface ParsedViewKey {
+  type: SupportedModelType;
+  id: string;
+}
+
+/**
+ * Parse key pattern `views:<type>:<objectId>`
+ * Trả về null nếu key không hợp lệ.
+ */
+function parseViewKey(key: string): ParsedViewKey | null {
+  // views:type:id → split tối đa 3 phần, tránh id chứa dấu ":"
+  const withoutPrefix = key.slice(VIEW_KEY_PREFIX.length);
+  const colonIdx = withoutPrefix.indexOf(":");
+  if (colonIdx === -1) return null;
+
+  const type = withoutPrefix.slice(0, colonIdx);
+  const id = withoutPrefix.slice(colonIdx + 1);
+
+  if (!SUPPORTED_TYPES.has(type) || !OBJECT_ID_REGEX.test(id)) return null;
+
+  return { type: type as SupportedModelType, id };
+}
+
+// ─── Batch Processing ─────────────────────────────────────────────────────────
+
+async function processBatch(
+  keys: string[],
+  metrics: SyncMetrics,
+): Promise<void> {
+  metrics.totalKeys += keys.length;
+
+  // Lấy tất cả view counts trong 1 round-trip
+  const values = await cacheRedis.mget(keys);
+
+  // Group ops theo model type
+  const groupedOps = new Map<SupportedModelType, GroupedOps>();
+
+  for (let i = 0; i < keys.length; i++) {
+    const views = parseInt(values[i] ?? "0", 10);
+
+    if (isNaN(views) || views <= 0) {
+      metrics.skippedKeys++;
+      continue;
+    }
+
+    const parsed = parseViewKey(keys[i]);
+    if (!parsed) {
+      metrics.skippedKeys++;
+      logger.warn("[SyncView] Invalid key format, skipping", { key: keys[i] });
+      continue;
+    }
+
+    const { type, id } = parsed;
+
+    if (!groupedOps.has(type)) {
+      groupedOps.set(type, { ops: [], redisKeys: [], redisViews: [] });
+    }
+
+    const group = groupedOps.get(type)!;
+    group.ops.push({
+      updateOne: {
+        filter: { _id: id },
+        update: { $inc: { playCount: views } },
+      },
+    });
+    group.redisKeys.push(keys[i]);
+    group.redisViews.push(views);
+    metrics.processedKeys++;
+  }
+
+  // Flush mỗi model type song song
+  await Promise.allSettled(
+    Array.from(groupedOps.entries()).map(([type, data]) =>
+      flushModelGroup(type, data, metrics),
+    ),
+  );
+}
+
+/**
+ * Ghi DB trước, sau đó mới decrement Redis.
+ * Nếu DB lỗi → Redis giữ nguyên → retry lần sau (at-least-once semantics).
+ */
+async function flushModelGroup(
+  type: SupportedModelType,
+  data: GroupedOps,
+  metrics: SyncMetrics,
+): Promise<void> {
   try {
-    const values = await cacheRedis.mget(keys);
-    const mongoOps = [];
-    const redisPipeline = cacheRedis.pipeline();
+    const result = await MODEL_MAP[type].bulkWrite(data.ops, {
+      ordered: false,
+    });
 
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      const viewStr = values[i];
-      const views = parseInt(viewStr || "0", 10);
+    logger.debug(`[SyncView] bulkWrite ${type}`, {
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
+    });
 
-      if (views > 0) {
-        const trackId = key.split(":")[2];
-
-        if (trackId && /^[0-9a-fA-F]{24}$/.test(trackId)) {
-          mongoOps.push({
-            updateOne: {
-              filter: { _id: trackId },
-              // Sử dụng $inc là chuẩn nhất để tránh Race Condition ở tầng DB
-              update: { $inc: { playCount: views, totalPlays: views } },
-            },
-          });
-
-          // 🔥 CẢI TIẾN: Thay vì trừ, ta dùng DECRBY chính xác số lượng đã đọc
-          // Điều này an toàn hơn DEL vì tránh xóa nhầm các view mới phát sinh trong lúc đang sync
-          redisPipeline.decrby(key, views);
-        }
-      }
+    // Decrement Redis chỉ khi DB thành công
+    const pipeline = cacheRedis.pipeline();
+    for (let i = 0; i < data.redisKeys.length; i++) {
+      pipeline.decrby(data.redisKeys[i], data.redisViews[i]);
     }
+    const pipelineResults = await pipeline.exec();
 
-    // Trong hàm processBatch
-    if (mongoOps.length > 0) {
-      try {
-        // 1. Ghi vào MongoDB
-        await Track.bulkWrite(mongoOps, { ordered: false });
-
-        // 2. Chỉ thực thi pipeline Redis khi Mongo THÀNH CÔNG
-        await redisPipeline.exec();
-      } catch (dbError) {
-        // Nếu Mongo lỗi, KHÔNG chạy redisPipeline.exec()
-        // để view vẫn còn ở Redis cho lần sync sau
-        console.error(
-          "❌ [SyncView] DB Write failed, views preserved in Redis:",
-          dbError,
-        );
+    // Dọn key có giá trị ≤ 0 để tránh rác Redis
+    const cleanupPipeline = cacheRedis.pipeline();
+    let hasCleanup = false;
+    pipelineResults?.forEach(([err, val], idx) => {
+      if (!err && typeof val === "number" && val <= 0) {
+        cleanupPipeline.del(data.redisKeys[idx]);
+        hasCleanup = true;
       }
-    }
-  } catch (error) {
-    // Nếu lỗi xảy ra, view vẫn nằm nguyên trong Redis (vì chưa exec pipeline)
-    console.error(`❌ [SyncView] Batch failed:`, error);
+    });
+    if (hasCleanup) await cleanupPipeline.exec();
+  } catch (err) {
+    metrics.failedTypes.push(type);
+    logger.error(`[SyncView] Failed to sync type: ${type}`, { error: err });
+    // Không re-throw → tiếp tục xử lý các type còn lại
   }
 }
+
+// ─── Main Job ─────────────────────────────────────────────────────────────────
+
+async function runSyncJob(): Promise<void> {
+  const acquired = await acquireLock();
+  if (!acquired) {
+    logger.warn("[SyncView] Lock already held, skipping this run.");
+    return;
+  }
+
+  const startTime = Date.now();
+  const metrics: SyncMetrics = {
+    totalKeys: 0,
+    processedKeys: 0,
+    skippedKeys: 0,
+    failedTypes: [],
+    durationMs: 0,
+  };
+
+  logger.info("[SyncView] Starting sync job...");
+
+  try {
+    const stream = cacheRedis.scanStream({
+      match: `${VIEW_KEY_PREFIX}*`,
+      count: SCAN_COUNT,
+    });
+
+    let keysBatch: string[] = [];
+
+    for await (const resultKeys of stream) {
+      keysBatch.push(...(resultKeys as string[]));
+
+      if (keysBatch.length >= BATCH_SIZE) {
+        await processBatch(keysBatch, metrics);
+        keysBatch = [];
+      }
+    }
+
+    // Flush phần dư
+    if (keysBatch.length > 0) {
+      await processBatch(keysBatch, metrics);
+    }
+  } catch (error) {
+    logger.error("[SyncView] Critical error during scan", { error });
+  } finally {
+    await releaseLock();
+
+    metrics.durationMs = Date.now() - startTime;
+    logger.info("[SyncView] Sync completed", { metrics });
+  }
+}
+
+// ─── Scheduler ────────────────────────────────────────────────────────────────
+
+let cronTask: cron.ScheduledTask | null = null;
+
+export const startViewSyncJob = (): void => {
+  if (cronTask) {
+    logger.warn("[SyncView] Job already started, ignoring duplicate call.");
+    return;
+  }
+
+  cronTask = cron.schedule(CRON_SCHEDULE, () => {
+    // Không await ở đây → cron callback không block event loop
+    runSyncJob().catch((err) =>
+      logger.error("[SyncView] Unhandled error in sync job", { error: err }),
+    );
+  });
+
+  logger.info(`[SyncView] Scheduled view sync job: ${CRON_SCHEDULE}`);
+};
+
+export const stopViewSyncJob = (): void => {
+  if (cronTask) {
+    cronTask.stop();
+    cronTask = null;
+    logger.info("[SyncView] View sync job stopped.");
+  }
+};
+
+// Graceful shutdown
+process.on("SIGTERM", stopViewSyncJob);
+process.on("SIGINT", stopViewSyncJob);

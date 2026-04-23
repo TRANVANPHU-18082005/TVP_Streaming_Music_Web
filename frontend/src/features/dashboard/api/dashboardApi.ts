@@ -1,3 +1,5 @@
+// features/dashboard/api/dashboardApi.ts
+
 import {
   DashboardData,
   DashboardRange,
@@ -7,14 +9,13 @@ import api from "@/lib/axios";
 
 export const dashboardApi = {
   getAnalytics: async (
-    range: DashboardRange = "7d"
+    range: DashboardRange = "7d",
   ): Promise<DashboardData> => {
-    // Gọi endpoint: /api/dashboard/analytics?range=7d
     const response = await api.get<DashboardResponse>("/dashboard/analytics", {
       params: { range },
     });
-
-    // Trả về thẳng data bên trong để UI đỡ phải .data.data
+    // Backend trả về { status, data: DashboardData }
+    // DashboardData bây giờ bao gồm cả _meta.isStale
     return response.data.data;
   },
 };

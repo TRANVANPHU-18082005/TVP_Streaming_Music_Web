@@ -19,7 +19,7 @@ import logger from "../utils/logger";
 // HELPERS
 // ============================================================
 
-const TARGET_MODELS: Record<string, mongoose.Model<any>> = {
+const TARGET_MODELS: Record<string, any> = {
   track: Track,
   album: Album,
   playlist: Playlist,

@@ -78,11 +78,6 @@ const artistBaseSchema = z.object({
     .min(1, "Vui lòng chọn quốc tịch")
     .default("VN"),
 
-  genreIds: z
-    .array(z.string())
-    .min(1, "Vui lòng chọn ít nhất 1 thể loại")
-    .max(5, "Tối đa 5 thể loại chính"),
-
   userId: optionalString(50, "UserId không hợp lệ"),
 
   bio: optionalString(3000, "Tiểu sử tối đa 3000 ký tự"),

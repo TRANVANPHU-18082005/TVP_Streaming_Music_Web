@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { UserPlus, SearchX, RefreshCcw, AlertCircle } from "lucide-react";
+import { UserPlus, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { APP_CONFIG } from "@/config/constants";
@@ -22,7 +22,9 @@ import ArtistModal from "@/features/artist/components/artist-model";
 import { useArtistParams } from "@/features/artist/hooks/useArtistParams";
 import { useArtistsQuery } from "@/features/artist/hooks/useArtistsQuery";
 import { useArtistMutations } from "@/features/artist/hooks/useArtistMutations";
-import { type Artist } from "@/features/artist/types";
+import { Artistpageskeleton, IArtist } from "@/features";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useSmartBack } from "@/hooks/useSmartBack";
 
 const ArtistManagementPage = () => {
   // --- 1. STATE MANAGEMENT ---
@@ -49,8 +51,8 @@ const ArtistManagementPage = () => {
 
   // --- 4. LOCAL UI STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [artistToEdit, setArtistToEdit] = useState<Artist | null>(null);
-  const [artistToDelete, setArtistToDelete] = useState<Artist | null>(null);
+  const [artistToEdit, setArtistToEdit] = useState<IArtist | null>(null);
+  const [artistToDelete, setArtistToDelete] = useState<IArtist | null>(null);
 
   // --- 5. HANDLERS (Memoized for Performance) ---
   const handleOpenCreate = useCallback(() => {
@@ -58,12 +60,12 @@ const ArtistManagementPage = () => {
     setIsModalOpen(true);
   }, []);
 
-  const handleOpenEdit = useCallback((artist: Artist) => {
+  const handleOpenEdit = useCallback((artist: IArtist) => {
     setArtistToEdit(artist);
     setIsModalOpen(true);
   }, []);
 
-  const handleToggleStatus = async (artist: Artist) => {
+  const handleToggleStatus = async (artist: IArtist) => {
     try {
       await toggleArtistStatus(artist._id);
       toast.success(
@@ -116,18 +118,38 @@ const ArtistManagementPage = () => {
     [data],
   );
 
-  // --- 7. RENDER STATES ---
-  if (isError) {
+  const onBack = useSmartBack();
+  const hasResults = artists.length > 0;
+  const isFiltering = Boolean(filterParams.keyword);
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Artistpageskeleton cardCount={meta.pageSize} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
     return (
-      <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
         <MusicResult
-          status="error"
-          title="Sync Error"
-          description="We couldn't load the artist profiles. Please check your connection."
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
         />
-        <Button onClick={() => refetch()} variant="outline" className="gap-2">
-          <RefreshCcw className="size-4" /> Try Again
-        </Button>
       </div>
     );
   }
@@ -169,9 +191,23 @@ const ArtistManagementPage = () => {
           <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
             <CardSkeleton count={meta.pageSize || 10} />
           </div>
-        ) : artists.length > 0 ? (
+        ) : !hasResults ? (
+          !isLoading && !isFiltering ? (
+            <MusicResult
+              variant="empty-artists"
+              description="Artist hiện đang trống"
+            />
+          ) : (
+            <MusicResult
+              variant="empty-artists"
+              description="Không có kết quả! Thử bộ lọc khác "
+              onClearFilters={clearFilters}
+              onBack={onBack}
+            />
+          )
+        ) : (
           <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {artists.map((artist: Artist) => (
+            {artists.map((artist: IArtist) => (
               <ArtistCard
                 key={artist._id}
                 artist={artist}
@@ -180,26 +216,6 @@ const ArtistManagementPage = () => {
                 onToggle={() => handleToggleStatus(artist)}
               />
             ))}
-          </div>
-        ) : (
-          <div className="h-[450px] flex flex-col items-center justify-center bg-muted/5 rounded-3xl border-2 border-dashed border-border transition-colors hover:bg-muted/10">
-            <div className="p-4 bg-background rounded-full shadow-sm mb-4 border">
-              <SearchX className="size-10 text-muted-foreground/40" />
-            </div>
-            <MusicResult
-              status="empty"
-              title="No Artists Found"
-              description="No talent profiles match your current search or filters."
-            />
-            {Object.keys(filterParams).length > 2 && (
-              <Button
-                onClick={clearFilters}
-                variant="link"
-                className="mt-2 text-primary font-bold"
-              >
-                Clear all filters
-              </Button>
-            )}
           </div>
         )}
       </div>

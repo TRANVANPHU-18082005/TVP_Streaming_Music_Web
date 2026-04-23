@@ -26,17 +26,17 @@
 import React, { memo } from "react";
 import { VideoOff, Plus, Clapperboard } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MoodVideo } from "../types";
 import { MoodVideoCard } from "./MoodVideoCard";
+import { IMoodVideo } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MoodVideoGridProps {
-  videos: MoodVideo[];
+  videos: IMoodVideo[];
   isLoading: boolean;
-  onEdit: (video: MoodVideo) => void;
+  onEdit: (video: IMoodVideo) => void;
   onDelete: (id: string) => void;
   onToggleActive: (id: string, isActive: boolean) => void;
   onAddClick: () => void;
@@ -177,8 +177,8 @@ const VideoGridList = memo(
     onDelete,
     onToggleActive,
   }: {
-    videos: MoodVideo[];
-    onEdit: (video: MoodVideo) => void;
+    videos: IMoodVideo[];
+    onEdit: (video: IMoodVideo) => void;
     onDelete: (id: string) => void;
     onToggleActive: (id: string, isActive: boolean) => void;
   }) => (

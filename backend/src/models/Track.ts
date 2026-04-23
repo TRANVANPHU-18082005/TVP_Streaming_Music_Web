@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { generateUniqueSlug } from "../utils/slug";
 
 // Interface cho Lyric Line Metadata (Chỉ lưu text thô để search & preview nhanh)
 interface ILyricPreview {
@@ -135,7 +136,26 @@ const TrackSchema = new Schema<ITrack>(
     toObject: { virtuals: true },
   },
 );
+// Middleware pre-save cho Track
+TrackSchema.pre("save", async function () {
+  const track = this as any;
 
+  // 1. Tự động tạo slug (Dùng helper generateUniqueSlug chúng ta đã làm)
+  if (track.isModified("title")) {
+    const TrackModel = track.constructor as mongoose.Model<ITrack>;
+    track.slug = await generateUniqueSlug(
+      TrackModel,
+      track.title,
+      track.isNew ? undefined : track._id,
+    );
+  }
+
+  // 2. Chống lỗi dữ liệu: Nếu bài hát đơn lẻ (không thuộc album), trackNumber mặc định là 1
+  if (!track.album) {
+    track.trackNumber = 1;
+    track.diskNumber = 1;
+  }
+});
 // --- INDEXING STRATEGY ---
 
 // 1. Text Search: Bao gồm cả plainLyrics để user tìm bài hát qua lời
@@ -145,6 +165,8 @@ TrackSchema.index({ isPublic: 1, isDeleted: 1, createdAt: -1 });
 TrackSchema.index({ playCount: -1, isPublic: 1, isDeleted: 1 });
 TrackSchema.index({ album: 1, diskNumber: 1, trackNumber: 1 });
 TrackSchema.index({ artist: 1, isPublic: 1, releaseDate: -1 });
-
+TrackSchema.index({ genres: 1, playCount: -1, isPublic: 1, isDeleted: 1 });
+TrackSchema.index({ artist: 1, playCount: -1, isPublic: 1, isDeleted: 1 });
+TrackSchema.index({ releaseDate: -1, isPublic: 1, isDeleted: 1 });
 const Track = mongoose.model<ITrack>("Track", TrackSchema);
 export default Track;

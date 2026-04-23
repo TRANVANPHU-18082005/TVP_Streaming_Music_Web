@@ -16,8 +16,12 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import { useAlbumParams } from "@/features/album/hooks/useAlbumParams";
 import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
 import { useAlbumMutations } from "@/features/album/hooks/useAlbumMutations";
-import type { Album } from "@/features/album/types";
 import AlbumModal from "@/features/album/components/album-modal";
+import { Albumpageskeleton, IAlbum } from "@/features";
+import {
+  WaveformLoader,
+} from "@/components/ui/MusicLoadingEffects";
+import { useSmartBack } from "@/hooks/useSmartBack";
 
 const AlbumManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL) ---
@@ -28,14 +32,14 @@ const AlbumManagementPage = () => {
     handlePageChange,
     clearFilters,
   } = useAlbumParams(APP_CONFIG.PAGINATION_LIMIT || 12);
-  const { data, isLoading } = useAlbumsQuery(filterParams);
+  const { data, isLoading, isError, refetch } = useAlbumsQuery(filterParams);
   const { createAlbumAsync, updateAlbumAsync, deleteAlbum, isMutating } =
     useAlbumMutations();
 
   // --- 4. LOCAL UI STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAlbum, setEditingAlbum] = useState<Album | null>(null);
-  const [albumToDelete, setAlbumToDelete] = useState<Album | null>(null);
+  const [editingAlbum, setEditingAlbum] = useState<IAlbum | null>(null);
+  const [albumToDelete, setAlbumToDelete] = useState<IAlbum | null>(null);
 
   // --- HANDLERS ---
   const handleOpenCreate = () => {
@@ -43,12 +47,12 @@ const AlbumManagementPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleEditClick = (album: Album) => {
+  const handleEditClick = (album: IAlbum) => {
     setEditingAlbum(album);
     setIsModalOpen(true);
   };
 
-  const handleDeleteClick = (album: Album) => {
+  const handleDeleteClick = (album: IAlbum) => {
     setAlbumToDelete(album);
   };
 
@@ -85,7 +89,42 @@ const AlbumManagementPage = () => {
     page: 1,
     pageSize: 12,
   };
-
+  const skeletonCount = meta.pageSize || APP_CONFIG.PAGINATION_LIMIT;
+  const hasResults = albums.length > 0;
+  const onBack = useSmartBack();
+  const isFiltering = Boolean(filterParams.keyword);
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Albumpageskeleton cardCount={meta.pageSize || 18} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
+    return (
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
+        />
+      </div>
+    );
+  }
   return (
     <div className="space-y-8 pb-12">
       {/* --- HEADER --- */}
@@ -116,9 +155,23 @@ const AlbumManagementPage = () => {
       {isLoading ? (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
           {/* Render 10 cái skeleton với hiệu ứng wave */}
-          <CardSkeleton count={10} />
+          <CardSkeleton count={skeletonCount} />
         </div>
-      ) : albums.length > 0 ? (
+      ) : !hasResults ? (
+        !isLoading && !isFiltering ? (
+          <MusicResult
+            variant="empty-albums"
+            description="Album hiện đang trống"
+          />
+        ) : (
+          <MusicResult
+            variant="empty-albums"
+            description="Không có kết quả! Thử bộ lọc khác "
+            onClearFilters={clearFilters}
+            onBack={onBack}
+          />
+        )
+      ) : (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6 animate-in fade-in duration-500">
           {albums.map((album) => (
             <AlbumCard
@@ -128,14 +181,6 @@ const AlbumManagementPage = () => {
               onDelete={handleDeleteClick}
             />
           ))}
-        </div>
-      ) : (
-        <div className=" bg-muted/5 rounded-xl border border-dashed border-border">
-          <MusicResult
-            status="empty"
-            title="No albums found"
-            description="Try adjusting your filters or create a new album to get started."
-          />
         </div>
       )}
 

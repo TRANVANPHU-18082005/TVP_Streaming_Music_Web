@@ -100,7 +100,6 @@ export const getRealtimeChart = async () => {
         slug: "$track.slug",
         duration: "$track.duration",
         coverImage: "$track.coverImage",
-        hlsUrl: "$track.hlsUrl",
         featuringArtists: "$track.featuringArtists",
         playCount: "$track.playCount",
         album: {
@@ -149,7 +148,6 @@ export const getRealtimeChart = async () => {
       slug: t.slug,
       duration: t.duration,
       coverImage: t.coverImage,
-      hlsUrl: t.hlsUrl,
       featuringArtists: t.featuringArtists,
       playCount: t.playCount,
       album: t.album

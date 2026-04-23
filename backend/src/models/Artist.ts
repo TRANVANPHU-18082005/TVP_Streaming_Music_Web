@@ -1,48 +1,52 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
+import { generateUniqueSlug } from "../utils/slug";
+import themeColorService from "../services/themeColor.service";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES & INTERFACES
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface IArtist extends Document {
   user?: mongoose.Types.ObjectId | null;
   name: string;
   slug: string;
-
-  // --- MỚI THÊM ---
-  aliases: string[]; // Tên khác (VD: ["MTP", "Son Tung"])
-  nationality: string; // Mã quốc gia (VN, US, KR...)
-
+  aliases: string[];
+  nationality: string;
   bio: string;
   avatar: string;
   coverImage: string;
-
-  // --- MỚI THÊM ---
-  images: string[]; // Gallery ảnh (Slide)
-  themeColor: string; // Màu Hex chủ đạo (#ff0000)
-
+  images: string[];
+  themeColor: string;
   socialLinks: {
     facebook?: string;
     instagram?: string;
     twitter?: string;
     website?: string;
-    spotify?: string; // Nên thêm link sang các nền tảng khác
+    spotify?: string;
     youtube?: string;
   };
-
-  genres: mongoose.Types.ObjectId[];
-
-  // Stats
   totalTracks: number;
   totalAlbums: number;
   totalFollowers: number;
-  totalPlays: number;
-
-  // --- MỚI THÊM ---
-  monthlyListeners: number; // Chỉ số quan trọng (update bằng Cron Job)
-
+  playCount: number;
+  monthlyListeners: number;
   isVerified: boolean;
   isActive: boolean;
-
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface IArtistModel extends Model<IArtist> {
+  /**
+   * Đồng bộ Stats thực tế từ Track và Album collections.
+   * Đảm bảo Artist Dashboard không bao giờ bị lệch số liệu (drift).
+   */
+  calculateStats(artistId: string): Promise<void>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEMA DEFINITION
+// ─────────────────────────────────────────────────────────────────────────────
 
 const ArtistSchema = new Schema<IArtist>(
   {
@@ -51,17 +55,7 @@ const ArtistSchema = new Schema<IArtist>(
       ref: "User",
       default: null,
     },
-
     name: { type: String, required: true, trim: true, maxlength: 100 },
-
-    // 🔥 SEARCH OPTIMIZATION
-    // Lưu các biến thể tên: "son tung", "mtp", "sơn tùng m-tp"
-    aliases: [{ type: String, trim: true, lowercase: true }],
-
-    // 🔥 LOCALIZATION & CHART
-    // VD: "VN", "US". Dùng để lọc BXH theo quốc gia
-    nationality: { type: String, default: "VN", uppercase: true, trim: true },
-
     slug: {
       type: String,
       unique: true,
@@ -69,17 +63,13 @@ const ArtistSchema = new Schema<IArtist>(
       lowercase: true,
       trim: true,
     },
+    aliases: [{ type: String, trim: true, lowercase: true }],
+    nationality: { type: String, default: "VN", uppercase: true, trim: true },
     bio: { type: String, default: "", maxlength: 2000 },
-
-    // --- VISUALS ---
     avatar: { type: String, default: "" },
     coverImage: { type: String, default: "" },
-    // Gallery ảnh nghệ sĩ (cho Slider)
     images: [{ type: String }],
-    // Màu chủ đạo trích xuất từ Avatar (VD: #1db954) -> UI dùng làm background gradient
     themeColor: { type: String, default: "#ffffff" },
-
-    genres: [{ type: Schema.Types.ObjectId, ref: "Genre" }],
 
     socialLinks: {
       facebook: { type: String, default: "" },
@@ -89,16 +79,11 @@ const ArtistSchema = new Schema<IArtist>(
       spotify: { type: String, default: "" },
       youtube: { type: String, default: "" },
     },
-
-    // --- STATISTICS ---
     totalTracks: { type: Number, default: 0, min: 0 },
     totalAlbums: { type: Number, default: 0, min: 0 },
     totalFollowers: { type: Number, default: 0, min: 0 },
-    totalPlays: { type: Number, default: 0, min: 0 },
-
-    // Số người nghe trong 28 ngày qua (Tính toán riêng bởi Analytics Worker)
+    playCount: { type: Number, default: 0, min: 0 },
     monthlyListeners: { type: Number, default: 0, min: 0 },
-
     isVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
   },
@@ -106,29 +91,121 @@ const ArtistSchema = new Schema<IArtist>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
-// --- INDEXING CHIẾN LƯỢC ---
+// ─────────────────────────────────────────────────────────────────────────────
+// INDEXING STRATEGY
+// ─────────────────────────────────────────────────────────────────────────────
 
-// 1. Text Search (Nâng cao): Tìm cả tên chính lẫn tên phụ (aliases)
+// Text search nâng cao cho bộ lọc tìm kiếm
 ArtistSchema.index(
   { name: "text", aliases: "text", bio: "text" },
-  { weights: { name: 10, aliases: 5, bio: 1 } } // Ưu tiên khớp tên chính > alias > bio
+  { weights: { name: 10, aliases: 5, bio: 1 } },
 );
 
-// 2. Partial Unique User
+// Sorting & Ranking Index
+ArtistSchema.index({ playCount: -1 });
+ArtistSchema.index({ monthlyListeners: -1 });
+ArtistSchema.index({ nationality: 1, playCount: -1 });
+
+// Partial unique cho user account link
 ArtistSchema.index(
   { user: 1 },
-  {
-    unique: true,
-    partialFilterExpression: { user: { $type: "objectId" } },
-  }
+  { unique: true, partialFilterExpression: { user: { $type: "objectId" } } },
 );
 
-// 3. Sorting & Filtering
-ArtistSchema.index({ totalPlays: -1 });
-ArtistSchema.index({ monthlyListeners: -1 }); // BXH độ hot hiện tại
-ArtistSchema.index({ nationality: 1, totalPlays: -1 }); // Top nghệ sĩ theo quốc gia
+// ─────────────────────────────────────────────────────────────────────────────
+// MIDDLEWARE (Automation)
+// ─────────────────────────────────────────────────────────────────────────────
 
-export default mongoose.model<IArtist>("Artist", ArtistSchema);
+ArtistSchema.pre("save", async function () {
+  const artist = this as any;
+
+  // 1. Tự động tạo SEO Slug đồng bộ với Album logic
+  if (artist.isModified("name")) {
+    const ArtistModel = artist.constructor as mongoose.Model<IArtist>;
+    artist.slug = await generateUniqueSlug(
+      ArtistModel,
+      artist.name,
+      artist.isNew ? undefined : artist._id,
+    );
+  }
+
+  // 2. Tự động trích xuất màu chủ đạo để làm giao diện profile cá nhân hóa
+  if (artist.isModified("avatar") && artist.avatar) {
+    if (!artist.isModified("themeColor")) {
+      try {
+        artist.themeColor = await themeColorService.extractThemeColor(
+          artist.avatar,
+        );
+      } catch {
+        artist.themeColor = "#ffffff";
+      }
+    }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VIRTUALS (Data Relationships)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Lấy danh sách Album mới nhất của nghệ sĩ
+ArtistSchema.virtual("albums", {
+  ref: "Album",
+  localField: "_id",
+  foreignField: "artist",
+  justOne: false,
+  options: { sort: { releaseDate: -1 } },
+});
+
+// Lấy Top 5 bài hát hot nhất của nghệ sĩ
+ArtistSchema.virtual("topTracks", {
+  ref: "Track",
+  localField: "_id",
+  foreignField: "artist",
+  justOne: false,
+  options: { sort: { playCount: -1 }, limit: 5 },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATIC METHODS (Reconciliation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+ArtistSchema.statics.calculateStats = async function (
+  artistId: string,
+): Promise<void> {
+  const Track = mongoose.model("Track");
+  const Album = mongoose.model("Album");
+
+  const [trackStats, albumCount] = await Promise.all([
+    Track.aggregate([
+      {
+        $match: {
+          artist: new mongoose.Types.ObjectId(artistId),
+          status: "ready",
+          isPublic: true,
+          isDeleted: false,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalTracks: { $sum: 1 },
+          playCount: { $sum: { $ifNull: ["$playCount", 0] } },
+        },
+      },
+    ]),
+    Album.countDocuments({ artist: artistId, isPublic: true }),
+  ]);
+
+  const stats = trackStats[0] || { totalTracks: 0, playCount: 0 };
+
+  await this.findByIdAndUpdate(artistId, {
+    totalTracks: stats.totalTracks,
+    totalAlbums: albumCount,
+    playCount: stats.playCount,
+  });
+};
+
+export default mongoose.model<IArtist, IArtistModel>("Artist", ArtistSchema);

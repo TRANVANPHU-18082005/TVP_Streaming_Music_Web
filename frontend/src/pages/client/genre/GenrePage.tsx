@@ -1,5 +1,4 @@
 import React, { memo, useMemo } from "react";
-import { Library, Tag } from "lucide-react";
 
 import { GenreCard } from "@/features/genre/components/GenreCard";
 import MusicResult from "@/components/ui/Result";
@@ -12,6 +11,10 @@ import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import { Genrepageskeleton } from "@/features";
 import SectionAmbient from "@/components/SectionAmbient";
+
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { KeyboardMusic } from "lucide-react";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -51,7 +54,7 @@ const PageHero = memo(() => (
           color: "hsl(var(--brand-glow))",
         }}
       >
-        <Tag className="size-4" aria-hidden="true" />
+        <KeyboardMusic className="size-4" aria-hidden="true" />
       </div>
       <span
         className="text-overline"
@@ -84,33 +87,6 @@ const PageHero = memo(() => (
   </header>
 ));
 PageHero.displayName = "PageHero";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EMPTY GENRES — context-aware, matches AlbumPage + ArtistPage v4.0
-// ─────────────────────────────────────────────────────────────────────────────
-const EmptyGenres = memo(
-  ({ isFiltering, keyword }: { isFiltering: boolean; keyword?: string }) => (
-    <div
-      className={cn(
-        "card-base border-dashed shadow-none",
-        "flex items-center justify-center min-h-[380px]",
-        "animate-fade-in",
-      )}
-    >
-      <MusicResult
-        status="empty"
-        title={isFiltering ? "Không tìm thấy kết quả" : "Chưa có thể loại nào"}
-        description={
-          isFiltering && keyword
-            ? `Không có thể loại nào phù hợp với "${keyword}". Hãy thử từ khoá khác.`
-            : "Hãy thử thay đổi từ khóa tìm kiếm hoặc các tiêu chí lọc."
-        }
-        icon={<Library className="size-10 text-muted-foreground/30" />}
-      />
-    </div>
-  ),
-);
-EmptyGenres.displayName = "EmptyGenres";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGINATION STRIP — single glass-frosted wrapper, no double-wrap anti-pattern
@@ -162,7 +138,7 @@ const GenrePage: React.FC = () => {
     clearFilters,
   } = useGenreParams(24);
 
-  const { data, isLoading, isError } = useGenresQuery(filterParams);
+  const { data, isLoading, isError, refetch } = useGenresQuery(filterParams);
 
   // Granular derived slices — avoids full object diff
   const genres = useMemo(() => data?.genres ?? [], [data?.genres]);
@@ -180,31 +156,43 @@ const GenrePage: React.FC = () => {
     }),
     [handleSearch, handleFilterChange, clearFilters],
   );
-
+  const onBack = useSmartBack();
   const hasResults = genres.length > 0;
   const isFiltering = Boolean(filterParams.keyword);
 
+  const isOffline = !navigator.onLine;
   // ── Error state ─────────────────────────────────────────────────────────
-  if (isError) {
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Genrepageskeleton cardCount={meta.pageSize} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
     return (
-      <div className="relative min-h-screen flex items-center justify-center px-4 pb-28">
-        <div className="card-base shadow-elevated p-8 max-w-md w-full text-center animate-scale-in">
-          <MusicResult
-            status="error"
-            title="Không thể tải danh sách Thể loại"
-            description="Máy chủ gặp sự cố hoặc kết nối không ổn định. Vui lòng thử lại."
-            secondaryAction={{
-              label: "Tải lại trang",
-              onClick: () => window.location.reload(),
-            }}
-          />
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
         </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
+        />
       </div>
     );
   }
-  if (isLoading && genres.length === 0) {
-    return <Genrepageskeleton cardCount={meta.pageSize} />;
-  }
+
   return (
     <div className="relative min-h-screen pb-28">
       <SectionAmbient />
@@ -246,10 +234,19 @@ const GenrePage: React.FC = () => {
               <CardSkeleton count={meta.pageSize} />
             </div>
           ) : !hasResults ? (
-            <EmptyGenres
-              isFiltering={isFiltering}
-              keyword={filterParams.keyword}
-            />
+            !isLoading && !isFiltering ? (
+              <MusicResult
+                variant="empty-genres"
+                description="Genre hiện đang trống"
+              />
+            ) : (
+              <MusicResult
+                variant="empty-genres"
+                description="Không có kết quả! Thử bộ lọc khác "
+                onClearFilters={clearFilters}
+                onBack={onBack}
+              />
+            )
           ) : (
             <div className={GRID_LAYOUT}>
               {genres.map((genre, index) => (

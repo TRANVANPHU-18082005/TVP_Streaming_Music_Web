@@ -14,6 +14,9 @@ import { startViewWorker } from "./workers/view.worker";
 import "./workers/interaction.worker";
 import { closeInteractionQueue } from "./queue/interaction.queue";
 import { closeInteractionWorker } from "./workers/interaction.worker";
+import { bootstrapCounters } from "./utils/counter";
+import { scheduleExternalHealthJob } from "./queue/external.queue";
+import { fetchLyrics } from "./services/lyrics/lrclib.service";
 const startServer = async () => {
   try {
     // 2. Kết nối Dual Redis (Quan trọng để chạy trước)
@@ -23,6 +26,11 @@ const startServer = async () => {
     // 3. Kết nối MongoDB
     await mongoose.connect(process.env.MONGO_URI as string);
     console.log("✅ MongoDB connected successfully");
+    // 2. Đồng bộ bộ đếm từ DB sang Redis
+    await bootstrapCounters();
+
+    // 3. Kích hoạt Job chạy ngầm (Cloudinary, B2, Upstash)
+    await scheduleExternalHealthJob();
     startViewWorker();
     console.log("✅ View Worker started & listening to Queue");
     console.log("✅ Interaction Worker is listening to Queue...");
@@ -36,7 +44,9 @@ const startServer = async () => {
 
     initCronJobs();
     console.log("✅ Cron Jobs initialized");
-
+    // Sơn Tùng MTP — track: Buông Đôi Tay Nhau Ra - durion: 227.
+    // const test = await fetchLyrics("Lạc Trôi", "Sơn Tùng M-TP", 234, "001");
+    // console.log(test);
     // 6. Chạy Server
     const PORT = process.env.PORT || 8000;
     server.listen(PORT, () => {

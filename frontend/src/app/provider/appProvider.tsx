@@ -20,7 +20,7 @@ import { store, persistor } from "@/store/store";
 import { queryClient } from "@/lib/queryClient";
 
 // --- Components ---
-import { EqualizerLoader } from "@/components/ui/MusicLoadingEffects";
+import { RadioLoader } from "@/components/ui/MusicLoadingEffects";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SocketProvider } from "@/app/provider/SocketProvider";
 
@@ -38,7 +38,13 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({
      * Điều này ngăn chặn việc UI bị "nháy" (FOUC) hoặc hiển thị sai trạng thái login/player.
      */}
     <PersistGate
-      loading={<EqualizerLoader fullscreen text="Đang khôi phục dữ liệu..." />}
+      loading={
+        <RadioLoader
+          glass={false}
+          fullscreen
+          text="Đang khôi phục dữ liệu..."
+        />
+      }
       persistor={persistor}
     >
       <QueryClientProvider client={queryClient}>

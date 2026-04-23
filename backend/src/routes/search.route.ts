@@ -1,15 +1,32 @@
-// src/routes/search.route.ts
+// src/routes/v1/search.route.ts
 import express from "express";
 import validate from "../middlewares/validate";
 import * as searchController from "../controllers/search.controller";
-import { searchSchema } from "../validations/search.schema";
+import * as searchSchema from "../validations/search.schema";
 
 const router = express.Router();
 
 /**
- * @route GET /api/v1/search
- * @desc Search tracks, artists, albums and playlists
+ * @desc Lấy danh sách từ khóa hot
  */
-router.get("/", validate(searchSchema), searchController.search);
+router.get(
+  "/trending",
+  validate(searchSchema.trendingSchema),
+  searchController.getTrending,
+);
+
+/**
+ * @desc Autocomplete khi user đang gõ
+ */
+router.get(
+  "/suggest",
+  validate(searchSchema.suggestSchema),
+  searchController.suggest,
+);
+
+/**
+ * @desc Tìm kiếm tổng hợp (Full search)
+ */
+router.get("/", validate(searchSchema.searchSchema), searchController.search);
 
 export default router;

@@ -1,7 +1,5 @@
 // src/config/paths.ts
 
-import { Verified } from "lucide-react";
-
 export const AUTH_PATHS = {
   LOGIN: "/login",
   REGISTER: "/register",
@@ -30,8 +28,9 @@ export const CLIENT_PATHS = {
   SETTINGS: "settings",
   CLAIM_PROFILE: "claim-profile",
   CHART_TOP: "chart-top",
+  TRACK_HISTORY: "/tracks/history",
   // Track
-  TRACK_DETAIL: (id: string) => `/tracks/${id}`, // Hàm tạo link động
+  TRACK_DETAIL: (slug: string) => `/tracks/${slug}`, // Hàm tạo link động
   // User
   PROFILE: "/profile",
 } as const;

@@ -219,8 +219,8 @@ export const togglePlaylistPrivacy = catchAsync(
 
     res.status(httpStatus.OK).json({
       success: true,
-      message: `Đã chuyển sang chế độ ${result.visibility === "public" ? "Công khai" : "Riêng tư"}`,
-      data: { visibility: result.visibility },
+      message: `Đã chuyển chế độ `,
+      data: { visibility: result?.visibility },
     });
   },
 );

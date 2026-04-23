@@ -36,17 +36,17 @@ import {
 import { ArtistSelector } from "@/features/artist/components/ArtistSelector";
 import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { useAppSelector } from "@/store/hooks";
-import { AlbumFilterParams } from "../schemas/album.schema";
+import { AlbumFilterParamsSchemas } from "../schemas/album.schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 interface AlbumFilterProps {
-  params: AlbumFilterParams;
+  params: AlbumFilterParamsSchemas;
   onSearch: (keyword: string) => void;
   onFilterChange: (
-    key: keyof AlbumFilterParams,
-    value: AlbumFilterParams[keyof AlbumFilterParams] | null,
+    key: keyof AlbumFilterParamsSchemas,
+    value: AlbumFilterParamsSchemas[keyof AlbumFilterParamsSchemas] | null,
   ) => void;
   onReset: () => void;
 }
@@ -97,7 +97,7 @@ type FilterTagKey = (typeof FILTER_TAG_DEFS)[number]["key"];
 /** Pure — no closure deps */
 function getTagDisplayValue(
   key: FilterTagKey,
-  params: AlbumFilterParams,
+  params: AlbumFilterParamsSchemas,
 ): string | null {
   switch (key) {
     case "type":
@@ -306,9 +306,9 @@ const ActiveTagsBar = memo(
     onRemoveFilter,
     onReset,
   }: {
-    params: AlbumFilterParams;
+    params: AlbumFilterParamsSchemas;
     activeCount: number;
-    onRemoveFilter: (key: keyof AlbumFilterParams) => void;
+    onRemoveFilter: (key: keyof AlbumFilterParamsSchemas) => void;
     onReset: () => void;
   }) => {
     if (activeCount === 0) return null;
@@ -513,7 +513,7 @@ const AlbumFilter = memo<AlbumFilterProps>(
 
     // FIX 4: null not undefined
     const removeFilter = useCallback(
-      (key: keyof AlbumFilterParams) => onFilterChange(key, null),
+      (key: keyof AlbumFilterParamsSchemas) => onFilterChange(key, null),
       [onFilterChange],
     );
 

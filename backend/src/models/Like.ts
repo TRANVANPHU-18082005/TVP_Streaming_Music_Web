@@ -17,5 +17,5 @@ const LikeSchema = new Schema(
 // 🔥 QUAN TRỌNG: Compound Index phải bao gồm cả targetType
 // Chặn trường hợp: 1 user like 1 ID vừa là track vừa là album (nếu trùng ID)
 LikeSchema.index({ userId: 1, targetId: 1, targetType: 1 }, { unique: true });
-
+LikeSchema.index({ userId: 1, targetType: 1 });
 export default mongoose.model("Like", LikeSchema);

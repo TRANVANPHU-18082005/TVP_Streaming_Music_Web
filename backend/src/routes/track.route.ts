@@ -1,3 +1,6 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// routes/track.routes.ts
+// ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import {
   protect,
@@ -7,38 +10,48 @@ import {
 import validate from "../middlewares/validate";
 import { uploadTrackFiles } from "../config/upload";
 import * as trackController from "../controllers/track.controller";
+import * as recommendationController from "../controllers/recommendation.controller";
 
-// Import Schemas
 import {
   createTrackSchema,
   updateTrackSchema,
   getTracksSchema,
   changeStatusSchema,
-  bulkUpdateTracksSchema, // 🔥 IMPORT MỚI
+  bulkUpdateTracksSchema,
 } from "../validations/track.validation";
 
 const router = express.Router();
 
-// ==========================================
-// 🟢 PUBLIC ROUTES
-// ==========================================
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 1. Các route TĨNH (Fixed paths) lên trên cùng
 router.get(
   "/",
   optionalAuth,
   validate(getTracksSchema),
   trackController.getTracks,
 );
-router.get("/charts/realtime", trackController.getTopChart); // 🔥 Route này
-// 🔥 ROUTE GHI NHẬN VIEW (Sau khi nghe 30s)
-router.post("/:trackId/view", optionalAuth, trackController.recordTrackView);
+router.get("/charts/realtime", trackController.getTopChart);
+router.get(
+  "/recommendations",
+  optionalAuth,
+  recommendationController.getRecommendedTracks,
+);
+
+// 2. Các route ĐỘNG (Dynamic paths) nằm dưới
+// Lưu ý: :slugOrId/similar phải nằm TRƯỚC /:id nếu không muốn bị xung đột
+router.get("/:id/similar", recommendationController.getSimilarTracks);
 router.get("/:id", optionalAuth, trackController.getTrackDetail);
 
-// ==========================================
-// 🟠 PROTECTED ROUTES (Artist & Admin)
-// ==========================================
+// ─────────────────────────────────────────────────────────────────────────────
+// PROTECTED ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
 router.use(protect);
 
-// 1. UPLOAD
+// ── Upload ────────────────────────────────────────────────────────────────────
 router.post(
   "/",
   authorize("artist", "admin"),
@@ -47,16 +60,15 @@ router.post(
   trackController.uploadTrack,
 );
 
-// 2. BULK OPERATIONS (🔥 NEW SECTION)
-// Đặt trước route /:id để tránh xung đột
+// ── Bulk (trước /:id để tránh conflict) ──────────────────────────────────────
 router.patch(
   "/bulk/update",
-  authorize("admin"), // Thường chỉ Admin mới được làm Bulk Update để an toàn
-  validate(bulkUpdateTracksSchema), // Validate input chặt chẽ
+  authorize("admin"),
+  validate(bulkUpdateTracksSchema),
   trackController.bulkUpdateTracks,
 );
 
-// 3. SINGLE UPDATE & ACTIONS
+// ── Status ────────────────────────────────────────────────────────────────────
 router.patch(
   "/change-status/:id",
   authorize("artist", "admin"),
@@ -64,9 +76,37 @@ router.patch(
   trackController.changeTrackStatus,
 );
 
-router.post("/:id/retry", authorize("admin"), trackController.retryTranscode);
+// ── Retry operations (admin only) ─────────────────────────────────────────────
+//
+//  POST /:id/retry/full       → xoá HLS + lyrics → full re-process
+//  POST /:id/retry/transcode  → chỉ HLS, giữ lyrics & mood
+//  POST /:id/retry/lyrics     → chỉ LRCLIB + karaoke fallback
+//  POST /:id/retry/karaoke    → chỉ forced alignment (cần plainLyrics trong DB)
+//  POST /:id/retry/mood       → chỉ mood canvas (không download audio)
+//
+router.post("/:id/retry/full", authorize("admin"), trackController.retryFull);
+router.post(
+  "/:id/retry/transcode",
+  authorize("admin"),
+  trackController.retryTranscode,
+);
+router.post(
+  "/:id/retry/lyrics",
+  authorize("admin"),
+  trackController.retryLyrics,
+);
+router.post(
+  "/:id/retry/karaoke",
+  authorize("admin"),
+  trackController.retryKaraoke,
+);
+router.post(
+  "/:id/retry/mood",
+  authorize("admin"),
+  trackController.retryMoodCanvas,
+);
 
-// Update chi tiết bài hát (File, Metadata)
+// ── Update ────────────────────────────────────────────────────────────────────
 router.patch(
   "/:id",
   authorize("artist", "admin"),
@@ -75,7 +115,7 @@ router.patch(
   trackController.updateTrack,
 );
 
-// 4. DELETE
+// ── Delete ────────────────────────────────────────────────────────────────────
 router.delete(
   "/:id",
   authorize("artist", "admin"),

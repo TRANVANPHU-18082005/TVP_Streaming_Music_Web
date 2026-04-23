@@ -29,7 +29,6 @@ export interface IPlaylist {
   // Các con số thống kê để hiển thị UI
   totalTracks: number;
   totalDuration: number;
-  followersCount: number;
   playCount: number;
 
   createdAt: string;
@@ -70,4 +69,30 @@ export interface PlaylistFilterParams {
 }
 export interface PlaylistDetailResponse extends IPlaylist {
   trackIds: string[];
+}
+export interface IMyPlaylist {
+  _id: string;
+  title: string;
+  slug: string;
+  description?: string;
+  coverImage: string;
+  themeColor: string;
+
+  // Quan hệ đã được Populate
+  user: IUser;
+
+  // Danh sách bài hát (Dạng phẳng hoặc dạng lồng tùy API của bạn)
+  tracks: string[];
+
+  visibility: PlaylistVisibility;
+  type: PlaylistType;
+
+  isSystem: boolean;
+
+  // Các con số thống kê để hiển thị UI
+  totalTracks: number;
+  playCount: number;
+
+  createdAt: string;
+  updatedAt: string;
 }

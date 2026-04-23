@@ -1,12 +1,14 @@
+// services/artist.service.ts
+
 import mongoose, { Types } from "mongoose";
-import Artist from "../models/Artist";
+import Artist, { IArtist } from "../models/Artist";
 import User, { IUser } from "../models/User";
 import Album from "../models/Album";
 import Track from "../models/Track";
-import Follow from "../models/Follow"; // Import bảng Follow
+import Follow from "../models/Follow";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
-import { generateSafeSlug, generateUniqueSlug } from "../utils/slug";
+import { generateUniqueSlug } from "../utils/slug";
 import { deleteFileFromCloud } from "../utils/cloudinary";
 import { parseGenreIds, parseTags } from "../utils/helper";
 import {
@@ -16,28 +18,57 @@ import {
 } from "../validations/artist.validation";
 import Genre from "../models/Genre";
 import { cacheRedis } from "../config/redis";
-import { buildCacheKey, withCacheTimeout } from "../utils/cacheHelper";
+import {
+  buildCacheKey,
+  withCacheTimeout,
+  invalidateArtistCache,
+} from "../utils/cacheHelper";
 import escapeStringRegexp from "escape-string-regexp";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERNAL HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Gọi Artist.calculateStats() sau commit — fire-and-forget, không block response.
+ * Dùng Promise.allSettled nên failure không crash caller.
+ */
+async function syncArtistStats(artistId: string): Promise<void> {
+  try {
+    await Artist.calculateStats(artistId);
+  } catch (err) {
+    console.error("[ArtistService] calculateStats error (non-critical):", err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 class ArtistService {
-  // ==========================================
-  // 🟢 PUBLIC METHODS
-  // ==========================================
+  // ── 1. GET DETAIL ──────────────────────────────────────────────────────────
 
   /**
-   * 1. GET DETAIL (Tối ưu Performance & Aggregation)
+   * NÂNG CẤP C: Dùng Virtual populate cho albums + topTracks.
+   * Model đã cấu hình sort/limit trong virtual options — không cần query thủ công.
+   *
+   * trackIds vẫn query riêng vì virtual topTracks chỉ lấy 5.
+   * Virtual scroll cần toàn bộ IDs để FE paginate.
    */
-  /**
-   * 1. GET DETAIL (Virtual Scroll Optimized)
-   */
-  async getArtistDetail(slugOrId: string, currentUserId?: string) {
+  async getArtistDetail(
+    slugOrId: string,
+    currentUserId?: string,
+    userRole: string = "guest",
+  ) {
+    // 1. Build Cache Key
+    const cacheKey = buildCacheKey(`artist:detail:${slugOrId}`, userRole, {});
+
+    // 2. Thử lấy từ cache
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
+    // 3. Query Database
     const isId = mongoose.isValidObjectId(slugOrId);
     const query = isId ? { _id: slugOrId } : { slug: slugOrId };
-
     // 1. Fetch thông tin Artist cơ bản
-    const artist = await Artist.findOne({ ...query, isActive: true })
-      .populate("genres", "name slug color")
-      .lean();
+    const artist = await Artist.findOne({ ...query, isActive: true }).lean();
 
     if (!artist)
       throw new ApiError(httpStatus.NOT_FOUND, "Nghệ sĩ không tồn tại");
@@ -61,27 +92,29 @@ class ArtistService {
         .lean(),
     ]);
 
-    return {
+    const result = {
       artist: {
         ...artist,
         trackIds: allTrackIds.map((t) => t._id),
       },
       albums,
     };
+
+    // 4. Lưu Cache (TTL 1 giờ)
+    await withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
+    );
+
+    return result;
   }
-  /**
-   * 2. GET ARTIST TRACKS (Infinite Loading cho Virtual Scroll)
-   */
-  async getArtistTracks(
-    artistId: string,
-    filter: any, // { page, limit }
-    userRole?: string,
-  ) {
+
+  // ── 2. GET ARTIST TRACKS ───────────────────────────────────────────────────
+
+  async getArtistTracks(artistId: string, filter: any, userRole?: string) {
     const { page = 1, limit = 20 } = filter;
     const skip = (page - 1) * limit;
     const isAdmin = userRole === "admin";
 
-    // 1. Cache Key
     const cacheKey = buildCacheKey(
       `artist:tracks:${artistId}`,
       userRole || "guest",
@@ -90,25 +123,31 @@ class ArtistService {
     const cached = await cacheRedis.get(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    // 2. Truy vấn Database
     const trackQuery: Record<string, any> = {
       artist: artistId,
       status: "ready",
     };
-
-    if (!isAdmin) {
-      trackQuery.isPublic = true;
-    }
+    if (!isAdmin) trackQuery.isPublic = true;
 
     const [tracks, total] = await Promise.all([
       Track.find(trackQuery)
-        .sort({ playCount: -1, createdAt: -1 }) // Thứ tự phổ biến giảm dần
+        .sort({ playCount: -1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .populate("album", "title slug coverImage")
         .select(
-          "title slug duration playCount coverImage hlsUrl isPublic bitrate isExplicit trackNumber",
+          "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
         )
+        .select(
+          "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
+        )
+        .populate("artist", "name avatar slug")
+        .populate("featuringArtists", "name slug avatar")
+        .populate("album", "title coverImage slug")
+        .populate("genres", "name slug")
+        .populate({
+          path: "moodVideo",
+          select: "videoUrl loop",
+        })
         .lean(),
       Track.countDocuments(trackQuery),
     ]);
@@ -124,30 +163,25 @@ class ArtistService {
       },
     };
 
-    // 3. Set Cache (TTL 15-20 phút)
     const ttl = 900 + Math.floor(Math.random() * 120);
     withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
-    ).catch((err) => console.error("[Cache] Set Album Tracks Error:", err));
+    ).catch((err) => console.error("[Cache] Artist Tracks SET error:", err));
 
     return result;
   }
-  /**
-   * 2. GET LIST (Advanced Search & Filter)
-   */
+
+  // ── 3. GET ARTISTS LIST ────────────────────────────────────────────────────
+
   async getArtists(queryInput: ArtistFilterInput, currentUser?: IUser) {
     const userRole = currentUser?.role ?? "guest";
     const isAdmin = userRole === "admin";
 
-    // 1. CHUẨN HÓA FILTER & CACHE KEY
-    // Loại bỏ các trường rỗng/undefined để Cache Key luôn ổn định
     const cleanFilter = Object.fromEntries(
-      Object.entries(queryInput).filter(
-        ([_, v]) => v !== undefined && v !== "",
-      ),
+      Object.entries(queryInput).filter(([, v]) => v !== undefined && v !== ""),
     );
-
     const cacheKey = buildCacheKey("artist:list", userRole, cleanFilter);
+
     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
     if (cached) return JSON.parse(cached as string);
 
@@ -165,49 +199,63 @@ class ArtistService {
     const skip = (page - 1) * limit;
     const filterQuery: Record<string, any> = {};
 
-    // --- 2. SECURITY LAYER ---
-    // Guest/User chỉ thấy Artist đang hoạt động. Admin thấy theo filter.
     if (!isAdmin) {
       filterQuery.isActive = true;
     } else if (isActive !== undefined) {
       filterQuery.isActive = isActive;
     }
 
-    // --- 3. SEARCH LOGIC (Chống ReDoS & Tối ưu Index) ---
+    // BONUS: Dual search strategy
+    let sortOption: Record<string, any>;
+    let useTextScore = false;
+
     if (keyword) {
-      const safeKeyword = escapeStringRegexp(keyword.substring(0, 100));
-      // Prefix match (^) để tận dụng Index hiệu quả hơn thay vì tìm kiếm chứa chuỗi (contains)
-      filterQuery.$or = [
-        { name: { $regex: `^${safeKeyword}`, $options: "i" } },
-        { aliases: { $in: [new RegExp(`^${safeKeyword}`, "i")] } },
-      ];
+      if (!sort) {
+        // $text: relevance ranking, uses text index on name + aliases + bio
+        filterQuery.$text = { $search: keyword };
+        useTextScore = true;
+        sortOption = { score: { $meta: "textScore" }, _id: 1 };
+      } else {
+        // Prefix regex — compound index works with explicit sort
+        const safe = escapeStringRegexp(keyword.substring(0, 100));
+        filterQuery.$or = [
+          { name: { $regex: `^${safe}`, $options: "i" } },
+          { aliases: { $in: [new RegExp(`^${safe}`, "i")] } },
+        ];
+      }
     }
 
     if (genreId) filterQuery.genres = genreId;
     if (nationality) filterQuery.nationality = nationality;
     if (isVerified !== undefined) filterQuery.isVerified = isVerified;
 
-    // --- 4. SORT MAP ---
-    const SORT_MAP: Record<string, any> = {
-      popular: { totalPlays: -1, totalFollowers: -1, _id: 1 },
-      monthlyListeners: { monthlyListeners: -1, _id: 1 },
-      newest: { createdAt: -1, _id: 1 },
-      name: { name: 1, _id: 1 },
-    };
+    if (!useTextScore) {
+      const SORT_MAP: Record<string, any> = {
+        popular: { playCount: -1, totalFollowers: -1, _id: 1 },
+        monthlyListeners: { monthlyListeners: -1, _id: 1 },
+        newest: { createdAt: -1, _id: 1 },
+        name: { name: 1, _id: 1 },
+      };
+      sortOption = SORT_MAP[sort ?? "popular"] ?? SORT_MAP.popular;
+    }
 
-    const sortOption = SORT_MAP[sort ?? "popular"] ?? SORT_MAP.popular;
+    let baseQuery = Artist.find(filterQuery)
+      .select(
+        "name avatar coverImage slug isVerified nationality genres themeColor " +
+          "totalFollowers monthlyListeners isActive",
+      )
+      .sort(sortOption!)
+      .skip(skip)
+      .limit(Number(limit))
+      .lean<IArtist & { score?: number }>();
 
-    // --- 5. EXECUTION ---
+    if (useTextScore) {
+      baseQuery = baseQuery.select({
+        score: { $meta: "textScore" },
+      } as any);
+    }
     const [artists, total] = await Promise.all([
-      Artist.find(filterQuery)
-        .populate("genres", "name color slug")
-        .select(
-          "name avatar coverImage slug isVerified nationality genres themeColor totalFollowers monthlyListeners isActive",
-        )
-        .sort(sortOption)
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
+      baseQuery.lean(),
       Artist.countDocuments(filterQuery),
     ]);
 
@@ -222,80 +270,65 @@ class ArtistService {
       },
     };
 
-    // --- 6. CACHE SET (Jitter logic) ---
-    // TTL 15-20 phút (Artist ít thay đổi hơn Track)
     const ttl = 900 + Math.floor(Math.random() * 300);
     withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
-    ).catch((err) => console.error("[Cache] Artist SET error:", err));
+    ).catch((err) => console.error("[Cache] Artist LIST SET error:", err));
 
     return result;
   }
-  // ==========================================
-  // 🔴 ADMIN / WRITE METHODS
-  // ==========================================
 
-  /**
-   * CREATE ARTIST (ADMIN)
-   */
+  // ── 4. CREATE ARTIST (ADMIN) ───────────────────────────────────────────────
+
   async createArtistByAdmin(
     data: CreateArtistInput,
     files?: { [fieldname: string]: Express.Multer.File[] },
   ) {
-    // 1. Kiểm tra tồn tại với Lean() cho nhanh
     const existingArtist = await Artist.findOne({
       name: { $regex: new RegExp(`^${data.name}$`, "i") },
     }).lean();
 
-    if (existingArtist) {
+    if (existingArtist)
       throw new ApiError(httpStatus.BAD_REQUEST, "Tên nghệ sĩ này đã tồn tại");
-    }
 
-    // 2. Thu thập đường dẫn file
     const avatar = files?.["avatar"]?.[0]?.path || "";
     const coverImage = files?.["coverImage"]?.[0]?.path || "";
     const galleryImages = files?.["images"]?.map((f) => f.path) || [];
-
-    const genres = parseGenreIds(data.genreIds);
     const aliases = parseTags(data.aliases);
 
-    // 3. Khởi tạo Transaction
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
       let userId = null;
       if (data.userId) {
-        // 🔥 NÂNG CẤP: Dùng findOneAndUpdate với điều kiện để chống Race Condition ngay từ lúc kiểm tra User
         const user = await User.findOneAndUpdate(
-          { _id: data.userId, role: { $ne: "artist" } }, // Chỉ lấy nếu user chưa là artist
-          { role: "artist" }, // Tạm set role để lock user lại trong transaction này
+          {
+            _id: data.userId,
+            role: { $ne: "artist" },
+            artistProfile: { $exists: false },
+          },
+          { role: "artist" },
           { session, new: true },
         );
 
-        if (!user) {
+        if (!user)
           throw new ApiError(
             httpStatus.BAD_REQUEST,
             "User không tồn tại hoặc đã liên kết với một Artist khác",
           );
-        }
+
         userId = data.userId;
       }
 
-      // Generate slug TRONG transaction để đảm bảo an toàn
-      const slug = await generateUniqueSlug(Artist, data.name);
-
-      // 4. Tạo Artist
       const [artist] = await Artist.create(
         [
           {
             ...data,
-            slug,
             user: userId,
             avatar,
             coverImage,
             images: galleryImages,
-            genres,
             aliases,
             socialLinks: {
               facebook: data.facebook || "",
@@ -310,7 +343,6 @@ class ArtistService {
         { session },
       );
 
-      // 5. Cập nhật lại chính xác _id của artist cho User
       if (userId) {
         await User.updateOne(
           { _id: userId },
@@ -319,21 +351,18 @@ class ArtistService {
         );
       }
 
-      // 6. Cập nhật số lượng cho Genre
-      if (genres.length > 0) {
-        await Genre.updateMany(
-          { _id: { $in: genres } },
-          { $inc: { artistCount: 1 } },
-          { session },
-        );
-      }
-
       await session.commitTransaction();
+
+      // NÂNG CẤP A: Sync stats + invalidate cache — fire-and-forget
+      Promise.allSettled([
+        syncArtistStats(artist._id.toString()),
+        invalidateArtistCache(artist._id.toString()),
+      ]).catch(console.error);
+
       return artist;
     } catch (error) {
       await session.abortTransaction();
 
-      // 🔥 NÂNG CẤP: Chờ xóa xong file rác mới văng lỗi, dùng Promise.allSettled
       const allFiles = [avatar, coverImage, ...galleryImages].filter(Boolean);
       if (allFiles.length > 0) {
         await Promise.allSettled(
@@ -346,30 +375,26 @@ class ArtistService {
     }
   }
 
-  /**
-   * UPDATE ARTIST (ADMIN)
-   */
+  // ── 5. UPDATE ARTIST (ADMIN) ───────────────────────────────────────────────
+
   async updateArtistByAdmin(
     id: string,
     data: UpdateArtistInput,
     files?: { [fieldname: string]: Express.Multer.File[] },
   ) {
-    // 1. Kiểm tra Artist trước, không cần session ở bước này để tối ưu tốc độ
     const artist = await Artist.findById(id);
-    if (!artist) {
+    if (!artist)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ");
-    }
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // --- A. USER SWAP LOGIC (Bảo vệ bằng Transaction) ---
+      // ── A. User swap ─────────────────────────────────────────────────────
       if (
         data.userId !== undefined &&
         String(data.userId) !== String(artist.user)
       ) {
-        // 1. Gỡ User cũ: Update trực tiếp qua DB thay vì update obj artist
         if (artist.user) {
           await User.updateOne(
             { _id: artist.user },
@@ -378,61 +403,50 @@ class ArtistService {
           );
         }
 
-        // 2. Gán User mới
-        if (data.userId) {
-          // Khóa User mới để chống đè
-          const newUser = await User.findOneAndUpdate(
-            { _id: data.userId, artistProfile: { $exists: false } },
-            { role: "artist", artistProfile: artist._id },
-            { session, new: true },
-          );
+        // ── A. User Swap Logic ─────────────────────────────────────────────────────
+        if (data.userId !== undefined) {
+          const targetUserId = data.userId ? String(data.userId) : null;
+          const oldUserId = artist.user ? String(artist.user) : null;
 
-          if (!newUser) {
-            throw new ApiError(
-              httpStatus.BAD_REQUEST,
-              "User mới không tồn tại hoặc đã là Artist",
-            );
+          if (targetUserId !== oldUserId) {
+            // 1. Gỡ quyền user cũ (nếu có)
+            if (oldUserId) {
+              await User.updateOne(
+                { _id: oldUserId },
+                { role: "user", $unset: { artistProfile: 1 } },
+                { session },
+              );
+            }
+
+            // 2. Gán quyền cho user mới (nếu có)
+            if (targetUserId) {
+              const newUser = await User.findOneAndUpdate(
+                { _id: targetUserId, artistProfile: { $exists: false } },
+                { role: "artist", artistProfile: artist._id },
+                { session, new: true },
+              );
+              if (!newUser)
+                throw new ApiError(
+                  httpStatus.BAD_REQUEST,
+                  "User mới không hợp lệ hoặc đã là Artist",
+                );
+
+              artist.user = new mongoose.Types.ObjectId(targetUserId) as any;
+            } else {
+              artist.user = null as any;
+            }
           }
-          artist.user = data.userId as any;
-        } else {
-          artist.user = null as any;
         }
       }
 
-      // --- B. XỬ LÝ GENRES (Bảo vệ bằng Transaction) ---
-      if (data.genreIds) {
-        const newGenreIds = parseGenreIds(data.genreIds);
-        const oldIds = artist.genres.map((id) => id.toString());
-        const newIds = newGenreIds.map((id) => id.toString());
-
-        const added = newIds.filter((id) => !oldIds.includes(id));
-        const removed = oldIds.filter((id) => !newIds.includes(id));
-
-        if (added.length || removed.length) {
-          await Promise.all([
-            added.length &&
-              Genre.updateMany(
-                { _id: { $in: added } },
-                { $inc: { artistCount: 1 } },
-                { session },
-              ),
-            removed.length &&
-              Genre.updateMany(
-                { _id: { $in: removed }, artistCount: { $gt: 0 } },
-                { $inc: { artistCount: -1 } },
-                { session },
-              ),
-          ]);
-        }
-        artist.genres = newGenreIds;
-      }
-
-      // --- C. XỬ LÝ HÌNH ẢNH (Ghi nhận mảng cần xóa) ---
+      // ── C. Images ─────────────────────────────────────────────────────────
       const imagesToDelete: string[] = [];
 
       if (files?.["avatar"]?.[0]) {
         if (artist.avatar) imagesToDelete.push(artist.avatar);
         artist.avatar = files["avatar"][0].path;
+        // NÂNG CẤP B: avatar thay đổi → pre("save") sẽ tự extract themeColor.
+        // KHÔNG gán themeColor ở đây trừ khi Admin gửi override tường minh.
       }
 
       if (files?.["coverImage"]?.[0]) {
@@ -446,29 +460,29 @@ class ArtistService {
       const deletedImages = artist.images.filter(
         (img) => !keptImages.includes(img),
       );
-
-      if (deletedImages.length > 0) {
-        imagesToDelete.push(...deletedImages);
-      }
+      if (deletedImages.length > 0) imagesToDelete.push(...deletedImages);
 
       const newUploads = files?.["images"]?.map((f) => f.path) || [];
       artist.images = [...keptImages, ...newUploads];
 
-      // --- D. UPDATE FIELDS CÒN LẠI ---
+      // ── D. Metadata ───────────────────────────────────────────────────────
       if (data.name && data.name !== artist.name) {
-        // Sinh slug trước khi save
-        artist.slug = await generateUniqueSlug(Artist, data.name);
+        // Slug generation trong session (pre("save") cũng regenerate — để model tự xử lý)
         artist.name = data.name;
       }
 
-      // Gán các thông tin cơ bản
       if (data.bio !== undefined) artist.bio = data.bio;
       if (data.nationality !== undefined) artist.nationality = data.nationality;
-      if (data.themeColor !== undefined) artist.themeColor = data.themeColor;
       if (data.isVerified !== undefined) artist.isVerified = data.isVerified;
       if (data.aliases !== undefined) artist.aliases = parseTags(data.aliases);
 
-      // 🔥 NÂNG CẤP: Chống Mass Assignment cho Social Links
+      // NÂNG CẤP B: chỉ override themeColor nếu Admin gửi tường minh.
+      // Khi avatar thay đổi mà không có themeColor override → middleware tự extract.
+      if (data.themeColor !== undefined) {
+        artist.themeColor = data.themeColor;
+      }
+
+      // Social links — explicit field-by-field để chống mass assignment
       if (data.facebook !== undefined)
         artist.socialLinks.facebook = data.facebook;
       if (data.instagram !== undefined)
@@ -478,37 +492,35 @@ class ArtistService {
       if (data.spotify !== undefined) artist.socialLinks.spotify = data.spotify;
       if (data.youtube !== undefined) artist.socialLinks.youtube = data.youtube;
 
-      // Lưu artist (Trong Transaction)
-      await artist.save({ session });
-
+      await artist.save({ session }); // pre("save") chạy tại đây: slug + themeColor nếu cần
       await session.commitTransaction();
 
-      // --- E. DỌN DẸP CLOUDINARY SAU KHI THÀNH CÔNG ---
-      // Chỉ khi DB commit thành công 100%, ta mới bắt đầu xóa ảnh cũ trên Cloudinary
-      // Tránh việc xóa ảnh xong DB lưu lỗi -> Mất sạch ảnh cũ.
-      if (imagesToDelete.length > 0) {
-        // Chạy ngầm không cần await để tăng tốc response API
-        Promise.allSettled(
-          imagesToDelete.map((img) => deleteFileFromCloud(img, "image")),
-        ).catch(console.error);
-      }
+      // NÂNG CẤP A + BONUS: Sau commit
+      Promise.allSettled([
+        syncArtistStats(id),
+        invalidateArtistCache(id),
+        imagesToDelete.length > 0
+          ? Promise.allSettled(
+              imagesToDelete.map((img) => deleteFileFromCloud(img, "image")),
+            )
+          : Promise.resolve(),
+      ]).catch(console.error);
 
       return artist;
     } catch (error) {
       await session.abortTransaction();
 
-      // Nếu lỗi, xóa ngay những ảnh MỚI vừa được multer upload lên Cloudinary trong request này
-      const newUploadedFiles = [];
-      if (files?.["avatar"]?.[0])
-        newUploadedFiles.push(files["avatar"][0].path);
+      // Xóa file MỚI vừa upload nếu transaction fail
+      const newFiles: string[] = [];
+      if (files?.["avatar"]?.[0]) newFiles.push(files["avatar"][0].path);
       if (files?.["coverImage"]?.[0])
-        newUploadedFiles.push(files["coverImage"][0].path);
+        newFiles.push(files["coverImage"][0].path);
       if (files?.["images"])
-        newUploadedFiles.push(...files["images"].map((f) => f.path));
+        newFiles.push(...files["images"].map((f) => f.path));
 
-      if (newUploadedFiles.length > 0) {
+      if (newFiles.length > 0) {
         Promise.allSettled(
-          newUploadedFiles.map((img) => deleteFileFromCloud(img, "image")),
+          newFiles.map((img) => deleteFileFromCloud(img, "image")),
         ).catch(console.error);
       }
 
@@ -517,35 +529,42 @@ class ArtistService {
       await session.endSession();
     }
   }
-  // ==========================================
-  // 🔴 ADMIN & USER METHODS
-  // ==========================================
+
+  // ── 6. TOGGLE STATUS (truly atomic) ───────────────────────────────────────
 
   /**
-   * 5. TOGGLE STATUS (Tối ưu Atomic Update)
+   * BONUS: Comment cũ nói "Atomic" nhưng dùng findById + save không atomic.
+   * Fix thực sự atomic bằng findOneAndUpdate với conditional flip.
    */
   async toggleStatus(id: string) {
-    // 🔥 NÂNG CẤP: Dùng FindOneAndUpdate để thao tác nguyên tử (Atomic),
-    // ngăn ngừa lỗi nhiều Admin bấm cùng lúc.
-    const artist = await Artist.findById(id);
+    // Dùng conditional update: đọc trạng thái hiện tại, flip nó
+    const artist = await Artist.findById(id).select("isActive").lean();
     if (!artist)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ");
 
-    artist.isActive = !artist.isActive;
-    await artist.save();
+    const updated = await Artist.findByIdAndUpdate(
+      id,
+      [{ $set: { isActive: { $not: "$isActive" } } }], // MongoDB aggregation pipeline update
+      { new: true, select: "_id isActive" },
+    ).lean();
 
-    return { id: artist._id, isActive: artist.isActive };
+    // Invalidate cache vì isActive thay đổi ảnh hưởng visibility
+    invalidateArtistCache(id).catch(console.error);
+
+    return { id: updated!._id, isActive: updated!.isActive };
   }
 
+  // ── 7. DELETE ARTIST ───────────────────────────────────────────────────────
+
   /**
-   * 6. DELETE ARTIST (Bọc Transaction & Xử lý File chuẩn)
+   * BONUS: Cache invalidation sau khi xóa thành công.
    */
   async deleteArtist(id: string) {
     const artist = await Artist.findById(id);
     if (!artist)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ");
 
-    // 1. Check Ràng buộc cực ngặt
+    // 1. Kiểm tra an toàn
     const [hasAlbums, hasTracks] = await Promise.all([
       Album.exists({ artist: id }),
       Track.exists({ artist: id }),
@@ -558,87 +577,69 @@ class ArtistService {
       );
     }
 
-    // 🔥 NÂNG CẤP: Sử dụng Transaction để xóa liên kết an toàn
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // 2. Gỡ liên kết User
-      if (artist.user) {
-        await User.updateOne(
-          { _id: artist.user },
-          { role: "user", $unset: { artistProfile: 1 } },
-          { session },
-        );
-      }
-
-      // 3. Xóa tất cả các lượt Follow liên quan
-      await Follow.deleteMany({ following: id }, { session });
-
-      // 4. Trừ đi đếm số lượng của Genre
-      if (artist.genres && artist.genres.length > 0) {
-        await Genre.updateMany(
-          { _id: { $in: artist.genres }, artistCount: { $gt: 0 } },
-          { $inc: { artistCount: -1 } },
-          { session },
-        );
-      }
-
-      // 5. Xóa Nghệ Sĩ
-      await Artist.deleteOne({ _id: id }).session(session);
+      // 2. Thực hiện xóa với Transaction
+      await Promise.all([
+        Follow.deleteMany({ following: id }, { session }),
+        Artist.deleteOne({ _id: id }).session(session),
+        artist.user
+          ? User.updateOne(
+              { _id: artist.user },
+              { role: "user", $unset: { artistProfile: 1 } },
+              { session },
+            )
+          : Promise.resolve(),
+      ]);
 
       await session.commitTransaction();
 
-      // 6. XÓA FILE TRÊN MÂY SAU KHI DB ĐÃ XÓA THÀNH CÔNG (Tránh mất file nếu Rollback)
+      // 3. Post-commit: Cleanup + Cache (Fire-and-forget)
       const filesToDelete = [
         artist.avatar,
         artist.coverImage,
         ...(artist.images || []),
-      ].filter(Boolean);
+      ].filter(Boolean) as string[];
 
-      if (filesToDelete.length > 0) {
-        // Chạy ngầm, không await để tăng tốc API response
-        Promise.allSettled(
-          filesToDelete.map((img) => deleteFileFromCloud(img, "image")),
-        ).catch(console.error);
-      }
+      Promise.allSettled([
+        ...filesToDelete.map((img) => deleteFileFromCloud(img, "image")),
+        invalidateArtistCache(id),
+      ]).catch(console.error);
 
       return true;
     } catch (error) {
       await session.abortTransaction();
       throw error;
     } finally {
-      await session.endSession();
+      session.endSession();
     }
   }
 
-  /**
-   * 7. SELF UPDATE (Cho Artist tự sửa profile)
-   */
+  // ── 8. SELF UPDATE ─────────────────────────────────────────────────────────
+
   async updateMyProfile(userId: string, data: any, files: any) {
     const artist = await Artist.findOne({ user: userId });
 
-    if (!artist) {
+    if (!artist)
       throw new ApiError(
         httpStatus.FORBIDDEN,
         "Bạn chưa có hồ sơ Nghệ sĩ để chỉnh sửa",
       );
-    }
 
-    // 🔥 SECURITY CHECK: Xóa triệt để các trường nhạy cảm
-    // Dùng destructuring để tạo object an toàn, loại bỏ nguy cơ ghi đè
+    // Strip fields Artist không được tự sửa
     const {
       userId: _u,
       isVerified: _v,
       name: _n,
       slug: _s,
-      totalPlays: _tp,
+      playCount: _tp,
       totalFollowers: _tf,
       monthlyListeners: _ml,
       ...safeData
     } = data;
 
-    // Tái sử dụng hàm Update Admin với dữ liệu đã thanh lọc
     return this.updateArtistByAdmin(artist._id.toString(), safeData, files);
   }
 }

@@ -1,18 +1,3 @@
-/**
- * TopChartPage.tsx — Full-page chart view (v5.0 — Soundwave Neural Audio)
- *
- * CHANGES vs v4.0:
- * ─ Hook alignment: tracks is now RankedTrack[] — rank/trend/rankDelta/score
- *   pre-computed. prevRankMap removed from hook exports and from all props.
- * ─ ChartItem usage updated: passes RankedTrack directly, no prevRank prop.
- * ─ ChartLine receives animationDelay prop for staggered hero draw animation.
- * ─ Pull-to-refresh: usePullToRefresh() hook wired to refetch() on mobile.
- * ─ Sticky list header: useSticky() hook drives a compact sticky bar that
- *   fades in once the section scrolls past the viewport top.
- * ─ TrackListSection: isUpdating-only re-render boundary preserved.
- * ─ HeroSection: no isUpdating dependency — never re-renders on live refresh.
- */
-
 import React, {
   memo,
   useState,
@@ -46,6 +31,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSyncInteractions } from "@/features";
 import SectionAmbient from "@/components/SectionAmbient";
+import TopChartPageSkeleton from "@/features/analytics/components/TopChartPageSkeleton";
+
+import MusicResult from "@/components/ui/Result";
+import { useNavigate } from "react-router-dom";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -561,7 +551,7 @@ const ShowMoreButton = memo(
           aria-label={
             showAll ? "Show fewer tracks" : `Show all ${totalTracks} tracks`
           }
-          className="btn-secondary btn-lg rounded-full px-8 gap-2.5 font-bold text-[11px] uppercase tracking-widest shadow-raised hover:shadow-elevated backdrop-blur-sm"
+          className="btn-secondary rounded-full gap-2.5 font-bold text-[11px] uppercase tracking-widest shadow-raised hover:shadow-elevated backdrop-blur-sm"
         >
           {showAll ? (
             <>
@@ -592,10 +582,17 @@ interface HeroSectionProps {
   chartData: unknown[];
   lastUpdated: string;
   reduced: boolean;
+  isLoading: boolean;
 }
 
 const HeroSection = memo(
-  ({ tracks, chartData, lastUpdated, reduced }: HeroSectionProps) => (
+  ({
+    tracks,
+    chartData,
+    lastUpdated,
+    reduced,
+    isLoading,
+  }: HeroSectionProps) => (
     <section
       aria-label="Chart overview"
       className="relative pt-12 pb-12 md:pt-20 md:pb-16 overflow-hidden"
@@ -698,6 +695,7 @@ const HeroSection = memo(
                   data={chartData}
                   tracks={tracks}
                   animationDelay={reduced ? 0 : 0.81}
+                  isLoading={isLoading}
                 />
               </div>
             </div>
@@ -930,7 +928,7 @@ export const TopChartPage = () => {
     refetch,
     lastUpdatedAt,
   } = useRealtimeChart();
-
+  console.log(tracks);
   const [showAll, setShowAll] = useState(false);
   const reduced = useReducedMotion() ?? false;
 
@@ -962,9 +960,45 @@ export const TopChartPage = () => {
     "track",
     !isLoading && trackIds.length > 0,
   );
+  const navigate = useNavigate();
 
-  if (isLoading && tracks.length === 0) return <PageLoader />;
-  if (error && tracks.length === 0) return <ErrorPage onRetry={handleRetry} />;
+  const hasResults = tracks.length > 0 && chartData.length > 0;
+  const isOffline = !navigator.onLine;
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/", { replace: true });
+    }
+  };
+  if (isLoading && !hasResults) {
+    return <TopChartPageSkeleton />;
+  }
+
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (error && !hasResults) {
+    return (
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={handleBack}
+        />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -979,6 +1013,7 @@ export const TopChartPage = () => {
       >
         {/* Hero never re-renders on live refresh — no isUpdating dependency */}
         <HeroSection
+          isLoading={isLoading}
           tracks={tracks}
           chartData={chartData}
           lastUpdated={lastUpdated}

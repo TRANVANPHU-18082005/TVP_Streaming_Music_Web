@@ -3,11 +3,12 @@ import { cacheRedis, queueRedis } from "../config/redis";
 import PlayLog from "../models/PlayLog";
 import DailyStats from "../models/DailyStats";
 import mongoose from "mongoose";
+import recommendationService from "../services/recommendation.service";
 
 // Định nghĩa Interface cho Job Data để chặt chẽ về Type
 interface ILogListenJob {
   trackId: string;
-  userId?: string;
+  userId: string;
   ip?: string;
   timestamp: string | Date;
 }
@@ -18,7 +19,7 @@ export const startViewWorker = () => {
     async (job: Job<ILogListenJob>) => {
       if (job.name === "log-listen-history") {
         const { trackId, userId, ip, timestamp } = job.data;
-
+        console.log(trackId, userId, ip, timestamp);
         // 1. XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7)
         // Dùng toLocaleDateString với timezone cố định để lấy chính xác YYYY-MM-DD tại VN
         const listenDate = new Date(timestamp);
@@ -37,6 +38,7 @@ export const startViewWorker = () => {
             listenedAt: listenDate,
             source: "web",
           });
+          recommendationService.invalidateUserRecommendCache(userId);
 
           // Task B: Cập nhật Global Chart (Redis)
           const vnHour = new Date(

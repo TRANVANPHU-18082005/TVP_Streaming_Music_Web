@@ -1,12 +1,30 @@
-import { Album } from "@/features/album/types";
-import { Artist } from "@/features/artist/types";
-import { MoodVideo } from "@/features/mood-video/types";
+import { IAlbum } from "@/features/album";
+import { IArtist } from "@/features/artist";
+import { IMoodVideo } from "@/features/mood-video/types";
 
-// 1. Cấu trúc câu Lyric để hiển thị Preview hoặc Search nhanh
-export interface ILyricLine {
+export interface IWord {
+  /** Display text */
+  word: string;
+  /** Absolute start time in ms */
+  startTime: number;
+  /** Duration in ms */
+  endTime: number;
+}
+
+export type LyricType = "none" | "plain" | "synced" | "karaoke";
+
+export interface ILyricLine extends ILyricSyncLine, IKaraokeLine { }
+
+export interface ILyricSyncLine {
   startTime: number;
   endTime: number;
   text: string;
+}
+export interface IKaraokeLine {
+  text: string;
+  start: number;
+  end: number;
+  words: { word: string; startTime: number; endTime: number }[];
 }
 
 export interface ITrack {
@@ -16,9 +34,9 @@ export interface ITrack {
   description?: string;
 
   // Populated Data
-  artist: Artist;
-  featuringArtists: Artist[];
-  album?: Album | null;
+  artist: IArtist;
+  featuringArtists: IArtist[];
+  album?: IAlbum | null;
   genres: Array<{ _id: string; name: string }>;
   uploader: string;
 
@@ -42,7 +60,7 @@ export interface ITrack {
 
   // === UPGRADE: VISUAL CONTEXT ===
   // Gán trực tiếp Object MoodVideo hoặc ID (Canvas)
-  moodVideo?: MoodVideo | null;
+  moodVideo?: IMoodVideo | null;
 
   // Context & Metadata
   trackNumber: number;
@@ -108,7 +126,7 @@ export interface IChartItem {
     title: string;
     slug: string;
   };
-  featuringArtists: Artist[];
+  featuringArtists: IArtist[];
   moodVideo?: string | null; // Cho phép hiển thị Canvas ngay trên Chart
 }
 

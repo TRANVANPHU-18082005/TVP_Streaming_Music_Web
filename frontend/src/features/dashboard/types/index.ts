@@ -1,27 +1,47 @@
-// --- 1. COMMON TYPES ---
+// features/dashboard/types/index.ts
 
-// Kiểu dữ liệu cho 1 ô thống kê (Card Overview)
+export type DashboardRange = "7d" | "30d" | "90d";
+
+// ── Primitives ──────────────────────────────────────────────────────────────
+
 export interface StatItem {
   value: number;
-  growth: number; // % tăng trưởng
+  growth: number;
 }
 
-// --- 2. SYSTEM HEALTH TYPES (DevOps - Updated) ---
+export interface ChartDataPoint {
+  _id: string; // "yyyy-MM-dd"
+  count: number;
+}
+
+// ── Storage Velocity ─────────────────────────────────────────────────────────
+
+export interface StorageVelocity {
+  avgBytesPerDay: number;
+  avgReadablePerDay: string; // e.g. "42.3 MB"
+  daysUntilFull: number | null;
+  projectedFullDate: string | null; // "yyyy-MM-dd" or null
+}
+
+// ── External Services ────────────────────────────────────────────────────────
 
 export interface CloudinaryStats {
   plan: string;
   bandwidth: {
     usage: number;
-    usageReadable: string; // 🔥 NEW: "350 MB" (Backend format sẵn)
+    usageReadable: string;
     limit: number;
-    limitReadable: string; // 🔥 NEW: "25 GB"
-    percent: number; // 🔥 NEW: 1.4
+    limitReadable: string;
+    percent: number;
   };
   storage: {
     usage: number;
-    usageReadable: string; // 🔥 NEW
+    usageReadable: string;
     limit: number;
+    limitReadable: string;
+    percent: number;
   };
+  velocity: StorageVelocity; // NEW: storage growth forecast
 }
 
 export interface B2Stats {
@@ -35,7 +55,32 @@ export interface UpstashStats {
   dailyRequests: number;
   monthlyRequests: number;
   dataSize: number;
-  dataSizeReadable: string; // 🔥 NEW: "5 MB" (Backend format sẵn)
+  dataSizeReadable: string;
+}
+
+// ── Redis Worker ──────────────────────────────────────────────────────────────
+
+export interface RedisWorkerInfo {
+  memory: string;
+  connectedClients: number; // NEW: live worker count
+  uptimeSeconds: number;
+  opsPerSecond: number; // NEW: throughput
+  hitRate: number | null; // NEW: cache hit rate %
+}
+
+// ── System Health ─────────────────────────────────────────────────────────────
+
+export interface StorageHealth {
+  // NEW: split by media type
+  audioBytes: number;
+  audioReadable: string;
+  imageBytes: number;
+  imageReadable: string;
+  totalBytes: number;
+  totalReadable: string;
+  velocity: StorageVelocity; // NEW: overall storage growth forecast
+  b2Status: B2Stats | null;
+  cloudinary: CloudinaryStats | null;
 }
 
 export interface QueueStats {
@@ -46,34 +91,30 @@ export interface QueueStats {
   delayed: number;
 }
 
-// Cấu trúc System Health tổng hợp
+export interface TrackStatus {
+  ready: number;
+  failed: number;
+  pending: number;
+  processing: number;
+}
+
 export interface SystemHealthData {
-  storage: {
-    dbTotalBytes: number;
-    dbReadable: string; // VD: "15.5 GB" (Dung lượng file thực tế, đại diện cho B2)
-    b2Status: B2Stats | null;
-    cloudinary: CloudinaryStats | null;
-  };
+  storage: StorageHealth;
   queue: QueueStats;
-  trackStatus: {
-    ready: number;
-    failed: number;
-    pending: number;
-    processing: number;
-  };
+  trackStatus: TrackStatus;
   redis: {
-    memory: string; // VD: "10.5 MB" (Lấy trực tiếp từ connection)
+    queueWorker: RedisWorkerInfo; // NEW: replaces old `memory` string
     upstash: UpstashStats | null;
   };
 }
 
-// --- 3. TOP LISTS TYPES ---
+// ── Top Lists ─────────────────────────────────────────────────────────────────
 
 export interface TopTrack {
   _id: string;
   title: string;
   coverImage: string;
-  playCount: number; // Khớp với DB field
+  playCount: number;
   artist: {
     _id: string;
     name: string;
@@ -85,12 +126,11 @@ export interface TopArtist {
   _id: string;
   name: string;
   avatar: string;
-  totalPlays: number;
+  playCount: number;
 }
 
-// --- 4. MAIN RESPONSE STRUCTURE ---
+// ── Root DTO ──────────────────────────────────────────────────────────────────
 
-// Cấu trúc dữ liệu chính (Data Payload)
 export interface DashboardData {
   overview: {
     users: StatItem;
@@ -110,7 +150,32 @@ export interface DashboardData {
   };
 }
 
-// API Response Wrapper (Chuẩn JSend)
+// NEW: _meta carries SWR state from backend
+export interface DashboardMeta {
+  isStale: boolean;
+}
+
+export interface DashboardData {
+  overview: {
+    users: StatItem;
+    tracks: StatItem;
+    albums: StatItem;
+    plays: StatItem;
+    activeUsers24h: number;
+  };
+  systemHealth: SystemHealthData;
+  charts: {
+    userGrowth: ChartDataPoint[];
+    trackGrowth: ChartDataPoint[];
+  };
+  topLists: {
+    topTracks: TopTrack[];
+    topArtists: TopArtist[];
+  };
+  _meta: DashboardMeta; // NEW: SWR staleness flag
+}
+
+// API wrapper (JSend)
 export interface DashboardResponse {
   status: string;
   data: DashboardData;

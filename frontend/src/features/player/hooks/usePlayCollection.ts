@@ -51,7 +51,7 @@ export const usePlayCollection = () => {
         });
         const root = res?.data ?? res;
         let tracks: ITrack[] = [];
-
+        console.log(res);
         // Chiết xuất danh sách tracks
         if (Array.isArray(root)) {
           tracks = root;

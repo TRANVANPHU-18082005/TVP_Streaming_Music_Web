@@ -1,25 +1,3 @@
-/**
- * PlaylistModal.tsx — Production Refactor v4.0
- * SOUNDWAVE Design System · Obsidian Luxury / Neural Audio
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * Fully aligned with GenreModal.tsx patterns:
- *
- * FIX 1+2: Scroll lock with scrollbar-width compensation (no layout shift)
- * FIX 3:   AnimatePresence + motion.div — smooth fade+scale exit
- * FIX 4:   stopPropagation on modal content
- * FIX 5:   SSR guard before createPortal
- * FIX 6:   Pre-validate file type + size before setValue
- * FIX 7:   LABEL_CLASS + VISIBILITY_OPTIONS at module scope
- * FIX 8:   VisibilityCard as <button role="radio"> (replaces <Label onClick>)
- * FIX 9:   File input aria-label
- * FIX 10:  isWorking via useMemo
- * FIX 11:  Theme color fallback label ("Chưa chọn màu")
- * FIX 12:  PlaylistModal wrapped in memo()
- * NEW:     Escape key closes modal
- * NEW:     noValidate on <form> — RHF owns validation
- */
-
 import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { Controller } from "react-hook-form";
@@ -43,13 +21,13 @@ import {
   Music2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type Playlist } from "../types";
 import { usePlaylistForm } from "../hooks/usePlaylistForm";
 import { TagInput } from "@/components/ui/tag-input";
 import { UserSelector } from "@/features/user/components/UserSelector";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { IPlaylist } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MODULE-SCOPE CONSTANTS — zero re-allocation per render
@@ -116,7 +94,7 @@ const VISIBILITY_OPTIONS = [
 interface PlaylistModalProps {
   isOpen: boolean;
   onClose: () => void;
-  playlistToEdit?: Playlist | null;
+  playlistToEdit?: IPlaylist | null;
   onSubmit: (data: FormData) => Promise<void>;
   isPending: boolean;
 }

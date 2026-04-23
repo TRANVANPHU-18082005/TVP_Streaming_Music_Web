@@ -36,7 +36,7 @@ import { TrendingUp, Eye, BarChart2, Clock } from "lucide-react";
 
 import { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
 import { ChartTrack } from "@/features/track/types";
-import { EqualizerLoader } from "@/components/ui/MusicLoadingEffects";
+import { RadioLoader } from "@/components/ui/MusicLoadingEffects";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,6 +55,7 @@ export interface ChartLineProps {
   data: ChartDataPoint[];
   tracks: RankedTrack[]; // RankedTrack ⊇ ChartTrack — fully backward safe
   animationDelay?: number; // seconds — from HeroSection stagger (default 0)
+  isLoading: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -723,7 +724,7 @@ const EmptyChartState = memo(() => (
     aria-label="Loading chart data"
     className="w-full h-[320px] sm:h-[380px] flex flex-col items-center justify-center gap-4 rounded-2xl border border-border bg-muted/12 dark:bg-muted/8"
   >
-    <EqualizerLoader />
+    <RadioLoader glass={false} />
     <p className="text-[9.5px] text-muted-foreground/40 font-bold tracking-[0.18em] uppercase">
       Loading chart data
     </p>
@@ -739,6 +740,7 @@ export const ChartLine = ({
   data,
   tracks,
   animationDelay = 0,
+  isLoading,
 }: ChartLineProps) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [showHint, setShowHint] = useState(true);
@@ -754,7 +756,7 @@ export const ChartLine = ({
     setShowHint(false);
   }, []);
 
-  if (!hasData) return <EmptyChartState />;
+  if (isLoading && !hasData) return <EmptyChartState />;
 
   return (
     <div className="w-full space-y-3 animate-fade-up">

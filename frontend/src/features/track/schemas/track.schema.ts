@@ -28,6 +28,13 @@ export const TRACK_SORT_OPTIONS = [
   "popular",
   "name",
 ] as const;
+export const TRACK_STATUS_OPTIONS = [
+  "pending",
+  "processing",
+  "ready",
+  "failed",
+  "all",
+] as const;
 export const LYRIC_TYPES = ["none", "plain", "synced", "karaoke"] as const;
 
 const optionalText = (maxLen: number, msg: string) =>
@@ -129,6 +136,7 @@ export const trackParamsSchema = z.object({
   page: z.coerce.number().int().min(1).catch(1),
   limit: z.coerce.number().int().min(1).max(100).catch(10),
   sort: z.enum(TRACK_SORT_OPTIONS).catch("newest"),
+  status: z.enum(TRACK_STATUS_OPTIONS).optional().catch(undefined),
   keyword: z.string().trim().optional().catch(undefined),
   artistId: z.string().trim().optional().catch(undefined),
   albumId: z.string().trim().optional().catch(undefined),

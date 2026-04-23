@@ -1,76 +1,50 @@
-import { useCallback, useMemo } from "react";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { setIsPlaying, selectPlayer } from "@/features/player";
-import { usePlayCollection } from "./usePlayCollection";
+/**
+ * useGenrePlayback
+ * Thin wrapper của useCollectionPlayback cho Genre.
+ *
+ * Note: getDetail dùng `genre.slug` (không phải `_id`) — giữ nguyên theo API.
+ */
+import { useMemo } from "react";
 
-import { genreKeys, IGenre } from "@/features/genre";
+import {
+  CollectionPlaybackReturn,
+  useCollectionPlayback,
+} from "./Usecollectionplayback";
+
+import { IGenre, genreKeys } from "@/features/genre";
 import genreApi from "@/features/genre/api/genreApi";
 
-export const useGenrePlayback = (genre: IGenre | undefined) => {
-  const dispatch = useAppDispatch();
-  const { currentSource, isPlaying } = useAppSelector(selectPlayer);
-  const { play, isFetching } = usePlayCollection();
+export interface UseGenrePlaybackReturn {
+  togglePlayGenre: CollectionPlaybackReturn["togglePlay"];
+  shuffleGenre: CollectionPlaybackReturn["shuffle"];
+  isThisGenreActive: boolean;
+  isThisGenrePlaying: boolean;
+  isFetching: boolean;
+}
 
-  /**
-   * 1. Xác định trạng thái genre (Memoized)
-   */
-  const isThisGenreActive = useMemo(() => {
-    if (!genre?._id || !currentSource?.id) return false;
-    return currentSource.id === genre._id && currentSource.type === "genre";
-  }, [currentSource?.id, currentSource?.type, genre?._id]);
-
-  const isThisGenrePlaying = isThisGenreActive && isPlaying;
-
-  /**
-   * 2. Phát genre thông thường (hoặc Toggle Play/Pause)
-   * @param index: Vị trí bài hát muốn phát (mặc định là 0)
-   */
-  const togglePlayGenre = useCallback(
-    (e?: React.MouseEvent | React.KeyboardEvent, index = 0) => {
-      e?.stopPropagation();
-      if (!genre?._id) return;
-
-      if (isThisGenreActive) {
-        dispatch(setIsPlaying(!isPlaying));
-      } else {
-        play({
-          queryKey: genreKeys.detail(genre._id),
-          fetchFn: () => genreApi.getDetail(genre.slug),
-          sourceType: "genre",
-          startIndex: index,
-          collectionName: genre.name,
-          shuffle: false, // Phát theo thứ tự
-        });
-      }
-    },
-    [isThisGenreActive, isPlaying, genre, play, dispatch],
+export const useGenrePlayback = (
+  genre: IGenre | undefined,
+): UseGenrePlaybackReturn => {
+  const config = useMemo(
+    () => ({
+      collectionId: genre?._id,
+      collectionName: genre?.name,
+      collectionType: "genre" as const,
+      queryKey: genre?._id ? genreKeys.detail(genre._id) : [],
+      // slug cho getDetail (API yêu cầu slug), _id cho queryKey (cache key)
+      fetchFn: () => genreApi.getDetail(genre!.slug),
+    }),
+    [genre?._id, genre?.name, genre?.slug],
   );
 
-  /**
-   * 3. Phát Shuffle genre (Dành riêng cho nút Shuffle ở trang Detail)
-   */
-  const shuffleGenre = useCallback(
-    (e?: React.MouseEvent | React.KeyboardEvent) => {
-      e?.stopPropagation();
-      if (!genre?._id) return;
-
-      play({
-        queryKey: genreKeys.detail(genre._id),
-        fetchFn: () => genreApi.getDetail(genre._id),
-        sourceType: "genre",
-        startIndex: -1, // Truyền -1 để báo hiệu chọn ngẫu nhiên bài đầu tiên
-        collectionName: genre.name,
-        shuffle: true, // Kích hoạt flag shuffle
-      });
-    },
-    [genre, play],
-  );
+  const { togglePlay, shuffle, isActive, isPlaying, isFetching } =
+    useCollectionPlayback(config);
 
   return {
-    togglePlayGenre,
-    shuffleGenre, // Thêm hàm này để dùng ở Hero trang Detail
-    isThisGenreActive,
-    isThisGenrePlaying,
+    togglePlayGenre: togglePlay,
+    shuffleGenre: shuffle,
+    isThisGenreActive: isActive,
+    isThisGenrePlaying: isPlaying,
     isFetching,
   };
 };

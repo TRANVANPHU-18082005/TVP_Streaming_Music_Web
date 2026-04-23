@@ -13,10 +13,13 @@ import Pagination from "@/utils/pagination";
 import { useMoodVideoMutations } from "@/features/mood-video/hooks/useMoodVideoMutations";
 import { useMoodVideosQuery } from "@/features/mood-video/hooks/useMoodVideoQuery";
 import { useMoodVideoParams } from "@/features/mood-video/hooks/useMoodVideoParams";
-import { MoodVideo } from "@/features/mood-video";
 import MoodVideoFilter from "@/features/mood-video/components/MoodVideoFilter";
 import { MoodVideoGrid } from "@/features/mood-video/components/MoodVideoGrid";
 import MoodVideoModal from "@/features/mood-video/components/MoodVideoModal";
+import { IMoodVideo } from "@/features/mood-video/types";
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { Genrepageskeleton } from "@/features";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 const MoodVideoManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL & Query) ---
@@ -28,8 +31,9 @@ const MoodVideoManagementPage = () => {
     clearFilters,
   } = useMoodVideoParams(APP_CONFIG.PAGINATION_LIMIT || 12);
 
-  const { data, isLoading } = useMoodVideosQuery(filterParams);
-
+  const { data, isLoading, refetch, isError } =
+    useMoodVideosQuery(filterParams);
+  console.log(data);
   const {
     createMoodVideo: createVideo,
     updateMoodVideoAsync,
@@ -40,8 +44,8 @@ const MoodVideoManagementPage = () => {
 
   // --- 2. LOCAL UI STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingVideo, setEditingVideo] = useState<MoodVideo | null>(null);
-  const [videoToDelete, setVideoToDelete] = useState<MoodVideo | null>(null);
+  const [editingVideo, setEditingVideo] = useState<IMoodVideo | null>(null);
+  const [videoToDelete, setVideoToDelete] = useState<IMoodVideo | null>(null);
 
   // --- 3. HANDLERS ---
   const handleOpenCreate = () => {
@@ -49,14 +53,14 @@ const MoodVideoManagementPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleEditClick = (video: MoodVideo) => {
+  const handleEditClick = (video: IMoodVideo) => {
     setEditingVideo(video);
     setIsModalOpen(true);
   };
 
   const handleDeleteClick = (id: string) => {
     // Tìm video trong list để lấy title hiển thị lên modal confirm
-    const video = data?.videos.find((v: MoodVideo) => v._id === id);
+    const video = data?.videos.find((v: IMoodVideo) => v._id === id);
     if (video) setVideoToDelete(video);
   };
 
@@ -89,7 +93,42 @@ const MoodVideoManagementPage = () => {
     page: 1,
     pageSize: 12,
   };
-  console.log(data);
+  const onBack = useSmartBack();
+  const hasResults = videos.length > 0;
+
+  const isOffline = !navigator.onLine;
+  // ── Error state ─────────────────────────────────────────────────────────
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Genrepageskeleton cardCount={meta.pageSize} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
+    return (
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
+        </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-12">
       {/* --- HEADER --- */}
@@ -124,16 +163,6 @@ const MoodVideoManagementPage = () => {
           onToggleActive={toggleActive}
           onAddClick={handleOpenCreate}
         />
-
-        {!isLoading && videos.length === 0 && (
-          <div className="mt-8 bg-muted/5 rounded-2xl border border-dashed border-border p-12">
-            <MusicResult
-              status="empty"
-              title="No mood videos found"
-              description="Your search didn't match any videos. Try different keywords or clear filters."
-            />
-          </div>
-        )}
       </div>
 
       {/* --- PAGINATION --- */}

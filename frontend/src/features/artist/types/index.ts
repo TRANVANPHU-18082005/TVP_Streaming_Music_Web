@@ -43,7 +43,7 @@ export interface IArtist {
   totalTracks: number;
   totalAlbums: number;
   totalFollowers: number;
-  totalPlays: number;
+  playCount: number;
   monthlyListeners: number; // Chỉ số quan trọng để hiện: "1.5M người nghe hàng tháng"
 
   // Status & Verification

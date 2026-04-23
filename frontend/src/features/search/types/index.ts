@@ -5,6 +5,7 @@ export interface SearchArtist {
   slug: string;
   avatar: string;
   totalFollowers: number;
+  highlightHtml?: string; // Mới thêm từ backend v4
 }
 
 export interface SearchTrack {
@@ -18,6 +19,7 @@ export interface SearchTrack {
     name: string;
     slug: string;
   };
+  highlightHtml?: string; // Mới thêm từ backend v4
 }
 
 export interface SearchAlbum {
@@ -29,6 +31,7 @@ export interface SearchAlbum {
   artist: {
     name: string;
   };
+  highlightHtml?: string; // Mới thêm từ backend v4
 }
 
 export interface SearchPlaylist {
@@ -41,11 +44,19 @@ export interface SearchPlaylist {
   };
 }
 
+// --- Suggestion Types (Endpoint /suggest) ---
+export interface SuggestItem {
+  id: string;
+  label: string; // Title hoặc Name
+  slug: string;
+  type: "track" | "artist" | "album";
+}
+
 // --- Top Result Union Type ---
-// Top Result có thể là Artist hoặc Track
 export type TopResultItem =
   | ({ type: "artist" } & SearchArtist)
-  | ({ type: "track" } & SearchTrack);
+  | ({ type: "track" } & SearchTrack)
+  | ({ type: "album" } & SearchAlbum);
 
 // --- Main Data Structure ---
 export interface SearchData {
@@ -56,8 +67,14 @@ export interface SearchData {
   playlists: SearchPlaylist[];
 }
 
-// --- API Response ---
-export interface SearchResponse {
-  status: string;
-  data: SearchData;
+// --- API Generic Response ---
+export interface BaseSearchResponse<T> {
+  status: "success" | "error";
+  data: T;
+  message?: string;
 }
+
+// --- Specific API Responses ---
+export type SearchResponse = BaseSearchResponse<SearchData>;
+export type SuggestResponse = BaseSearchResponse<SuggestItem[]>;
+export type TrendingResponse = BaseSearchResponse<string[]>;

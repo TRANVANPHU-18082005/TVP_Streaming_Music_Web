@@ -58,7 +58,7 @@ export const toggleGenreStatus = catchAsync(
 
     res.status(httpStatus.OK).json({
       success: true,
-      message: result.isActive ? "Đã kích hoạt thể loại" : "Đã ẩn thể loại",
+      message: "Đã cập nhật trạng thái thể loại",
       data: result,
     });
   },

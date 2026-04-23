@@ -1,5 +1,6 @@
 import { ITrack } from "@/features";
 import type {
+  IMyPlaylist,
   IPlaylist,
   PlaylistDetailResponse,
   PlaylistFilterParams,
@@ -19,9 +20,12 @@ const playlistApi = {
 
   // Lấy danh sách Playlist của User đang đăng nhập
   getMyPlaylists: async (params?: PlaylistFilterParams) => {
-    const response = await api.get<ApiResponse<IPlaylist[]>>("/playlists/me", {
-      params,
-    });
+    const response = await api.get<ApiResponse<IMyPlaylist[]>>(
+      "/playlists/me",
+      {
+        params,
+      },
+    );
     return response.data;
   },
 

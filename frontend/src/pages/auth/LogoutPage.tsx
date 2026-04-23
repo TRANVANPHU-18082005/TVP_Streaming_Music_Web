@@ -4,9 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner"; // Hoặc notification của bạn
 import authApi from "@/features/auth/api/authApi";
 import { logout } from "@/features";
-import { VinylLoader } from "@/components/ui/MusicLoadingEffects";
+
 import { useAppDispatch } from "@/store/hooks";
 import { persistor } from "@/store/store";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 const LogoutPage = () => {
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ const LogoutPage = () => {
     handleLogout();
   }, [dispatch, navigate]);
 
-  return <VinylLoader fullscreen text="Đang đăng xuất..." />;
+  return <WaveformLoader glass={false} fullscreen text="Đang đăng xuất..." />;
 };
 
 export default LogoutPage;

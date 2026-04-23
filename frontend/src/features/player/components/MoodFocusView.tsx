@@ -1,140 +1,357 @@
-import { useEffect, memo, useCallback, useMemo } from "react";
-import { VideoMoodEngine } from "./VideoMoodEngine";
-import { MoodLyricLine } from "./MoodLyricLine";
-import { ILyricLine, ITrack } from "@/features/track";
+import { useRef, useEffect, useState, useMemo, useCallback, memo } from "react";
 import { motion } from "framer-motion";
-import { RealWaveform } from "@/components/MusicVisualizer";
+import { VideoMoodEngine } from "./VideoMoodEngine";
+import { MoodLyricLine, type MoodWord } from "./MoodLyricLine";
+import { ITrack } from "@/features";
 
-// ── CSS ──────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES — compatible với IKaraokeLine / ILyricSyncLine từ @/features
+// (re-declared locally để tránh tight coupling, duck-typed)
+// ─────────────────────────────────────────────────────────────────────────────
 
-const MFV_STYLE_ID = "__mfv-styles__";
-const MFV_CSS = `
-  @keyframes mfv-breathe {
-    0%,100% { transform: scale(1); }
-    50%      { transform: scale(1.004); }
-  }
-  .mfv-breathing {
-    animation: mfv-breathe 5s ease-in-out infinite;
-  }
-`;
-
-function injectMFVStyles() {
-  if (typeof document === "undefined") return;
-  if (document.getElementById(MFV_STYLE_ID)) return;
-  const s = document.createElement("style");
-  s.id = MFV_STYLE_ID;
-  s.textContent = MFV_CSS;
-  document.head.appendChild(s);
+export interface MoodSyncLine {
+  /** ms */
+  startTime: number;
+  /** ms */
+  endTime: number;
+  text: string;
 }
 
-// ── Binary search ─────────────────────────────────────────────────────────────
+export interface MoodKaraokeLine {
+  /** ms */
+  start: number;
+  /** ms */
+  end: number;
+  text: string;
+  words?: MoodWord[];
+}
 
-function findCurrentIndex(lines: ILyricLine[], timeMs: number): number {
+/** Union — accept either shape */
+export type MoodLine = MoodSyncLine | MoodKaraokeLine;
+
+function isSyncLine(l: MoodLine): l is MoodSyncLine {
+  return "startTime" in l;
+}
+
+function toUnified(l: MoodLine): {
+  start: number;
+  end: number;
+  text: string;
+  words?: MoodWord[];
+} {
+  if (isSyncLine(l)) {
+    return { start: l.startTime, end: l.endTime, text: l.text };
+  }
+  return { start: l.start, end: l.end, text: l.text, words: l.words };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MIN_WORD_MS = 80;
+const QUALITY_THRESH = 0.7;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useRafTime — port từ LyricsView v2 (BUG-1 fix: freeze khi pause)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function useRafTime(currentTime: number, isPlaying: boolean): number {
+  const [rafMs, setRafMs] = useState(() => currentTime * 1000);
+  const base = useRef({
+    audioMs: currentTime * 1000,
+    wallMs: performance.now(),
+  });
+  const rafId = useRef(0);
+  const playing = useRef(isPlaying);
+
+  useEffect(() => {
+    base.current = { audioMs: currentTime * 1000, wallMs: performance.now() };
+    if (!isPlaying) setRafMs(currentTime * 1000);
+  }, [currentTime, isPlaying]);
+
+  useEffect(() => {
+    playing.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const tick = () => {
+      if (playing.current) {
+        const { audioMs, wallMs } = base.current;
+        setRafMs(audioMs + (performance.now() - wallMs));
+      }
+      rafId.current = requestAnimationFrame(tick);
+    };
+    rafId.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId.current);
+  }, []);
+
+  return rafMs;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// bsearch — port từ LyricsView v2 (BUG-4 fix: gap → last-past, không -1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function bsearch(
+  items: Array<{ start: number; end: number }>,
+  ms: number,
+): number {
   let lo = 0,
-    hi = lines.length - 1,
-    candidate = -1;
+    hi = items.length - 1,
+    best = -1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    const line = lines[mid];
-    const end = line.endTime ?? line.startTime + 5000;
-    if (timeMs >= line.startTime && timeMs <= end) return mid;
-    if (timeMs < line.startTime) {
+    if (ms >= items[mid].start && ms <= items[mid].end) return mid;
+    if (ms < items[mid].start) {
       hi = mid - 1;
     } else {
-      candidate = mid;
+      best = mid;
       lo = mid + 1;
     }
   }
-  return candidate;
+  return best;
 }
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// sanitizeWords — tương tự sanitizeKaraokeLines nhưng chỉ cho words[]
+// ─────────────────────────────────────────────────────────────────────────────
+
+function sanitizeWords(
+  words: MoodWord[],
+  lineStart: number,
+  lineEnd: number,
+): MoodWord[] {
+  if (!words.length) return words;
+
+  // 1. Clamp
+  const clamped = words.map((w) => ({
+    word: w.word,
+    startTime: Math.max(lineStart, Math.min(lineEnd - 1, w.startTime)),
+    endTime: Math.max(lineStart + 1, Math.min(lineEnd, w.endTime)),
+  }));
+
+  // 2. Sort
+  clamped.sort((a, b) => a.startTime - b.startTime);
+
+  // 3. Ensure start < end
+  for (const w of clamped) {
+    if (w.endTime <= w.startTime) w.endTime = w.startTime + 1;
+  }
+
+  // 4. Merge short words
+  const merged: typeof clamped = [];
+  for (const w of clamped) {
+    if (w.endTime - w.startTime < MIN_WORD_MS && merged.length > 0) {
+      const prev = merged[merged.length - 1];
+      merged[merged.length - 1] = {
+        word: prev.word + " " + w.word,
+        startTime: prev.startTime,
+        endTime: w.endTime,
+      };
+    } else {
+      merged.push({ ...w });
+    }
+  }
+
+  // 5. Chain end times
+  for (let i = 0; i < merged.length - 1; i++) {
+    merged[i].endTime = merged[i + 1].startTime;
+  }
+  if (merged.length) merged[merged.length - 1].endTime = lineEnd;
+
+  return merged;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ITrack shape (duck-typed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC PROPS
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface MoodFocusViewProps {
-  lyrics: ILyricLine[] | null;
+  lyrics: MoodLine[] | null;
   loading: boolean;
   track: ITrack;
-  currentTimeMs: number;
+  /** Current audio position in SECONDS */
+  currentTime: number;
+  /** TRUE khi audio đang phát — bắt buộc để rAF freeze đúng */
   isPlaying: boolean;
+  /** Accent color for fill and breath overlay */
+  accentColor?: string;
+  /** 0–1; < 0.7 → degraded (no word fill) */
+  qualityScore?: number;
+  /** Callback nhận GIÂY */
   onSeek?: (timeS: number) => void;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// EMPTY / LOADING STATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MoodEmpty = memo(({ loading }: { loading: boolean }) => (
+  <motion.div
+    className="h-full flex flex-col items-center justify-center gap-4 select-none"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ duration: 0.5 }}
+  >
+    {loading ? (
+      <div
+        style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 32 }}
+      >
+        {[0.4, 0.7, 1, 0.7, 0.4].map((h, i) => (
+          <motion.span
+            key={i}
+            style={{
+              display: "block",
+              width: 3,
+              height: "100%",
+              borderRadius: 99,
+              background: "rgba(255,255,255,0.32)",
+              transformOrigin: "bottom",
+              scaleY: h,
+            }}
+            animate={{ scaleY: [h, 1, h] }}
+            transition={{ duration: 0.85, repeat: Infinity, delay: i * 0.1 }}
+          />
+        ))}
+      </div>
+    ) : (
+      <p
+        style={{
+          color: "rgba(255,255,255,0.2)",
+          fontSize: "0.95rem",
+          fontStyle: "italic",
+        }}
+      >
+        Không có lời bài hát
+      </p>
+    )}
+  </motion.div>
+));
+MoodEmpty.displayName = "MoodEmpty";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const MoodFocusView = memo(
   ({
     lyrics,
     loading,
     track,
-    currentTimeMs,
+    currentTime,
     isPlaying,
+    accentColor = "primary",
+    qualityScore = 1,
     onSeek,
   }: MoodFocusViewProps) => {
-    useEffect(() => {
-      injectMFVStyles();
-    }, []);
+    // rAF-interpolated time — đồng bộ 60fps, freeze khi pause
+    const rafMs = useRafTime(currentTime, isPlaying);
+    const degraded = qualityScore < QUALITY_THRESH;
 
-    const currentIndex = useMemo(
-      () => findCurrentIndex(lyrics || [], currentTimeMs),
-      [lyrics, currentTimeMs],
+    // Normalize lyrics to unified shape
+    const unified = useMemo(() => {
+      if (!lyrics) return [];
+      return lyrics.map(toUnified);
+    }, [lyrics]);
+
+    // Sanitize words once per lyrics reference
+    const sanitized = useMemo(
+      () =>
+        unified.map((line) => ({
+          ...line,
+          words: line.words
+            ? sanitizeWords(line.words, line.start, line.end)
+            : undefined,
+        })),
+      [unified],
     );
 
-    const currentLine = lyrics?.[currentIndex] ?? null;
+    // Current line index — gap-safe (best=-1 only before first line)
+    const currentIndex = useMemo(
+      () => bsearch(sanitized, rafMs),
+      [sanitized, rafMs],
+    );
+
+    const currentLine = currentIndex >= 0 ? sanitized[currentIndex] : null;
+
+    // beatKey — index of word currently sung → drives beat pulse in MoodLyricLine
+    const beatKey = useMemo(() => {
+      if (!currentLine?.words?.length) return -1;
+      return currentLine.words.findIndex(
+        (w) => rafMs >= w.startTime && rafMs < w.endTime,
+      );
+    }, [currentLine, rafMs]);
+
+    // Detect karaoke mode: has words
+    const hasWords = Boolean(currentLine?.words?.length && !degraded);
+    const lyricMode = hasWords ? "karaoke" : "synced";
 
     const handleSeek = useCallback(
-      (timeS: number) => {
-        onSeek?.(timeS);
-      },
+      (timeS: number) => onSeek?.(timeS),
       [onSeek],
     );
 
-    if (!lyrics || lyrics.length === 0 || loading) {
-      return (
-        <motion.div
-          className="h-full flex flex-col items-center justify-center gap-4 select-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-          <>
-            <RealWaveform active lines={17} />
-          </>
-        </motion.div>
-      );
-    }
+    // ── Empty / loading ──────────────────────────────────────────────────────
 
-    return (
-      <>
-        <div
-          className={isPlaying ? "mfv-breathing" : ""}
-          style={{
-            position: "relative",
-            width: "100%",
-            height: "100%",
-            overflow: "hidden",
-            background: "transparent",
-            borderRadius: "inherit",
-            willChange: "transform",
-          }}
-          aria-label="Mood focus view"
-        >
-          {/* LAYER 1 — Video (Ken Burns + grain + vignette + accent breath bên trong) */}
+    if (loading || !lyrics || lyrics.length === 0) {
+      return (
+        <div style={{ position: "relative", width: "100%", height: "100%" }}>
           <VideoMoodEngine
             src={track.moodVideo?.videoUrl}
             isPlaying={isPlaying}
-            opacity={0.78}
+            accentColor={accentColor}
+            opacity={0.55}
           />
-
-          {/* LAYER 2 — Lyric: 1 line duy nhất, position absolute bottom */}
-          <MoodLyricLine
-            currentText={currentLine?.text ?? ""}
-            onSeek={onSeek ? handleSeek : undefined}
-            currentStartTimeMs={currentLine?.startTime}
-            currentIndex={currentIndex}
-          />
+          <MoodEmpty loading={loading} />
         </div>
-      </>
+      );
+    }
+
+    // ── Full view ────────────────────────────────────────────────────────────
+
+    return (
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+          background: "transparent",
+          borderRadius: "inherit",
+          willChange: "transform",
+        }}
+        aria-label="Mood focus view"
+      >
+        {/* LAYER 1 — Video background */}
+        <VideoMoodEngine
+          src={track.moodVideo?.videoUrl}
+          isPlaying={isPlaying}
+          accentColor={accentColor}
+          opacity={0.78}
+        />
+
+        {/* LAYER 2 — Lyric: 1 line, word fill, beat pulse */}
+        <MoodLyricLine
+          currentText={currentLine?.text ?? ""}
+          currentWords={currentLine?.words}
+          rafMs={rafMs}
+          currentIndex={currentIndex}
+          currentStartTimeMs={currentLine?.start}
+          beatKey={beatKey}
+          accentColor={accentColor}
+          degraded={degraded}
+          mode={lyricMode}
+          onSeek={onSeek ? handleSeek : undefined}
+        />
+      </div>
     );
   },
 );
+
 MoodFocusView.displayName = "MoodFocusView";
+export default MoodFocusView;

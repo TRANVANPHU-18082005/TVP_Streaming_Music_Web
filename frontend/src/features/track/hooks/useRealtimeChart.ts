@@ -66,7 +66,6 @@ export const useRealtimeChart = () => {
   });
   // ── Normalization ──────────────────────────────────────────────────────────
   const rawData = apiResponse?.data;
-
   // ── FIX #1 — Tính Trend ngay trong useMemo ────────────────────────────────
   // Toàn bộ logic Up/Down/New/Same được tính tại đây, dựa trên snapshot
   // prevRankMapRef.current được chụp TRƯỚC khi tracks thay đổi (xem updateChartCache).

@@ -23,12 +23,7 @@ export const createTrackSchema = z.object({
     genreIds: genreIdsSchema,
 
     // === UPGRADE v2.0: VISUAL CANVAS ===
-    // moodVideoId có thể là ID cụ thể hoặc null (để Worker tự khớp)
     moodVideoId: nullableObjectIdSchema.optional(),
-
-    // === UPGRADE v2.0: LYRICS ===
-    lyricType: z.enum(["none", "plain", "synced", "karaoke"]).default("none"),
-    plainLyrics: z.string().max(15000).optional(), // Chứa cả text thô hoặc mã LRC
 
     trackNumber: z.coerce.number().min(1).default(1),
     diskNumber: z.coerce.number().min(1).default(1),
@@ -55,6 +50,7 @@ export const updateTrackSchema = z.object({
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(2000).optional(),
     isPublic: booleanSchema.optional(),
+    artistId: objectIdSchema.optional(),
 
     albumId: nullableObjectIdSchema.optional(),
     genreIds: genreIdsSchema.optional(),
@@ -62,11 +58,7 @@ export const updateTrackSchema = z.object({
 
     // Nâng cấp update Canvas & Lyrics
     moodVideoId: nullableObjectIdSchema.optional(),
-    lyricType: z.enum(["none", "plain", "synced", "karaoke"]).optional(),
-    plainLyrics: z.string().max(15000).optional(),
-
     tags: tagsSchema.optional(),
-
     trackNumber: z.coerce.number().min(1).optional(),
     diskNumber: z.coerce.number().min(1).optional(),
     releaseDate: z.preprocess(emptyToUndefined, z.coerce.date().optional()),

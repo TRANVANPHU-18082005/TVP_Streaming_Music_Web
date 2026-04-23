@@ -1,6 +1,3 @@
-// components/ui/MarqueeText.tsx
-"use client";
-
 import { memo, useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -51,14 +48,16 @@ export const MarqueeText = memo(
     const pauseFrac = duration > 0 ? (pauseMs / 1000 / duration) * 100 : 0;
     const runEnd = 100 - pauseFrac;
 
+    const animName = `_mq_${Math.abs(shift)}_${duration.toFixed(0)}`;
+
     const keyframes =
       isOverflowing && duration > 0
         ? `
-        @keyframes _mq_${Math.abs(shift)} {
-          0%                    { transform: translateX(0); }
-          ${pauseFrac.toFixed(1)}%  { transform: translateX(0); }
-          ${runEnd.toFixed(1)}%     { transform: translateX(${shift}px); }
-          100%                  { transform: translateX(${shift}px); }
+        @keyframes ${animName} {
+          0% { transform: translateX(0); }
+          ${pauseFrac.toFixed(1)}% { transform: translateX(0); }
+          ${runEnd.toFixed(1)}% { transform: translateX(${shift}px); }
+          100% { transform: translateX(${shift}px); }
         }
       `
         : "";
@@ -66,7 +65,10 @@ export const MarqueeText = memo(
     return (
       <div
         ref={outerRef}
-        className={cn("relative overflow-hidden whitespace-nowrap", className)}
+        className={cn(
+          "group relative overflow-hidden whitespace-nowrap",
+          className,
+        )}
         style={{
           // Fade edges chỉ khi overflow
           ...(isOverflowing && {
@@ -81,12 +83,16 @@ export const MarqueeText = memo(
 
         <span
           ref={innerRef}
-          className="inline-block whitespace-nowrap will-change-transform"
+          className="inline-block whitespace-nowrap will-change-transform group-hover:[animation-play-state:paused]"
           style={
             isOverflowing
               ? {
-                  animation: `_mq_${Math.abs(shift)} ${duration.toFixed(2)}s linear infinite`,
-                  // Dừng khi hover vào track info
+                  // ✅ FIX: Tách nhỏ animation shorthand thành các thuộc tính riêng lẻ
+                  animationName: animName,
+                  animationDuration: `${duration.toFixed(2)}s`,
+                  animationTimingFunction: "linear",
+                  animationIterationCount: "infinite",
+                  // animationPlayState vẫn có thể dùng biến CSS hoặc giá trị trực tiếp
                   animationPlayState: "var(--marquee-play-state, running)",
                 }
               : undefined

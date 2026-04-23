@@ -1,24 +1,3 @@
-/**
- * @file useAudioPlayer.ts
- * @description Hook Core xử lý Audio, HLS streaming, Preload & Analytics qua Socket.
- *
- * @architecture
- *   - audioRef: gắn vào <audio> element trong JSX của caller (KHÔNG tự tạo Audio())
- *   - Tất cả state playback là Redux source of truth
- *   - Local state: chỉ currentTime (smooth progress bar, không đưa vào Redux mỗi giây)
- *
- * @fixes (production hardening)
- *   1. isPlaying stale closure trong Effect C → isPlayingRef
- *   2. seekTo trong Effect E (pause) gây vòng lặp Effect B → bỏ
- *   3. loadedmetadata listener không cleanup → return cleanup trong Effect B
- *   4. handleEnded duplicate repeat:one với slice → để slice là single source of truth
- *   5. HLS main track không cleanup on unmount → return cleanup trong Effect C
- *   6. Preload HLS không cleanup on unmount → return cleanup trong Effect D
- *   7. handleTimeUpdate re-create mỗi khi reduxDuration đổi → reduxDurationRef
- *   8. MediaSession re-setup không cần thiết → dep chỉ còn currentTrack._id
- *   9. seek() helper double-seek với Effect B → sync lastSeekTimeRef trực tiếp
- */
-
 import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
 import {
@@ -117,13 +96,18 @@ export const useAudioPlayer = () => {
     hasCountedView.current = null;
   }, [currentTrack?._id]);
 
+  // console.log(user);
   const handleRecordView = useCallback(
     (trackId: string): void => {
       if (hasCountedView.current === trackId) return;
       if (!socket || !isConnected) return;
       hasCountedView.current = trackId;
       const userId = user?._id ?? user?.id ?? undefined;
-      socket.emit("track_play", { trackId, userId });
+      socket.emit("interact_play", {
+        targetId: trackId,
+        targetType: "track",
+        userId: userId,
+      });
       if (env.NODE_ENV === "development") {
         console.log("[Analytics] track_play emitted:", { trackId, userId });
       }

@@ -1,5 +1,4 @@
 import React, { memo, useMemo } from "react";
-import { Users } from "lucide-react";
 import { Mic2 } from "lucide-react";
 
 import Pagination from "@/utils/pagination";
@@ -13,6 +12,9 @@ import { APP_CONFIG } from "@/config/constants";
 import { Artistpageskeleton, IArtist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
+
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -88,33 +90,6 @@ const PageHero = memo(() => (
 PageHero.displayName = "PageHero";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMPTY ARTISTS — context-aware, matches AlbumPage v4.0 pattern
-// ─────────────────────────────────────────────────────────────────────────────
-const EmptyArtists = memo(
-  ({ isFiltering, keyword }: { isFiltering: boolean; keyword?: string }) => (
-    <div
-      className={cn(
-        "card-base border-dashed shadow-none",
-        "flex items-center justify-center min-h-[380px]",
-        "animate-fade-in",
-      )}
-    >
-      <MusicResult
-        status="empty"
-        title={isFiltering ? "Không tìm thấy kết quả" : "Chưa có nghệ sĩ nào"}
-        description={
-          isFiltering && keyword
-            ? `Không có nghệ sĩ nào phù hợp với "${keyword}". Hãy thử từ khoá khác.`
-            : "Hệ thống chưa tìm thấy nghệ sĩ nào thoả mãn điều kiện này."
-        }
-        icon={<Users className="size-10 text-muted-foreground/30" />}
-      />
-    </div>
-  ),
-);
-EmptyArtists.displayName = "EmptyArtists";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // PAGINATION STRIP — single glass-frosted wrapper (no double-wrap anti-pattern)
 // ─────────────────────────────────────────────────────────────────────────────
 const PaginationStrip = memo(
@@ -164,7 +139,7 @@ const ArtistPage: React.FC = () => {
     clearFilters,
   } = useArtistParams(APP_CONFIG.PAGINATION_LIMIT);
 
-  const { data, isLoading, isError } = useArtistsQuery(filterParams);
+  const { data, isLoading, isError, refetch } = useArtistsQuery(filterParams);
 
   // Granular derived slices — avoids full object diff
   const artists = useMemo(() => data?.artists ?? [], [data?.artists]);
@@ -194,31 +169,42 @@ const ArtistPage: React.FC = () => {
     }),
     [handleSearch, handleFilterChange, clearFilters],
   );
-
+  const onBack = useSmartBack();
   const hasResults = artists.length > 0;
   const isFiltering = Boolean(filterParams.keyword);
-
+  const isOffline = !navigator.onLine;
   // ── Error state ─────────────────────────────────────────────────────────
-  if (isError) {
+  // Initial Load
+  if (isLoading && !hasResults) {
+    return <Artistpageskeleton cardCount={meta.pageSize} />;
+  }
+  // Switching
+  if (isLoading && hasResults) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
+  }
+  // Deep Error
+  if (isError && !hasResults) {
     return (
-      <div className="relative min-h-screen flex items-center justify-center px-4 pb-28">
-        <div className="card-base shadow-elevated p-8 max-w-md w-full text-center animate-scale-in">
-          <MusicResult
-            status="error"
-            title="Không thể tải danh sách Nghệ sĩ"
-            description="Máy chủ gặp sự cố. Vui lòng kiểm tra kết nối và thử lại."
-            secondaryAction={{
-              label: "Tải lại",
-              onClick: () => window.location.reload(),
-            }}
-          />
+      <>
+        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+          <MusicResult variant="error" onRetry={refetch} />
         </div>
+      </>
+    );
+  }
+  // Offline
+  if (isOffline) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult
+          variant="error-network"
+          onRetry={refetch}
+          onBack={onBack}
+        />
       </div>
     );
   }
-  if (isLoading && artists.length === 0) {
-    return <Artistpageskeleton cardCount={meta.pageSize} />;
-  }
+
   return (
     <div className="relative min-h-screen pb-28">
       <SectionAmbient />
@@ -262,10 +248,19 @@ const ArtistPage: React.FC = () => {
               />
             </div>
           ) : !hasResults ? (
-            <EmptyArtists
-              isFiltering={isFiltering}
-              keyword={filterParams.keyword}
-            />
+            !isLoading && !isFiltering ? (
+              <MusicResult
+                variant="empty-artists"
+                description="Artist hiện đang trống"
+              />
+            ) : (
+              <MusicResult
+                variant="empty-artists"
+                description="Không có kết quả! Thử bộ lọc khác "
+                onClearFilters={clearFilters}
+                onBack={onBack}
+              />
+            )
           ) : (
             <div className={GRID_LAYOUT}>
               {artists.map((artist, index) => (

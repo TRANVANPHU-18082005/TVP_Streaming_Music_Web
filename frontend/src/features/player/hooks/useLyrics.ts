@@ -1,4 +1,3 @@
-// hooks/useLyrics.ts
 import { ILyricLine } from "@/features/track";
 import { useEffect, useState, startTransition, useRef } from "react";
 
@@ -9,18 +8,18 @@ export function useLyrics(lyricsUrl?: string) {
   const cacheRef = useRef<Map<string, ILyricLine[]>>(new Map());
 
   useEffect(() => {
-    // ✅ Reset ngay khi url thay đổi
-    startTransition(() => {
+    // No URL → reset everything synchronously, nothing to fetch
+    if (!lyricsUrl) {
       setLyrics([]);
       setError(false);
-    });
-
-    if (!lyricsUrl) {
       setLoading(false);
       return;
     }
 
-    // ✅ Trả cache ngay nếu đã fetch trước đó
+    // Reset state for new URL before anything async happens
+    setError(false);
+
+    // Cache hit → serve immediately, no loading flash
     const cached = cacheRef.current.get(lyricsUrl);
     if (cached) {
       startTransition(() => {
@@ -30,7 +29,10 @@ export function useLyrics(lyricsUrl?: string) {
       return;
     }
 
+    // Cache miss → show loading, then fetch
     setLoading(true);
+    setLyrics([]);
+
     const controller = new AbortController();
 
     fetch(lyricsUrl, { signal: controller.signal })
@@ -43,7 +45,6 @@ export function useLyrics(lyricsUrl?: string) {
           ? data
           : (data.lines ?? []);
 
-        // ✅ Lưu vào cache
         cacheRef.current.set(lyricsUrl, parsed);
 
         startTransition(() => {
@@ -52,12 +53,11 @@ export function useLyrics(lyricsUrl?: string) {
         });
       })
       .catch((err) => {
-        if (err.name !== "AbortError") {
-          startTransition(() => {
-            setError(true);
-            setLoading(false);
-          });
-        }
+        if (err.name === "AbortError") return;
+        startTransition(() => {
+          setError(true);
+          setLoading(false);
+        });
       });
 
     return () => controller.abort();

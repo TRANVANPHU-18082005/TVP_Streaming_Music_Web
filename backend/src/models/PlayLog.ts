@@ -30,5 +30,6 @@ playLogSchema.index({ listenedAt: 1 }, { expireAfterSeconds: 691200 });
 
 // Quan trọng: Thêm Compound Index để tránh Scan toàn bộ bảng
 playLogSchema.index({ userId: 1, listenedAt: 1 });
+playLogSchema.index({ userId: 1, trackId: 1 });
 
 export default mongoose.model<IPlayLog>("PlayLog", playLogSchema);

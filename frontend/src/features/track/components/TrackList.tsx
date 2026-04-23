@@ -355,11 +355,11 @@ ColumnHeaders.displayName = "ColumnHeaders";
 
 const ScrollProgressBar = memo(({ progress }: { progress: number }) => (
   <div
-    className="absolute top-0 left-0 right-0 h-[2px] z-20 overflow-hidden rounded-t-2xl"
+    className="absolute top-[50px] left-0 right-0 h-[2px] z-20 overflow-hidden rounded-t-2xl"
     aria-hidden="true"
   >
     <div
-      className="h-full bg-gradient-to-r from-primary/60 via-primary to-primary/60 transition-[width] duration-75 ease-linear"
+      className="h-full bg-linear-to-r from-primary/60 via-primary to-primary/60 transition-[width] duration-75 ease-linear"
       style={{ width: `${progress * 100}%` }}
     />
   </div>
@@ -571,6 +571,7 @@ export const TrackList = memo(
      * @fix #7 — dispatch trước, onTrackPlay callback sau
      *           (onTrackPlay trước có thể dispatch action → activeId stale trong closure)
      */
+    console.log(tracksRef.current);
     const handlePlayTrack = useCallback(
       (track: ITrack, index: number) => {
         if (activeId === track._id) {
@@ -607,7 +608,7 @@ export const TrackList = memo(
 
     // ── Container style ────────────────────────────────────────
     const scrollStyle: React.CSSProperties = isFixedHeight
-      ? { height: `${maxHeight}px`, overflowY: "auto", overflowX: "hidden" }
+      ? { maxHeight: `${maxHeight}px`, overflowY: "auto", overflowX: "hidden" }
       : { overflowX: "hidden" };
 
     // ── Shared header table (sticky, luar scroll container) ────

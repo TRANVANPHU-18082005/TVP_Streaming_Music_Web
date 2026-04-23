@@ -1,36 +1,49 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { dashboardApi } from "../api/dashboardApi";
-import { DashboardRange } from "@/features/dashboard/schemas/dashboard.schema";
+// features/dashboard/hooks/useDashboard.ts
 
-// Keys để quản lý cache
-export const dashboardKeys = {
-  all: ["dashboard"] as const,
-  analytics: (range: string) =>
-    [...dashboardKeys.all, "analytics", range] as const,
-};
+import { useQuery } from "@tanstack/react-query";
+import { dashboardApi } from "@/features/dashboard/api/dashboardApi";
+import { DashboardData, DashboardRange } from "@/features/dashboard/types";
 
-export const useDashboardAnalytics = (range: DashboardRange) => {
-  return useQuery({
-    // Cache key phụ thuộc vào range. Khi range đổi -> key đổi -> fetch lại
-    queryKey: dashboardKeys.analytics(range),
+const DASHBOARD_QUERY_KEY = (range: DashboardRange) => [
+  "dashboard",
+  "analytics",
+  range,
+];
 
-    // Hàm gọi API
+// Refetch interval: 5 phút
+// - Ngắn hơn DASHBOARD_CACHE_TTL (10 phút) để UI luôn sync với fresh cache
+// - Kết hợp với SWR backend: lần refetch đầu thường nhận stale=false (fresh)
+const REFETCH_INTERVAL = 5 * 60 * 1000;
+
+export interface UseDashboardAnalyticsResult {
+  data: DashboardData | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  isStale: boolean; // NEW: backend SWR flag — true = data đang được refresh ngầm
+  isRefetching: boolean;
+  refetch: () => void;
+}
+
+export function useDashboardAnalytics(
+  range: DashboardRange = "7d",
+): UseDashboardAnalyticsResult {
+  const query = useQuery<DashboardData>({
+    queryKey: DASHBOARD_QUERY_KEY(range),
     queryFn: () => dashboardApi.getAnalytics(range),
-
-    // --- CÁC TÙY CHỌN TỐI ƯU UX ---
-
-    // 1. Giữ dữ liệu cũ hiển thị trong lúc đang fetch dữ liệu mới
-    // (Tránh hiện loading spinner nhấp nháy khi đổi từ 7d sang 30d)
-    placeholderData: keepPreviousData,
-
-    // 2. Thời gian data được coi là "tươi" (Fresh)
-    // Backend cache 10 phút, thì Frontend cũng nên để tầm 5-10 phút để đỡ spam request
-    staleTime: 5 * 60 * 1000,
-
-    // 3. Tự động fetch lại khi focus window (giúp dữ liệu realtime hơn)
-    refetchOnWindowFocus: true,
-
-    // 4. Retry nếu lỗi mạng (tối đa 2 lần)
+    staleTime: REFETCH_INTERVAL,
+    refetchInterval: REFETCH_INTERVAL,
+    refetchOnWindowFocus: false,
     retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
-};
+
+  return {
+    data: query.data,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    // Đọc isStale từ _meta được backend inject vào response
+    isStale: query.data?._meta?.isStale ?? false,
+    isRefetching: query.isRefetching,
+    refetch: query.refetch,
+  };
+}

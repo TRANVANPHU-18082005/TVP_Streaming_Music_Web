@@ -9,6 +9,7 @@ import {
 } from "../queue/interaction.queue";
 import { createModuleLogger } from "../utils/logger";
 import mongoose from "mongoose";
+import recommendationService from "./recommendation.service";
 
 const log = createModuleLogger("InteractionService");
 
@@ -74,7 +75,7 @@ class InteractionService {
       action: newStatus ? "like" : "unlike",
       attemptedAt: Date.now(),
     });
-
+    recommendationService.invalidateUserRecommendCache(userId);
     log.debug("toggleLike success", { userId, targetId, newStatus });
     return {
       isLiked: newStatus,

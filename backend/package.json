@@ -8,8 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "seed": "ts-node src/scripts/seed.ts",
-    "dev:worker": "ts-node src/workers/hls.worker.ts",
-    "start:worker": "node dist/workers/hls.worker.js"
+    "dev:worker": "ts-node src/workers/processTrack.worker.ts",
+    "start:worker": "node dist/workers/processTrack.worker.js"
   },
   "repository": {
     "type": "git",
@@ -57,6 +57,7 @@
     "multer-storage-cloudinary": "^4.0.0",
     "nanoid": "^5.1.7",
     "node-cron": "^4.2.1",
+    "node-vibrant": "^4.0.4",
     "nodemailer": "^7.0.11",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",

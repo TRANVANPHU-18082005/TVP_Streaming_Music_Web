@@ -335,7 +335,7 @@ const AudioFilePicker = memo(
         <input
           id="audio-upload"
           type="file"
-          accept="audio/*"
+          accept="audio/mp3,audio/wav,audio/aac,audio/flac"
           className="sr-only"
           onChange={onFileChange}
           aria-label="Upload audio file"

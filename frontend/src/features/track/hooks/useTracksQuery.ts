@@ -53,7 +53,7 @@ export const useTopTracks = (limit = 10) => {
 export const usePublicTrackDetail = (slugOrId: string) => {
   return useQuery({
     queryKey: trackKeys.detail(slugOrId),
-    queryFn: () => trackApi.getDetail(slugOrId), // Hoặc getById tùy cấu trúc Backend
+    queryFn: () => trackApi.getTrackDetail(slugOrId), // Hoặc getById tùy cấu trúc Backend
     enabled: !!slugOrId,
     staleTime: 10 * 60 * 1000, // Chi tiết bài hát gần như không đổi, Cache 10 phút
     select: (response) => response.data as ITrack,
@@ -103,7 +103,7 @@ export const useAdminTracks = (params: TrackFilterParams) => {
 export const useAdminTrackDetail = (id: string) => {
   return useQuery({
     queryKey: trackKeys.detail(id),
-    queryFn: () => trackApi.getById(id),
+    queryFn: () => trackApi.getTrackDetail(id),
     enabled: !!id,
 
     // 🔥 SMART POLLING: Tự cập nhật trang Detail nếu hệ thống đang encode file Audio
@@ -117,5 +117,38 @@ export const useAdminTrackDetail = (id: string) => {
     },
 
     select: (response) => response.data as ITrack,
+  });
+};
+// ============================================================================
+// PHẦN C: RECOMMENDATION QUERIES (Dành cho tính năng Cá nhân hóa & Autoplay)
+// ============================================================================
+
+/**
+ * 6. Lấy danh sách "Bài hát bạn có thể thích" (Cá nhân hóa)
+ * @param limit - Số lượng bài gợi ý
+ * @param excludeTrackId - ID bài hát đang phát (để loại trừ khỏi danh sách)
+ */
+export const useRecommendedTracks = (limit = 20, excludeTrackId?: string) => {
+  return useQuery({
+    queryKey: trackKeys.recommendations({ limit, excludeTrackId }),
+    queryFn: () => trackApi.getRecommendations(limit, excludeTrackId),
+    // Chỉ fetch khi có data cần thiết (nếu cần thiết)
+    staleTime: 1000 * 60 * 5, // Cache 5 phút vì gợi ý không cần cập nhật tức thời
+    select: (response) => response.tracks,
+  });
+};
+
+/**
+ * 7. Lấy danh sách bài hát tương tự (Dùng cho Autoplay Queue)
+ * @param trackId - Slug hoặc ID của bài hát gốc
+ * @param limit - Số lượng bài tương tự
+ */
+export const useSimilarTracks = (trackId: string, limit = 10) => {
+  return useQuery({
+    queryKey: trackKeys.similar(trackId, { limit }),
+    queryFn: () => trackApi.getSimilarTracks(trackId, limit),
+    enabled: !!trackId, // Chỉ chạy khi có slugOrId
+    staleTime: 1000 * 60 * 10, // Cache 10 phút, dữ liệu tương tự rất ổn định
+    select: (response) => response.tracks,
   });
 };

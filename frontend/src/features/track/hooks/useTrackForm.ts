@@ -150,6 +150,7 @@ export const useTrackForm = ({
 
     try {
       const payload = buildTrackPayload(values, dirtyFields, isEditMode);
+      console.log(values, payload, dirtyFields);
       await onSubmit(payload);
     } catch (error) {
       console.error("Submission error:", error);

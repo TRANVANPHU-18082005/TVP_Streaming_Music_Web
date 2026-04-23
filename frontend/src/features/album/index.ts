@@ -6,7 +6,6 @@ export { default as Albumpageskeleton } from "./components/Albumpageskeleton";
 export { default as AlbumFilters } from "./components/AlbumFilter";
 export { default as AlbumSelector } from "./components/AlbumSelector";
 export { default as PublicAlbumCard } from "./components/PublicAlbumCard";
-export { default as PublicAlbumFilters } from "./components/PublicAlbumFilters";
 export { default as AlbumModal } from "./components/album-modal/index";
 
 export * from "./hooks/useAlbumForm";

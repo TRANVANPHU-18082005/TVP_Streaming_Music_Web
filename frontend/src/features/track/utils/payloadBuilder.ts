@@ -1,13 +1,13 @@
-import { TrackFormValues } from "../schemas/track.schema";
+import { TrackEditFormValues } from "../schemas/track.schema";
 
 export const buildTrackPayload = (
-  values: TrackFormValues,
-  dirtyFields: Partial<Record<keyof TrackFormValues, any>>,
+  values: TrackEditFormValues,
+  dirtyFields: Partial<Record<keyof TrackEditFormValues, any>>,
   isEditMode: boolean,
 ): FormData => {
   const formData = new FormData();
 
-  (Object.keys(values) as Array<keyof TrackFormValues>).forEach((key) => {
+  (Object.keys(values) as Array<keyof TrackEditFormValues>).forEach((key) => {
     const value = values[key];
     const isFile = value instanceof File;
     const isDirty = !!dirtyFields[key];

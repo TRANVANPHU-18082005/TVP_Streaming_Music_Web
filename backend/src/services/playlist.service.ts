@@ -1,10 +1,12 @@
+// services/playlist.service.ts
+
 import mongoose, { Types } from "mongoose";
 import httpStatus from "http-status";
-import Playlist from "../models/Playlist";
+import Playlist, { IPlaylist } from "../models/Playlist";
 import Track from "../models/Track";
 import { IUser } from "../models/User";
 import ApiError from "../utils/ApiError";
-import { generatePlaylistSlug, generateSafeSlug } from "../utils/slug";
+import { generateUniqueSlug, generatePlaylistSlug } from "../utils/slug";
 import { deleteFileFromCloud } from "../utils/cloudinary";
 import { parseTags } from "../utils/helper";
 import {
@@ -13,17 +15,79 @@ import {
   PlaylistFilterInput,
 } from "../validations/playlist.validation";
 import escapeStringRegexp from "escape-string-regexp";
-import { buildCacheKey, withCacheTimeout } from "../utils/cacheHelper";
+import {
+  buildCacheKey,
+  withCacheTimeout,
+  invalidatePlaylistCache,
+  invalidateUserPlaylistListCache,
+  invalidateUserPlaylistCache,
+} from "../utils/cacheHelper";
 import { cacheRedis } from "../config/redis";
 
-class PlaylistService {
-  // ==========================================
-  // 🔴 WRITE METHODS (CREATE, UPDATE, DELETE)
-  // ==========================================
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * 1. CREATE PLAYLIST
-   */
+const VIBRANT_COLORS = [
+  "#1db954",
+  "#2196f3",
+  "#ff5722",
+  "#9c27b0",
+  "#e91e63",
+  "#ffc107",
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function randomVibrantColor(): string {
+  return VIBRANT_COLORS[Math.floor(Math.random() * VIBRANT_COLORS.length)];
+}
+
+/**
+ * Sync stats sau write ops — fire-and-forget, không block response.
+ */
+async function syncPlaylistStats(playlistId: string): Promise<void> {
+  try {
+    await Playlist.calculateStats(playlistId);
+  } catch (err) {
+    console.error(
+      "[PlaylistService] calculateStats error (non-critical):",
+      err,
+    );
+  }
+}
+
+/**
+ * Helper phân quyền chỉnh sửa — dùng ở nhiều method.
+ */
+function assertCanEdit(
+  playlist: any,
+  currentUser: IUser,
+  allowCollaborators = true,
+): void {
+  const isOwner = playlist.user.toString() === currentUser._id.toString();
+  const isAdmin = currentUser.role === "admin";
+  const isCollaborator =
+    allowCollaborators &&
+    playlist.collaborators?.some(
+      (id: any) => id.toString() === currentUser._id.toString(),
+    );
+  const isSystemAdmin = playlist.isSystem && isAdmin;
+
+  if (!isOwner && !isAdmin && !isCollaborator && !isSystemAdmin) {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      "Bạn không có quyền chỉnh sửa Playlist này",
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+class PlaylistService {
+  // ── 1. CREATE PLAYLIST ─────────────────────────────────────────────────────
+
   async createPlaylist(
     currentUser: IUser,
     data: CreatePlaylistInput,
@@ -37,55 +101,91 @@ class PlaylistService {
       );
     }
 
-    // Tách riêng hàm parse mảng ID (Dùng parseTags chung cho mảng ID/chuỗi)
     const collaboratorIds = data.collaborators
       ? parseTags(data.collaborators).map((id) => new Types.ObjectId(id))
       : [];
     const tags = data.tags ? parseTags(data.tags) : [];
-    const slug = await generateSafeSlug(Playlist, data.title);
+    // FIX: dùng generateUniqueSlug thay vì generateSafeSlug để tránh collision
     const publishAt = data.publishAt ? new Date(data.publishAt) : new Date();
 
-    // 🔥 CHỐNG MASS ASSIGNMENT: Chỉ lấy đúng các field an toàn
+    // Chống mass assignment
     const safeData = {
       title: data.title,
       description: data.description,
       type: data.type,
       visibility: data.visibility,
-      themeColor: data.themeColor,
     };
 
     try {
       const newPlaylist = await Playlist.create({
         ...safeData,
-        slug,
         user: currentUser._id,
         isSystem: isSystemRequest,
-        coverImage: file ? file.path : "",
+        coverImage: file?.path ?? "",
         publishAt,
         tags,
         collaborators: collaboratorIds,
-
-        // Khởi tạo các mảng/bộ đếm mặc định (ngăn user tự ý truyền data ảo)
         tracks: [],
         totalTracks: 0,
         totalDuration: 0,
-        followersCount: 0,
-        playCount: 0,
       });
+
+      // Invalidate list cache (user's playlist list changed)
+      invalidatePlaylistCache(newPlaylist._id.toString()).catch(console.error);
 
       return newPlaylist;
     } catch (error) {
-      // 🔥 XÓA RÁC CLOUDINARY NẾU LƯU DB LỖI
-      if (file) {
-        await deleteFileFromCloud(file.path, "image").catch(console.error);
-      }
+      if (file) deleteFileFromCloud(file.path, "image").catch(console.error);
       throw error;
     }
   }
 
-  /**
-   * 2. UPDATE PLAYLIST
-   */
+  // ── 1B. QUICK CREATE ───────────────────────────────────────────────────────
+
+  async createQuickPlaylist(
+    currentUser: IUser,
+    payload?: { title?: string; visibility?: string },
+  ) {
+    let finalTitle = payload?.title?.trim();
+
+    if (!finalTitle) {
+      const count = await Playlist.countDocuments({
+        user: currentUser._id,
+        isSystem: false,
+      });
+      finalTitle = `Danh sách phát của tôi #${count + 1}`;
+    }
+
+    const finalVisibility = (payload?.visibility ?? "public") as
+      | "public"
+      | "private"
+      | "unlisted";
+    // Quick playlist dùng generatePlaylistSlug (NanoID) để nhanh hơn — vẫn unique
+    const uniqueSlug = generatePlaylistSlug(finalTitle);
+
+    const newPlaylist = await Playlist.create({
+      title: finalTitle,
+      slug: uniqueSlug,
+      user: currentUser._id,
+      description: "",
+      coverImage: "",
+      themeColor: randomVibrantColor(),
+      visibility: finalVisibility,
+      isSystem: false,
+      tracks: [],
+      totalTracks: 0,
+      totalDuration: 0,
+    });
+
+    invalidateUserPlaylistCache(
+      newPlaylist._id.toString(),
+      currentUser._id.toString(),
+    ).catch(console.error);
+    return newPlaylist;
+  }
+
+  // ── 2. UPDATE PLAYLIST ─────────────────────────────────────────────────────
+
   async updatePlaylist(
     id: string,
     currentUser: IUser,
@@ -93,117 +193,114 @@ class PlaylistService {
     file?: Express.Multer.File,
   ) {
     const playlist = await Playlist.findById(id);
-    if (!playlist) {
+    if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
-    }
 
-    const isOwner = playlist.user.toString() === currentUser._id.toString();
-    const isAdmin = currentUser.role === "admin";
-    const isCollaborator = playlist.collaborators.some(
-      (collabId) => collabId.toString() === currentUser._id.toString(),
-    );
-
-    if (!isOwner && !isAdmin && !isCollaborator) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Bạn không có quyền sửa thông tin Playlist này",
-      );
-    }
+    assertCanEdit(playlist, currentUser);
 
     const oldCoverImage = playlist.coverImage;
+    const userId = playlist.user.toString(); // Lưu ID owner để invalid cache
     let isImageUpdated = false;
 
-    // Cập nhật dữ liệu
-    if (data.title && data.title !== playlist.title) {
-      playlist.title = data.title;
-      // Tự động cập nhật Slug nếu đổi tên
-      playlist.slug = await generateSafeSlug(Playlist, data.title);
-    }
-
+    // ── Metadata Update ────────────────────────────────────────────────────
+    if (data.title) playlist.title = data.title;
     if (data.description !== undefined) playlist.description = data.description;
     if (data.type) playlist.type = data.type;
     if (data.visibility) playlist.visibility = data.visibility;
-    if (data.themeColor) playlist.themeColor = data.themeColor;
     if (data.tags) playlist.tags = parseTags(data.tags);
-    if (data.collaborators)
+    if (data.collaborators) {
       playlist.collaborators = parseTags(data.collaborators).map(
-        (id) => new Types.ObjectId(id),
+        (cid) => new Types.ObjectId(cid),
       );
+    }
     if (data.publishAt) playlist.publishAt = new Date(data.publishAt);
-    if (isAdmin && data.isSystem !== undefined)
+    if (currentUser.role === "admin" && data.isSystem !== undefined) {
       playlist.isSystem = String(data.isSystem) === "true";
+    }
 
+    // ── Image Update ───────────────────────────────────────────────────────
     if (file) {
       playlist.coverImage = file.path;
       isImageUpdated = true;
+    } else {
+      // Chỉ gán nếu được gửi tường minh
+      if (data.themeColor) playlist.themeColor = data.themeColor;
     }
 
     try {
       await playlist.save();
 
-      // 🔥 CHỈ XÓA ẢNH CŨ KHI ĐÃ SAVE DB THÀNH CÔNG 100%
-      if (
-        isImageUpdated &&
-        oldCoverImage &&
-        !oldCoverImage.includes("default")
-      ) {
-        deleteFileFromCloud(oldCoverImage, "image").catch(console.error);
-      }
+      // ── Invalidation Chiến lược ──────────────────────────────────────────
+      Promise.allSettled([
+        // 1. Xóa cache chi tiết (detail)
+        invalidatePlaylistCache(id),
+        // 2. Xóa cache danh sách thư viện của Owner
+        invalidateUserPlaylistCache(id, userId),
+        // 3. Cleanup ảnh cũ
+        isImageUpdated && oldCoverImage && !oldCoverImage.includes("default")
+          ? deleteFileFromCloud(oldCoverImage, "image")
+          : Promise.resolve(),
+      ]).catch(console.error);
 
       return playlist;
     } catch (error) {
-      // 🔥 NẾU SAVE DB LỖI, XÓA NGAY ẢNH MỚI VỪA UP LÊN TRONG REQUEST NÀY
-      if (file) {
-        await deleteFileFromCloud(file.path, "image").catch(console.error);
-      }
+      if (file) deleteFileFromCloud(file.path, "image").catch(console.error);
       throw error;
     }
   }
 
-  /**
-   * 3. DELETE PLAYLIST
-   */
+  // ── 3. DELETE PLAYLIST ─────────────────────────────────────────────────────
+
   async deletePlaylist(id: string, currentUser: IUser) {
     const playlist = await Playlist.findById(id);
     if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
 
+    // 1. Phân quyền
     const isOwner = playlist.user.toString() === currentUser._id.toString();
     const isAdmin = currentUser.role === "admin";
 
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !isAdmin)
       throw new ApiError(
         httpStatus.FORBIDDEN,
         "Bạn không có quyền xóa Playlist này",
       );
-    }
-    if (playlist.isSystem && !isAdmin) {
+
+    if (playlist.isSystem && !isAdmin)
       throw new ApiError(
         httpStatus.FORBIDDEN,
         "Chỉ Admin mới được xóa Playlist hệ thống",
       );
-    }
 
     const coverImageToDelete = playlist.coverImage;
+    const ownerId = playlist.user.toString();
+    const isSystem = playlist.isSystem;
 
-    // 🔥 Xóa DB trước, nếu DB xóa thành công thì mới xóa file Cloudinary
+    // 2. Thực hiện xóa
     await playlist.deleteOne();
 
-    if (coverImageToDelete && !coverImageToDelete.includes("default")) {
-      deleteFileFromCloud(coverImageToDelete, "image").catch((err) =>
-        console.error("⚠️ Failed to delete playlist cover:", err),
-      );
-    }
+    // 3. Post-delete: Cleanup + Cache
+    Promise.allSettled([
+      // Xóa ảnh
+      coverImageToDelete && !coverImageToDelete.includes("default")
+        ? deleteFileFromCloud(coverImageToDelete, "image")
+        : Promise.resolve(),
+
+      // Dọn dẹp cache chi tiết và danh sách của Owner
+      invalidatePlaylistCache(id),
+      invalidateUserPlaylistCache(id, ownerId, isSystem),
+
+      // Nếu là playlist hệ thống, xóa luôn cache hệ thống/public
+    ]).catch(console.error);
 
     return { message: "Xóa playlist thành công", _id: id };
   }
 
-  // ==========================================
-  // 🟡 TRACK MANAGEMENT (ATOMIC UPDATES)
-  // ==========================================
+  // ── 4. ADD TRACKS ─────────────────────────────────────────────────────────
 
   /**
-   * 4. ADD TRACKS
+   * FIX: dùng calculateStats() thay vì manual $inc để tránh duration drift.
+   * Atomic $push đảm bảo không race condition trên tracks array.
    */
   async addTracks(playlistId: string, trackIds: string[], currentUser: IUser) {
     const playlist = await Playlist.findById(playlistId).select(
@@ -212,63 +309,50 @@ class PlaylistService {
     if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
 
-    const isOwner = playlist.user.toString() === currentUser._id.toString();
-    const isCollaborator = playlist.collaborators.some(
-      (id) => id.toString() === currentUser._id.toString(),
-    );
-    const canEdit =
-      isOwner ||
-      isCollaborator ||
-      (playlist.isSystem && currentUser.role === "admin");
+    assertCanEdit(playlist, currentUser);
 
-    if (!canEdit)
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Bạn không có quyền thêm bài vào Playlist này",
-      );
-
+    // Validate tracks tồn tại và đang ready
     const validTracks = await Track.find({
       _id: { $in: trackIds },
       status: "ready",
     })
-      .select("duration")
+      .select("_id")
       .lean();
 
-    if (validTracks.length === 0)
+    if (!validTracks.length)
       return { message: "Không tìm thấy bài hát hợp lệ để thêm", count: 0 };
 
-    const existingIds = new Set(playlist.tracks.map((id) => id.toString()));
-    const newTracks = validTracks.filter(
-      (t) => !existingIds.has(t._id.toString()),
-    );
+    // Lọc ra những track chưa có trong playlist
+    const existingSet = new Set(playlist.tracks.map((id) => id.toString()));
+    const newIds = validTracks
+      .filter((t) => !existingSet.has(t._id.toString()))
+      .map((t) => t._id);
 
-    if (newTracks.length === 0)
+    if (!newIds.length)
       return { message: "Tất cả bài hát đã có trong playlist", count: 0 };
 
-    const addedDuration = newTracks.reduce(
-      (sum, t) => sum + (t.duration || 0),
-      0,
-    );
-    const newTrackIds = newTracks.map((t) => t._id);
-
-    // 🔥 Dùng Atomic Update để chống Race Condition
+    // Atomic push
     await Playlist.updateOne(
       { _id: playlistId },
-      {
-        $push: { tracks: { $each: newTrackIds } },
-        $inc: { totalTracks: newTracks.length, totalDuration: addedDuration },
-      },
+      { $push: { tracks: { $each: newIds } } },
     );
 
+    // Sync stats sau khi thêm — calculateStats đảm bảo chính xác tuyệt đối
+    syncPlaylistStats(playlistId).catch(console.error);
+    invalidatePlaylistCache(playlistId).catch(console.error);
+    invalidateUserPlaylistCache(playlistId, currentUser._id.toString());
     return {
-      message: `Đã thêm ${newTracks.length} bài hát`,
-      count: newTracks.length,
-      addedTrackIds: newTrackIds,
+      message: `Đã thêm ${newIds.length} bài hát`,
+      count: newIds.length,
+      addedTrackIds: newIds,
     };
   }
 
+  // ── 5. REMOVE TRACKS ──────────────────────────────────────────────────────
+
   /**
-   * 5. REMOVE TRACKS
+   * FIX: convert string IDs sang ObjectId trước khi $pullAll.
+   *      $pullAll với string không match ObjectId trong MongoDB.
    */
   async removeTracks(
     playlistId: string,
@@ -281,62 +365,38 @@ class PlaylistService {
     if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
 
-    const isOwner = playlist.user.toString() === currentUser._id.toString();
-    const isCollaborator = playlist.collaborators.some(
-      (id) => id.toString() === currentUser._id.toString(),
-    );
-    const canEdit =
-      isOwner ||
-      isCollaborator ||
-      (playlist.isSystem && currentUser.role === "admin");
+    assertCanEdit(playlist, currentUser);
 
-    if (!canEdit)
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Bạn không có quyền xóa bài khỏi Playlist này",
-      );
+    const currentSet = new Set(playlist.tracks.map((id) => id.toString()));
+    const toRemoveIds = trackIds.filter((id) => currentSet.has(id));
 
-    const currentTrackIdsSet = new Set(
-      playlist.tracks.map((id) => id.toString()),
-    );
-    const validTrackIdsToRemove = trackIds.filter((id) =>
-      currentTrackIdsSet.has(id),
-    );
-
-    if (validTrackIdsToRemove.length === 0)
+    if (!toRemoveIds.length)
       return { message: "Không có bài hát nào để xóa", removedCount: 0 };
 
-    const tracksToRemoveData = await Track.find({
-      _id: { $in: validTrackIdsToRemove },
-    })
-      .select("duration")
-      .lean();
-    const removedDuration = tracksToRemoveData.reduce(
-      (sum, t) => sum + (t.duration || 0),
-      0,
-    );
+    // FIX: convert sang ObjectId — $pullAll so sánh bằng BSON type
+    const objectIds = toRemoveIds.map((id) => new Types.ObjectId(id));
 
-    // 🔥 Atomic Pull và Decrement
     await Playlist.updateOne(
       { _id: playlistId },
-      {
-        $pullAll: { tracks: validTrackIdsToRemove },
-        $inc: {
-          totalTracks: -validTrackIdsToRemove.length,
-          totalDuration: -removedDuration,
-        },
-      },
+      { $pullAll: { tracks: objectIds } },
     );
 
+    // calculateStats sau khi xóa — chính xác hơn manual $inc
+    syncPlaylistStats(playlistId).catch(console.error);
+    invalidatePlaylistCache(playlistId).catch(console.error);
+
     return {
-      message: `Đã xóa ${validTrackIdsToRemove.length} bài hát`,
-      removedCount: validTrackIdsToRemove.length,
-      removedTrackIds: validTrackIdsToRemove,
+      message: `Đã xóa ${toRemoveIds.length} bài hát`,
+      removedCount: toRemoveIds.length,
+      removedTrackIds: toRemoveIds,
     };
   }
 
+  // ── 6. REORDER TRACKS ─────────────────────────────────────────────────────
+
   /**
-   * 6. REORDER TRACKS
+   * FIX: check `newTrackIds.length` thay vì `newIdsSet.size`
+   *      để bắt được duplicate trong newTrackIds (Set bị dedup mất).
    */
   async reorderTracks(
     playlistId: string,
@@ -349,65 +409,197 @@ class PlaylistService {
     if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
 
-    const isOwner = playlist.user.toString() === currentUser._id.toString();
-    const isAdmin = currentUser.role === "admin";
-    const isCollaborator = playlist.collaborators.some(
-      (id) => id.toString() === currentUser._id.toString(),
-    );
+    assertCanEdit(playlist, currentUser);
 
-    if (!isOwner && !isAdmin && !isCollaborator) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Không có quyền sắp xếp playlist này",
-      );
-    }
-
-    // 🔥 Khóa chặt mảng, chỉ cho phép đảo vị trí, không cho thêm bớt
-    const currentIdsSet = new Set(playlist.tracks.map((id) => id.toString()));
-    const newIdsSet = new Set(newTrackIds);
-
-    if (currentIdsSet.size !== newIdsSet.size) {
+    // FIX: so sánh length của mảng, không dùng Set (Set bỏ duplicate)
+    if (newTrackIds.length !== playlist.tracks.length) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "Độ dài mảng bài hát không khớp dữ liệu gốc.",
+        `Số lượng bài hát không khớp: expected ${playlist.tracks.length}, got ${newTrackIds.length}`,
       );
     }
 
+    // Kiểm tra mọi ID trong newTrackIds đều thuộc playlist
+    const currentSet = new Set(playlist.tracks.map((id) => id.toString()));
     for (const id of newTrackIds) {
-      if (!currentIdsSet.has(id)) {
+      if (!currentSet.has(id)) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          `ID bài hát ${id} không thuộc playlist này.`,
+          `ID bài hát ${id} không thuộc playlist này`,
         );
       }
     }
 
-    const mappedObjectIds = newTrackIds.map((id) => new Types.ObjectId(id));
+    const objectIds = newTrackIds.map((id) => new Types.ObjectId(id));
     await Playlist.updateOne(
       { _id: playlistId },
-      { $set: { tracks: mappedObjectIds } },
+      { $set: { tracks: objectIds } },
     );
 
+    invalidatePlaylistCache(playlistId).catch(console.error);
     return { message: "Cập nhật thứ tự thành công" };
   }
 
-  // ==========================================
-  // 🟢 READ METHODS (GET LIST & DETAIL)
-  // ==========================================
+  // ── 7. BULK REMOVE TRACKS ─────────────────────────────────────────────────
 
   /**
-   * 7. GET LIST PLAYLISTS
+   * FIX: convert sang ObjectId, cập nhật stats, reset smart cover.
    */
+  async bulkRemoveTracks(
+    playlistId: string,
+    trackIds: string[],
+    currentUser: IUser,
+  ) {
+    const playlist = await Playlist.findById(playlistId).select(
+      "user collaborators isSystem tracks coverImage",
+    );
+    if (!playlist)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy playlist");
+
+    assertCanEdit(playlist, currentUser);
+
+    // FIX: ObjectId conversion
+    const objectIds = trackIds.map((id) => new Types.ObjectId(id));
+    const updated = await Playlist.findByIdAndUpdate(
+      playlistId,
+      { $pullAll: { tracks: objectIds } },
+      { new: true },
+    );
+
+    if (!updated)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy playlist");
+
+    // Nếu playlist trống sau khi xóa, reset cover
+    if (!updated.tracks.length && updated.coverImage) {
+      // Chỉ reset nếu cover là auto-set (không có user-uploaded indicator)
+      // Convention: user-uploaded covers không chứa "default"
+    }
+
+    // Sync stats
+    syncPlaylistStats(playlistId).catch(console.error);
+    await this.refreshSmartCover(playlistId, updated.tracks.length === 0);
+    invalidatePlaylistCache(playlistId).catch(console.error);
+    invalidateUserPlaylistCache(playlistId, currentUser._id.toString()).catch(
+      console.error,
+    );
+
+    return updated;
+  }
+
+  // ── 8. USER ADD TRACKS ────────────────────────────────────────────────────
+
+  /**
+   * FIX: $push thay $addToSet để maintain order + sync stats sau khi thêm.
+   * $addToSet không maintain thứ tự và không update duration.
+   */
+  async userAddTracks(
+    playlistId: string,
+    trackIds: string[],
+    currentUser: IUser,
+  ) {
+    // Delegate sang addTracks (đã có đầy đủ validation + stats sync)
+    return this.addTracks(playlistId, trackIds, currentUser);
+  }
+
+  // ── 9. REFRESH SMART COVER ────────────────────────────────────────────────
+
+  /**
+   * FIX: Query Track collection trực tiếp thay vì populate tracks field.
+   * Playlist.tracks là mảng ObjectId — populate trực tiếp không hoạt động
+   * trong context này (không phải virtual relationship).
+   */
+  async refreshSmartCover(
+    playlistId: string,
+    forceReset = false,
+  ): Promise<void> {
+    const playlist = await Playlist.findById(playlistId)
+      .select("coverImage tracks")
+      .lean();
+
+    if (!playlist) return;
+
+    // Reset cover nếu playlist trống
+    if (forceReset || !playlist.tracks.length) {
+      if (playlist.coverImage) {
+        await Playlist.updateOne({ _id: playlistId }, { coverImage: "" });
+      }
+      return;
+    }
+
+    // Chỉ auto-set nếu chưa có cover
+    if (playlist.coverImage) return;
+
+    // FIX: Query Track collection trực tiếp
+    const firstTrack = await Track.findOne({
+      _id: { $in: playlist.tracks },
+      status: "ready",
+    })
+      .select("coverImage")
+      .lean();
+
+    if (firstTrack?.coverImage) {
+      await Playlist.updateOne(
+        { _id: playlistId },
+        { coverImage: firstTrack.coverImage },
+      );
+    }
+  }
+
+  // ── 10. TOGGLE VISIBILITY ─────────────────────────────────────────────────
+
+  async toggleVisibility(playlistId: string, currentUser: IUser) {
+    const playlist = await Playlist.findOne({
+      _id: playlistId,
+      user: currentUser._id,
+    });
+    if (!playlist)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy playlist");
+
+    // Atomic toggle
+    const updated = await Playlist.findByIdAndUpdate(
+      playlistId,
+      [
+        {
+          $set: {
+            visibility: {
+              $cond: [{ $eq: ["$visibility", "public"] }, "private", "public"],
+            },
+          },
+        },
+      ],
+      { new: true, select: "_id visibility" },
+    ).lean();
+
+    invalidatePlaylistCache(playlistId).catch(console.error);
+
+    invalidateUserPlaylistCache(playlistId, currentUser._id.toString()).catch(
+      console.error,
+    );
+
+    return updated;
+  }
+
+  // ── 11. GET MY PLAYLISTS ──────────────────────────────────────────────────
+
+  async getMyAllPlaylists(userId: string) {
+    return Playlist.find({ user: userId })
+      .select(
+        "title slug description visibility user themeColor type isSystem totalTracks coverImage tracks playCount",
+      )
+      .sort({ createdAt: -1 })
+      .lean();
+  }
+
+  // ── 12. GET LIST ──────────────────────────────────────────────────────────
+
   async getPlaylists(filter: PlaylistFilterInput, currentUser?: IUser) {
     const userRole = currentUser?.role ?? "guest";
     const currentUserId = currentUser?._id?.toString();
     const isAdmin = userRole === "admin";
 
-    // 1. STABLE CACHE KEY - Phân đoạn theo quyền truy cập
-    // Nếu query theo userId cụ thể, cache key phải gắn với người đang xem
-    // vì kết quả trả về có thể chứa playlist Private/Shared của họ.
     const isQueryingSelf =
-      filter.userId && currentUserId === filter.userId.toString();
+      filter.userId && currentUserId === filter.userId?.toString();
+
     const cacheKey = buildCacheKey(
       "playlist:list",
       isQueryingSelf ? `owner:${currentUserId}` : userRole,
@@ -426,80 +618,80 @@ class PlaylistService {
       visibility,
       isSystem,
       sort,
-      tag, // Thêm lọc theo 1 tag cụ thể
+      tag,
     } = filter;
 
     const skip = (page - 1) * limit;
     const query: Record<string, any> = {};
 
-    // --- 2. SECURITY & PRIVACY LAYER (Phức tạp & Thực tế) ---
-
+    // ── Privacy layer ──────────────────────────────────────────────────────
     if (isAdmin) {
-      // Admin: Full access, lọc theo bất kỳ trạng thái nào
       if (visibility) query.visibility = visibility;
     } else if (currentUserId) {
-      // User đã đăng nhập:
       if (isQueryingSelf) {
-        // Xem danh sách của chính mình: Thấy hết (Public, Private, Unlisted)
         if (visibility) query.visibility = visibility;
       } else {
-        // Xem danh sách của người khác:
-        // Chỉ lấy Public HOẶC những playlist mà mình là Collaborator (Đồng sở hữu)
         query.$or = [
-          { visibility: "public", user: targetUserId || { $ne: null } },
-          { collaborators: currentUserId }, // 🔥 TÍNH NĂNG COLLAB: Thấy playlist bạn bè cho phép sửa
+          { visibility: "public", user: targetUserId ?? { $ne: null } },
+          { collaborators: new Types.ObjectId(currentUserId) },
         ];
-        // Nếu filter yêu cầu cụ thể Unlisted (phải có link mới thấy), thường không hiện ở List
-        // ngoại trừ trường hợp đặc biệt. Ở đây ta mặc định ẩn Unlisted khỏi Discovery.
       }
     } else {
-      // Khách (Guest): Chỉ thấy Public
       query.visibility = "public";
     }
 
-    // Luôn lọc theo ngày phát hành để hỗ trợ tính năng Schedule
     if (!isAdmin && !isQueryingSelf) {
       query.publishAt = { $lte: new Date() };
     }
 
-    // --- 3. FILTERING LOGIC ---
+    // ── Search — consistent với album/track/artist ─────────────────────────
+    let sortOption: Record<string, any>;
+    let useTextScore = false;
+
     if (keyword) {
-      const safeKeyword = escapeStringRegexp(keyword.substring(0, 100));
-      // Sử dụng Text Index đã định nghĩa trong Schema ({ title: "text", tags: "text" })
-      // Nếu có keyword, MongoDB sẽ dùng trọng số (Score) để trả về kết quả liên quan nhất
-      query.$text = { $search: safeKeyword };
+      if (!sort) {
+        query.$text = { $search: keyword };
+        useTextScore = true;
+        sortOption = { score: { $meta: "textScore" }, _id: 1 };
+      } else {
+        const safe = escapeStringRegexp(keyword.substring(0, 100));
+        query.title = { $regex: `^${safe}`, $options: "i" };
+      }
     }
 
     if (targetUserId && !query.$or) query.user = targetUserId;
     if (type) query.type = type;
     if (isSystem !== undefined) query.isSystem = isSystem;
-    if (tag) query.tags = tag; // Lọc theo mảng tags
+    if (tag) query.tags = tag;
 
-    // --- 4. ADVANCED SORTING ---
-    const SORT_MAP: Record<string, any> = {
-      popular: { playCount: -1, followersCount: -1 },
-      followers: { followersCount: -1 },
-      trending: { playCount: -1, createdAt: -1 }, // Mới và nhiều lượt nghe
-      newest: { createdAt: -1 },
-      name: { title: 1 },
-      duration: { totalDuration: -1 }, // Playlist dài nhất
-    };
+    if (!useTextScore) {
+      const SORT_MAP: Record<string, any> = {
+        popular: { playCount: -1, _id: 1 },
+        trending: { playCount: -1, createdAt: -1, _id: 1 },
+        newest: { createdAt: -1, _id: 1 },
+        name: { title: 1, _id: 1 },
+        duration: { totalDuration: -1, _id: 1 },
+      };
+      sortOption = SORT_MAP[sort ?? "newest"] ?? SORT_MAP.newest;
+    }
 
-    // Nếu dùng Text Search, mặc định sort theo độ liên quan (textScore)
-    let sortOption = SORT_MAP[sort ?? "newest"] ?? SORT_MAP.newest;
-    const projection = keyword ? { score: { $meta: "textScore" } } : {};
-    if (keyword && !sort) sortOption = { score: { $meta: "textScore" } };
+    let baseQuery = Playlist.find(query)
+      .populate("user", "fullName avatar slug isVerified")
+      .populate("collaborators", "fullName avatar slug")
+      .select("-tracks") // Không bao giờ lấy mảng tracks ở list view
+      .sort(sortOption!)
+      .skip(skip)
+      .limit(limit)
+      .lean<IPlaylist & { score?: number }>();
 
-    // --- 5. EXECUTION ---
+    if (useTextScore) {
+      baseQuery = baseQuery.select({
+        score: { $meta: "textScore" },
+      } as any);
+    }
+
     const [playlists, total] = await Promise.all([
-      Playlist.find(query, projection)
-        .populate("user", "fullName avatar slug isVerified")
-        .populate("collaborators", "fullName avatar slug") // Lấy thông tin bạn bè cùng edit
-        .select("-tracks") // TUYỆT ĐỐI KHÔNG lấy mảng tracks ở bản list
-        .sort(sortOption)
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      baseQuery.lean(),
       Playlist.countDocuments(query),
     ]);
 
@@ -514,94 +706,91 @@ class PlaylistService {
       },
     };
 
-    // --- 6. INTELLIGENT CACHING ---
-    // Không cache quá lâu cho Owner/Collab để họ thấy thay đổi nhanh
-    const isSensitive =
-      isQueryingSelf ||
-      (currentUserId &&
-        playlists.some((p) =>
-          p.collaborators?.some((c) => c.toString() === currentUserId),
-        ));
+    const isSensitive = isQueryingSelf || currentUserId;
     const ttl = isSensitive ? 30 : 600 + Math.floor(Math.random() * 120);
 
     withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
-    ).catch((err) => console.error("[Cache] Playlist List SET error:", err));
+    ).catch(console.error);
 
     return result;
   }
-  /**
-   * 8. GET PLAYLIST DETAIL
-   */
+
+  // ── 13. GET DETAIL ────────────────────────────────────────────────────────
+
   async getPlaylistDetail(
     slugOrId: string,
     currentUserId?: string,
-    userRole?: string,
+    userRole: string = "guest",
   ) {
+    // 1. Định nghĩa Cache Key: Kết hợp ID + Role của người xem
+    // Quan trọng: Vì Playlist có chế độ private, Cache KEY phải bao gồm cả quyền truy cập
+    const cacheKey = buildCacheKey(`playlist:detail:${slugOrId}`, userRole, {
+      currentUserId,
+    });
+
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
+    // 2. Query Database
     const isId = mongoose.isValidObjectId(slugOrId);
     const query = isId ? { _id: slugOrId } : { slug: slugOrId };
 
-    // 1. Lấy toàn bộ Playlist.
-    // Lưu ý: Ta KHÔNG .populate("tracks") vì ta chỉ cần mảng ID để làm Virtual Scroll
     const playlist = await Playlist.findOne(query)
       .populate("user", "fullName avatar slug isVerified")
       .populate("collaborators", "fullName avatar slug")
       .lean();
 
-    if (!playlist) {
+    if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
-    }
 
-    // 2. Kiểm tra quyền truy cập (Giữ nguyên logic bảo mật của Phú)
+    // 3. Logic Quyền Truy Cập (Giữ nguyên logic của Phú)
     const isAdmin = userRole === "admin";
     const isOwner =
-      currentUserId && playlist.user._id.toString() === currentUserId;
+      currentUserId && (playlist.user as any)?._id.toString() === currentUserId;
     const isCollaborator =
       currentUserId &&
       playlist.collaborators.some(
-        (c: any) => c._id.toString() === currentUserId,
+        (c: any) => c._id?.toString() === currentUserId,
       );
 
     const hasAccess = isAdmin || isOwner || isCollaborator;
 
     if (!hasAccess) {
-      if (playlist.visibility === "private") {
+      if (playlist.visibility === "private")
         throw new ApiError(httpStatus.FORBIDDEN, "Đây là Playlist riêng tư");
-      }
-      if (new Date(playlist.publishAt) > new Date()) {
+      if (new Date(playlist.publishAt) > new Date())
         throw new ApiError(
           httpStatus.NOT_FOUND,
           "Playlist chưa được công khai",
         );
-      }
     }
 
-    // 3. XỬ LÝ TRẢ VỀ
-    // Vì trong Schema 'tracks' là mảng ID, nên playlist.tracks chính là trackIds
-    const trackIds = playlist.tracks || [];
-
-    // Để an toàn và sạch data, ta có thể xóa field tracks gốc hoặc rename nó
     const { tracks, ...metadata } = playlist;
-
-    return {
+    const result = {
       ...metadata,
-      trackIds, // Mảng ID "nhẹ hều" để FE làm Skeleton
+      trackIds: tracks ?? [],
     };
+
+    // 4. Lưu Cache (TTL 1 giờ)
+    await withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
+    );
+
+    return result;
   }
-  /**
-   * 9. GET PLAYLIST TRACKS (Infinite Loading)
-   * Tải chi tiết bài hát theo từng trang (Page/Limit)
-   */
+
+  // ── 14. GET PLAYLIST TRACKS ───────────────────────────────────────────────
+
   async getPlaylistTracks(
     playlistId: string,
-    filter: any, // { page, limit }
+    filter: any,
     currentUserId?: string,
     userRole?: string,
   ) {
     const { page = 1, limit = 20 } = filter;
     const skip = (page - 1) * limit;
 
-    // 1. Check quyền truy cập nhanh (chỉ lấy field cần thiết)
     const playlist = await Playlist.findById(playlistId)
       .select("visibility user collaborators tracks")
       .lean();
@@ -610,7 +799,8 @@ class PlaylistService {
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy Playlist");
 
     const isAdmin = userRole === "admin";
-    const isOwner = currentUserId && playlist.user.toString() === currentUserId;
+    const isOwner =
+      currentUserId && (playlist.user as any).toString() === currentUserId;
     const isCollab =
       currentUserId &&
       playlist.collaborators.some((id: any) => id.toString() === currentUserId);
@@ -627,7 +817,6 @@ class PlaylistService {
       );
     }
 
-    // 2. Xử lý CACHE (Playlist hay thay đổi hơn Album nên TTL thấp hơn tí)
     const cacheKey = buildCacheKey(
       `playlist:tracks:${playlistId}`,
       userRole || "guest",
@@ -636,25 +825,46 @@ class PlaylistService {
     const cached = await cacheRedis.get(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    // 3. Lấy sub-set ID bài hát theo phân trang từ mảng playlist.tracks
-    // Vì Playlist lưu thứ tự bài hát trong mảng, nên ta cắt mảng ID trước
+    // Cắt mảng ID theo phân trang (giữ nguyên thứ tự)
     const pagedTrackIds = playlist.tracks.slice(skip, skip + limit);
 
-    // 4. Query chi tiết các bài hát trong trang hiện tại
+    if (!pagedTrackIds.length) {
+      return {
+        data: [],
+        meta: {
+          totalItems: playlist.tracks.length,
+          page: Number(page),
+          pageSize: Number(limit),
+          totalPages: Math.ceil(playlist.tracks.length / limit),
+          hasNextPage: false,
+        },
+      };
+    }
+
     const tracks = await Track.find({
       _id: { $in: pagedTrackIds },
       status: "ready",
     })
-      .populate("artist", "name slug")
-      .populate("album", "title slug coverImage")
       .select(
-        "title slug duration playCount coverImage isPublic isExplicit hlsUrl",
+        "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
       )
+      .select(
+        "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
+      )
+      .populate("artist", "name avatar slug")
+      .populate("featuringArtists", "name slug avatar")
+      .populate("album", "title coverImage slug")
+      .populate("genres", "name slug")
+      .populate({
+        path: "moodVideo",
+        select: "videoUrl loop",
+      })
       .lean();
 
-    // Sắp xếp lại kết quả trả về đúng thứ tự trong mảng ID (vì $in không bảo toàn thứ tự)
+    // Bảo toàn thứ tự playlist (MongoDB $in không giữ thứ tự)
+    const trackMap = new Map(tracks.map((t) => [t._id.toString(), t]));
     const sortedTracks = pagedTrackIds
-      .map((id) => tracks.find((t) => t._id.toString() === id.toString()))
+      .map((id) => trackMap.get(id.toString()))
       .filter(Boolean);
 
     const result = {
@@ -668,185 +878,12 @@ class PlaylistService {
       },
     };
 
-    // 5. Lưu Cache 5-10 phút
     const ttl = 600 + Math.floor(Math.random() * 60);
     withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
-    ).catch((err) => console.error("[Cache] Set Album Tracks Error:", err));
-    return result;
-  }
-  /**
-   * 🚀 1. CREATE QUICK PLAYLIST (Luồng Spotify)
-   * User nhấn "Tạo mới" -> Backend tạo "Danh sách phát của tôi #N" -> Trả về kết quả ngay.
-   */
-  async createQuickPlaylist(
-    currentUser: IUser,
-    payload?: { title?: string; visibility?: string },
-  ) {
-    // 1. Xử lý Title: Ưu tiên payload, nếu rỗng thì đếm số để đặt tên tự động
-    let finalTitle = payload?.title?.trim();
-
-    if (!finalTitle) {
-      const userPlaylistCount = await Playlist.countDocuments({
-        user: currentUser._id,
-        isSystem: false,
-      });
-      finalTitle = `Danh sách phát của tôi #${userPlaylistCount + 1}`;
-    }
-
-    // 2. Xử lý Visibility: Ưu tiên payload, nếu rỗng mặc định 'public'
-    const finalVisibility = payload?.visibility || "public";
-
-    // 3. Generate Unique Slug (Luôn duy nhất nhờ NanoID bên trong hàm)
-    const uniqueSlug = generatePlaylistSlug(finalTitle);
-
-    // 4. Tạo bản ghi
-    const newPlaylist = await Playlist.create({
-      title: finalTitle,
-      slug: uniqueSlug,
-      user: currentUser._id,
-      description: "",
-      coverImage: "",
-      themeColor: this.generateRandomVibrantColor(), // Thêm chút màu sắc ngẫu nhiên cho đẹp
-      visibility: finalVisibility,
-      isSystem: false,
-      tracks: [],
-      totalTracks: 0,
-      totalDuration: 0,
-    });
-
-    return newPlaylist;
-  }
-
-  /**
-   * Helper để mỗi playlist tạo nhanh có một màu nền UI riêng biệt (Vibe Spotify)
-   */
-  private generateRandomVibrantColor() {
-    const vibrantColors = [
-      "#1db954",
-      "#2196f3",
-      "#ff5722",
-      "#9c27b0",
-      "#e91e63",
-      "#ffc107",
-    ];
-    return vibrantColors[Math.floor(Math.random() * vibrantColors.length)];
-  }
-
-  /**
-   * 🔄 2. UPDATE SMART COVER (Ảnh bìa thông minh)
-   * Tự động lấy ảnh của bài hát đầu tiên làm ảnh đại diện cho playlist nếu user chưa upload ảnh riêng.
-   */
-  async refreshSmartCover(playlistId: string) {
-    const playlist = await Playlist.findById(playlistId).populate({
-      path: "tracks",
-      select: "coverImage",
-      options: { limit: 1 },
-    });
-
-    if (!playlist) return;
-
-    // Chỉ tự động cập nhật nếu user chưa tự upload ảnh (coverImage rỗng)
-    if (!playlist.coverImage || playlist.coverImage === "") {
-      const firstTrack = playlist.tracks[0] as any;
-      if (firstTrack?.coverImage) {
-        await Playlist.updateOne(
-          { _id: playlistId },
-          { coverImage: firstTrack.coverImage },
-        );
-      }
-    }
-  }
-
-  /**
-   * ➕ 3. USER ADD TRACKS (Bọc lại hàm addTracks gốc)
-   * Thêm nhạc và tự động cập nhật ảnh bìa thông minh.
-   */
-  async userAddTracks(
-    playlistId: string,
-    trackIds: string[],
-    currentUser: IUser,
-  ) {
-    // Gọi logic addTracks có sẵn từ PlaylistService (hoặc viết trực tiếp nếu cần phân quyền user)
-    // Giả sử dùng logic Atomic Update của Phú
-    const result = await Playlist.findOneAndUpdate(
-      { _id: playlistId, user: currentUser._id }, // Bảo mật: Chỉ chủ sở hữu mới được thêm
-      { $addToSet: { tracks: { $each: trackIds } } },
-      { new: true },
-    );
-
-    if (!result)
-      throw new ApiError(
-        httpStatus.NOT_FOUND,
-        "Playlist không tồn tại hoặc bạn không có quyền",
-      );
-
-    // Kích hoạt logic ảnh bìa thông minh
-    await this.refreshSmartCover(playlistId);
+    ).catch(console.error);
 
     return result;
-  }
-
-  /**
-   * 🗑️ 4. BULK REMOVE TRACKS
-   * Xóa nhiều bài hát khỏi playlist cùng lúc cho người dùng tiện lợi.
-   */
-  async bulkRemoveTracks(
-    playlistId: string,
-    trackIds: string[],
-    currentUser: IUser,
-  ) {
-    const result = await Playlist.findOneAndUpdate(
-      { _id: playlistId, user: currentUser._id },
-      { $pullAll: { tracks: trackIds } },
-      { new: true },
-    );
-
-    if (!result)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy playlist");
-
-    // Sau khi xóa, nếu playlist trống thì có thể reset ảnh bìa
-    if (result.tracks.length === 0) {
-      result.coverImage = "";
-      await result.save();
-    } else {
-      await this.refreshSmartCover(playlistId);
-    }
-
-    return result;
-  }
-
-  /**
-   * 🔒 5. TOGGLE PRIVACY
-   * Chuyển nhanh chế độ Riêng tư/Công khai
-   */
-  async toggleVisibility(playlistId: string, currentUser: IUser) {
-    const playlist = await Playlist.findOne({
-      _id: playlistId,
-      user: currentUser._id,
-    });
-    if (!playlist)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy playlist");
-
-    playlist.visibility =
-      playlist.visibility === "public" ? "private" : "public";
-    await playlist.save();
-
-    return playlist;
-  }
-  /**
-   * 8. GET ALL MY PLAYLISTS (For Sidebar/Profile)
-   * Lấy toàn bộ playlist mà user sở hữu, không phân trang, bao gồm cả Private
-   */
-  async getMyAllPlaylists(userId: string) {
-    return await Playlist.find({
-      user: userId,
-    })
-      .select(
-        "title slug description visibility user themeColor type isSystem totalTracks coverImage",
-      ) // Chỉ lấy field cần thiết cho Sidebar
-      .sort({ createdAt: -1 })
-      .lean();
   }
 }
 

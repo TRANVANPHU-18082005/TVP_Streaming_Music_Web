@@ -1,6 +1,5 @@
 import React from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { ArtistSelector } from "@/features/artist/components/ArtistSelector";
 import type { AlbumFormValues } from "@/features/album/schemas/album.schema";
 
@@ -33,29 +32,6 @@ const RelationSection: React.FC<RelationSectionProps> = ({ form }) => {
                 form.setValue("artist", ids[0] || "", { shouldDirty: true });
               }}
               error={fieldState.error?.message}
-            />
-          )}
-        />
-      </div>
-
-      <div className="space-y-1">
-        <Controller
-          control={form.control}
-          name="genreIds"
-          render={({ field, fieldState }) => (
-            <GenreSelector
-              label="Thể loại âm nhạc"
-              required
-              variant="form"
-              singleSelect={false}
-              value={field.value || []}
-              onChange={(ids) => {
-                field.onChange(ids);
-                // THÊM DÒNG NÀY ĐỂ ÉP DIRTY:
-                form.setValue("genreIds", ids, { shouldDirty: true });
-              }}
-              error={fieldState.error?.message}
-              placeholder="Tìm thể loại..."
             />
           )}
         />

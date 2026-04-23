@@ -1,4 +1,4 @@
-export interface MoodVideo {
+export interface IMoodVideo {
   _id: string;
   title: string;
   slug: string;
