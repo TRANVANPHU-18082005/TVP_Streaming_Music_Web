@@ -5,7 +5,8 @@ import {
 } from "@tanstack/react-query";
 import genreApi from "../api/genreApi";
 import { genreKeys } from "../utils/genreKeys";
-import { GenreFilterParams } from "../types";
+import { GenreFilterParams, IGenre } from "../types";
+import { APP_CONFIG } from "@/config/constants";
 
 // ==========================================
 // 1. Hook lấy danh sách phân trang (Cho Table Admin)
@@ -33,7 +34,21 @@ export const useGenresQuery = (params: GenreFilterParams) => {
     }),
   });
 };
+export const useTrendingGenres = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
+  const params: GenreFilterParams = {
+    page: 1,
+    limit: limit,
+    isTrending: true,
+    sort: "priority",
+  };
 
+  return useQuery({
+    queryKey: genreKeys.list(params),
+    queryFn: () => genreApi.getGenres(params),
+    staleTime: 1000 * 60 * 15, // Genre hệ thống ít đổi, cache 15 phút
+    select: (response) => response.data.data as IGenre[],
+  });
+};
 // ==========================================
 // 2. Hook lấy cây danh mục (Cho Dropdown/Selector)
 // ==========================================

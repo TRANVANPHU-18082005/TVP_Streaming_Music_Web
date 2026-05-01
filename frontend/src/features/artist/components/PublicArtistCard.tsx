@@ -14,7 +14,6 @@ import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 
 import { FollowButton } from "@/features/interaction";
 import { IArtist } from "../types";
-import { IGenre } from "@/features/genre";
 import { useArtistPlayback } from "@/features/player/hooks/useArtistPlayback";
 import {
   PremiumMusicVisualizer,
@@ -186,8 +185,6 @@ interface ArtistInfoProps {
 
 const ArtistInfo = memo(
   ({ artist, variant, isActive, isPlaying }: ArtistInfoProps) => {
-    const mainGenre = artist.genres?.[0] as IGenre | undefined;
-
     return (
       <div className="p-3 sm:p-4 flex flex-col flex-1 justify-between gap-2.5 sm:gap-3">
         <div className="space-y-1 sm:space-y-1.5 min-w-0">
@@ -226,14 +223,10 @@ const ArtistInfo = memo(
               aria-hidden="true"
             />
             <span className="hidden sm:block truncate">
-              {mainGenre ? (
-                mainGenre.name
-              ) : (
-                <span className="flex items-center gap-1">
-                  <Music2 className="size-3 sm:size-3.5" aria-hidden="true" />
-                  {formatNumber(artist.totalTracks || 0)} tracks
-                </span>
-              )}
+              <span className="flex items-center gap-1">
+                <Music2 className="size-3 sm:size-3.5" aria-hidden="true" />
+                {formatNumber(artist.totalTracks || 0)} tracks
+              </span>
             </span>
           </div>
 
@@ -272,8 +265,8 @@ const PublicArtistCard: React.FC<PublicArtistCardProps> = ({
 
   const {
     togglePlayArtist,
-    isThisAristActive,
-    isThisartistPlaying,
+    isThisArtistActive,
+    isThisArtistPlaying,
     isFetching,
   } = useArtistPlayback(artist);
 
@@ -316,23 +309,23 @@ const PublicArtistCard: React.FC<PublicArtistCardProps> = ({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         "transition-[border-color,box-shadow] duration-400",
         // Active card highlight — mirrors PublicAlbumCard
-        isThisAristActive && "bg-primary/5 shadow-brand-soft",
+        isThisArtistActive && "bg-primary/5 shadow-brand-soft",
         className,
       )}
     >
       <ArtistImage
         src={artist.avatar || artist.coverImage}
         alt={artist.name}
-        isActive={isThisAristActive}
-        isPlaying={isThisartistPlaying}
+        isActive={isThisArtistActive}
+        isPlaying={isThisArtistPlaying}
         isFetching={isFetching}
         onPlay={handlePlay}
       />
       <ArtistInfo
         artist={artist}
         variant={variant}
-        isActive={isThisAristActive}
-        isPlaying={isThisartistPlaying}
+        isActive={isThisArtistActive}
+        isPlaying={isThisArtistPlaying}
       />
     </motion.article>
   );

@@ -16,19 +16,19 @@ import {
   User as UserIcon,
   CreditCard,
 } from "lucide-react";
-import type { User } from "@/features/user/types";
 
 // Nếu bạn không muốn dùng framer-motion có thể bỏ qua,
 // nhưng để UX "sướng" hơn thì giữ lại animation nhấn nhẹ này.
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { IUser } from "../types";
 
 interface UserDropdownProps {
-  user: User;
+  user: IUser;
 }
 
 export const UserDropdown = ({ user }: UserDropdownProps) => {
-    const navigate = useNavigate(); 
+  const navigate = useNavigate();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -68,7 +68,7 @@ export const UserDropdown = ({ user }: UserDropdownProps) => {
         </DropdownMenuLabel>
 
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => navigate("/profile")}>
+          <DropdownMenuItem onClick={() => navigate("/profile?tab=overview")}>
             <UserIcon className="mr-2 size-4" />
             <span>Hồ sơ cá nhân</span>
             <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>

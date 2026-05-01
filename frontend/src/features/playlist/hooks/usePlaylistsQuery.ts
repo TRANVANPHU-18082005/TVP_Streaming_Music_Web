@@ -6,6 +6,7 @@ import {
 import playlistApi from "../api/playlistApi";
 import { playlistKeys } from "../utils/playlistKeys";
 import type { IPlaylist, PlaylistFilterParams } from "../types";
+import { APP_CONFIG } from "@/config/constants";
 
 // ==========================================
 // 1. PUBLIC QUERIES (Khám phá & Tìm kiếm)
@@ -74,7 +75,7 @@ export const usePlaylistTracksInfinite = (
  * Hook lấy danh sách Playlist Nổi bật (Hệ thống tạo / Curated)
  * Dùng cho Trang Chủ
  */
-export const useFeaturedPlaylists = (limit = 10) => {
+export const useFeaturedPlaylists = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
   const params: PlaylistFilterParams = {
     limit,
     sort: "popular",

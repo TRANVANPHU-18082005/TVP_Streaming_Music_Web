@@ -262,15 +262,62 @@ class AuthService {
     return user;
   }
 
+  // 6b. Login Facebook (Logic Link Account)
+  async loginWithFacebook(profile: any) {
+    const email = profile.emails?.[0]?.value;
+    if (!email) throw new Error("No email found from Facebook");
+
+    let user = await User.findOne({
+      $or: [{ facebookId: profile.id }, { email: email }],
+    });
+
+    if (user) {
+      // Nếu user đã tồn tại (do đăng ký local hoặc social trước đó)
+      if (!user.facebookId) {
+        // Link account Facebook vào account Local
+        user.facebookId = profile.id;
+        if (!user.avatar) user.avatar = profile.photos?.[0]?.value;
+        if (!user.isVerified) user.isVerified = true;
+
+        user.lastLogin = new Date();
+        await user.save();
+      }
+      return user;
+    }
+
+    // Nếu user mới hoàn toàn
+    const displayName =
+      profile.displayName ||
+      `${profile.name?.givenName || ""} ${profile.name?.familyName || ""}`.trim() ||
+      email.split("@")[0];
+    const username = await generateUniqueSlug(User, displayName, "username");
+    const randomPassword = crypto.randomBytes(16).toString("hex");
+
+    user = await User.create({
+      username,
+      fullName: displayName,
+      email,
+      avatar: profile.photos?.[0]?.value || "",
+      facebookId: profile.id,
+      authProvider: "facebook",
+      isVerified: true,
+      role: "user",
+      password: randomPassword,
+      lastLogin: new Date(),
+    });
+
+    return user;
+  }
+
   // 7. Forgot Password (Rate Limit)
   async forgotPassword(email: string) {
     const user = await User.findOne({ email });
     if (!user) throw new ApiError(httpStatus.NOT_FOUND, "Email không tồn tại");
 
-    if (user.authProvider === "google") {
+    if (user.authProvider === "google" || user.authProvider === "facebook") {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "Tài khoản Google không thể reset mật khẩu.",
+        "Tài khoản social (Google/Facebook) không thể reset mật khẩu.",
       );
     }
 

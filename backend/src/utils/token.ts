@@ -5,7 +5,7 @@ import { Response } from "express";
 export const generateTokens = (
   userId: string,
   role: string,
-  rememberMe: boolean = false // <--- Thêm tham số này
+  rememberMe: boolean = false, // <--- Thêm tham số này
 ) => {
   const accessToken = jwt.sign({ id: userId, role }, process.env.JWT_SECRET!, {
     expiresIn: "15m",
@@ -17,7 +17,7 @@ export const generateTokens = (
   const refreshToken = jwt.sign(
     { id: userId },
     process.env.JWT_REFRESH_SECRET!,
-    { expiresIn: refreshExpiresIn }
+    { expiresIn: refreshExpiresIn },
   );
 
   return { accessToken, refreshToken };
@@ -27,19 +27,20 @@ export const generateTokens = (
 export const setRefreshTokenCookie = (
   res: Response,
   token: string,
-  rememberMe: boolean = false // <--- Thêm tham số này
+  rememberMe: boolean = false, // <--- Thêm tham số này
 ) => {
   // Tính mili-giây: 30 ngày hoặc 1 ngày
   const oneDay = 24 * 60 * 60 * 1000;
   const maxAge = rememberMe ? 30 * oneDay : oneDay;
+  // For cross-origin OAuth flows we prefer 'none' in production (requires Secure).
+  // For local development use 'lax' to be more permissive without HTTPS.
+  const sameSiteOption: "lax" | "strict" | "none" =
+    process.env.NODE_ENV === "production" ? "none" : "lax";
 
   res.cookie("refreshToken", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: sameSiteOption,
     maxAge: maxAge, // <--- Động theo biến này
-    // Nếu bạn muốn tắt trình duyệt là mất login luôn (Session Cookie)
-    // thì bỏ dòng maxAge khi rememberMe = false.
-    // Nhưng xu hướng hiện đại là để 1 ngày cho tiện.
   });
 };

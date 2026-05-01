@@ -10,11 +10,14 @@ import {
   seekTo,
   nextTrack,
   prevTrack,
+  appendQueueIds,
 } from "@/features/player/slice/playerSlice";
+import trackApi from "@/features/track/api/trackApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useSocket } from "@/hooks/useSocket";
 import { RootState } from "@/store/store";
 import { env } from "@/config/env";
+import { toCDN } from "@/utils/track-helper";
 
 // ---------------------------------------------------------------------------
 // Constants & pure helpers
@@ -50,8 +53,17 @@ export const useAudioPlayer = () => {
   } = useAppSelector(selectPlayer);
 
   const currentTrack = useAppSelector(selectCurrentTrack);
+
   const nextTrackPreload = useAppSelector(selectNextTrack);
   const user = useAppSelector((state: RootState) => state.auth.user);
+  const activeQueueLen = useAppSelector(
+    (s: RootState) => s.player.activeQueueIds.length,
+  );
+  const currentIndex = useAppSelector((s: RootState) => s.player.currentIndex);
+  const repeatMode = useAppSelector((s: RootState) => s.player.repeatMode);
+  const autoplayEnabled = useAppSelector(
+    (s: RootState) => s.player.autoplayEnabled,
+  );
 
   // ── Audio Refs ─────────────────────────────────────────────────────────────
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -165,8 +177,10 @@ export const useAudioPlayer = () => {
     if (!currentTrack || !audioRef.current) return;
 
     const audio = audioRef.current;
-    const src = currentTrack.hlsUrl || currentTrack.trackUrl;
-
+    const rawSrc = currentTrack.hlsUrl || currentTrack.trackUrl;
+    const src = toCDN(rawSrc) || rawSrc;
+    console.log(toCDN(src));
+    console.log(src);
     // Dọn HLS instance của bài trước
     if (hlsRef.current) {
       hlsRef.current.detachMedia();
@@ -253,7 +267,8 @@ export const useAudioPlayer = () => {
       return;
     }
 
-    const src = nextTrackPreload.hlsUrl || nextTrackPreload.trackUrl;
+    const rawSrc = nextTrackPreload.hlsUrl || nextTrackPreload.trackUrl;
+    const src = toCDN(rawSrc) || rawSrc;
 
     if (!preloadAudioRef.current) {
       preloadAudioRef.current = new Audio();
@@ -328,12 +343,20 @@ export const useAudioPlayer = () => {
 
   useEffect(() => {
     if (!("mediaSession" in navigator) || !currentTrack) return;
-
+    const fullArtist =
+      currentTrack.artist?.name +
+      (currentTrack.featuringArtists.length > 0
+        ? ` ft. ${currentTrack.featuringArtists.map((a) => a.name).join(", ")}`
+        : "");
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
-      artist: currentTrack.artist?.name ?? "Unknown Artist",
+      artist: fullArtist,
       artwork: [
-        { src: currentTrack.coverImage, sizes: "512x512", type: "image/jpeg" },
+        {
+          src: toCDN(currentTrack.coverImage) || currentTrack.coverImage,
+          sizes: "512x512",
+          type: "image/jpeg",
+        },
       ],
     });
 
@@ -402,9 +425,50 @@ export const useAudioPlayer = () => {
    *   repeat:off  → dừng ở cuối
    * Slice là single source of truth duy nhất cho navigation logic.
    */
-  const handleEnded = useCallback((): void => {
+  const handleEnded = useCallback(async (): Promise<void> => {
+    // If there's no current track, fallback to nextTrack behavior
+    if (!currentTrack) {
+      dispatch(nextTrack());
+      return;
+    }
+
+    const atLast = activeQueueLen > 0 && currentIndex >= activeQueueLen - 1;
+
+    // If we're at the end of the queue and repeat is off, consider Autoplay
+    if (atLast && repeatMode === "off") {
+      if (autoplayEnabled && currentTrack._id) {
+        try {
+          const resp = await trackApi.getSimilarTracks(currentTrack._id, 10);
+          const recs = resp?.tracks ?? [];
+          const ids = recs.map((t) => t._id).filter(Boolean);
+          if (ids.length > 0) {
+            // Append recommended IDs and immediately advance to the next track
+            dispatch(appendQueueIds(ids));
+            dispatch(nextTrack());
+            return;
+          }
+        } catch (err) {
+          if (env.NODE_ENV === "development") {
+            console.error("Autoplay fetch failed:", err);
+          }
+        }
+      }
+
+      // No autoplay or fetch failed → default behavior
+      dispatch(nextTrack());
+      return;
+    }
+
+    // Normal case: advance to next track
     dispatch(nextTrack());
-  }, [dispatch]);
+  }, [
+    dispatch,
+    currentTrack,
+    activeQueueLen,
+    currentIndex,
+    repeatMode,
+    autoplayEnabled,
+  ]);
 
   const handleWaiting = useCallback(
     () => dispatch(setLoadingState("buffering")),

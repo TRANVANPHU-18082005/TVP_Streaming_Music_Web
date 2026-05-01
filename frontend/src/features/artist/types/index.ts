@@ -50,7 +50,7 @@ export interface IArtist {
   isVerified: boolean;
   isActive: boolean; // Trạng thái hoạt động (Admin có thể ẩn Artist)
   isFollowed?: boolean; // Field động trả về dựa trên currentUser
-
+  trackIds: string[];
   createdAt: string;
   updatedAt: string;
 }

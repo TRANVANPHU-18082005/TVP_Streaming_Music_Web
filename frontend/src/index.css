@@ -598,142 +598,350 @@
   }
 
   /* ============================================================
-     THEME OPTIONS — Skin System v3
-     Tất cả skin chỉ override --primary, --brand-*, --wave-*, --ring.
-     Light/Dark glass, shadow, surface được tính tự động từ mode.
-     ============================================================ */
-  /* 1. TOKYO NIGHT — Neon Cyberpunk */
+   THEME SYSTEM v4 — Skin Engine
+   17 skins production-grade
+   Each skin overrides: --primary, --brand-*, --wave-*, --ring
+   Light/Dark glass, shadow, surface auto-computed from mode.
+   ============================================================ */
+
+  /* ─── 1. TOKYO NIGHT — Neon Cyberpunk ─── */
   [data-theme='tokyo'] {
-    --primary: 340 75% 50%; --brand-glow: 340 80% 60%;
-    --wave-1: 340 70% 55%; --wave-2: 280 60% 55%; --wave-3: 195 80% 50%;
-    --background: 340 15% 98%; /* Tint hồng nhạt */
+    --primary: 340 75% 55%;
+    --brand-glow: 340 85% 65%;
+    --wave-1: 340 72% 58%;
+    --wave-2: 280 65% 58%;
+    --wave-3: 195 85% 52%;
+    --ring: 340 80% 65%;
+    --background: 340 18% 98.5%;
   }
-  .dark [data-theme='tokyo'], [data-theme='tokyo'].dark {
-    --primary: 340 90% 68%; --brand-glow: 340 100% 75%;
-    --background: 250 28% 4%;
+  .dark [data-theme='tokyo'],
+  [data-theme='tokyo'].dark {
+    --primary: 340 92% 70%;
+    --brand-glow: 340 100% 78%;
+    --wave-1: 340 88% 65%;
+    --wave-2: 280 72% 62%;
+    --wave-3: 195 90% 58%;
+    --background: 250 30% 4%;
   }
 
-  /* 2. SAHARA GOLD — Luxury Amber */
+  /* ─── 2. SAHARA GOLD — Luxury Amber ─── */
   [data-theme='sahara'] {
-    --primary: 36 85% 42%; --brand-glow: 36 90% 52%;
-    --wave-1: 36 80% 48%; --wave-2: 22 75% 45%; --wave-3: 48 85% 55%;
-    --background: 36 15% 97.5%; /* Tint vàng cát */
+    --primary: 38 88% 44%;
+    --brand-glow: 38 92% 54%;
+    --wave-1: 38 82% 50%;
+    --wave-2: 24 78% 46%;
+    --wave-3: 50 88% 57%;
+    --ring: 38 85% 52%;
+    --background: 38 18% 98%;
   }
-  .dark [data-theme='sahara'], [data-theme='sahara'].dark {
-    --primary: 36 95% 56%; --brand-glow: 36 100% 66%;
-    --background: 20 22% 4%;
+  .dark [data-theme='sahara'],
+  [data-theme='sahara'].dark {
+    --primary: 38 96% 58%;
+    --brand-glow: 38 100% 68%;
+    --wave-1: 38 92% 54%;
+    --wave-2: 24 82% 50%;
+    --wave-3: 50 92% 62%;
+    --background: 22 24% 4%;
   }
 
-  /* 3. NORDIC ICE — Arctic Minimalist */
+  /* ─── 3. NORDIC ICE — Arctic Minimalist ─── */
   [data-theme='nordic'] {
-    --primary: 210 85% 45%; --brand-glow: 210 90% 55%;
-    --wave-1: 210 80% 55%; --wave-2: 225 65% 50%; --wave-3: 185 75% 55%;
-    --background: 210 15% 97.5%; /* Tint xanh biển */
+    --primary: 199 88% 48%;
+    --brand-glow: 199 92% 58%;
+    --wave-1: 199 82% 55%;
+    --wave-2: 226 68% 52%;
+    --wave-3: 186 78% 56%;
+    --ring: 199 88% 60%;
+    --background: 210 18% 98%;
   }
-  .dark [data-theme='nordic'], [data-theme='nordic'].dark {
-    --primary: 199 92% 66%; --brand-glow: 199 100% 76%;
-    --background: 220 28% 5%;
+  .dark [data-theme='nordic'],
+  [data-theme='nordic'].dark {
+    --primary: 199 95% 68%;
+    --brand-glow: 199 100% 78%;
+    --wave-1: 199 90% 65%;
+    --wave-2: 226 75% 62%;
+    --wave-3: 186 85% 65%;
+    --background: 220 30% 5%;
   }
 
-  /* 4. FOREST ZEN — Deep Organic */
+  /* ─── 4. FOREST ZEN — Deep Organic ─── */
   [data-theme='amazon'] {
-    --primary: 162 75% 32%; --brand-glow: 162 70% 42%;
-    --wave-1: 162 65% 38%; --wave-2: 140 60% 35%; --wave-3: 180 65% 45%;
-    --background: 162 12% 97.5%;
+    --primary: 160 72% 34%;
+    --brand-glow: 160 68% 44%;
+    --wave-1: 160 65% 40%;
+    --wave-2: 142 62% 36%;
+    --wave-3: 180 68% 48%;
+    --ring: 160 68% 46%;
+    --background: 162 14% 98%;
   }
-  .dark [data-theme='amazon'], [data-theme='amazon'].dark {
-    --primary: 152 68% 56%; --brand-glow: 152 82% 64%;
-    --background: 160 22% 3.5%;
+  .dark [data-theme='amazon'],
+  [data-theme='amazon'].dark {
+    --primary: 152 70% 58%;
+    --brand-glow: 152 84% 66%;
+    --wave-1: 152 68% 54%;
+    --wave-2: 142 64% 48%;
+    --wave-3: 180 72% 58%;
+    --background: 160 24% 4%;
   }
 
-  /* 5. CRIMSON ABYSS — Passion Ruby */
+  /* ─── 5. CRIMSON ABYSS — Passion Ruby ─── */
   [data-theme='crimson'] {
-    --primary: 0 80% 48%; --brand-glow: 0 85% 58%;
-    --wave-1: 0 75% 50%; --wave-2: 340 70% 45%; --wave-3: 18 85% 55%;
-    --background: 0 10% 98%;
+    --primary: 351 82% 50%;
+    --brand-glow: 351 88% 60%;
+    --wave-1: 351 78% 52%;
+    --wave-2: 338 72% 46%;
+    --wave-3: 20 88% 58%;
+    --ring: 351 85% 62%;
+    --background: 351 12% 98.5%;
   }
-  .dark [data-theme='crimson'], [data-theme='crimson'].dark {
-    --primary: 356 88% 56%; --brand-glow: 356 100% 65%;
-    --background: 0 18% 4%;
+  .dark [data-theme='crimson'],
+  [data-theme='crimson'].dark {
+    --primary: 351 90% 62%;
+    --brand-glow: 351 100% 72%;
+    --wave-1: 351 88% 60%;
+    --wave-2: 338 80% 54%;
+    --wave-3: 20 92% 65%;
+    --background: 0 20% 4%;
   }
 
-  /* 6. VAPORWAVE — 80s Dream */
+  /* ─── 6. VAPORWAVE — 80s Dream ─── */
   [data-theme='vapor'] {
-    --primary: 275 65% 55%; --brand-glow: 275 70% 65%;
-    --wave-1: 275 60% 60%; --wave-2: 200 75% 55%; --wave-3: 320 70% 62%;
-    --background: 275 12% 98%;
+    --primary: 272 68% 58%;
+    --brand-glow: 272 74% 68%;
+    --wave-1: 272 64% 62%;
+    --wave-2: 196 78% 58%;
+    --wave-3: 322 72% 65%;
+    --ring: 272 72% 70%;
+    --background: 275 14% 98.5%;
   }
-  .dark [data-theme='vapor'], [data-theme='vapor'].dark {
-    --primary: 286 92% 72%; --brand-glow: 286 100% 80%;
-    --background: 276 32% 5%;
+  .dark [data-theme='vapor'],
+  [data-theme='vapor'].dark {
+    --primary: 286 94% 74%;
+    --brand-glow: 286 100% 82%;
+    --wave-1: 286 90% 72%;
+    --wave-2: 196 88% 65%;
+    --wave-3: 322 82% 72%;
+    --background: 276 34% 5%;
   }
 
-  /* 7. MIDNIGHT SLATE — Steel Professional */
+  /* ─── 7. MIDNIGHT SLATE — Steel Professional ─── */
   [data-theme='slate'] {
-    --primary: 215 25% 45%; --brand-glow: 215 30% 55%;
-    --wave-1: 215 20% 50%; --wave-2: 222 15% 40%; --wave-3: 200 25% 55%;
-    --background: 215 10% 98%;
+    --primary: 215 28% 48%;
+    --brand-glow: 215 34% 58%;
+    --wave-1: 215 24% 52%;
+    --wave-2: 222 18% 42%;
+    --wave-3: 200 28% 58%;
+    --ring: 215 30% 60%;
+    --background: 215 12% 98.5%;
   }
-  .dark [data-theme='slate'], [data-theme='slate'].dark {
-    --primary: 215 28% 76%; --brand-glow: 215 32% 86%;
-    --background: 220 18% 6%;
+  .dark [data-theme='slate'],
+  [data-theme='slate'].dark {
+    --primary: 215 30% 78%;
+    --brand-glow: 215 34% 88%;
+    --wave-1: 215 28% 74%;
+    --wave-2: 222 22% 64%;
+    --wave-3: 200 30% 80%;
+    --background: 220 20% 6%;
   }
 
-  /* 8. ARCTIC LIGHT — Pure Obsidian Contrast */
+  /* ─── 8. ARCTIC LIGHT — Pure Obsidian Contrast ─── */
   [data-theme='arctic'] {
-    --primary: 258 85% 50%; --brand-glow: 258 90% 60%;
-    --wave-1: 258 80% 55%; --wave-2: 232 65% 48%; --wave-3: 282 75% 65%;
-    --background: 222 35% 98.5%;
+    --primary: 258 88% 52%;
+    --brand-glow: 258 92% 62%;
+    --wave-1: 258 82% 57%;
+    --wave-2: 234 68% 50%;
+    --wave-3: 282 78% 67%;
+    --ring: 258 86% 65%;
+    --background: 222 38% 99%;
   }
-  .dark [data-theme='arctic'], [data-theme='arctic'].dark {
-    --primary: 258 80% 70%;
-    --background: 222 35% 5%;
+  .dark [data-theme='arctic'],
+  [data-theme='arctic'].dark {
+    --primary: 258 82% 72%;
+    --brand-glow: 258 88% 82%;
+    --wave-1: 258 80% 70%;
+    --wave-2: 234 72% 62%;
+    --wave-3: 282 82% 74%;
+    --background: 222 38% 5%;
   }
 
-  /* === NEW SKINS === */
-
-  /* 9. DEEP OCEAN — Mysterious & Bold */
+  /* ─── 9. DEEP OCEAN — Mysterious & Bold ─── */
   [data-theme='ocean'] {
-    --primary: 220 90% 45%; --brand-glow: 220 95% 55%;
-    --wave-1: 220 85% 50%; --wave-2: 200 80% 45%; --wave-3: 240 70% 55%;
-    --background: 220 20% 97%;
+    --primary: 217 92% 48%;
+    --brand-glow: 217 96% 58%;
+    --wave-1: 217 88% 52%;
+    --wave-2: 202 84% 46%;
+    --wave-3: 238 72% 58%;
+    --ring: 217 90% 60%;
+    --background: 220 22% 98%;
   }
-  .dark [data-theme='ocean'], [data-theme='ocean'].dark {
-    --primary: 210 100% 60%; --brand-glow: 210 100% 70%;
-    --background: 222 45% 3%;
+  .dark [data-theme='ocean'],
+  [data-theme='ocean'].dark {
+    --primary: 213 100% 62%;
+    --brand-glow: 213 100% 72%;
+    --wave-1: 213 96% 60%;
+    --wave-2: 202 90% 54%;
+    --wave-3: 238 80% 66%;
+    --background: 222 48% 3%;
   }
 
-  /* 10. ROSE GOLD — Elegant & Feminine */
+  /* ─── 10. ROSE GOLD — Elegant Feminine ─── */
   [data-theme='rose'] {
-    --primary: 350 65% 55%; --brand-glow: 350 70% 65%;
-    --wave-1: 350 60% 60%; --wave-2: 10 60% 65%; --wave-3: 330 50% 60%;
-    --background: 350 20% 98%;
+    --primary: 348 68% 58%;
+    --brand-glow: 348 72% 68%;
+    --wave-1: 348 64% 62%;
+    --wave-2: 12 62% 66%;
+    --wave-3: 328 54% 62%;
+    --ring: 348 68% 70%;
+    --background: 350 22% 98.5%;
   }
-  .dark [data-theme='rose'], [data-theme='rose'].dark {
-    --primary: 350 80% 72%; --brand-glow: 350 90% 80%;
-    --background: 350 30% 4%;
+  .dark [data-theme='rose'],
+  [data-theme='rose'].dark {
+    --primary: 348 82% 74%;
+    --brand-glow: 348 92% 82%;
+    --wave-1: 348 80% 72%;
+    --wave-2: 12 70% 74%;
+    --wave-3: 328 62% 70%;
+    --background: 350 32% 4%;
   }
 
-  /* 11. NEON LIME — High Energy */
+  /* ─── 11. NEON LIME — High Energy ─── */
   [data-theme='lime'] {
-    --primary: 85 90% 35%; --brand-glow: 85 95% 45%;
-    --wave-1: 85 80% 40%; --wave-2: 110 70% 35%; --wave-3: 65 90% 45%;
-    --background: 85 20% 97%;
+    --primary: 84 92% 36%;
+    --brand-glow: 84 96% 46%;
+    --wave-1: 84 82% 42%;
+    --wave-2: 108 72% 36%;
+    --wave-3: 66 92% 48%;
+    --ring: 84 90% 48%;
+    --background: 84 22% 98%;
   }
-  .dark [data-theme='lime'], [data-theme='lime'].dark {
-    --primary: 82 90% 60%; --brand-glow: 82 100% 70%;
-    --background: 100 25% 3%;
+  .dark [data-theme='lime'],
+  [data-theme='lime'].dark {
+    --primary: 82 92% 62%;
+    --brand-glow: 82 100% 72%;
+    --wave-1: 82 90% 60%;
+    --wave-2: 108 80% 54%;
+    --wave-3: 66 94% 66%;
+    --background: 100 28% 3%;
   }
 
-  /* 12. OBSIDIAN MONO — Ghostly Minimalist */
+  /* ─── 12. OBSIDIAN MONO — Ghostly Minimalist ─── */
   [data-theme='mono'] {
-    --primary: 0 0% 20%; --brand-glow: 0 0% 40%;
-    --wave-1: 0 0% 30%; --wave-2: 0 0% 15%; --wave-3: 0 0% 50%;
-    --background: 0 0% 97%;
+    --primary: 0 0% 22%;
+    --brand-glow: 0 0% 42%;
+    --wave-1: 0 0% 32%;
+    --wave-2: 0 0% 17%;
+    --wave-3: 0 0% 52%;
+    --ring: 0 0% 45%;
+    --background: 0 0% 98%;
   }
-  .dark [data-theme='mono'], [data-theme='mono'].dark {
-    --primary: 0 0% 90%; --brand-glow: 0 0% 100%;
+  .dark [data-theme='mono'],
+  [data-theme='mono'].dark {
+    --primary: 0 0% 92%;
+    --brand-glow: 0 0% 100%;
+    --wave-1: 0 0% 88%;
+    --wave-2: 0 0% 70%;
+    --wave-3: 0 0% 96%;
     --background: 0 0% 2%;
+  }
+
+  /* ─── 13. AURORA BOREALIS — Northern Lights ─── */
+  [data-theme='aurora'] {
+    --primary: 168 88% 42%;
+    --brand-glow: 168 92% 52%;
+    --wave-1: 168 84% 46%;
+    --wave-2: 244 72% 60%;
+    --wave-3: 186 90% 52%;
+    --ring: 168 86% 54%;
+    --background: 168 16% 98%;
+  }
+  .dark [data-theme='aurora'],
+  [data-theme='aurora'].dark {
+    --primary: 168 90% 58%;
+    --brand-glow: 168 96% 68%;
+    --wave-1: 168 88% 56%;
+    --wave-2: 244 80% 68%;
+    --wave-3: 186 94% 62%;
+    --background: 200 36% 3%;
+  }
+
+  /* ─── 14. EMBER FORGE — Industrial Fire ─── */
+  [data-theme='ember'] {
+    --primary: 22 96% 50%;
+    --brand-glow: 22 100% 60%;
+    --wave-1: 22 92% 52%;
+    --wave-2: 0 88% 52%;
+    --wave-3: 44 96% 54%;
+    --ring: 22 94% 62%;
+    --background: 22 14% 98%;
+  }
+  .dark [data-theme='ember'],
+  [data-theme='ember'].dark {
+    --primary: 22 100% 64%;
+    --brand-glow: 22 100% 74%;
+    --wave-1: 22 96% 62%;
+    --wave-2: 0 92% 60%;
+    --wave-3: 44 100% 62%;
+    --background: 15 30% 4%;
+  }
+
+  /* ─── 15. GALAXY CORE — Deep Space Indigo ─── */
+  [data-theme='galaxy'] {
+    --primary: 234 80% 62%;
+    --brand-glow: 234 84% 72%;
+    --wave-1: 234 76% 66%;
+    --wave-2: 249 74% 54%;
+    --wave-3: 218 72% 80%;
+    --ring: 234 80% 74%;
+    --background: 238 28% 98.5%;
+  }
+  .dark [data-theme='galaxy'],
+  [data-theme='galaxy'].dark {
+    --primary: 234 78% 76%;
+    --brand-glow: 234 84% 86%;
+    --wave-1: 234 76% 74%;
+    --wave-2: 249 72% 68%;
+    --wave-3: 218 68% 84%;
+    --background: 240 52% 3%;
+  }
+
+  /* ─── 16. MATCHA STONE — Japanese Zen ─── */
+  [data-theme='matcha'] {
+    --primary: 142 52% 48%;
+    --brand-glow: 142 56% 58%;
+    --wave-1: 142 48% 52%;
+    --wave-2: 160 48% 42%;
+    --wave-3: 120 44% 62%;
+    --ring: 142 52% 60%;
+    --background: 142 14% 98%;
+  }
+  .dark [data-theme='matcha'],
+  [data-theme='matcha'].dark {
+    --primary: 142 60% 66%;
+    --brand-glow: 142 68% 74%;
+    --wave-1: 142 58% 64%;
+    --wave-2: 160 54% 58%;
+    --wave-3: 120 52% 72%;
+    --background: 152 22% 4%;
+  }
+
+  /* ─── 17. DUSK OPAL — Sunset Iridescent ─── */
+  [data-theme='dusk'] {
+    --primary: 292 78% 62%;
+    --brand-glow: 292 82% 72%;
+    --wave-1: 292 74% 66%;
+    --wave-2: 38 92% 52%;
+    --wave-3: 348 80% 58%;
+    --ring: 292 76% 72%;
+    --background: 290 16% 98.5%;
+  }
+  .dark [data-theme='dusk'],
+  [data-theme='dusk'].dark {
+    --primary: 292 82% 76%;
+    --brand-glow: 292 88% 84%;
+    --wave-1: 292 80% 74%;
+    --wave-2: 38 96% 64%;
+    --wave-3: 348 86% 68%;
+    --background: 280 36% 4%;
   }
 }
 

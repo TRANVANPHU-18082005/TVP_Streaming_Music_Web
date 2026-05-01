@@ -6,6 +6,7 @@ import {
   EyeOff,
   Github,
   Chrome,
+  Facebook,
   Check,
   Disc,
   AlertCircle,
@@ -381,10 +382,15 @@ export default function LoginForm() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" className="w-full">
-                  <Github className="mr-2 h-4 w-4" /> Github
-                </Button>
+              <div className="flex gap-4">
+                <Link
+                  to={`${import.meta.env.VITE_API_URL}/auth/facebook`}
+                  className="w-full"
+                >
+                  <Button variant="outline" className="w-full cursor-pointer">
+                    <Facebook className="mr-2 h-4 w-4" /> Facebook
+                  </Button>
+                </Link>
                 <Link
                   to={`${import.meta.env.VITE_API_URL}/auth/google`}
                   className="w-full"

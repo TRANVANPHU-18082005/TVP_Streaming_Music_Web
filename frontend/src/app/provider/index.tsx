@@ -10,14 +10,13 @@
  */
 
 import { Suspense } from "react";
-
 import { RouterProvider } from "react-router-dom";
 
 import { router } from "@/app/routes/route";
 
 // --- Components ---
 import { RadioLoader } from "@/components/ui/MusicLoadingEffects";
-import { AppProviders } from "@/app/provider/appProvider";
+import { AppProviders } from "./AppProvider";
 
 // ============================================================================
 // 2. ROOT APP (With Router)

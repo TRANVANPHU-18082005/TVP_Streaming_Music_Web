@@ -8,13 +8,14 @@ import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
 import { ArtistFilters } from "@/features/artist/components/ArtistFilters";
 import { useArtistParams } from "@/features/artist/hooks/useArtistParams";
 import { useArtistsQuery } from "@/features/artist/hooks/useArtistsQuery";
-import { APP_CONFIG } from "@/config/constants";
-import { Artistpageskeleton, IArtist, useSyncInteractions } from "@/features";
+import { DEFAULT_GRID_META } from "@/config/constants";
+import { IArtist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -29,13 +30,6 @@ const GRID_LAYOUT = cn(
   "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7",
   "gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12",
 );
-
-const DEFAULT_META = {
-  totalPages: 1,
-  totalItems: 0,
-  page: 1,
-  pageSize: APP_CONFIG.PAGINATION_LIMIT,
-} as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE HERO — eyebrow + gradient title + divider-glow + stat badges
@@ -61,13 +55,13 @@ const PageHero = memo(() => (
         className="text-overline"
         style={{ color: "hsl(var(--brand-glow))" }}
       >
-        Artists
+        Artist
       </span>
     </div>
 
     {/* Title */}
     <h1
-      className="text-display-xl text-gradient-wave mb-2 animate-fade-up animation-fill-both"
+      className="text-display-xl text-primary mb-2 animate-fade-up animation-fill-both"
       style={{ animationDelay: "60ms" }}
       id="artist-page-heading"
     >
@@ -120,7 +114,7 @@ const PaginationStrip = memo(
         totalPages={totalPages}
         onPageChange={onPageChange}
         totalItems={totalItems}
-        itemsPerPage={pageSize || APP_CONFIG.PAGINATION_LIMIT}
+        itemsPerPage={pageSize || DEFAULT_GRID_META.pageSize}
       />
     </div>
   ),
@@ -137,17 +131,17 @@ const ArtistPage: React.FC = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useArtistParams(APP_CONFIG.PAGINATION_LIMIT);
+  } = useArtistParams(DEFAULT_GRID_META.pageSize);
 
   const { data, isLoading, isError, refetch } = useArtistsQuery(filterParams);
 
   // Granular derived slices — avoids full object diff
   const artists = useMemo(() => data?.artists ?? [], [data?.artists]);
   const meta = useMemo(
-    () => ({ ...DEFAULT_META, ...data?.meta }),
+    () => ({ ...DEFAULT_GRID_META, ...data?.meta }),
     [data?.meta],
   );
-
+  console.log(artists);
   // Must run unconditionally — enabled guard prevents execution when empty
   const artistIds = useMemo(
     () => artists.map((a: IArtist) => a._id),
@@ -172,38 +166,66 @@ const ArtistPage: React.FC = () => {
   const onBack = useSmartBack();
   const hasResults = artists.length > 0;
   const isFiltering = Boolean(filterParams.keyword);
-  const isOffline = !navigator.onLine;
-  // ── Error state ─────────────────────────────────────────────────────────
-  // Initial Load
-  if (isLoading && !hasResults) {
-    return <Artistpageskeleton cardCount={meta.pageSize} />;
-  }
-  // Switching
-  if (isLoading && hasResults) {
-    return <WaveformLoader glass={false} text="Đang tải" />;
-  }
-  // Deep Error
-  if (isError && !hasResults) {
-    return (
-      <>
-        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+  const isOffline = !useOnlineStatus();
+  const renderContent = () => {
+    if (isLoading && !hasResults) {
+      return (
+        <div className={GRID_LAYOUT}>
+          <CardSkeleton
+            count={meta.pageSize || DEFAULT_GRID_META.pageSize}
+            className="skeleton-avatar aspect-square"
+          />
         </div>
-      </>
-    );
-  }
-  // Offline
-  if (isOffline) {
-    return (
-      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+      );
+    }
+
+    if (isLoading && hasResults) {
+      return <WaveformLoader glass={false} text="Đang tải" />;
+    }
+
+    if (isOffline) {
+      return (
         <MusicResult
           variant="error-network"
           onRetry={refetch}
           onBack={onBack}
         />
+      );
+    }
+
+    if (isError || !hasResults) {
+      if (!isError && !hasResults) {
+        return !isFiltering ? (
+          <MusicResult
+            variant="empty-artists"
+            description="Danh sách nghệ sĩ hiện đang trống"
+          />
+        ) : (
+          <MusicResult
+            variant="empty-artists"
+            description="Không có kết quả! Thử bộ lọc khác"
+            onClearFilters={clearFilters}
+            onBack={onBack}
+          />
+        );
+      }
+      return <MusicResult variant="error" onRetry={refetch} />;
+    }
+
+    return (
+      <div className={GRID_LAYOUT}>
+        {artists.map((artist, index) => (
+          <div
+            key={artist._id}
+            className="animate-fade-up animation-fill-both"
+            style={{ animationDelay: `${staggerDelay(index)}ms` }}
+          >
+            <PublicArtistCard artist={artist} />
+          </div>
+        ))}
       </div>
     );
-  }
+  };
 
   return (
     <div className="relative min-h-screen pb-28">
@@ -240,49 +262,16 @@ const ArtistPage: React.FC = () => {
           aria-label="Danh sách nghệ sĩ"
           aria-busy={isLoading}
         >
-          {isLoading ? (
-            <div className={GRID_LAYOUT}>
-              <CardSkeleton
-                count={meta.pageSize}
-                className="skeleton-avatar aspect-square"
-              />
-            </div>
-          ) : !hasResults ? (
-            !isLoading && !isFiltering ? (
-              <MusicResult
-                variant="empty-artists"
-                description="Artist hiện đang trống"
-              />
-            ) : (
-              <MusicResult
-                variant="empty-artists"
-                description="Không có kết quả! Thử bộ lọc khác "
-                onClearFilters={clearFilters}
-                onBack={onBack}
-              />
-            )
-          ) : (
-            <div className={GRID_LAYOUT}>
-              {artists.map((artist, index) => (
-                <div
-                  key={artist._id}
-                  className="animate-fade-up animation-fill-both"
-                  style={{ animationDelay: `${staggerDelay(index)}ms` }}
-                >
-                  <PublicArtistCard artist={artist} />
-                </div>
-              ))}
-            </div>
-          )}
+          {renderContent()}
         </section>
 
         {/* ── Pagination */}
         {!isLoading && hasResults && (
           <PaginationStrip
-            currentPage={meta.page}
-            totalPages={meta.totalPages}
-            totalItems={meta.totalItems}
-            pageSize={meta.pageSize}
+            currentPage={meta.page || DEFAULT_GRID_META.page}
+            totalPages={meta.totalPages || DEFAULT_GRID_META.totalPages}
+            totalItems={meta.totalItems || DEFAULT_GRID_META.totalItems}
+            pageSize={meta.pageSize || DEFAULT_GRID_META.pageSize}
             onPageChange={handlePageChange}
           />
         )}

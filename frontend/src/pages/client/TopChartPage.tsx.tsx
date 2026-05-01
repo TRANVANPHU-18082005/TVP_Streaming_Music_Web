@@ -26,7 +26,10 @@ import {
   RankedTrack,
 } from "@/features/track/hooks/useRealtimeChart";
 import { ChartItem } from "@/features/track/components/ChartItem";
-import { ChartLine } from "@/features/track/components/ChartLine";
+import {
+  ChartDataPoint,
+  ChartLine,
+} from "@/features/track/components/ChartLine";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSyncInteractions } from "@/features";
@@ -36,6 +39,9 @@ import TopChartPageSkeleton from "@/features/analytics/components/TopChartPageSk
 import MusicResult from "@/components/ui/Result";
 import { useNavigate } from "react-router-dom";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { toCDN } from "@/utils/track-helper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -103,35 +109,63 @@ const listItem = (index: number, reduced = false) =>
       } as const);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// usePullToRefresh
+// usePullToRefresh — Production v2 (fully ref-based, zero re-renders)
 //
-// Detects a downward touch drag from the very top of the page on mobile.
-// Calls onRefresh when the drag exceeds THRESHOLD px.
-// Returns { isPulling, pullProgress (0–1) } for the indicator.
-// Passively listens (passive: true) — no scroll jank.
+// FIX B2+B3+P1: Previous version used useState for pullProgress inside
+// touchmove — caused re-render on EVERY touchmove + closure stale bug
+// in onTouchEnd (state.pullProgress always captured old value).
+// Now: all state is refs, indicator updated via imperative DOM mutation.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PULL_THRESHOLD = 72; // px
+const PULL_THRESHOLD = 72;
 
-interface PullState {
-  isPulling: boolean;
-  pullProgress: number;
+interface PullIndicatorHandle {
+  indicatorRef: React.RefObject<HTMLDivElement | null>;
+  textRef: React.RefObject<HTMLSpanElement | null>;
+  arrowRef: React.RefObject<HTMLSpanElement | null>;
 }
 
-function usePullToRefresh(onRefresh: () => void): PullState {
-  const [state, setState] = useState<PullState>({
-    isPulling: false,
-    pullProgress: 0,
-  });
+function usePullToRefresh(
+  onRefresh: () => void,
+  handle: PullIndicatorHandle,
+): void {
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
+
   const startY = useRef<number | null>(null);
-  const pulling = useRef(false);
+  const progressRef = useRef(0);
 
   useEffect(() => {
+    const { indicatorRef, textRef, arrowRef } = handle;
+
+    const showIndicator = (progress: number) => {
+      const el = indicatorRef.current;
+      const txt = textRef.current;
+      const arrow = arrowRef.current;
+      if (!el) return;
+
+      el.style.opacity = String(Math.min(progress, 1));
+      el.style.transform = `translateY(${progress > 0 ? 0 : -32}px)`;
+      el.style.display = progress > 0 ? "flex" : "none";
+
+      if (txt)
+        txt.textContent = progress >= 1 ? "Thả để làm mới" : "Kéo để làm mới";
+      if (arrow)
+        arrow.style.transform = `rotate(${progress >= 1 ? 180 : 0}deg)`;
+    };
+
+    const hideIndicator = () => {
+      const el = indicatorRef.current;
+      if (el) {
+        el.style.opacity = "0";
+        el.style.display = "none";
+      }
+    };
+
     const onTouchStart = (e: TouchEvent) => {
-      // Only engage when scrolled to the very top
       if (window.scrollY > 4) return;
       startY.current = e.touches[0].clientY;
-      pulling.current = false;
+      progressRef.current = 0;
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -139,68 +173,56 @@ function usePullToRefresh(onRefresh: () => void): PullState {
       const dy = e.touches[0].clientY - startY.current;
       if (dy <= 0) {
         startY.current = null;
+        hideIndicator();
         return;
       }
-
-      pulling.current = true;
-      const progress = Math.min(dy / PULL_THRESHOLD, 1);
-      setState({ isPulling: true, pullProgress: progress });
+      progressRef.current = Math.min(dy / PULL_THRESHOLD, 1);
+      showIndicator(progressRef.current);
     };
 
     const onTouchEnd = () => {
-      if (pulling.current && state.pullProgress >= 1) onRefresh();
+      if (progressRef.current >= 1) onRefreshRef.current();
       startY.current = null;
-      pulling.current = false;
-      setState({ isPulling: false, pullProgress: 0 });
+      progressRef.current = 0;
+      hideIndicator();
     };
 
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: true });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
-
     return () => {
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("touchend", onTouchEnd);
     };
-  }, [onRefresh, state.pullProgress]);
-
-  return state;
+  }, [handle]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// useSticky
+// useSticky — Production v2 (IntersectionObserver, no layout thrash)
 //
-// Returns true once a ref'd element has scrolled above the viewport top.
-// Used to drive the sticky list header fade-in.
-// Runs on rAF-throttled scroll to avoid layout thrash.
+// FIX P2: Previous version used getBoundingClientRect() inside rAF scroll
+// handler — forces layout recalculation every frame. IntersectionObserver
+// fires only on boundary crossing, zero layout cost.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function useSticky<T extends HTMLElement>(): [React.RefObject<T>, boolean] {
-  const ref = useRef<T>(null);
+function useSticky<T extends HTMLElement>(): [
+  React.RefObject<T | null>,
+  boolean,
+] {
+  const ref = useRef<T | null>(null);
   const [sticky, setSticky] = useState(false);
-  const rafId = useRef<number | null>(null);
 
   useEffect(() => {
-    const check = () => {
-      if (!ref.current) return;
-      setSticky(ref.current.getBoundingClientRect().top <= 0);
-    };
+    const el = ref.current;
+    if (!el) return;
 
-    const onScroll = () => {
-      if (rafId.current !== null) return;
-      rafId.current = requestAnimationFrame(() => {
-        check();
-        rafId.current = null;
-      });
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    check();
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (rafId.current !== null) cancelAnimationFrame(rafId.current);
-    };
+    const observer = new IntersectionObserver(
+      ([entry]) => setSticky(!entry.isIntersecting),
+      { threshold: 0, rootMargin: "0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   return [ref, sticky];
@@ -210,50 +232,39 @@ function useSticky<T extends HTMLElement>(): [React.RefObject<T>, boolean] {
 // PULL INDICATOR — shown at top of page during pull gesture
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PullIndicator = memo(
-  ({
-    isPulling,
-    pullProgress,
-  }: {
-    isPulling: boolean;
-    pullProgress: number;
-  }) => (
-    <AnimatePresence>
-      {isPulling && (
-        <motion.div
-          key="pull"
-          initial={{ opacity: 0, y: -32 }}
-          animate={{ opacity: pullProgress, y: 0 }}
-          exit={{ opacity: 0, y: -32 }}
-          transition={{ duration: 0.15 }}
-          aria-live="polite"
-          aria-label={
-            pullProgress >= 1 ? "Release to refresh" : "Pull to refresh"
-          }
-          className="fixed top-3 inset-x-0 z-50 flex justify-center pointer-events-none"
-        >
-          <div
-            className={cn(
-              "flex items-center gap-2 px-3.5 py-1.5 rounded-full",
-              "glass-frosted border border-border/40 shadow-raised",
-              "text-[11px] font-bold text-primary uppercase tracking-wide",
-              "transition-colors duration-200",
-              pullProgress >= 1 && "border-primary/40 text-primary",
-            )}
-          >
-            <motion.span
-              animate={{ rotate: pullProgress >= 1 ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ArrowDown className="w-3 h-3" aria-hidden="true" />
-            </motion.span>
-            {pullProgress >= 1 ? "Release to refresh" : "Pull to refresh"}
-          </div>
-        </motion.div>
+/**
+ * PullIndicator — v2: imperative DOM-driven (no Framer Motion)
+ * Controlled entirely by usePullToRefresh via refs.
+ * Zero re-renders during pull gesture.
+ */
+const PullIndicator = React.forwardRef<
+  HTMLDivElement,
+  {
+    textRef: React.RefObject<HTMLSpanElement | null>;
+    arrowRef: React.RefObject<HTMLSpanElement | null>;
+  }
+>(({ textRef, arrowRef }, ref) => (
+  <div
+    ref={ref}
+    aria-live="polite"
+    aria-label="Kéo để làm mới"
+    className="fixed top-3 inset-x-0 z-50 flex justify-center pointer-events-none transition-[opacity,transform] duration-150"
+    style={{ opacity: 0, display: "none" }}
+  >
+    <div
+      className={cn(
+        "flex items-center gap-2 px-3.5 py-1.5 rounded-full",
+        "glass-frosted border border-border/40 shadow-raised",
+        "text-[11px] font-bold text-primary uppercase tracking-wide",
       )}
-    </AnimatePresence>
-  ),
-);
+    >
+      <span ref={arrowRef} className="transition-transform duration-200">
+        <ArrowDown className="w-3 h-3" aria-hidden="true" />
+      </span>
+      <span ref={textRef}>Kéo để làm mới</span>
+    </div>
+  </div>
+));
 PullIndicator.displayName = "PullIndicator";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -304,8 +315,8 @@ const LeaderAvatars = memo(({ tracks }: { tracks: RankedTrack[] }) => {
                 RANK_STYLES[i].border,
               )}
             >
-              <img
-                src={t.coverImage}
+              <ImageWithFallback
+                src={toCDN(t.coverImage) || t.coverImage}
                 alt={`#${i + 1}: ${t.title}`}
                 loading="lazy"
                 decoding="async"
@@ -409,10 +420,10 @@ const PageLoader = memo(() => (
     </div>
     <div className="text-center space-y-1.5">
       <p className="text-[12px] font-black uppercase tracking-[0.18em] text-foreground/70">
-        Loading Charts
+        Đang tải bảng xếp hạng
       </p>
       <p className="text-[11px] text-muted-foreground/50 font-medium">
-        Fetching real-time data…
+        Đang lấy dữ liệu thời gian thực…
       </p>
     </div>
   </div>
@@ -440,11 +451,10 @@ const ErrorPage = memo(({ onRetry }: { onRetry?: () => void }) => (
     </div>
     <div className="text-center space-y-2 max-w-xs">
       <p className="font-black text-lg text-foreground/80 tracking-tight">
-        Chart unavailable
+        Không thể tải bảng xếp hạng
       </p>
       <p className="text-sm text-muted-foreground/55 leading-relaxed">
-        We couldn't fetch the rankings. This is usually a temporary network
-        hiccup.
+        Không thể tải được dữ liệu. Đây thường là lỗi mạng tạm thời.
       </p>
     </div>
     {onRetry && (
@@ -454,7 +464,7 @@ const ErrorPage = memo(({ onRetry }: { onRetry?: () => void }) => (
         className="btn-outline btn-lg gap-2 rounded-full"
       >
         <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
-        Try again
+        Thử lại
       </button>
     )}
   </div>
@@ -482,11 +492,11 @@ const EmptyState = memo(() => (
     </div>
     <div className="space-y-1.5">
       <p className="text-sm font-bold text-foreground/65 tracking-tight">
-        No chart data yet
+        Chưa có dữ liệu bảng xếp hạng
       </p>
       <p className="text-xs text-muted-foreground/45 max-w-[240px] leading-relaxed">
-        Rankings appear once enough listening data has been collected. Check
-        back soon.
+        Bảng xếp hạng sẽ hiển thị khi có đủ dữ liệu nghe nhạc. Hãy quay lại sau
+        nhé.
       </p>
     </div>
   </div>
@@ -514,7 +524,7 @@ const UpdatingBadge = memo(({ visible }: { visible: boolean }) => (
             aria-hidden="true"
           />
           <span className="text-[10px] font-bold text-primary uppercase tracking-wide">
-            Updating
+            Đang cập nhật
           </span>
         </motion.div>
       )}
@@ -549,19 +559,19 @@ const ShowMoreButton = memo(
           onClick={onToggle}
           aria-expanded={showAll}
           aria-label={
-            showAll ? "Show fewer tracks" : `Show all ${totalTracks} tracks`
+            showAll ? "Thu gọn danh sách" : `Xem tất cả ${totalTracks} bài`
           }
           className="btn-secondary rounded-full gap-2.5 font-bold text-[11px] uppercase tracking-widest shadow-raised hover:shadow-elevated backdrop-blur-sm"
         >
           {showAll ? (
             <>
               <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
-              Show less
+              Thu gọn
             </>
           ) : (
             <>
               <TrendingUp className="w-3.5 h-3.5" aria-hidden="true" />
-              {`+${remaining} more tracks`}
+              {`Xem thêm ${remaining} bài`}
             </>
           )}
         </button>
@@ -579,7 +589,7 @@ ShowMoreButton.displayName = "ShowMoreButton";
 
 interface HeroSectionProps {
   tracks: RankedTrack[];
-  chartData: unknown[];
+  chartData: ChartDataPoint[];
   lastUpdated: string;
   reduced: boolean;
   isLoading: boolean;
@@ -846,12 +856,12 @@ const TrackListSection = memo(
           <Button
             variant="ghost"
             size="sm"
-            aria-label="View ranking rules"
+            aria-label="Xem quy tắc xếp hạng"
             className="text-muted-foreground/55 hover:text-foreground text-[11px] font-semibold h-8 gap-1.5 shrink-0 rounded-lg"
           >
             <Info className="w-3.5 h-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Ranking rules</span>
-            <span className="sm:hidden">Rules</span>
+            <span className="hidden sm:inline">Quy tắc xếp hạng</span>
+            <span className="sm:hidden">Quy tắc</span>
           </Button>
         </motion.div>
 
@@ -909,7 +919,7 @@ const SkipToContent = memo(() => (
     href="#chart-list"
     className="sr-only focus:not-sr-only fixed top-3 left-3 z-[200] px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
   >
-    Skip to track list
+    Chuyển đến danh sách bài hát
   </a>
 ));
 SkipToContent.displayName = "SkipToContent";
@@ -928,15 +938,26 @@ export const TopChartPage = () => {
     refetch,
     lastUpdatedAt,
   } = useRealtimeChart();
-  console.log(tracks);
   const [showAll, setShowAll] = useState(false);
   const reduced = useReducedMotion() ?? false;
 
   const handleRetry = useCallback(() => refetch?.(), [refetch]);
   const handleToggleAll = useCallback(() => setShowAll((v) => !v), []);
 
-  // Pull-to-refresh — fires refetch() when drag exceeds threshold
-  const { isPulling, pullProgress } = usePullToRefresh(handleRetry);
+  // Pull-to-refresh refs — imperative, zero re-renders during gesture
+  const pullIndicatorRef = useRef<HTMLDivElement>(null);
+  const pullTextRef = useRef<HTMLSpanElement>(null);
+  const pullArrowRef = useRef<HTMLSpanElement>(null);
+  const pullHandle = useMemo(
+    () => ({
+      indicatorRef: pullIndicatorRef,
+      textRef: pullTextRef,
+      arrowRef: pullArrowRef,
+    }),
+    [],
+  );
+  usePullToRefresh(handleRetry, pullHandle);
+
   const lastUpdated = useMemo(
     () =>
       new Date(lastUpdatedAt ?? Date.now()).toLocaleTimeString([], {
@@ -963,7 +984,7 @@ export const TopChartPage = () => {
   const navigate = useNavigate();
 
   const hasResults = tracks.length > 0 && chartData.length > 0;
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
   const handleBack = () => {
     if (window.history.length > 1) {
       navigate(-1);
@@ -1005,7 +1026,11 @@ export const TopChartPage = () => {
       <SkipToContent />
 
       {/* Pull-to-refresh indicator — mobile only, zero cost on desktop */}
-      <PullIndicator isPulling={isPulling} pullProgress={pullProgress} />
+      <PullIndicator
+        ref={pullIndicatorRef}
+        textRef={pullTextRef}
+        arrowRef={pullArrowRef}
+      />
 
       <main
         id="top-chart-main"

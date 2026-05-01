@@ -13,7 +13,6 @@ import {
   Monitor,
   Sun,
   ChevronRight,
-  Zap,
   Globe,
   Save,
   Camera,
@@ -32,53 +31,112 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SKINS: { id: Skin; label: string; color: string; desc: string }[] = [
-  {
-    id: "obsidian",
-    label: "Obsidian",
-    color: "hsl(258 90% 56%)",
-    desc: "Deep Indigo",
-  },
+  // ── 8 theme cũ (giữ id, cập nhật color HSL từ v4) ──
   {
     id: "tokyo",
     label: "Tokyo Night",
-    color: "hsl(340 90% 68%)",
+    color: "hsl(340 92% 70%)",
     desc: "Neon Cyberpunk",
   },
   {
     id: "sahara",
     label: "Sahara Gold",
-    color: "hsl(36 95% 56%)",
+    color: "hsl(38 96% 58%)",
     desc: "Luxury Amber",
   },
   {
     id: "nordic",
     label: "Nordic Ice",
-    color: "hsl(199 92% 66%)",
+    color: "hsl(199 95% 68%)",
     desc: "Arctic Minimal",
   },
   {
     id: "amazon",
     label: "Forest Zen",
-    color: "hsl(152 68% 56%)",
+    color: "hsl(152 70% 58%)",
     desc: "Emerald Calm",
   },
   {
     id: "crimson",
-    label: "Crimson",
-    color: "hsl(356 88% 56%)",
+    label: "Crimson Abyss",
+    color: "hsl(351 90% 62%)",
     desc: "Ruby Passion",
   },
   {
     id: "vapor",
     label: "Vaporwave",
-    color: "hsl(286 92% 72%)",
+    color: "hsl(286 94% 74%)",
     desc: "80s Dream",
   },
   {
     id: "slate",
-    label: "Slate",
-    color: "hsl(215 28% 76%)",
+    label: "Midnight Slate",
+    color: "hsl(215 30% 78%)",
     desc: "Pro Steel Gray",
+  },
+  {
+    id: "arctic",
+    label: "Arctic Light",
+    color: "hsl(258 82% 72%)",
+    desc: "Obsidian Contrast",
+  },
+
+  // ── 4 theme v3 bổ sung ──
+  {
+    id: "ocean",
+    label: "Deep Ocean",
+    color: "hsl(213 100% 62%)",
+    desc: "Mysterious Bold",
+  },
+  {
+    id: "rose",
+    label: "Rose Gold",
+    color: "hsl(348 82% 74%)",
+    desc: "Elegant Feminine",
+  },
+  {
+    id: "lime",
+    label: "Neon Lime",
+    color: "hsl(82 92% 62%)",
+    desc: "High Energy",
+  },
+  {
+    id: "mono",
+    label: "Obsidian Mono",
+    color: "hsl(0 0% 92%)",
+    desc: "Ghostly Minimal",
+  },
+
+  // ── 5 theme mới v4 ──
+  {
+    id: "aurora",
+    label: "Aurora Borealis",
+    color: "hsl(168 90% 58%)",
+    desc: "Northern Lights",
+  },
+  {
+    id: "ember",
+    label: "Ember Forge",
+    color: "hsl(22 100% 64%)",
+    desc: "Industrial Fire",
+  },
+  {
+    id: "galaxy",
+    label: "Galaxy Core",
+    color: "hsl(234 78% 76%)",
+    desc: "Deep Space Indigo",
+  },
+  {
+    id: "matcha",
+    label: "Matcha Stone",
+    color: "hsl(142 60% 66%)",
+    desc: "Japanese Zen",
+  },
+  {
+    id: "dusk",
+    label: "Dusk Opal",
+    color: "hsl(292 82% 76%)",
+    desc: "Sunset Iridescent",
   },
 ];
 
@@ -706,24 +764,7 @@ export default function SettingsPage() {
       <div className="section-container py-10 lg:py-16">
         {/* ── Page Header ── */}
         <header className="mb-10 animate-fade-up">
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <span className="badge badge-brand">
-              <Zap size={10} className="mr-1" aria-hidden="true" />
-              Soundwave v5
-            </span>
-            <span className="badge badge-playing">
-              <span
-                className="size-1.5 rounded-full bg-current mr-1 animate-pulse"
-                aria-hidden="true"
-              />
-              Neural Active
-            </span>
-          </div>
           <h1 className="text-display-xl text-brand mb-3">Settings</h1>
-          <p className="text-muted-foreground max-w-xl leading-relaxed">
-            Personalize your Soundwave experience with Adaptive Skins and Neural
-            Audio Engine.
-          </p>
         </header>
 
         <div className="flex flex-col lg:flex-row gap-8 xl:gap-12">

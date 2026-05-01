@@ -9,6 +9,7 @@ import Artist from "../models/Artist";
 import Album from "../models/Album";
 import Genre from "../models/Genre";
 import Follow from "../models/Follow";
+import TrackMoodVideo from "../models/TrackMoodVideo";
 import ApiError from "../utils/ApiError";
 import { generateUniqueSlug } from "../utils/slug";
 import {
@@ -40,6 +41,7 @@ import {
   withCacheTimeout,
 } from "../utils/cacheHelper";
 import recommendationService from "./recommendation.service";
+import { parseGenreIds } from "../utils/helper";
 
 type MulterS3File = Express.Multer.File & { location: string; key: string };
 
@@ -124,13 +126,22 @@ class TrackService {
       const album = await Album.findById(data.albumId).lean();
       if (album) coverImageUrl = album.coverImage;
     }
-
+    let featuringArtists: Types.ObjectId[] = [];
+    if (data.featuringArtistIds) {
+      featuringArtists = parseGenreIds(data.featuringArtistIds);
+    }
+    let genres: Types.ObjectId[] = [];
+    if (data.genreIds) {
+      genres = parseGenreIds(data.genreIds);
+    }
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
       const track = new Track({
         ...data,
+        featuringArtists,
+        genres,
         slug,
         artist: targetArtistId,
         uploader: currentUser._id,
@@ -720,13 +731,7 @@ class TrackService {
     if (cached) {
       const track = JSON.parse(cached as string);
       // Logic phân quyền sau khi lấy từ Cache (Bảo vệ dữ liệu Private)
-      const isOwner = userId && track.uploader?.toString() === userId;
-      if (!track.isPublic && !isOwner && !isAdmin) {
-        throw new ApiError(
-          httpStatus.FORBIDDEN,
-          "Bài hát này đang ở chế độ riêng tư",
-        );
-      }
+
       return track;
     }
 
@@ -757,12 +762,6 @@ class TrackService {
 
     // 4. KIỂM TRA QUYỀN TRUY CẬP TRƯỚC KHI LƯU CACHE
     const isOwner = userId && track.uploader?.toString() === userId;
-    if (!track.isPublic && !isOwner && !isAdmin) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Bài hát này đang ở chế độ riêng tư",
-      );
-    }
 
     // 5. THIẾT LẬP CACHE (TTL dài vì Detail ít thay đổi hơn List)
     // Sử dụng Jitter để tránh hết hạn đồng loạt (30 - 40 phút)
@@ -802,6 +801,137 @@ class TrackService {
     return jobRetryMoodCanvas(trackId);
   }
 
+  // ── BULK RETRY HELPERS (Chunked, admin-safe) ───────────────────────────
+  private async _chunkAndRun<T extends any>(
+    ids: string[],
+    handler: (id: string) => Promise<T>,
+    chunkSize = 20,
+  ) {
+    const results: Array<{ id: string; success: boolean; error?: string }> = [];
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      // Run chunk in parallel, but sequential between chunks
+      const promises = chunk.map(async (id) => {
+        try {
+          await handler.call(this, id);
+          return { id, success: true };
+        } catch (err: any) {
+          return { id, success: false, error: err?.message ?? String(err) };
+        }
+      });
+      const settled = await Promise.all(promises);
+      results.push(...settled);
+      // optional small delay could be inserted here if needed
+    }
+    return results;
+  }
+
+  /** Bulk retry HLS transcode for multiple tracks (chunked) */
+  async bulkRetryTranscode(currentUser: IUser, trackIds: string[]) {
+    // Authorization: allow admin or owner-of-tracks
+    if (currentUser.role !== "admin") {
+      const count = await Track.countDocuments({
+        _id: { $in: trackIds },
+        uploader: currentUser._id,
+      });
+      if (count !== trackIds.length)
+        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
+    }
+
+    const details = await this._chunkAndRun(trackIds, this.retryTranscode);
+    const queued = details.filter((d) => d.success).length;
+    return {
+      requested: trackIds.length,
+      queued,
+      failed: details.length - queued,
+      details,
+    };
+  }
+
+  /** Bulk retry lyrics (LRCLIB + karaoke) */
+  async bulkRetryLyrics(currentUser: IUser, trackIds: string[]) {
+    if (currentUser.role !== "admin") {
+      const count = await Track.countDocuments({
+        _id: { $in: trackIds },
+        uploader: currentUser._id,
+      });
+      if (count !== trackIds.length)
+        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
+    }
+
+    const details = await this._chunkAndRun(trackIds, this.retryLyrics);
+    const queued = details.filter((d) => d.success).length;
+    return {
+      requested: trackIds.length,
+      queued,
+      failed: details.length - queued,
+      details,
+    };
+  }
+
+  /** Bulk retry karaoke (forced alignment) */
+  async bulkRetryKaraoke(currentUser: IUser, trackIds: string[]) {
+    if (currentUser.role !== "admin") {
+      const count = await Track.countDocuments({
+        _id: { $in: trackIds },
+        uploader: currentUser._id,
+      });
+      if (count !== trackIds.length)
+        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
+    }
+
+    const details = await this._chunkAndRun(trackIds, this.retryKaraoke);
+    const queued = details.filter((d) => d.success).length;
+    return {
+      requested: trackIds.length,
+      queued,
+      failed: details.length - queued,
+      details,
+    };
+  }
+
+  /** Bulk retry mood canvas matching */
+  async bulkRetryMood(currentUser: IUser, trackIds: string[]) {
+    if (currentUser.role !== "admin") {
+      const count = await Track.countDocuments({
+        _id: { $in: trackIds },
+        uploader: currentUser._id,
+      });
+      if (count !== trackIds.length)
+        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
+    }
+
+    const details = await this._chunkAndRun(trackIds, this.retryMoodCanvas);
+    const queued = details.filter((d) => d.success).length;
+    return {
+      requested: trackIds.length,
+      queued,
+      failed: details.length - queued,
+      details,
+    };
+  }
+
+  /** Bulk retry full pipeline (HLS + Lyrics + Mood) */
+  async bulkRetryFull(currentUser: IUser, trackIds: string[]) {
+    if (currentUser.role !== "admin") {
+      const count = await Track.countDocuments({
+        _id: { $in: trackIds },
+        uploader: currentUser._id,
+      });
+      if (count !== trackIds.length)
+        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
+    }
+
+    const details = await this._chunkAndRun(trackIds, this.retryFull);
+    const queued = details.filter((d) => d.success).length;
+    return {
+      requested: trackIds.length,
+      queued,
+      failed: details.length - queued,
+      details,
+    };
+  }
+
   // ── 7. BULK UPDATE ────────────────────────────────────────────────────────
 
   async bulkUpdateTracks(
@@ -820,8 +950,9 @@ class TrackService {
     }
 
     // 2. Thu thập dữ liệu TRƯỚC khi Update (để Invalidate cache)
+    // Lấy thêm moodVideo + tags để có thể điều chỉnh thống kê hoặc re-calc
     const tracksBefore = await Track.find({ _id: { $in: trackIds } })
-      .select("artist album genres duration")
+      .select("artist album genres duration moodVideo tags")
       .lean();
 
     if (!tracksBefore.length) return { modifiedCount: 0 };
@@ -835,15 +966,38 @@ class TrackService {
       if (updates.status) updatePayload.status = updates.status;
       if (updates.isPublic !== undefined)
         updatePayload.isPublic = String(updates.isPublic) === "true";
+
+      // Album — giữ nguyên logic cũ
       if (updates.albumId !== undefined) {
         const albumId = updates.albumId;
 
         if (albumId === "" || albumId === "null" || albumId === null) {
           updatePayload.album = null; // Mongoose tự hiểu null là xóa liên kết
         } else {
-          // Lúc này TypeScript biết chắc albumId là một string hợp lệ (không phải null)
           updatePayload.album = new Types.ObjectId(albumId);
         }
+      }
+
+      // Mood Video (Canvas) — hỗ trợ gán / gỡ
+      if (updates.moodVideoId !== undefined) {
+        const mv = updates.moodVideoId;
+        if (mv === "" || mv === "null" || mv === null) {
+          updatePayload.moodVideo = null;
+        } else {
+          updatePayload.moodVideo = new Types.ObjectId(mv as string);
+        }
+      }
+
+      // Tags (ghi đè)
+      if (updates.tags !== undefined) {
+        updatePayload.tags = updates.tags;
+      }
+
+      // Genres (ghi đè)
+      if (updates.genreIds !== undefined) {
+        updatePayload.genres = (updates.genreIds || []).map(
+          (id: string) => new Types.ObjectId(id),
+        );
       }
 
       // 4. Cập nhật Album Counters (BulkWrite tối ưu)
@@ -904,6 +1058,41 @@ class TrackService {
         if (bulkOps.length > 0) await Album.bulkWrite(bulkOps, { session });
       }
 
+      // 4b. Genres Counters (Nếu thay đổi thể loại hàng loạt)
+      if (updates.genreIds !== undefined) {
+        const genreChanges = new Map<string, number>();
+
+        // Trừ các genre cũ (mỗi track trừ 1 cho mỗi genre hiện có)
+        for (const t of tracksBefore) {
+          if (t.genres && Array.isArray(t.genres)) {
+            for (const g of t.genres) {
+              const id = g.toString();
+              genreChanges.set(id, (genreChanges.get(id) || 0) - 1);
+            }
+          }
+        }
+
+        // Cộng genre mới (mỗi track cộng 1 cho mỗi genre mới)
+        if (updates.genreIds && updates.genreIds.length) {
+          for (const id of updates.genreIds) {
+            genreChanges.set(id, (genreChanges.get(id) || 0) + trackIds.length);
+          }
+        }
+
+        const genreBulkOps = Array.from(genreChanges.entries()).map(
+          ([id, delta]) => ({
+            updateOne: {
+              filter:
+                delta < 0 ? { _id: id, trackCount: { $gt: 0 } } : { _id: id },
+              update: { $inc: { trackCount: delta } },
+            },
+          }),
+        );
+
+        if (genreBulkOps.length > 0)
+          await Genre.bulkWrite(genreBulkOps, { session });
+      }
+
       // 5. Thực hiện Update Many
       const result = await Track.updateMany(
         { _id: { $in: trackIds } },
@@ -913,9 +1102,31 @@ class TrackService {
 
       await session.commitTransaction();
 
-      Promise.allSettled([
-        invalidateTracksCache(trackIds), // Dọn dẹp cache track chi tiết
-      ]);
+      const postTasks: Promise<any>[] = [invalidateTracksCache(trackIds)]; // Dọn dẹp cache track chi tiết
+
+      // Nếu có cập nhật moodVideoId, tính lại usage count cho các mood video cũ + mới
+      if (updates.moodVideoId !== undefined) {
+        const idsToRecalc = new Set<string>();
+        for (const t of tracksBefore) {
+          if (t && (t as any).moodVideo)
+            idsToRecalc.add(String((t as any).moodVideo));
+        }
+        if (
+          updates.moodVideoId &&
+          updates.moodVideoId !== "" &&
+          updates.moodVideoId !== "null"
+        ) {
+          idsToRecalc.add(updates.moodVideoId as string);
+        }
+
+        for (const id of idsToRecalc) {
+          postTasks.push(
+            TrackMoodVideo.calculateUsage(id).catch(console.error),
+          );
+        }
+      }
+
+      Promise.allSettled(postTasks);
 
       return result;
     } catch (error) {

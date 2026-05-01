@@ -15,7 +15,12 @@ export type Skin =
   | "rose" // Rose Gold (New)
   | "lime" // Neon Lime (New)
   | "mono" // Obsidian Mono (New)
-  | "arctic"; // Arctic Light (New)
+  | "arctic"
+  | "aurora"
+  | "ember"
+  | "galaxy"
+  | "matcha"
+  | "dusk"; // Arctic Light (New)
 export type ThemeProviderState = {
   theme: Theme;
   skin: Skin;

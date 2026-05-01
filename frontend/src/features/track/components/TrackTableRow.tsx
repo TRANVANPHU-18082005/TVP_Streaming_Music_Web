@@ -37,9 +37,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { formatDuration, STATUS_CONFIG } from "@/utils/track-helper";
+import { formatDuration, STATUS_CONFIG, toCDN } from "@/utils/track-helper";
 import { toast } from "sonner";
 import { ITrack } from "@/features/track/types";
+import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,7 +111,7 @@ const TrackCover = memo(
 
       {/* Cover */}
       {src && (
-        <img
+        <ImageWithFallback
           src={src}
           alt={title}
           loading="lazy"
@@ -118,7 +120,7 @@ const TrackCover = memo(
             "size-full object-cover transition-all duration-300",
             isActive ? "brightness-50 scale-105" : "brightness-100",
             canPlay &&
-            "group-hover/cover:brightness-50 group-hover/cover:scale-105",
+              "group-hover/cover:brightness-50 group-hover/cover:scale-105",
           )}
         />
       )}
@@ -358,10 +360,10 @@ export const TrackTableRow = memo(
           "hover:bg-muted/30",
           // States
           isActive &&
-          !isFailed && [
-            "bg-primary/[0.04] hover:bg-primary/[0.07]",
-            "border-b-primary/10",
-          ],
+            !isFailed && [
+              "bg-primary/[0.04] hover:bg-primary/[0.07]",
+              "border-b-primary/10",
+            ],
           isSelected && "bg-secondary/20 hover:bg-secondary/30",
           isFailed && "bg-destructive/[0.03] hover:bg-destructive/[0.06]",
           // Active left accent via pseudo — achieved via shadow trick
@@ -405,7 +407,7 @@ export const TrackTableRow = memo(
         <TableCell className="py-2.5 pl-2">
           <div className="flex items-center gap-3 min-w-0">
             <TrackCover
-              src={track.coverImage}
+              src={toCDN(track.coverImage) || track.coverImage}
               title={track.title}
               isActive={isActive}
               isPlaying={isPlaying}
@@ -447,31 +449,11 @@ export const TrackTableRow = memo(
 
         {/* ── Col 4: Artist (sm+) ── */}
         <TableCell className="hidden sm:table-cell text-sm text-muted-foreground py-2.5">
-          <Link
-            to={`/artist/${track.artist?.slug}`}
-            onClick={(e) => e.stopPropagation()}
-            className="hover:text-foreground hover:underline transition-colors truncate block max-w-[180px]"
-            title={track.artist?.name}
-          >
-            {track.artist?.name}
-          </Link>
-          {track.featuringArtists?.length > 0 && (
-            <span className="text-[11px] text-muted-foreground/60 block truncate mt-0.5">
-              ft.{" "}
-              {track.featuringArtists.map((a, i) => (
-                <React.Fragment key={a._id}>
-                  {i > 0 && ", "}
-                  <Link
-                    to={`/artist/${a.slug}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="hover:text-foreground hover:underline transition-colors"
-                  >
-                    {a.name}
-                  </Link>
-                </React.Fragment>
-              ))}
-            </span>
-          )}
+          <ArtistDisplay
+            mainArtist={track.artist}
+            featuringArtists={track.featuringArtists}
+            className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
+          />
         </TableCell>
 
         {/* ── Col 5: Album (md+) ── */}

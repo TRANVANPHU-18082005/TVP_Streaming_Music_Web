@@ -103,6 +103,27 @@ api.interceptors.response.use(
     }
     // LOGIC 401 & REFRESH TOKEN
     if (status === 401 && !originalRequest._retry) {
+      try {
+        // If we're currently on a social callback page that includes an access
+        // token in the URL (e.g. /auth/facebook?token=...), skip the automatic
+        // refresh attempt — the browser may not yet have stored the Set-Cookie
+        // issued by the OAuth redirect response, causing refresh to fail.
+        const pathname =
+          typeof window !== "undefined" ? window.location.pathname : "";
+        const search =
+          typeof window !== "undefined" ? window.location.search : "";
+        const isSocialCallback =
+          pathname.startsWith("/auth") &&
+          (search.includes("token=") || search.includes("code="));
+        if (isSocialCallback) {
+          // Let the original 401 bubble up (the social callback page will
+          // handle login using the token in the URL). Avoid triggering a
+          // refresh request with no cookie present.
+          return Promise.reject(error);
+        }
+      } catch (e) {
+        // ignore
+      }
       // 1. Nếu lỗi 401 đến từ chính API refresh hoặc login -> Logout luôn
       if (originalRequest.url?.includes("/auth/")) {
         // Dispatch action Logout (Dùng type string để an toàn dependency)

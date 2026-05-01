@@ -56,14 +56,14 @@ interface PlaylistFilterProps {
 const FILTER_TAG_DEFS = [
   {
     key: "isSystem" as const,
-    label: "Source",
+    label: "Nguồn",
     icon: Server,
     iconColor: "hsl(var(--info))",
     bgClass: "bg-info/10",
   },
   {
     key: "visibility" as const,
-    label: "Visibility",
+    label: "Có thể xem",
     icon: Eye,
     iconColor: "hsl(var(--wave-3))",
     bgClass: "bg-cyan-500/10",
@@ -81,8 +81,8 @@ function getTagDisplayValue(
     case "isSystem":
       return params.isSystem !== undefined
         ? params.isSystem
-          ? "System"
-          : "User"
+          ? "Hệ thống"
+          : "Người dùng"
         : null;
     case "visibility":
       return params.visibility
@@ -135,8 +135,8 @@ const SearchInput = memo(
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search playlists by title, creator…"
-        aria-label="Search playlists"
+        placeholder="Tìm kiếm playlists"
+        aria-label="Tìm kiếm playlists"
         className={cn(
           "h-11 pl-10 pr-10 text-sm",
           "bg-background/60 dark:bg-surface-1/60",
@@ -299,7 +299,7 @@ const ActiveTagsBar = memo(
         <div className="flex items-center gap-1.5 shrink-0">
           <Sparkles className="size-3 text-primary/60" aria-hidden="true" />
           <span className="text-overline text-muted-foreground/50">
-            Filters:
+            Bộ lọc:
           </span>
         </div>
 
@@ -326,7 +326,7 @@ const ActiveTagsBar = memo(
           className="btn-danger btn-sm ml-auto h-7 px-3 gap-1.5 text-[11px]"
         >
           <Trash2 className="size-3" aria-hidden="true" />
-          Clear all
+          Xóa tất cả
         </button>
       </div>
     );
@@ -374,7 +374,7 @@ const FilterToggleButton = memo(
     >
       <div className="flex items-center gap-2">
         <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="hidden sm:block">Filters</span>
+        <span className="hidden sm:block">Bộ lọc</span>
       </div>
 
       <div className="flex items-center gap-1.5 ml-1">
@@ -553,10 +553,10 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
                   </div>
                 </SelectTrigger>
                 <SelectContent align="end">
-                  <SelectItem value="newest">Newest</SelectItem>
-                  <SelectItem value="popular">Popular</SelectItem>
-                  <SelectItem value="followers">Followers</SelectItem>
-                  <SelectItem value="name">A – Z</SelectItem>
+                  <SelectItem value="newest">Mới nhất</SelectItem>
+                  <SelectItem value="popular">Phổ biến</SelectItem>
+                  <SelectItem value="followers">Người theo dõi</SelectItem>
+                  <SelectItem value="name">Tên</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -603,7 +603,7 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
                   <div className="space-y-0">
                     <FilterLabel
                       icon={LayoutTemplate}
-                      text="Source"
+                      text="Nguồn"
                       iconColor="hsl(var(--info))"
                     />
                     <Select
@@ -620,21 +620,21 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
                       }
                     >
                       <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue placeholder="All Sources" />
+                        <SelectValue placeholder="Tất cả nguồn" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Sources</SelectItem>
+                        <SelectItem value="all">Tất cả nguồn</SelectItem>
                         <IconSelectItem
                           value="true"
                           icon={Server}
                           iconColor="hsl(var(--info))"
-                          label="System Only"
+                          label="Hệ thống"
                         />
                         <IconSelectItem
                           value="false"
                           icon={User}
                           iconColor="hsl(var(--wave-2))"
-                          label="User Created"
+                          label="Người dùng tạo"
                         />
                       </SelectContent>
                     </Select>
@@ -646,7 +646,7 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
                   <div className="space-y-0">
                     <FilterLabel
                       icon={Eye}
-                      text="Visibility"
+                      text="Có thể xem"
                       iconColor="hsl(var(--wave-3))"
                     />
                     <Select
@@ -656,27 +656,27 @@ const PlaylistFilter = memo<PlaylistFilterProps>(
                       }
                     >
                       <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue placeholder="All Status" />
+                        <SelectValue placeholder="Tất cả trạng thái" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="all">Tất cả trạng thái</SelectItem>
                         <IconSelectItem
                           value="public"
                           icon={Globe}
                           iconColor="hsl(var(--success))"
-                          label="Public"
+                          label="Công khai"
                         />
                         <IconSelectItem
                           value="private"
                           icon={Lock}
                           iconColor="hsl(var(--warning))"
-                          label="Private"
+                          label="Riêng tư"
                         />
                         <IconSelectItem
                           value="unlisted"
                           icon={Link}
                           iconColor="hsl(var(--info))"
-                          label="Unlisted"
+                          label="Không công khai"
                         />
                       </SelectContent>
                     </Select>

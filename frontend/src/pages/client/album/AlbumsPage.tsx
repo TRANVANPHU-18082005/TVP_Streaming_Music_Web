@@ -5,28 +5,22 @@ import { Disc3 } from "lucide-react";
 import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
 import MusicResult from "@/components/ui/Result";
 import Pagination from "@/utils/pagination";
-import CardSkeleton from "@/components/ui/CardSkeleton";
 import AlbumFilter from "@/features/album/components/AlbumFilter";
 import { useAlbumParams } from "@/features/album/hooks/useAlbumParams";
 import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
 
 import { Albumpageskeleton, useSyncInteractions } from "@/features";
-import { APP_CONFIG } from "@/config/constants";
+import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-const DEFAULT_META = {
-  totalPages: 1,
-  totalItems: 0,
-  page: 1,
-  pageSize: 24,
-} as const;
 
 /** Stagger delay — 45ms/item, capped at 700ms (prevents 16th+ card jank) */
 const staggerDelay = (i: number) => Math.min(i * 45, 700);
@@ -67,7 +61,7 @@ const PageHero = memo(() => (
     </div>
     {/* Title */}
     <h1
-      className="text-display-xl text-gradient-wave mb-2 animate-fade-up animation-fill-both"
+      className="text-display-xl text-primary mb-2 animate-fade-up animation-fill-both"
       style={{ animationDelay: "60ms" }}
       id="album-page-heading"
     >
@@ -132,7 +126,7 @@ const PaginationStrip = memo(
         totalPages={totalPages}
         onPageChange={onPageChange}
         totalItems={totalItems}
-        itemsPerPage={pageSize || APP_CONFIG.PAGINATION_LIMIT}
+        itemsPerPage={pageSize || DEFAULT_GRID_META.pageSize}
       />
     </div>
   ),
@@ -149,13 +143,13 @@ const AlbumPage: React.FC = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useAlbumParams(APP_CONFIG.PAGINATION_LIMIT || 12);
+  } = useAlbumParams(DEFAULT_GRID_META.pageSize);
 
   const { data, isLoading, isError, refetch } = useAlbumsQuery(filterParams);
 
   const albums = useMemo(() => data?.albums ?? [], [data?.albums]);
   const meta = useMemo(
-    () => ({ ...DEFAULT_META, ...data?.meta }),
+    () => ({ ...DEFAULT_GRID_META, ...data?.meta }),
     [data?.meta],
   );
   const albumIds = useMemo(() => albums?.map((a) => a._id) ?? [], [albums]);
@@ -175,42 +169,66 @@ const AlbumPage: React.FC = () => {
     }),
     [handleSearch, handleFilterChange, clearFilters],
   );
-  const skeletonCount = meta.pageSize || APP_CONFIG.PAGINATION_LIMIT;
   const hasResults = albums.length > 0;
   const onBack = useSmartBack();
   const isFiltering = Boolean(filterParams.keyword);
-  const isOffline = !navigator.onLine;
-  // ── Error state ─────────────────────────────────────────────────────────
-  // Initial Load
-  if (isLoading && !hasResults) {
-    return <Albumpageskeleton cardCount={meta.pageSize || 18} />;
-  }
-  // Switching
-  if (isLoading && hasResults) {
-    return <WaveformLoader glass={false} text="Đang tải" />;
-  }
-  // Deep Error
-  if (isError && !hasResults) {
-    return (
-      <>
-        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
-        </div>
-      </>
-    );
-  }
-  // Offline
-  if (isOffline) {
-    return (
-      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+  const isOffline = !useOnlineStatus();
+  const renderContent = () => {
+    if (isLoading && !hasResults) {
+      return (
+        <Albumpageskeleton
+          cardCount={meta.pageSize || DEFAULT_GRID_META.pageSize}
+        />
+      );
+    }
+
+    if (isLoading && hasResults) {
+      return <WaveformLoader glass={false} text="Đang tải" />;
+    }
+
+    if (isOffline) {
+      return (
         <MusicResult
           variant="error-network"
           onRetry={refetch}
           onBack={onBack}
         />
-      </div>
+      );
+    }
+
+    if (isError || !hasResults) {
+      if (!isError && !hasResults) {
+        return !isFiltering ? (
+          <MusicResult
+            variant="empty-albums"
+            description="Danh sách album hiện đang trống"
+          />
+        ) : (
+          <MusicResult
+            variant="empty-albums"
+            description="Không có kết quả! Thử bộ lọc khác"
+            onClearFilters={clearFilters}
+            onBack={onBack}
+          />
+        );
+      }
+      return <MusicResult variant="error" onRetry={refetch} />;
+    }
+
+    return (
+      <AlbumGrid>
+        {albums.map((album, index) => (
+          <div
+            key={album._id}
+            className="animate-fade-up animation-fill-both"
+            style={{ animationDelay: `${staggerDelay(index)}ms` }}
+          >
+            <PublicAlbumCard album={album} />
+          </div>
+        ))}
+      </AlbumGrid>
     );
-  }
+  };
 
   return (
     <div className="relative min-h-screen pb-28">
@@ -247,46 +265,16 @@ const AlbumPage: React.FC = () => {
           aria-label="Danh sách album"
           aria-busy={isLoading}
         >
-          {isLoading ? (
-            <AlbumGrid>
-              <CardSkeleton count={skeletonCount} />
-            </AlbumGrid>
-          ) : !hasResults ? (
-            !isLoading && !isFiltering ? (
-              <MusicResult
-                variant="empty-albums"
-                description="Album hiện đang trống"
-              />
-            ) : (
-              <MusicResult
-                variant="empty-albums"
-                description="Không có kết quả! Thử bộ lọc khác "
-                onClearFilters={clearFilters}
-                onBack={onBack}
-              />
-            )
-          ) : (
-            <AlbumGrid>
-              {albums.map((album, index) => (
-                <div
-                  key={album._id}
-                  className="animate-fade-up animation-fill-both"
-                  style={{ animationDelay: `${staggerDelay(index)}ms` }}
-                >
-                  <PublicAlbumCard album={album} />
-                </div>
-              ))}
-            </AlbumGrid>
-          )}
+          {renderContent()}
         </section>
 
         {/* ── Pagination */}
         {!isLoading && hasResults && (
           <PaginationStrip
-            currentPage={meta.page}
-            totalPages={meta.totalPages}
-            totalItems={meta.totalItems}
-            pageSize={meta.pageSize}
+            currentPage={meta.page || DEFAULT_GRID_META.page}
+            totalPages={meta.totalPages || DEFAULT_GRID_META.totalPages}
+            totalItems={meta.totalItems || DEFAULT_GRID_META.totalItems}
+            pageSize={meta.pageSize || DEFAULT_GRID_META.pageSize}
             onPageChange={handlePageChange}
           />
         )}

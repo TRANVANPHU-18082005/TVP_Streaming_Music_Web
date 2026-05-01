@@ -1,31 +1,9 @@
-/**
- * ChartItem.tsx — Premium ranked track row (v5.0 — Soundwave Neural Audio)
- *
- * CHANGES vs v4.0:
- * ─ Props: prevRank removed — rank/trend/rankDelta now come pre-computed
- *   from RankedTrack (hook v10/10). rankBadge prop accepts pre-built badge
- *   from TopFeaturedTracks so ChartItem stays decoupled from trend logic.
- * ─ setQueue: aligned with playerSlice v2 signature
- *   { trackIds, initialMetadata, startIndex } — no longer passes tracks[].
- * ─ PlayCount: renders track.score (24h unique listeners) instead of
- *   track.playCount (all-time). Label updated to "24h".
- * ─ MarqueeText: gated by useOverflows() hook — only scrolls when title
- *   genuinely overflows its container, eliminating unnecessary motion.
- * ─ RankBadge: "haptic" pulse animation fires once on mount via
- *   key={rankDelta} trick — gives rank changes physical weight without state.
- */
-
 import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Play,
   Pause,
-  MoreHorizontal,
   Loader2,
-  PlusCircle,
-  Share2,
-  Disc3,
-  ListMusic,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -35,21 +13,17 @@ import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
-import { fmtCount, formatDuration } from "@/utils/track-helper";
+import { fmtCount, formatDuration, toCDN } from "@/utils/track-helper";
 import { useAppDispatch } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
 import { handleError } from "@/utils/handleError";
-import { MarqueeText } from "@/features/player/components/MarqueeText";
 import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
+import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
+import { TrackTitleMarquee } from "@/features/player/components/TrackTitleMarquee";
+import { WaveformBars } from "@/components/MusicVisualizer";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useOverflows — measures whether text overflows its container
@@ -60,7 +34,7 @@ import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 
 const useOverflows = (
   text: string,
-): [React.RefObject<HTMLParagraphElement>, boolean] => {
+): [React.RefObject<HTMLParagraphElement | null>, boolean] => {
   const ref = useRef<HTMLParagraphElement>(null);
   const [overflows, setOverflows] = useState(false);
 
@@ -79,27 +53,6 @@ const useOverflows = (
 
   return [ref, overflows];
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WAVE BARS
-// ─────────────────────────────────────────────────────────────────────────────
-
-const WaveBars = memo(({ active }: { active: boolean }) => (
-  <div
-    className={cn("eq-bars", !active && "paused")}
-    aria-hidden="true"
-    style={{ height: "18px", gap: "2px" }}
-  >
-    {[0, 1, 2, 3].map((i) => (
-      <span
-        key={i}
-        className="eq-bar"
-        style={{ background: "hsl(var(--primary))", opacity: active ? 1 : 0.3 }}
-      />
-    ))}
-  </div>
-));
-WaveBars.displayName = "WaveBars";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RANK CONFIG
@@ -368,10 +321,9 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
   const rowBg = isActivePlaying ? cfg.rowActive : cfg.rowIdle;
 
   // MarqueeText overflow gate — only scroll when title genuinely overflows
-  const [titleRef, titleOverflows] = useOverflows(track.title);
+  const [titleRef] = useOverflows(track.title);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-
   const handlePlayPause = useCallback(
     async (e: React.MouseEvent | React.KeyboardEvent) => {
       e.stopPropagation();
@@ -390,6 +342,8 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
             trackIds: [track._id],
             initialMetadata: [],
             startIndex: 0,
+            isShuffling: false,
+
             source: {
               id: track._id,
               type: "chart",
@@ -399,20 +353,19 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         );
         dispatch(setIsPlaying(true));
       } catch (err) {
-        handleError(err, "Playback failed. Please try again.");
+        handleError(err, "Không thể phát nhạc. Hãy thử lại.");
       } finally {
         setIsLoadingPlay(false);
       }
     },
-    [isCurrentTrack, isPlaying, isLoadingPlay, track, dispatch],
-  );
-
-  const handleGoToArtist = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (track.artist?.slug) navigate(`/artist/${track.artist.slug}`);
-    },
-    [track.artist?.slug, navigate],
+    [
+      isCurrentTrack,
+      isPlaying,
+      isLoadingPlay,
+      track._id,
+      track.title,
+      dispatch,
+    ],
   );
 
   const handleGoToAlbum = useCallback(
@@ -439,7 +392,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
     <div
       role="row"
       tabIndex={0}
-      aria-label={`${isActivePlaying ? "Pause" : "Play"}: ${track.title} – ${track.artist?.name ?? "Unknown Artist"}`}
+      aria-label={`${isActivePlaying ? "Tạm dừng" : "Phát"}: ${track.title} – ${track.artist?.name ?? "Ẩn danh"}`}
       aria-pressed={isActivePlaying}
       onClick={handlePlayPause}
       onKeyDown={handleKeyDown}
@@ -473,7 +426,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
             !isCurrentTrack && cfg.numGlow,
           )}
         >
-          {isCurrentTrack ? <WaveBars active={isActivePlaying} /> : rank}
+          {isCurrentTrack ? <WaveformBars active={isActivePlaying} /> : rank}
         </div>
 
         <RankBadge trend={track.trend} rankDelta={track.rankDelta} />
@@ -500,7 +453,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         )}
       >
         <ImageWithFallback
-          src={track.coverImage}
+          src={toCDN(track.coverImage) || track.coverImage}
           alt={track.title}
           className="size-full object-cover"
         />
@@ -512,9 +465,6 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
 
       {/* ── TITLE + ARTIST ── */}
       <div className="relative z-10 flex-1 min-w-0 py-2.5 pr-2">
-        {/* THẺ ĐO (Invisible): Luôn tồn tại để ResizeObserver theo dõi. 
-    Không có truncate để scrollWidth giãn ra tự nhiên.
-  */}
         <p
           ref={titleRef}
           className="absolute invisible whitespace-nowrap pointer-events-none"
@@ -524,22 +474,36 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         </p>
 
         {/* HIỂN THỊ THỰC TẾ */}
-        {isActive && titleOverflows ? (
-          <MarqueeText
-            text={track.title}
-            className="text-sm font-medium leading-snug mb-0.5 text-[hsl(var(--primary))]"
+        {isActive ? (
+          <TrackTitleMarquee
+            title={track.title}
+            mainArtist={track.artist}
+            featuringArtists={track.featuringArtists}
+            className="text-sm"
+            artistClassName="text-xs"
           />
         ) : (
           <p
             title={track.title}
             className={cn(
               "truncate text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
-              isActive ? "text-[hsl(var(--primary))]" : "text-foreground",
+              "text-foreground",
             )}
           >
             {track.title}
           </p>
         )}
+
+        {/* Artist name — FIX B4: was missing entirely */}
+        <div className="min-w-0 truncate text-xs">
+          {!isActive && (
+            <ArtistDisplay
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
+            />
+          )}
+        </div>
       </div>
 
       {/* ── ALBUM (lg+ column) ── */}
@@ -547,7 +511,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         <button
           type="button"
           onClick={handleGoToAlbum}
-          aria-label={`Go to album: ${track.album.title}`}
+          aria-label={`Đi đến album: ${track.album.title}`}
           className={cn(
             "relative z-10 hidden lg:block w-[172px] xl:w-[208px] shrink-0 px-4",
             "text-[12.5px] truncate text-left",
@@ -590,7 +554,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         {/* Actions — slides in on hover */}
         <div
           className={cn(
-            "absolute right-0 flex items-center gap-1",
+            "absolute right-10 flex items-center gap-1",
             "opacity-0 translate-x-2",
             "group-hover:opacity-100 group-hover:translate-x-0",
             "transition-[opacity,transform] duration-200 ease-out",
@@ -598,106 +562,6 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
           )}
         >
           <TrackLikeButton id={track._id} />
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`More options for ${track.title}`}
-                className={cn(
-                  "flex items-center justify-center size-8 rounded-full",
-                  "text-muted-foreground/50 hover:text-foreground",
-                  "hover:bg-muted/60 transition-colors duration-150",
-                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring)/0.4)]",
-                )}
-              >
-                <MoreHorizontal className="size-[15px]" aria-hidden="true" />
-              </button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent
-              align="end"
-              sideOffset={4}
-              onClick={(e) => e.stopPropagation()}
-              className="w-52 rounded-xl p-1 glass-frosted shadow-floating border border-border/50"
-            >
-              <DropdownMenuItem
-                onClick={handlePlayPause}
-                className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]"
-              >
-                {isActivePlaying ? (
-                  <>
-                    <Pause
-                      className="size-4 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    Pause
-                  </>
-                ) : (
-                  <>
-                    <Play
-                      className="size-4 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    Play now
-                  </>
-                )}
-              </DropdownMenuItem>
-
-              <DropdownMenuItem className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]">
-                <ListMusic
-                  className="size-4 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                Add to queue
-              </DropdownMenuItem>
-
-              <DropdownMenuItem className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]">
-                <PlusCircle
-                  className="size-4 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                Add to playlist
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator className="my-1 bg-border/50" />
-
-              <DropdownMenuItem
-                onClick={handleGoToArtist}
-                disabled={!track.artist?.slug}
-                className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]"
-              >
-                <Disc3
-                  className="size-4 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                View artist
-              </DropdownMenuItem>
-
-              <DropdownMenuItem
-                onClick={handleGoToAlbum}
-                disabled={!track.album?.slug}
-                className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]"
-              >
-                <Disc3
-                  className="size-4 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                View album
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator className="my-1 bg-border/50" />
-
-              <DropdownMenuItem className="menu-item cursor-pointer py-2.5 gap-3 font-medium text-[13px]">
-                <Share2
-                  className="size-4 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                Share
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
     </div>

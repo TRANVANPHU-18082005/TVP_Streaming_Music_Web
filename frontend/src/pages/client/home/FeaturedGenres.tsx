@@ -11,6 +11,8 @@ import SectionAmbient from "../../../components/SectionAmbient";
 import { IGenre } from "@/features";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { APP_CONFIG } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — scale-first reveal suits the wide genre cards
@@ -64,7 +66,7 @@ const GenresHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
           className="text-overline"
           style={{ color: "hsl(var(--wave-10))" }}
         >
-          Explore
+          Khám phá
         </span>
       </div>
 
@@ -72,7 +74,7 @@ const GenresHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         id="featured-genres-heading"
         className="text-section-title text-foreground leading-tight"
       >
-        Browse by Genre
+        Thể loại âm nhạc
       </h2>
 
       <p className="text-section-subtitle hidden sm:block">
@@ -123,7 +125,7 @@ const SkeletonGrid = memo(() => (
       aria-label="Đang tải thể loại"
       aria-busy="true"
     >
-      {Array.from({ length: 8 }).map((_, i) => (
+      {Array.from({ length: APP_CONFIG.HOME_PAGE_LIMIT }).map((_, i) => (
         <div
           key={i}
           className="skeleton w-full"
@@ -196,7 +198,7 @@ GenreScroll.displayName = "GenreScroll";
 export function FeaturedGenres() {
   const { data, isLoading, isError, refetch } = useGenresQuery({
     page: 1,
-    limit: 8,
+    limit: APP_CONFIG.HOME_PAGE_LIMIT,
     isTrending: true,
     sort: "priority",
   });
@@ -204,7 +206,7 @@ export function FeaturedGenres() {
   const genres = data?.genres as IGenre[] | undefined;
 
   const hasResults = genres && genres?.length > 0;
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
 
   const renderContent = () => {
     if (isLoading && !hasResults) {
@@ -214,8 +216,9 @@ export function FeaturedGenres() {
     if (isLoading && hasResults) {
       return <VinylLoader />;
     }
-    // Deep Error
+    // Error or Empty
     if (isError || !hasResults) {
+      if (!isError && !hasResults) return null;
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
@@ -240,6 +243,9 @@ export function FeaturedGenres() {
       </div>
     );
   };
+
+  if (!isLoading && !hasResults && !isError) return null;
+
   return (
     <>
       <div

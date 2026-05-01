@@ -171,10 +171,12 @@ export const useRealtimeChart = () => {
     };
   }, [socket, isConnected, flushPendingUpdate]);
 
-  // ── Re-sync khi reconnect ──────────────────────────────────────────────────
+  // ── Re-sync khi reconnect — silent invalidation (không flash loading) ────
   useEffect(() => {
-    if (isConnected) refetch();
-  }, [isConnected, refetch]);
+    if (isConnected) {
+      queryClient.invalidateQueries({ queryKey: ["live-chart"] });
+    }
+  }, [isConnected, queryClient]);
 
   return {
     tracks: rankedTracks, // Đã có rank + trend + rankDelta, dùng trực tiếp

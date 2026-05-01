@@ -5,9 +5,6 @@ import {
   Play,
   Pause,
   MoreHorizontal,
-  Share2,
-  ListMusic,
-  Plus,
   Loader2,
   ChevronLeft,
   Shuffle,
@@ -15,13 +12,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -29,7 +19,7 @@ import { TrackList } from "@/features/track/components/TrackList";
 import { useAlbumDetail } from "@/features/album/hooks/useAlbumsQuery";
 import {
   AlbumDetailSkeleton,
-  IGenre,
+  IAlbum,
   ITrack,
   useAlbumTracksInfinite,
   useSyncInteractions,
@@ -43,6 +33,8 @@ import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 import MusicResult from "@/components/ui/Result";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { APP_CONFIG } from "@/config/constants";
+import { useContextSheet } from "@/app/provider/SheetProvider";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -98,51 +90,6 @@ const AlbumStats = memo<{
 AlbumStats.displayName = "AlbumStats";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AlbumContextMenu
-// ─────────────────────────────────────────────────────────────────────────────
-
-const AlbumContextMenu = memo<{ size?: "sm" | "md"; align?: "start" | "end" }>(
-  ({ size = "md", align = "start" }) => {
-    const btnCls = cn(
-      "rounded-full flex items-center justify-center border border-border/50",
-      "bg-background/30 backdrop-blur-sm text-foreground/70 hover:text-foreground hover:bg-muted/60 hover:border-border",
-      "transition-all duration-150 active:scale-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
-      size === "sm" ? "size-9" : "size-10 sm:size-11",
-    );
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className={btnCls} aria-label="More options">
-            <MoreHorizontal
-              className={size === "sm" ? "size-4" : "size-[18px]"}
-              aria-hidden="true"
-            />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align={align}
-          className="w-52 rounded-2xl p-1.5 border-border/50 bg-background/95 backdrop-blur-xl shadow-2xl"
-        >
-          <DropdownMenuItem className="gap-2.5 py-2.5 px-3 font-semibold text-sm rounded-xl cursor-pointer">
-            <Plus className="size-4 shrink-0" aria-hidden="true" /> Thêm vào
-            Playlist
-          </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2.5 py-2.5 px-3 font-semibold text-sm rounded-xl cursor-pointer">
-            <ListMusic className="size-4 shrink-0" aria-hidden="true" /> Thêm
-            vào hàng đợi
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-border/40 my-1" />
-          <DropdownMenuItem className="gap-2.5 py-2.5 px-3 font-semibold text-sm rounded-xl cursor-pointer text-primary focus:text-primary focus:bg-primary/10">
-            <Share2 className="size-4 shrink-0" aria-hidden="true" /> Chia sẻ
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  },
-);
-AlbumContextMenu.displayName = "AlbumContextMenu";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // ActionBar
 //
 // FIX: thêm prop `isPlaying` — Play button hiện Pause khi album đang phát.
@@ -151,7 +98,8 @@ AlbumContextMenu.displayName = "AlbumContextMenu";
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ActionBarProps {
-  albumId: string;
+  album: IAlbum;
+  handleMoreOptions: (album: IAlbum) => void;
   palette: Palette;
   isLoadingPlay: boolean;
   isLoadingShuffle: boolean;
@@ -164,7 +112,8 @@ interface ActionBarProps {
 
 const ActionBar = memo<ActionBarProps>(
   ({
-    albumId,
+    album,
+    handleMoreOptions,
     palette,
     isLoadingPlay,
     isLoadingShuffle,
@@ -284,9 +233,15 @@ const ActionBar = memo<ActionBarProps>(
           )}
         </motion.button>
 
-        <AlbumLikeButton id={albumId} variant="detail" />
+        <AlbumLikeButton id={album?._id} variant="detail" />
         <div className="flex-1" aria-hidden="true" />
-        <AlbumContextMenu size={isCompact ? "sm" : "md"} align="end" />
+        <button
+          className="rounded-full flex items-center justify-center border border-border/50  size-10  text-white/70 hover:text-white  active:scale-90 transition-all"
+          aria-label="More options"
+          onClick={() => handleMoreOptions(album)}
+        >
+          <MoreHorizontal className="size-6" strokeWidth={2} />
+        </button>
       </div>
     );
   },
@@ -555,11 +510,6 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
     [allTracks],
   );
 
-  const genres = useMemo(
-    () => (album?.genres ?? []) as IGenre[],
-    [album?.genres],
-  );
-
   // ── Title style ───────────────────────────────────────────────────────────
 
   const { className: titleCls, style: titleStyle } = useTitleStyle(
@@ -585,10 +535,21 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
   }, [navigate, album?.artist?.slug]);
 
   // ── Shared props ──────────────────────────────────────────────────────────
-
+  const { openAlbumSheet } = useContextSheet();
+  const openSheet = useCallback(
+    (a: IAlbum) => {
+      openAlbumSheet(a);
+    },
+    [openAlbumSheet],
+  );
+  const handleMoreOptions = useCallback(
+    (a: IAlbum) => openSheet(a),
+    [openSheet],
+  );
   const sharedActionBarProps: ActionBarProps = useMemo(
     () => ({
-      albumId: album?._id || "",
+      album: album!,
+      handleMoreOptions,
       palette,
       isLoadingPlay: isFetching,
       isLoadingShuffle: isFetching,
@@ -598,7 +559,8 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
       onShuffle: shuffleAlbum,
     }),
     [
-      album?._id,
+      album,
+      handleMoreOptions,
       palette,
       isFetching,
       isThisAlbumPlaying,
@@ -774,9 +736,9 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
 
           <TrackList
             {...trackListProps}
-            maxHeight={400}
+            maxHeight={700}
             moodColor={palette.hex}
-            skeletonCount={7}
+            skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
             staggerAnimation={false}
           />
         </div>
@@ -936,27 +898,6 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
                 </motion.div>
               )}
             </AnimatePresence>
-
-            {/* Genres */}
-            {genres.length > 0 && (
-              <motion.div
-                className="flex flex-wrap items-center justify-center md:justify-start gap-1.5 mt-1"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.28, duration: 0.4 }}
-              >
-                {genres.slice(0, 4).map((g) => (
-                  <button
-                    key={g._id ?? String(g)}
-                    type="button"
-                    className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-background/30 backdrop-blur-sm border border-white/15 text-foreground/80 hover:bg-background/50 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
-                    aria-label={`Genre: ${g.name ?? ""}`}
-                  >
-                    {g.name ?? String(g)}
-                  </button>
-                ))}
-              </motion.div>
-            )}
           </motion.div>
         </motion.section>
 
@@ -1058,8 +999,8 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
         >
           <TrackList
             {...trackListProps}
-            maxHeight="auto"
-            skeletonCount={12}
+            maxHeight={700}
+            skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
             moodColor={palette.hslChannels}
             staggerAnimation={true}
           />

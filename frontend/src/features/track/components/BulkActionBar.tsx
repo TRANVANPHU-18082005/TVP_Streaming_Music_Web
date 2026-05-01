@@ -1,5 +1,14 @@
 import React from "react";
-import { X, Disc, Tags, Trash2, CheckCircle2 } from "lucide-react";
+import {
+  X,
+  Disc,
+  Tags,
+  Trash2,
+  CheckCircle2,
+  RefreshCw,
+  FileText,
+  Video,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
@@ -9,6 +18,9 @@ interface BulkActionBarProps {
   onEditAlbum: () => void;
   onEditMetadata: () => void;
   onDelete: () => void;
+  onRetryTranscode?: () => void;
+  onRetryLyrics?: () => void;
+  onRetryMood?: () => void;
 }
 
 export const BulkActionBar: React.FC<BulkActionBarProps> = ({
@@ -59,6 +71,24 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
             icon={<Tags className="size-4" />}
             label="Metadata"
             onClick={onEditMetadata}
+          />
+
+          <div className="mx-1 w-px h-5 bg-background/20 block" />
+
+          <ActionButton
+            icon={<RefreshCw className="size-4" />}
+            label="Retranscode"
+            onClick={() => onRetryTranscode && onRetryTranscode()}
+          />
+          <ActionButton
+            icon={<FileText className="size-4" />}
+            label="Retry Lyrics"
+            onClick={() => onRetryLyrics && onRetryLyrics()}
+          />
+          <ActionButton
+            icon={<Video className="size-4" />}
+            label="Retry Mood"
+            onClick={() => onRetryMood && onRetryMood()}
           />
 
           <div className="mx-1 w-px h-5 bg-background/20 block" />

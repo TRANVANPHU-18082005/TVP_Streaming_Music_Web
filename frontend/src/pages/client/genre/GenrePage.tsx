@@ -7,7 +7,7 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import { GenreFilters } from "@/features/genre/components/GenreFilters";
 import { useGenreParams } from "@/features/genre/hooks/useGenreParams";
 import { useGenresQuery } from "@/features/genre/hooks/useGenresQuery";
-import { APP_CONFIG } from "@/config/constants";
+import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import { Genrepageskeleton } from "@/features";
 import SectionAmbient from "@/components/SectionAmbient";
@@ -28,13 +28,6 @@ const GRID_LAYOUT = cn(
   "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7",
   "gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12",
 );
-
-const DEFAULT_META = {
-  totalPages: 1,
-  totalItems: 0,
-  page: 1,
-  pageSize: 24,
-} as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE HERO — eyebrow (Tag) + gradient wave title + divider + stat badges
@@ -66,19 +59,13 @@ const PageHero = memo(() => (
 
     {/* Title — text-gradient-wave: cyan → pink → purple sweep */}
     <h1
-      className="text-display-xl text-gradient-wave mb-2 animate-fade-up animation-fill-both"
+      className="text-display-xl text-primary mb-2 animate-fade-up animation-fill-both"
       style={{ animationDelay: "60ms" }}
       id="genre-page-heading"
     >
       Thể loại & Tâm trạng
     </h1>
-    {/* Subtitle */}
-    <p
-      className="text-section-subtitle hidden sm:block mb-5 animate-fade-up animation-fill-both"
-      style={{ animationDelay: "90ms" }}
-    >
-      Khám phá thế giới âm nhạc qua từng thể loại và cảm xúc.
-    </p>
+
     {/* Animated divider — .divider-glow token */}
     <div
       className="divider-glow  animate-fade-up animation-fill-both"
@@ -119,7 +106,7 @@ const PaginationStrip = memo(
         totalPages={totalPages}
         onPageChange={onPageChange}
         totalItems={totalItems}
-        itemsPerPage={pageSize || APP_CONFIG.PAGINATION_LIMIT}
+        itemsPerPage={pageSize || DEFAULT_GRID_META.pageSize}
       />
     </div>
   ),
@@ -136,14 +123,14 @@ const GenrePage: React.FC = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useGenreParams(24);
+  } = useGenreParams(DEFAULT_GRID_META.pageSize);
 
   const { data, isLoading, isError, refetch } = useGenresQuery(filterParams);
 
   // Granular derived slices — avoids full object diff
   const genres = useMemo(() => data?.genres ?? [], [data?.genres]);
   const meta = useMemo(
-    () => ({ ...DEFAULT_META, ...data?.meta }),
+    () => ({ ...DEFAULT_GRID_META, ...data?.meta }),
     [data?.meta],
   );
 
@@ -164,7 +151,11 @@ const GenrePage: React.FC = () => {
   // ── Error state ─────────────────────────────────────────────────────────
   // Initial Load
   if (isLoading && !hasResults) {
-    return <Genrepageskeleton cardCount={meta.pageSize} />;
+    return (
+      <Genrepageskeleton
+        cardCount={meta.pageSize || DEFAULT_GRID_META.pageSize}
+      />
+    );
   }
   // Switching
   if (isLoading && hasResults) {
@@ -231,7 +222,9 @@ const GenrePage: React.FC = () => {
         >
           {isLoading ? (
             <div className={GRID_LAYOUT}>
-              <CardSkeleton count={meta.pageSize} />
+              <CardSkeleton
+                count={meta.pageSize || DEFAULT_GRID_META.pageSize}
+              />
             </div>
           ) : !hasResults ? (
             !isLoading && !isFiltering ? (
@@ -265,10 +258,10 @@ const GenrePage: React.FC = () => {
         {/* ── Pagination */}
         {!isLoading && hasResults && (
           <PaginationStrip
-            currentPage={meta.page}
-            totalPages={meta.totalPages}
-            totalItems={meta.totalItems}
-            pageSize={meta.pageSize}
+            currentPage={meta.page || DEFAULT_GRID_META.page}
+            totalPages={meta.totalPages || DEFAULT_GRID_META.totalPages}
+            totalItems={meta.totalItems || DEFAULT_GRID_META.totalItems}
+            pageSize={meta.pageSize || DEFAULT_GRID_META.pageSize}
             onPageChange={handlePageChange}
           />
         )}

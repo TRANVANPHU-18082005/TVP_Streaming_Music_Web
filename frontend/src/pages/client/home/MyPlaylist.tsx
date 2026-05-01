@@ -8,11 +8,12 @@ import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCar
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useMyPlaylists } from "@/features/playlist/hooks/usePlaylistsQuery";
 
-import { IPlaylist, useSyncInteractions } from "@/features";
+import { IMyPlaylist, IPlaylist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — slightly softer than Albums for tonal differentiation
@@ -63,7 +64,7 @@ const PlaylistsHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
           <Turntable className="size-3.5" />
         </div>
         <span className="text-overline" style={{ color: "hsl(var(--wave-6))" }}>
-          Collection
+          Bộ sưu tập
         </span>
       </div>
 
@@ -71,7 +72,7 @@ const PlaylistsHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         className="text-section-title text-foreground leading-tight"
         id="featured-playlists-heading"
       >
-        My Playlists
+        Playlist của tôi
       </h2>
 
       <p className="text-section-subtitle hidden sm:block">Playlist của bạn.</p>
@@ -142,7 +143,7 @@ SkeletonGrid.displayName = "SkeletonGrid";
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST GRID — desktop whileInView stagger
 // ─────────────────────────────────────────────────────────────────────────────
-const PlaylistGrid = memo(({ playlists }: { playlists: IPlaylist[] }) => (
+const PlaylistGrid = memo(({ playlists }: { playlists: IMyPlaylist[] }) => (
   <motion.div
     variants={containerVariants}
     initial="hidden"
@@ -164,7 +165,7 @@ PlaylistGrid.displayName = "PlaylistGrid";
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST SCROLL — mobile snap-x horizontal strip
 // ─────────────────────────────────────────────────────────────────────────────
-const PlaylistScroll = memo(({ playlists }: { playlists: IPlaylist[] }) => (
+const PlaylistScroll = memo(({ playlists }: { playlists: IMyPlaylist[] }) => (
   <div
     className="lg:hidden scroll-overflow-mask -mx-4 px-4"
     role="list"
@@ -206,7 +207,7 @@ export function MyPlaylist() {
 
   useSyncInteractions(playlistIds, "like", "playlist", playlistIds.length > 0);
   const hasResults = playlists && playlists?.length > 0;
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
 
   const renderContent = () => {
     if (isLoading && !hasResults) {
@@ -216,8 +217,9 @@ export function MyPlaylist() {
     if (isLoading && hasResults) {
       return <VinylLoader />;
     }
-    // Deep Error
+    // Error or Empty
     if (isError || !hasResults) {
+      if (!isError && !hasResults) return null;
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
@@ -241,7 +243,7 @@ export function MyPlaylist() {
       </div>
     );
   };
-  if (!playlists || playlists.length === 0) return null;
+  if (!isLoading && !hasResults && !isError) return null;
   return (
     <>
       <div
@@ -264,7 +266,7 @@ export function MyPlaylist() {
         {/* <SectionAmbient /> */}
         <SectionAmbient style="wave-6" />
         <div className="section-container">
-          <PlaylistsHeader viewAllHref="/playlists" />
+          <PlaylistsHeader viewAllHref="/profile?tab=playlists" />
 
           {renderContent()}
         </div>

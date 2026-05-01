@@ -18,6 +18,8 @@ import { usePlaylistMutations } from "../hooks/usePlaylistMutations";
 import { useMyPlaylists } from "../hooks/usePlaylistsQuery";
 import { IMyPlaylist } from "../types";
 import { ITrack } from "@/features";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { toCDN } from "@/utils/track-helper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -48,7 +50,7 @@ interface AddToPlaylistModalProps {
 const PlaylistCover = memo(({ playlist }: { playlist: IMyPlaylist }) => {
   if (playlist.coverImage) {
     return (
-      <img
+      <ImageWithFallback
         src={playlist.coverImage}
         alt={playlist.title}
         className="w-full h-full object-cover"
@@ -216,8 +218,8 @@ const TrackChip = memo(({ track }: { track: ITrack }) => (
     }}
   >
     {track.coverImage ? (
-      <img
-        src={track.coverImage}
+      <ImageWithFallback
+        src={toCDN(track.coverImage) || track.coverImage}
         alt={track.title}
         className="size-8 rounded-md object-cover shrink-0"
       />

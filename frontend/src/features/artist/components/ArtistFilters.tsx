@@ -11,7 +11,6 @@ import {
   X,
   ShieldCheck,
   Globe,
-  Music2,
   LayoutGrid,
   SlidersHorizontal,
   ChevronDown,
@@ -25,7 +24,6 @@ import {
 import { useDebounce } from "@/hooks/useDebounce";
 import { Input } from "@/components/ui/input";
 import FilterDropdown from "@/components/ui/FilterDropdown";
-import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { NationalitySelector } from "@/components/ui/NationalitySelector";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -56,9 +54,9 @@ interface ArtistFiltersProps {
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 const SORT_OPTIONS = [
-  { label: "Newest", value: "newest" },
-  { label: "Popular", value: "popular" },
-  { label: "Followers", value: "followers" },
+  { label: "Mới nhất", value: "newest" },
+  { label: "Phổ biến", value: "popular" },
+  { label: "Người theo dõi", value: "followers" },
   { label: "A – Z", value: "name" },
 ] as const;
 
@@ -80,35 +78,28 @@ interface TagDef {
 const ARTIST_TAG_DEFS: TagDef[] = [
   {
     key: "nationality",
-    label: "Nation",
+    label: "Quốc gia",
     iconColor: "hsl(var(--info))",
     bgClass: "bg-info/10",
     getValue: (p) => p.nationality ?? null,
     getIcon: () => Globe,
   },
-  {
-    key: "genreId",
-    label: "Genre",
-    iconColor: "hsl(var(--wave-2))",
-    bgClass: "bg-pink-500/10",
-    getValue: (p) => (p.genreId ? "Genre" : null),
-    getIcon: () => Music2,
-  },
+
   {
     key: "isVerified",
-    label: "Verified",
+    label: "Xác minh",
     iconColor: "hsl(var(--success))",
     bgClass: "bg-success/10",
-    getValue: (p) => (p.isVerified !== undefined ? "Verified Only" : null),
+    getValue: (p) => (p.isVerified !== undefined ? "Chỉ đã xác minh" : null),
     getIcon: () => ShieldCheck,
   },
   {
     key: "isActive",
-    label: "Status",
+    label: "Trạng thái",
     iconColor: "hsl(var(--success))",
     bgClass: "bg-success/10",
     getValue: (p) =>
-      p.isActive !== undefined ? (p.isActive ? "Active" : "Inactive") : null,
+      p.isActive !== undefined ? (p.isActive ? "Hoạt động" : "Bị khóa") : null,
     getIcon: (p) => (p.isActive ? UserCheck : UserX),
   },
 ];
@@ -153,8 +144,8 @@ const SearchInput = memo(
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search artists by name, genre, nationality…"
-        aria-label="Search artists"
+        placeholder="Tìm kiếm nghệ sĩ"
+        aria-label="Tìm kiếm nghệ sĩ"
         className={cn(
           "h-11 pl-10 pr-10 text-sm",
           "bg-background/60 dark:bg-surface-1/60",
@@ -321,7 +312,7 @@ const ActiveTagsBar = memo(
         <div className="flex items-center gap-1.5 shrink-0">
           <Sparkles className="size-3 text-primary/60" aria-hidden="true" />
           <span className="text-overline text-muted-foreground/50">
-            Filters:
+            Bộ lọc:
           </span>
         </div>
 
@@ -341,7 +332,7 @@ const ActiveTagsBar = memo(
           className="btn-danger btn-sm ml-auto h-7 px-3 gap-1.5 text-[11px]"
         >
           <Trash2 className="size-3" aria-hidden="true" />
-          Clear all
+          Xóa tất cả
         </button>
       </div>
     );
@@ -388,7 +379,7 @@ const FilterToggleButton = memo(
     >
       <div className="flex items-center gap-2">
         <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="hidden sm:block">Filters</span>
+        <span className="hidden sm:block">Bộ lọc</span>
       </div>
 
       <div className="flex items-center gap-1.5 ml-1">
@@ -477,17 +468,11 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
     // ── Active count — granular deps ─────────────────────────────────────────
     const activeFiltersCount = useMemo(() => {
       let n = 0;
-      if (params.genreId) n++;
       if (params.nationality) n++;
       if (params.isVerified !== undefined) n++;
       if (params.isActive !== undefined) n++;
       return n;
-    }, [
-      params.genreId,
-      params.nationality,
-      params.isVerified,
-      params.isActive,
-    ]);
+    }, [params.nationality, params.isVerified, params.isActive]);
 
     // FIX 4: null sentinel
     const removeFilter = useCallback(
@@ -538,7 +523,7 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
                       aria-hidden="true"
                     />
                     <span className="text-overline text-muted-foreground/50 hidden md:block">
-                      Sort:
+                      Sắp xếp:
                     </span>
                     <SelectValue />
                   </div>
@@ -594,7 +579,7 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
                 <div className="space-y-0">
                   <FilterLabel
                     icon={Globe}
-                    text="Nationality"
+                    text="Quốc gia"
                     iconColor="hsl(var(--info))"
                   />
                   <FilterDropdown
@@ -602,7 +587,7 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
                     onClear={() => onFilterChange("nationality", null)}
                     label={
                       <span className="truncate">
-                        {params.nationality ?? "All Countries"}
+                        {params.nationality ?? "Tất cả quốc gia"}
                       </span>
                     }
                     contentClassName="w-[280px]"
@@ -623,47 +608,12 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
                   </FilterDropdown>
                 </div>
 
-                {/* Genre */}
-                <div className="space-y-0">
-                  <FilterLabel
-                    icon={Music2}
-                    text="Genre"
-                    iconColor="hsl(var(--wave-2))"
-                  />
-                  <FilterDropdown
-                    isActive={!!params.genreId}
-                    onClear={() => onFilterChange("genreId", null)}
-                    label={
-                      <span className="truncate">
-                        {params.genreId ? "Genre selected" : "Select Genre"}
-                      </span>
-                    }
-                    contentClassName="w-[280px]"
-                    className={cn(
-                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
-                      "justify-start shadow-raised rounded-lg border-border/70",
-                      "focus:ring-1 focus:ring-primary/30",
-                      params.genreId && "border-pink-500/40 text-foreground",
-                    )}
-                  >
-                    <div className="p-1">
-                      <GenreSelector
-                        variant="filter"
-                        singleSelect
-                        value={params.genreId}
-                        onChange={(val) => onFilterChange("genreId", val)}
-                        placeholder="Search genres…"
-                      />
-                    </div>
-                  </FilterDropdown>
-                </div>
-
                 {/* Status — admin only. FIX 11: "all" → null */}
                 {user?.role === "admin" && (
                   <div className="space-y-0">
                     <FilterLabel
                       icon={LayoutGrid}
-                      text="Status"
+                      text="Trạng thái"
                       iconColor="hsl(var(--wave-1))"
                     />
                     <Select
@@ -680,12 +630,12 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
                       }
                     >
                       <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue placeholder="All Status" />
+                        <SelectValue placeholder="Tất cả trạng thái" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="true">Active</SelectItem>
-                        <SelectItem value="false">Inactive / Banned</SelectItem>
+                        <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                        <SelectItem value="true">Hoạt động</SelectItem>
+                        <SelectItem value="false">Bị khóa</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -696,7 +646,7 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
                   <div className="space-y-0">
                     <FilterLabel
                       icon={ShieldCheck}
-                      text="Verification"
+                      text="Xác minh"
                       iconColor="hsl(var(--success))"
                     />
                     <Select
@@ -713,11 +663,11 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
                       }
                     >
                       <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue placeholder="All Profiles" />
+                        <SelectValue placeholder="Tất cả hồ sơ" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Profiles</SelectItem>
-                        <SelectItem value="true">Verified Only</SelectItem>
+                        <SelectItem value="all">Tất cả hồ sơ</SelectItem>
+                        <SelectItem value="true">Chỉ đã xác minh</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

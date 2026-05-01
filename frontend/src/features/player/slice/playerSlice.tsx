@@ -15,7 +15,6 @@ import {
 } from "@reduxjs/toolkit";
 import type { RootState } from "@/store/store";
 import { ITrack } from "@/features/track/types";
-import { createContext, useContext } from "react";
 
 // ============================================================================
 // 1. HELPER: SMART SHUFFLE (ID-based, Spotify Style)
@@ -131,6 +130,9 @@ interface PlayerState {
   repeatMode: "off" | "all" | "one";
   isShuffling: boolean;
 
+  /** Tự động phát khi hết queue. Nếu true sẽ tự fetch gợi ý và append vào queue. */
+  autoplayEnabled: boolean;
+
   // --- Gapless Preload ---
   /** ID bài tiếp theo đã được preload metadata. */
   nextTrackIdPreloaded: string | null;
@@ -152,6 +154,7 @@ const initialState: PlayerState = {
   isMuted: false,
   repeatMode: "off",
   isShuffling: false,
+  autoplayEnabled: true,
   nextTrackIdPreloaded: null,
 };
 
@@ -306,6 +309,7 @@ const playerSlice = createSlice({
      *       Không động vào "ready" / "buffering" hiện tại để tránh regression.
      */
     upsertMetadataCache: (state, action: PayloadAction<ITrack[]>) => {
+      console.log("Upserting metadata cache for tracks:", action.payload);
       for (const track of action.payload) {
         state.trackMetadataCache[track._id] = track;
       }
@@ -330,19 +334,18 @@ const playerSlice = createSlice({
       if (newIds.length === 0) return;
 
       state.originalQueueIds.push(...newIds);
+      // Always append to activeQueue so dynamic additions (Autoplay, fetches)
+      // will be playable immediately without requiring a full reshuffle.
+      state.activeQueueIds.push(...newIds);
 
-      // Nếu không shuffle, append thẳng vào activeQueue
-      if (!state.isShuffling) {
-        state.activeQueueIds.push(...newIds);
-        // Cập nhật preload vì queue vừa dài thêm (edge case: đang ở bài cuối)
-        state.nextTrackIdPreloaded = resolveNextPreload(
-          state.activeQueueIds,
-          state.currentIndex,
-          state.repeatMode,
-        );
-      }
-      // Nếu shuffle, KHÔNG tự shuffle lại — giữ UX mượt.
-      // Dispatch toggleShuffle 2 lần nếu muốn re-shuffle toàn bộ.
+      // Update preload in case we were at the end of the queue.
+      state.nextTrackIdPreloaded = resolveNextPreload(
+        state.activeQueueIds,
+        state.currentIndex,
+        state.repeatMode,
+      );
+
+      // We intentionally avoid reshuffling the entire queue to preserve UX.
     },
 
     /**
@@ -506,6 +509,11 @@ const playerSlice = createSlice({
       );
     },
 
+    /** Toggle autoplay when queue ends */
+    toggleAutoplay: (state) => {
+      state.autoplayEnabled = !state.autoplayEnabled;
+    },
+
     nextTrack: (state) => {
       if (state.activeQueueIds.length === 0) return;
 
@@ -605,6 +613,7 @@ export const {
   stopPlaying,
   toggleShuffle,
   toggleRepeat,
+  toggleAutoplay,
   nextTrack,
   prevTrack,
   jumpToIndex,
@@ -644,21 +653,4 @@ export const selectIsTrackCached =
 export const selectQueueLength = (state: RootState): number =>
   state.player.activeQueueIds.length;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GLOBAL SHEET CONTEXT — any child can open a sheet without prop drilling
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface PlayerSheetContextValue {
-  openSheet: (type: "playlist" | "options", track: ITrack) => void;
-  closeSheet: () => void;
-}
-
-export const PlayerSheetContext = createContext<PlayerSheetContextValue>({
-  openSheet: () => {},
-  closeSheet: () => {},
-});
-
-export function usePlayerSheet() {
-  return useContext(PlayerSheetContext);
-}
 export default playerSlice.reducer;

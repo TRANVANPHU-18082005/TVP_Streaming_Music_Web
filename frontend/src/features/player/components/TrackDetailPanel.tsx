@@ -1,30 +1,3 @@
-/**
- * TrackDetailPanel.tsx — Production v3.0
- * ─────────────────────────────────────────────────────────────────────────────
- * CHANGES v2 → v3:
- *
- * INTEGRATION: usePlayerSheet() context
- * - Không còn local OptionSheet / AddToPlaylistSheet state
- * - Gọi openSheet("options", track) / openSheet("playlist", track) từ context
- * - Sheets render một lần duy nhất ở FullPlayer level → không duplicate mount
- *
- * PERF-1  TrackRow hover overlay dùng motion.div không cần
- *         Fix: CSS opacity transition đủ — loại Framer wrapper
- *
- * PERF-2  handleMoreOptions nhận _anchor param không dùng
- *         Fix: bỏ anchor param, context-based sheet không cần anchor position
- *
- * PERF-3  OptionSheet.options useMemo dep array thừa (track, onClose recreated)
- *         Fix: options được compute từ track._id stable dep trong sheet
- *
- * PERF-4  STAGGER_CONTAINER/ITEM variants object recreated per render
- *         Fix: hoist to module scope
- *
- * UX:     formatDuration / formatDate cached với Map
- */
-
-"use client";
-
 import { memo, useState, useCallback, useMemo } from "react";
 import {
   motion,
@@ -45,6 +18,8 @@ import {
   Mic2,
   Loader2,
   Play,
+  Zap,
+  CheckCheck,
 } from "lucide-react";
 
 import { ITrack } from "@/features/track/types";
@@ -52,7 +27,10 @@ import { useRecommendedTracks, useSimilarTracks } from "@/features/track";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { MarqueeText } from "./MarqueeText";
-import { usePlayerSheet } from "@/features";
+import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
+import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
+import { useContextSheet } from "@/app/provider/SheetProvider";
+import { toCDN } from "@/utils/track-helper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPRING PRESETS — module scope, no alloc per render
@@ -184,7 +162,7 @@ const TrackRow = memo(
         {/* Cover — PERF-1: CSS overlay, no Framer motion.div */}
         <div className="relative shrink-0 w-10 h-10">
           <ImageWithFallback
-            src={item.coverImage}
+            src={toCDN(item.coverImage) || item.coverImage}
             alt={item.title}
             className="w-10 h-10 rounded-lg object-cover ring-1 ring-white/10"
           />
@@ -201,19 +179,16 @@ const TrackRow = memo(
           <p className="text-[13px] font-semibold text-white/90 truncate leading-snug">
             {item.title}
           </p>
-          <p className="text-[11px] text-white/40 truncate mt-0.5">
-            {artistName}
-            {item.duration ? (
-              <span className="ml-2 text-white/25">
-                {formatDuration(item.duration)}
-              </span>
-            ) : null}
-          </p>
+          <ArtistDisplay
+            mainArtist={item.artist}
+            featuringArtists={item.featuringArtists}
+            className="text-[11px]"
+          />
         </div>
 
-        {/* Actions */}
+        {/* Actions — hidden by default, visible on hover/focus (cleaner mobile UX) */}
         <div
-          className="flex items-center gap-0.5 shrink-0"
+          className="flex items-center gap-0.5 shrink-0 opacity-100 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
           onClick={(e) => e.stopPropagation()}
         >
           <motion.button
@@ -255,13 +230,13 @@ const SectionLabel = memo(
     label: string;
     count?: number;
   }) => (
-    <div className="flex items-center gap-2 mb-2">
-      <Icon className="w-3.5 h-3.5 text-white/30" />
-      <h4 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/35">
+    <div className="flex items-center gap-2 mb-2.5">
+      <Icon className="w-3.5 h-3.5 text-[hsl(var(--primary))]" />
+      <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
         {label}
       </h4>
       {count != null && (
-        <span className="ml-auto text-[10px] text-white/20 tabular-nums">
+        <span className="ml-auto text-[10px] text-[hsl(var(--primary)/0.5)] bg-[hsl(var(--primary)/0.1)] border border-[hsl(var(--primary)/0.15)] px-1.5 py-0.5 rounded-full font-mono tabular-nums">
           {count}
         </span>
       )}
@@ -275,9 +250,14 @@ SectionLabel.displayName = "SectionLabel";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TrackInfoSection = memo(({ track }: { track: ITrack }) => {
+  const fullArtist =
+    track.artist?.name +
+    (track.featuringArtists.length > 0
+      ? ` ft. ${track.featuringArtists.map((a) => a.name).join(", ")}`
+      : "");
   const rows = useMemo(
     () => [
-      { icon: Mic2, label: "Nghệ sĩ", value: track.artist?.name ?? "—" },
+      { icon: Mic2, label: "Nghệ sĩ", value: fullArtist },
       { icon: Disc3, label: "Album", value: track.album?.title ?? "Single" },
       {
         icon: Calendar,
@@ -289,40 +269,49 @@ const TrackInfoSection = memo(({ track }: { track: ITrack }) => {
         label: "Thời lượng",
         value: formatDuration(track.duration),
       },
+      ...(track.bitrate
+        ? [{ icon: Zap, label: "Chất lượng", value: `${track.bitrate} kbps` }]
+        : []),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [track._id],
+    [track._id, track.bitrate],
   );
 
   return (
     <motion.section variants={STAGGER_ITEM}>
-      <SectionLabel icon={Music2} label="Thông tin track" />
-      <div className="flex items-center gap-2 p-2">
-        <div className="size-10 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10">
+      <SectionLabel icon={Music2} label="Thông tin" />
+      {/* Compact cover + title header */}
+      <div className="flex items-center gap-3 px-1 py-2 mb-1">
+        <div className="size-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10 shadow-lg">
           <ImageWithFallback
-            src={track.coverImage}
+            src={toCDN(track.coverImage) || track.coverImage}
             alt=""
             className="size-full object-cover"
           />
         </div>
-        <div className="flex-1 min-w-0 text-center">
+        <div className="flex-1 min-w-0">
           <MarqueeText
             text={track.title}
-            className="flex-1 min-w-0 font-semibold tracking-tight text-brand text-sm"
+            className="font-bold tracking-tight text-brand text-[14px]"
             speed={38}
             pauseMs={1600}
           />
+          <ArtistDisplay
+            mainArtist={track.artist}
+            featuringArtists={track.featuringArtists}
+            className="text-[11px]"
+          />
         </div>
       </div>
-      <dl className="space-y-1">
+      <dl className="space-y-0.5">
         {rows.map(({ icon: Icon, label, value }) => (
           <div
             key={label}
-            className="flex items-center gap-3 py-2 px-3 rounded-xl hover:bg-white/[0.04] transition-colors group"
+            className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-white/[0.04] transition-colors"
           >
-            <Icon className="w-4 h-4 text-white/25 shrink-0" />
-            <dt className="text-[12px] text-white/35 w-24 shrink-0">{label}</dt>
-            <dd className="text-[13px] text-white/80 font-medium truncate">
+            <Icon className="w-3.5 h-3.5 text-white/25 shrink-0" />
+            <dt className="text-[11px] text-white/30 w-20 shrink-0">{label}</dt>
+            <dd className="text-[12px] text-white/75 font-medium truncate">
               {value}
             </dd>
           </div>
@@ -345,14 +334,24 @@ interface TrackSectionProps {
 
 const RecommendedSection = memo(
   ({ excludeTrackId, onPlay }: TrackSectionProps) => {
-    const { openSheet } = usePlayerSheet();
+    const { openOptionSheet, openAddToPlaylistSheet } = useContextSheet();
+
     const {
       data: tracks,
       isLoading,
       error,
       isFetching,
     } = useRecommendedTracks(5, excludeTrackId);
-
+    const openSheet = useCallback(
+      (type: "playlist" | "options", t: ITrack) => {
+        if (type === "options") openOptionSheet(t);
+        else if (type === "playlist") openAddToPlaylistSheet(undefined, [t]);
+      },
+      [openOptionSheet, openAddToPlaylistSheet],
+    );
+    // const closeSheet = useCallback(() => {
+    //   closeContextSheet();
+    // }, [closeContextSheet]);
     // PERF-2: no anchor param
     const handleMoreOptions = useCallback(
       (t: ITrack) => openSheet("options", t),
@@ -413,9 +412,16 @@ RecommendedSection.displayName = "RecommendedSection";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SimilarSection = memo(({ trackId, onPlay }: TrackSectionProps) => {
-  const { openSheet } = usePlayerSheet();
-  const { data: tracks, isLoading, error } = useSimilarTracks(trackId!, 5);
+  const { openOptionSheet, openAddToPlaylistSheet } = useContextSheet();
 
+  const { data: tracks, isLoading, error } = useSimilarTracks(trackId!, 5);
+  const openSheet = useCallback(
+    (type: "playlist" | "options", t: ITrack) => {
+      if (type === "options") openOptionSheet(t);
+      else if (type === "playlist") openAddToPlaylistSheet(undefined, [t]);
+    },
+    [openOptionSheet, openAddToPlaylistSheet],
+  );
   const handleMoreOptions = useCallback(
     (t: ITrack) => openSheet("options", t),
     [openSheet],
@@ -467,13 +473,38 @@ SimilarSection.displayName = "SimilarSection";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ActionBar = memo(({ track }: { track: ITrack }) => {
-  const { openSheet } = usePlayerSheet();
-  const [liked, setLiked] = useState(false);
+  const { openOptionSheet, openAddToPlaylistSheet } = useContextSheet();
+  const [shared, setShared] = useState(false);
+
+  const openSheet = useCallback(
+    (type: "playlist" | "options", t: ITrack) => {
+      if (type === "options") openOptionSheet(t);
+      else if (type === "playlist") openAddToPlaylistSheet(undefined, [t]);
+    },
+    [openOptionSheet, openAddToPlaylistSheet],
+  );
 
   const handleAddToPlaylist = useCallback(
     () => openSheet("playlist", track),
     [openSheet, track],
   );
+
+  const handleShare = useCallback(async () => {
+    const url = `${window.location.origin}/track/${track._id}`;
+    const title = track.title;
+    const text = `Nghe "${title}" trên TVP Music`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      }
+    } catch {
+      // user cancelled or not supported
+    }
+  }, [track._id, track.title]);
 
   return (
     <motion.div variants={STAGGER_ITEM} className="flex gap-2">
@@ -488,42 +519,40 @@ const ActionBar = memo(({ track }: { track: ITrack }) => {
         Thêm vào playlist
       </motion.button>
 
-      <motion.button
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.88 }}
-        transition={SP.pop}
-        onClick={() => setLiked((v) => !v)}
-        aria-label={liked ? "Bỏ yêu thích" : "Yêu thích"}
-        aria-pressed={liked}
-        className={cn(
-          "px-4 rounded-xl border transition-all duration-200",
-          liked
-            ? "bg-rose-500/20 border-rose-500/30 text-rose-400"
-            : "bg-white/[0.07] border-white/[0.06] text-white/50 hover:text-white/80 hover:bg-white/[0.11]",
-        )}
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={liked ? "liked" : "not"}
-            initial={{ scale: 0.5, rotate: liked ? -20 : 20 }}
-            animate={{ scale: 1, rotate: 0 }}
-            exit={{ scale: 0.5 }}
-            transition={SP.pop}
-            className="flex items-center justify-center"
-          >
-            <Heart className={cn("w-5 h-5", liked && "fill-current")} />
-          </motion.span>
-        </AnimatePresence>
-      </motion.button>
+      {/* Like button — uses real Redux store via TrackLikeButton */}
+      <div className="flex items-center justify-center px-3 rounded-xl bg-white/[0.07] border border-white/[0.06] hover:bg-white/[0.11] transition-colors">
+        <TrackLikeButton id={track._id} />
+      </div>
 
       <motion.button
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.88 }}
         transition={SP.snappy}
-        aria-label="Chia sẻ"
-        className="px-3.5 rounded-xl bg-white/[0.07] hover:bg-white/[0.11] border border-white/[0.06] text-white/50 hover:text-white/80 transition-colors"
+        onClick={handleShare}
+        aria-label={shared ? "Đã sao chép link" : "Chia sẻ"}
+        className={cn(
+          "px-3.5 rounded-xl border transition-all duration-200",
+          shared
+            ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+            : "bg-white/[0.07] border-white/[0.06] text-white/50 hover:text-white/80 hover:bg-white/[0.11]",
+        )}
       >
-        <Share2 className="w-4 h-4" />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={shared ? "copied" : "share"}
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.6, opacity: 0 }}
+            transition={SP.pop}
+            className="flex items-center justify-center"
+          >
+            {shared ? (
+              <CheckCheck className="w-4 h-4" />
+            ) : (
+              <Share2 className="w-4 h-4" />
+            )}
+          </motion.span>
+        </AnimatePresence>
       </motion.button>
     </motion.div>
   );
@@ -558,7 +587,7 @@ export const TrackDetailPanel = memo(
         transition={SP.swipe}
         className="absolute inset-0 flex flex-col"
       >
-        <div className="flex-1 overflow-y-auto overscroll-contain custom-scrollbar px-5 py-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-none px-5 py-4">
           <motion.div
             variants={STAGGER_CONTAINER}
             initial="hidden"

@@ -6,6 +6,7 @@ import {
 import albumApi from "../api/albumApi";
 import { albumKeys } from "../utils/albumKeys";
 import type { AlbumFilterParams, IAlbum } from "../types";
+import { APP_CONFIG } from "@/config/constants";
 
 // ==========================================
 // 1. PUBLIC LISTS (Trang Albums, Search)
@@ -46,8 +47,8 @@ export const useNewReleases = (limit = 10) => {
 // ==========================================
 // 3. FEATURE ALBUMS
 // ==========================================
-export const useFeatureAlbums = (limit = 10) => {
-  const params: AlbumFilterParams = { limit, sort: "popular", isPublic: true };
+export const useFeatureAlbums = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
+  const params: AlbumFilterParams = { limit: Number(limit), sort: "popular", isPublic: true };
 
   return useQuery({
     queryKey: albumKeys.list(params),

@@ -38,6 +38,9 @@ import { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
 import { ChartTrack } from "@/features/track/types";
 import { RadioLoader } from "@/components/ui/MusicLoadingEffects";
 import { cn } from "@/lib/utils";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { toCDN } from "@/utils/track-helper";
+import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -139,8 +142,8 @@ function fmtViews(n: number): string {
   return n.toLocaleString();
 }
 
-function getArtistName(track: ChartTrack): string {
-  return (track as any).artist?.name ?? "Unknown Artist";
+function getArtistName(track: ChartTrack | RankedTrack): string {
+  return track.artist?.name ?? "Ẩn danh";
 }
 
 /**
@@ -335,8 +338,8 @@ const ChartTooltipInner = memo(
                 style={{ backgroundColor: s.stroke }}
               />
               <div className="w-8 h-8 rounded-lg overflow-hidden border border-border/60 shrink-0">
-                <img
-                  src={track.coverImage}
+                <ImageWithFallback
+                  src={toCDN(track.coverImage) || track.coverImage}
                   alt=""
                   aria-hidden="true"
                   className="w-full h-full object-cover"
@@ -430,8 +433,8 @@ const TrackLegendCard = memo(
           #{seriesIndex + 1}
         </span>
         <div className="relative shrink-0 w-9 h-9 rounded-lg overflow-hidden border border-border/60 shadow-sm">
-          <img
-            src={track.coverImage}
+          <ImageWithFallback
+            src={toCDN(track.coverImage) || track.coverImage}
             alt={track.title}
             className="w-full h-full object-cover"
             loading="lazy"
@@ -442,9 +445,11 @@ const TrackLegendCard = memo(
           <p className="text-[12px] font-semibold text-foreground/90 truncate leading-snug">
             {track.title}
           </p>
-          <p className="text-[10.5px] text-muted-foreground/65 truncate leading-snug mt-[2px] font-medium">
-            {getArtistName(track)}
-          </p>
+          <ArtistDisplay
+            mainArtist={track.artist}
+            featuringArtists={track.featuringArtists}
+            className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
+          />
         </div>
         <TrendingUp
           aria-hidden="true"
@@ -647,7 +652,7 @@ const ChartCanvas = memo(
             aria-hidden="true"
             className="sm:hidden text-center text-[9px] text-muted-foreground/32 pb-2.5 font-bold tracking-widest uppercase"
           >
-            Tap a card to isolate
+            Nhấn để xem riêng
           </p>
         )}
       </div>
@@ -677,7 +682,7 @@ const PeakStatCard = memo(({ track, seriesIndex, peak }: PeakStatCardProps) => {
           style={{ backgroundColor: s.stroke }}
         />
         <span className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest">
-          Peak
+          Đỉnh
         </span>
       </div>
       <p
@@ -721,12 +726,12 @@ const EmptyChartState = memo(() => (
   <div
     role="status"
     aria-live="polite"
-    aria-label="Loading chart data"
+    aria-label="Đang tải biểu đồ"
     className="w-full h-[320px] sm:h-[380px] flex flex-col items-center justify-center gap-4 rounded-2xl border border-border bg-muted/12 dark:bg-muted/8"
   >
     <RadioLoader glass={false} />
     <p className="text-[9.5px] text-muted-foreground/40 font-bold tracking-[0.18em] uppercase">
-      Loading chart data
+      Đang tải biểu đồ
     </p>
   </div>
 ));
@@ -736,46 +741,44 @@ EmptyChartState.displayName = "EmptyChartState";
 // CHART LINE — ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ChartLine = ({
-  data,
-  tracks,
-  animationDelay = 0,
-  isLoading,
-}: ChartLineProps) => {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [showHint, setShowHint] = useState(true);
+export const ChartLine = memo(
+  ({ data, tracks, animationDelay = 0, isLoading }: ChartLineProps) => {
+    const [activeIndex, setActiveIndex] = useState<number | null>(null);
+    const [showHint, setShowHint] = useState(true);
 
-  const hasData = Boolean(data?.length && tracks?.length);
-  const displayTracks = useMemo(() => tracks.slice(0, 3), [tracks]);
-  const peaks = usePeakStats(data ?? []);
-  const theme = useChartTheme();
-  const seriesOpacity = useSeriesOpacity(activeIndex);
+    const hasData = Boolean(data?.length && tracks?.length);
+    const displayTracks = useMemo(() => tracks.slice(0, 3), [tracks]);
+    const peaks = usePeakStats(data ?? []);
+    const theme = useChartTheme();
+    const seriesOpacity = useSeriesOpacity(activeIndex);
 
-  const toggleActive = useCallback((i: number) => {
-    setActiveIndex((prev) => (prev === i ? null : i));
-    setShowHint(false);
-  }, []);
+    const toggleActive = useCallback((i: number) => {
+      setActiveIndex((prev) => (prev === i ? null : i));
+      setShowHint(false);
+    }, []);
 
-  if (isLoading && !hasData) return <EmptyChartState />;
+    if (isLoading && !hasData) return <EmptyChartState />;
 
-  return (
-    <div className="w-full space-y-3 animate-fade-up">
-      <LegendGrid
-        tracks={displayTracks}
-        activeIndex={activeIndex}
-        onToggle={toggleActive}
-      />
-      <ChartCanvas
-        data={data}
-        tracks={displayTracks}
-        theme={theme}
-        seriesOpacity={seriesOpacity}
-        showHint={showHint}
-        animationDelay={animationDelay}
-      />
-      <PeakStatsRow tracks={displayTracks} peaks={peaks} />
-    </div>
-  );
-};
+    return (
+      <div className="w-full space-y-3 animate-fade-up">
+        <LegendGrid
+          tracks={displayTracks}
+          activeIndex={activeIndex}
+          onToggle={toggleActive}
+        />
+        <ChartCanvas
+          data={data}
+          tracks={displayTracks}
+          theme={theme}
+          seriesOpacity={seriesOpacity}
+          showHint={showHint}
+          animationDelay={animationDelay}
+        />
+        <PeakStatsRow tracks={displayTracks} peaks={peaks} />
+      </div>
+    );
+  },
+);
+ChartLine.displayName = "ChartLine";
 
 export default ChartLine;

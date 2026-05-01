@@ -1,14 +1,37 @@
 import { ILyricLine } from "@/features/track";
-import { useEffect, useState, startTransition, useRef } from "react";
+import { useEffect, useState, startTransition } from "react";
 
-export function useLyrics(lyricsUrl?: string) {
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE-LEVEL CACHE — persists across FullPlayer mount/unmount cycles.
+// User opens player → lyrics fetched once → closes → reopens → served from cache.
+// Map key = lyricUrl string, value = parsed ILyricLine[].
+// ─────────────────────────────────────────────────────────────────────────────
+
+const lyricsModuleCache = new Map<string, ILyricLine[]>();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useLyrics
+//
+// @param lyricsUrl  URL của file JSON lyrics
+// @param enabled    Chỉ fetch khi true (lazy — mặc định false)
+//                   FullPlayer truyền true khi currentView === "lyrics" | "mood"
+//
+// Performance improvements vs old version:
+//   1. Module-level cache (không mất khi FullPlayer unmount)
+//   2. enabled=false → zero network, zero state updates
+//   3. startTransition cho mọi state update để tránh block UI
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useLyrics(lyricsUrl?: string, enabled: boolean = false) {
   const [lyrics, setLyrics] = useState<ILyricLine[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const cacheRef = useRef<Map<string, ILyricLine[]>>(new Map());
 
   useEffect(() => {
-    // No URL → reset everything synchronously, nothing to fetch
+    // Guard 1: không enabled → không làm gì
+    if (!enabled) return;
+
+    // Guard 2: không có URL → reset synchronously
     if (!lyricsUrl) {
       setLyrics([]);
       setError(false);
@@ -16,11 +39,10 @@ export function useLyrics(lyricsUrl?: string) {
       return;
     }
 
-    // Reset state for new URL before anything async happens
     setError(false);
 
-    // Cache hit → serve immediately, no loading flash
-    const cached = cacheRef.current.get(lyricsUrl);
+    // Module cache hit → phục vụ ngay, không loading flash
+    const cached = lyricsModuleCache.get(lyricsUrl);
     if (cached) {
       startTransition(() => {
         setLyrics(cached);
@@ -29,7 +51,7 @@ export function useLyrics(lyricsUrl?: string) {
       return;
     }
 
-    // Cache miss → show loading, then fetch
+    // Cache miss → fetch
     setLoading(true);
     setLyrics([]);
 
@@ -45,7 +67,8 @@ export function useLyrics(lyricsUrl?: string) {
           ? data
           : (data.lines ?? []);
 
-        cacheRef.current.set(lyricsUrl, parsed);
+        // Lưu vào module cache
+        lyricsModuleCache.set(lyricsUrl, parsed);
 
         startTransition(() => {
           setLyrics(parsed);
@@ -61,7 +84,7 @@ export function useLyrics(lyricsUrl?: string) {
       });
 
     return () => controller.abort();
-  }, [lyricsUrl]);
+  }, [lyricsUrl, enabled]);
 
   return { lyrics, loading, error };
 }

@@ -11,6 +11,8 @@ import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncIn
 import { CLIENT_PATHS } from "@/config/paths";
 import MusicResult from "../../../components/ui/Result";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { APP_CONFIG } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -50,7 +52,7 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
           className="text-overline"
           style={{ color: "hsl(var(--brand-glow))" }}
         >
-          Histories
+          Lịch sử
         </span>
       </div>
 
@@ -58,7 +60,7 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         className="text-section-title text-foreground leading-tight"
         id="top-featured-tracks-heading"
       >
-        Recently listened tracks
+        Nghe gần đây
       </h2>
 
       <p className="text-section-subtitle hidden sm:block">
@@ -154,7 +156,7 @@ export const RecentlyListenedTrack = () => {
     isError,
     refetch: refetchTracks,
   } = useRecentlyPlayedInfinite();
-  console.log(tracksData);
+
   const allTracks = useMemo<ITrack[]>(
     () => tracksData?.allTracks ?? [],
     [tracksData?.allTracks],
@@ -197,10 +199,10 @@ export const RecentlyListenedTrack = () => {
     ],
   );
   // ── Loading ────────────────────────────────────────────────────────────────
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
   const hasResults = allTracks.length > 0;
 
-  if (isLoadingTracks && !allTracks) {
+  if (isLoadingTracks && !hasResults) {
     return (
       <section
         className="section-block section-block--alt"
@@ -266,7 +268,7 @@ export const RecentlyListenedTrack = () => {
   }
 
   // ── Populated / Empty ──────────────────────────────────────────────────────
-  if (!allTracks || totalItems === 0) return null;
+  if (!isLoadingTracks && (!allTracks || totalItems === 0)) return null;
   // return (
   //   <section
   //     className="section-block section-block--alt"
@@ -363,7 +365,7 @@ export const RecentlyListenedTrack = () => {
                 {...trackListProps}
                 maxHeight={400} // page tự scroll, không giới hạn height
                 moodColor={`var(--wave-2)`}
-                skeletonCount={12} // nhiều hơn để fill viewport lúc đầu
+                skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
                 staggerAnimation={true}
               />
             </AnimatePresence>

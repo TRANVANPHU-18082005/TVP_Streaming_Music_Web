@@ -41,7 +41,7 @@ import {
 } from "@/features/search/hooks/useSearch";
 import { cn } from "@/lib/utils";
 import { SearchSkeleton } from "@/features/search/components/SearchSkeleton";
-import { formatDuration } from "@/utils/track-helper";
+import { formatDuration, toCDN } from "@/utils/track-helper";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
 import { SearchTrack, SuggestItem, useSyncInteractions } from "@/features";
@@ -353,7 +353,7 @@ const TrackRow = memo(
       {/* Ảnh bìa + Overlay Play */}
       <div className="relative size-11 shrink-0 rounded-lg overflow-hidden dark:bg-white/8 bg-black/6 shadow-md">
         <ImageWithFallback
-          src={track.coverImage}
+          src={toCDN(track.coverImage) || track.coverImage}
           alt={track.title}
           className={cn(
             "size-full object-cover transition-transform duration-500 group-hover:scale-110",

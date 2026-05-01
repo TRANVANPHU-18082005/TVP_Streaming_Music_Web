@@ -12,7 +12,6 @@ import {
   SlidersHorizontal,
   Calendar,
   Mic2,
-  Music,
   LayoutGrid,
   Eye,
   Trash2,
@@ -34,7 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArtistSelector } from "@/features/artist/components/ArtistSelector";
-import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { useAppSelector } from "@/store/hooks";
 import { AlbumFilterParamsSchemas } from "../schemas/album.schema";
 
@@ -57,35 +55,28 @@ interface AlbumFilterProps {
 const FILTER_TAG_DEFS = [
   {
     key: "type" as const,
-    label: "Type",
+    label: "Loại",
     icon: LayoutGrid,
     iconColor: "hsl(var(--info))",
     bgClass: "bg-info/10",
   },
   {
     key: "year" as const,
-    label: "Year",
+    label: "Năm",
     icon: Calendar,
     iconColor: "hsl(var(--success))",
     bgClass: "bg-success/10",
   },
   {
     key: "isPublic" as const,
-    label: "Visibility",
+    label: "Hiển thị",
     icon: Eye,
     iconColor: "hsl(var(--wave-1))",
     bgClass: "bg-brand-100/60",
   },
   {
-    key: "genreId" as const,
-    label: "Genre",
-    icon: Music,
-    iconColor: "hsl(var(--wave-4))",
-    bgClass: "bg-warning/10",
-  },
-  {
     key: "artistId" as const,
-    label: "Artist",
+    label: "Nghệ sĩ",
     icon: Mic2,
     iconColor: "hsl(var(--wave-2))",
     bgClass: "bg-pink-500/10",
@@ -107,13 +98,12 @@ function getTagDisplayValue(
     case "isPublic":
       return params.isPublic !== undefined
         ? params.isPublic
-          ? "Public"
-          : "Private"
+          ? "Công khai"
+          : "Riêng tư"
         : null;
-    case "genreId":
-      return params.genreId ? "Genre" : null;
+
     case "artistId":
-      return params.artistId ? "Artist" : null;
+      return params.artistId ? "Đã chọn" : null;
     default:
       return null;
   }
@@ -160,8 +150,8 @@ const SearchInput = memo(
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search albums by title, artist, or genre…"
-        aria-label="Search albums"
+        placeholder="Tìm kiếm album"
+        aria-label="Tìm kiếm album"
         className={cn(
           "h-11 pl-10 pr-10 text-sm",
           "bg-background/60 dark:bg-surface-1/60",
@@ -328,7 +318,7 @@ const ActiveTagsBar = memo(
         <div className="flex items-center gap-1.5 shrink-0">
           <Sparkles className="size-3 text-primary/60" aria-hidden="true" />
           <span className="text-overline text-muted-foreground/50">
-            Filters:
+            Bộ lọc:
           </span>
         </div>
 
@@ -358,7 +348,7 @@ const ActiveTagsBar = memo(
           )}
         >
           <Trash2 className="size-3" aria-hidden="true" />
-          Clear all
+          Xóa tất cả
         </button>
       </div>
     );
@@ -406,7 +396,7 @@ const FilterToggleButton = memo(
     >
       <div className="flex items-center gap-2">
         <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="hidden sm:block">Filters</span>
+        <span className="hidden sm:block">Bộ lọc</span>
       </div>
 
       <div className="flex items-center gap-1.5 ml-1">
@@ -497,19 +487,12 @@ const AlbumFilter = memo<AlbumFilterProps>(
     // ── Active count — granular deps ─────────────────────────────────────────
     const activeFiltersCount = useMemo(() => {
       let n = 0;
-      if (params.genreId) n++;
       if (params.artistId) n++;
       if (params.year) n++;
       if (params.type) n++;
       if (params.isPublic !== undefined) n++;
       return n;
-    }, [
-      params.genreId,
-      params.artistId,
-      params.year,
-      params.type,
-      params.isPublic,
-    ]);
+    }, [params.artistId, params.year, params.type, params.isPublic]);
 
     // FIX 4: null not undefined
     const removeFilter = useCallback(
@@ -565,15 +548,15 @@ const AlbumFilter = memo<AlbumFilterProps>(
                       aria-hidden="true"
                     />
                     <span className="text-overline text-muted-foreground/50 hidden md:block">
-                      Sort:
+                      Sắp xếp:
                     </span>
                     <SelectValue />
                   </div>
                 </SelectTrigger>
                 <SelectContent align="end">
-                  <SelectItem value="newest">Newest</SelectItem>
-                  <SelectItem value="oldest">Oldest</SelectItem>
-                  <SelectItem value="popular">Popular</SelectItem>
+                  <SelectItem value="newest">Mới nhất</SelectItem>
+                  <SelectItem value="oldest">Cũ nhất</SelectItem>
+                  <SelectItem value="popular">Phổ biến</SelectItem>
                   <SelectItem value="name">A – Z</SelectItem>
                 </SelectContent>
               </Select>
@@ -623,7 +606,7 @@ const AlbumFilter = memo<AlbumFilterProps>(
                   <div className="space-y-0">
                     <FilterLabel
                       icon={Eye}
-                      text="Visibility"
+                      text="Hiển thị"
                       iconColor="hsl(var(--wave-1))"
                     />
                     <Select
@@ -640,12 +623,12 @@ const AlbumFilter = memo<AlbumFilterProps>(
                       }
                     >
                       <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue placeholder="All Status" />
+                        <SelectValue placeholder="Tất cả" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="true">Public</SelectItem>
-                        <SelectItem value="false">Private</SelectItem>
+                        <SelectItem value="all">Tất cả</SelectItem>
+                        <SelectItem value="true">Công khai</SelectItem>
+                        <SelectItem value="false">Riêng tư</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -655,7 +638,7 @@ const AlbumFilter = memo<AlbumFilterProps>(
                 <div className="space-y-0">
                   <FilterLabel
                     icon={LayoutGrid}
-                    text="Type"
+                    text="Loại"
                     iconColor="hsl(var(--info))"
                   />
                   <Select
@@ -665,58 +648,23 @@ const AlbumFilter = memo<AlbumFilterProps>(
                     }
                   >
                     <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                      <SelectValue placeholder="All Types" />
+                      <SelectValue placeholder="Tất cả loại" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="all">Tất cả loại</SelectItem>
                       <SelectItem value="album">Album</SelectItem>
                       <SelectItem value="single">Single</SelectItem>
                       <SelectItem value="ep">EP</SelectItem>
-                      <SelectItem value="compilation">Compilation</SelectItem>
+                      <SelectItem value="compilation">Tuyển tập</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* Genre */}
-                <div className="space-y-0">
-                  <FilterLabel
-                    icon={Music}
-                    text="Genre"
-                    iconColor="hsl(var(--wave-4))"
-                  />
-                  <FilterDropdown
-                    isActive={!!params.genreId}
-                    onClear={() => onFilterChange("genreId", null)}
-                    label={
-                      <span className="truncate">
-                        {params.genreId ? "Genre selected" : "Select Genre"}
-                      </span>
-                    }
-                    contentClassName="w-[280px]"
-                    className={cn(
-                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
-                      "justify-start shadow-raised rounded-lg border-border/70",
-                      "focus:ring-1 focus:ring-primary/30",
-                      params.genreId && "border-warning/40 text-foreground",
-                    )}
-                  >
-                    <div className="p-1">
-                      <GenreSelector
-                        variant="filter"
-                        singleSelect
-                        value={params.genreId}
-                        onChange={(val) => onFilterChange("genreId", val)}
-                        placeholder="Search genres…"
-                      />
-                    </div>
-                  </FilterDropdown>
                 </div>
 
                 {/* Artist */}
                 <div className="space-y-0">
                   <FilterLabel
                     icon={Mic2}
-                    text="Artist"
+                    text="Nghệ sĩ"
                     iconColor="hsl(var(--wave-2))"
                   />
                   <FilterDropdown
@@ -724,7 +672,7 @@ const AlbumFilter = memo<AlbumFilterProps>(
                     onClear={() => onFilterChange("artistId", null)}
                     label={
                       <span className="truncate">
-                        {params.artistId ? "Artist selected" : "Select Artist"}
+                        {params.artistId ? "Đã chọn nghệ sĩ" : "Chọn nghệ sĩ"}
                       </span>
                     }
                     contentClassName="w-[280px]"
@@ -752,13 +700,13 @@ const AlbumFilter = memo<AlbumFilterProps>(
                 <div className="space-y-0">
                   <FilterLabel
                     icon={Calendar}
-                    text="Year"
+                    text="Năm"
                     iconColor="hsl(var(--success))"
                   />
                   <FilterDropdown
                     isActive={!!params.year}
                     onClear={() => onFilterChange("year", null)}
-                    label={params.year ? `Year: ${params.year}` : "Select Year"}
+                    label={params.year ? `Năm: ${params.year}` : "Chọn năm"}
                     className={cn(
                       "w-full bg-background/80 h-9 text-sm font-normal px-3",
                       "justify-start shadow-raised rounded-lg border-border/70",

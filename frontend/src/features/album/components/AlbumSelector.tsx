@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
 import { IAlbum } from "../types";
 import { Button } from "@/components/ui/button";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { APP_CONFIG } from "@/config/constants";
 
 // ─── Debounce Hook ────────────────────────────────────────────────────────────
 function useDebounce<T>(value: T, delay: number): T {
@@ -52,7 +54,7 @@ const AlbumItem = memo(({ album, isSelected, onToggle }: AlbumItemProps) => {
         )}
       >
         {album.coverImage ? (
-          <img
+          <ImageWithFallback
             src={album.coverImage}
             alt={album.title}
             className="w-full h-full object-cover"
@@ -112,12 +114,12 @@ export const AlbumSelector: React.FC<AlbumSelectorProps> = ({
 
   // Server-side search: truyền keyword vào query thay vì filter client-side
   const { data, isLoading } = useAlbumsQuery({
-    limit: 20,
+    limit: APP_CONFIG.SELECTOR_LIMIT,
     isPublic: true,
     keyword: debouncedFilter || undefined,
   });
 
-  const albums: IAlbum[] = data?.albums || [];
+  const albums: IAlbum[] = useMemo(() => data?.albums || [], [data?.albums]);
 
   // Lấy thông tin selectedAlbum — fetch riêng nếu không có trong danh sách hiện tại
   const selectedAlbumInList = useMemo(

@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Radio, Music, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RankedTrack } from "@/features/analytics/types";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { toCDN } from "@/utils/track-helper";
 
 // ─── Rank medal colors (dùng wave tokens từ design system) ───────
 const RANK_STYLES = [
@@ -51,8 +53,8 @@ const TrackRow = ({
 
       {/* Cover art */}
       <div className="relative size-10 rounded-xl overflow-hidden shrink-0 border border-border/20 shadow-card">
-        <img
-          src={item.coverImage}
+        <ImageWithFallback
+          src={toCDN(item.coverImage)}
           alt={item.title}
           className="img-cover transition-transform duration-300 group-hover:scale-110"
           loading="lazy"
@@ -115,8 +117,8 @@ const NowListeningRow = ({
   >
     {/* Cover */}
     <div className="size-9 rounded-xl overflow-hidden shrink-0 border border-border/20 shadow-card">
-      <img
-        src={item.coverImage}
+      <ImageWithFallback
+        src={toCDN(item.coverImage)}
         alt={item.title}
         className="img-cover transition-transform duration-300 group-hover:scale-110"
         loading="lazy"

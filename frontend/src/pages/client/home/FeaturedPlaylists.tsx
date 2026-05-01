@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { APP_CONFIG } from "@/config/constants";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — slightly softer than Albums for tonal differentiation
@@ -64,7 +66,7 @@ const PlaylistsHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
           <Music2 className="size-3.5" />
         </div>
         <span className="text-overline" style={{ color: "hsl(var(--wave-8))" }}>
-          Curated
+          Tuyển chọn
         </span>
       </div>
 
@@ -72,7 +74,7 @@ const PlaylistsHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         className="text-section-title text-foreground leading-tight"
         id="featured-playlists-heading"
       >
-        Featured Playlists
+        Playlist nổi bật
       </h2>
 
       <p className="text-section-subtitle hidden sm:block">
@@ -142,66 +144,6 @@ const SkeletonGrid = memo(({ count }: { count: number }) => (
 ));
 SkeletonGrid.displayName = "SkeletonGrid";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ERROR STATE — wave-2 tinted for section consistency
-// ─────────────────────────────────────────────────────────────────────────────
-const ErrorState = memo(({ message }: { message: string }) => (
-  <div
-    role="alert"
-    className={cn(
-      "flex flex-col items-center justify-center gap-3 py-16 px-6",
-      "rounded-2xl border text-center",
-    )}
-    style={{
-      background: "hsl(var(--error) / 0.05)",
-      borderColor: "hsl(var(--error) / 0.18)",
-    }}
-  >
-    <div
-      className="flex items-center justify-center size-12 rounded-full"
-      style={{
-        background: "hsl(var(--error) / 0.1)",
-        color: "hsl(var(--error))",
-      }}
-    >
-      <AlertCircle className="size-5" />
-    </div>
-    <div className="space-y-1">
-      <p className="text-sm font-medium text-foreground">Đã có lỗi xảy ra</p>
-      <p className="text-xs text-muted-foreground">{message}</p>
-    </div>
-    <button
-      onClick={() => window.location.reload()}
-      className="btn-outline btn-sm mt-1"
-    >
-      Thử lại
-    </button>
-  </div>
-));
-ErrorState.displayName = "ErrorState";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EMPTY STATE
-// ─────────────────────────────────────────────────────────────────────────────
-const EmptyState = memo(({ message }: { message: string }) => (
-  <div
-    role="status"
-    aria-label={message}
-    className={cn(
-      "flex flex-col items-center justify-center gap-3 py-16 px-6",
-      "rounded-2xl border border-dashed border-border text-center",
-    )}
-  >
-    <div className="flex items-center justify-center size-12 rounded-full bg-muted text-muted-foreground">
-      <ListMusic className="size-5" />
-    </div>
-    <div className="space-y-1">
-      <p className="text-sm font-medium text-foreground">Chưa có nội dung</p>
-      <p className="text-xs text-muted-foreground">{message}</p>
-    </div>
-  </div>
-));
-EmptyState.displayName = "EmptyState";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST GRID — desktop whileInView stagger
@@ -266,7 +208,7 @@ export function FeaturedPlaylists() {
     isLoading,
     isError,
     refetch,
-  } = useFeaturedPlaylists(6);
+  } = useFeaturedPlaylists();
 
   const playlistIds = useMemo(
     () => playlists?.map((p) => p._id) ?? [],
@@ -276,18 +218,19 @@ export function FeaturedPlaylists() {
   useSyncInteractions(playlistIds, "like", "playlist", playlistIds.length > 0);
 
   const hasResults = playlists && playlists?.length > 0;
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
 
   const renderContent = () => {
     if (isLoading && !hasResults) {
-      return <SkeletonGrid count={3} />;
+      return <SkeletonGrid count={APP_CONFIG.HOME_PAGE_LIMIT} />;
     }
     // Switching
     if (isLoading && hasResults) {
       return <VinylLoader />;
     }
-    // Deep Error
+    // Error or Empty
     if (isError || !hasResults) {
+      if (!isError && !hasResults) return null;
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
@@ -312,6 +255,9 @@ export function FeaturedPlaylists() {
       </div>
     );
   };
+
+  if (!isLoading && !hasResults && !isError) return null;
+
   return (
     <>
       <div

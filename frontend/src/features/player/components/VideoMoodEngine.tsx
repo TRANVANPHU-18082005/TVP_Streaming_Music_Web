@@ -163,8 +163,8 @@ const CSS_TEXT = `
 .vme-scrim-bottom {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  height: 280px;
-  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 42%, transparent 100%);
+  height: 380px;
+  background: linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.7) 35%, transparent 100%);
   pointer-events: none;
   z-index: 4;
 }
@@ -375,7 +375,8 @@ export const VideoMoodEngine = memo(
 
     const breathStyle = useMemo(
       () => ({
-        background: `radial-gradient(ellipse 65% 52% at 50% 62%, ${accentColor}1c, transparent 72%)`,
+        background: `radial-gradient(ellipse 65% 52% at 50% 65%, ${accentColor}2a, transparent 75%)`,
+        filter: "blur(24px)",
       }),
       [accentColor],
     );

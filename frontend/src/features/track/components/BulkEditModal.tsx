@@ -20,6 +20,8 @@ import {
   Globe,
   AlertTriangle,
   Layers,
+  Video,
+  Sparkles,
   CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { AlbumSelector } from "@/features/album/components/AlbumSelector";
 import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { TagInput } from "@/components/ui/tag-input";
+import { MoodVideoPicker } from "@/features/mood-video/components/MoodVideoPicker";
 import {
   BulkTrackFormValues,
   bulkTrackSchema,
@@ -39,7 +42,7 @@ interface BulkEditModalProps {
   selectedCount: number;
   onSubmit: (data: BulkTrackFormValues) => void;
   isPending: boolean;
-  initialTab?: "metadata" | "album";
+  initialTab?: "metadata" | "album" | "mood";
 }
 
 export const BulkEditModal: React.FC<BulkEditModalProps> = ({
@@ -61,6 +64,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     });
 
   const isPublic = watch("isPublic");
+  // moodVideo selection will use the shared MoodVideoPicker component
 
   return (
     <Dialog
@@ -98,12 +102,18 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
           >
             {/* TABS LIST */}
             <div className="px-5 pt-5 pb-2 shrink-0">
-              <TabsList className="grid w-full grid-cols-2 bg-muted h-11 p-1 rounded-lg">
+              <TabsList className="grid w-full grid-cols-3 bg-muted h-11 p-1 rounded-lg">
                 <TabsTrigger
                   value="metadata"
                   className="gap-2 text-xs sm:text-sm font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md transition-all"
                 >
                   <Tags className="size-3.5 sm:size-4" /> Metadata
+                </TabsTrigger>
+                <TabsTrigger
+                  value="mood"
+                  className="gap-2 text-xs sm:text-sm font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md transition-all"
+                >
+                  <Layers className="size-3.5 sm:size-4" /> Mood Video
                 </TabsTrigger>
                 <TabsTrigger
                   value="album"
@@ -166,6 +176,17 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         />
                       )}
                     />
+                  </div>
+
+                  {/* Mood Video (Canvas) */}
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-foreground/80">
+                      Gán Mood Video (Canvas)
+                    </Label>
+                    <div className="p-3 rounded-md bg-muted/5 text-sm text-muted-foreground">
+                      Sử dụng tab <strong>“Mood Video”</strong> để gán, chọn
+                      hoặc gỡ Mood Video cho các bài hát một cách trực quan.
+                    </div>
                   </div>
 
                   {/* Visibility - Fixed Click Handler */}
@@ -234,6 +255,60 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         )}
                       />
                     </div>
+                  </div>
+                </TabsContent>
+
+                {/* --- TAB: MOOD VIDEO (Visual Canvas) --- */}
+                <TabsContent
+                  value="mood"
+                  className="space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-300 outline-none"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
+                        <Video className="size-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-foreground uppercase">
+                          Visual Canvas
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Background video experience for selected tracks.
+                          Manual selection here overrides any automatic
+                          assignment.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "card-base p-4 space-y-2 rounded-lg",
+                        "bg-gradient-to-r from-primary/8 via-transparent to-transparent",
+                      )}
+                    >
+                      <div className="flex items-center gap-2 text-primary">
+                        <Sparkles className="size-4" aria-hidden="true" />
+                        <h5 className="text-xs font-black uppercase tracking-widest">
+                          Smart Selection
+                        </h5>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Leave blank to keep existing assignments. Use the picker
+                        below to assign or remove a Mood Video for all selected
+                        tracks.
+                      </p>
+                    </div>
+
+                    <Controller
+                      name="moodVideoId"
+                      control={control}
+                      render={({ field }) => (
+                        <MoodVideoPicker
+                          value={field.value ?? null}
+                          onChange={field.onChange}
+                        />
+                      )}
+                    />
                   </div>
                 </TabsContent>
 

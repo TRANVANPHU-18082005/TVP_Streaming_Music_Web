@@ -29,9 +29,12 @@ const trackApi = {
   },
 
   // Admin: Lấy chi tiết bài hát bằng ID
-  getTrackDetail: async (id: string) => {
-    const { data } = await api.get<ApiResponse<ITrack>>(`/tracks/${id}`);
-    return data; // unwrap ApiResponse wrapper
+  getTrackDetail: async (id: string, options?: { signal?: AbortSignal }) => {
+    const { data } = await api.get<ApiResponse<ITrack>>(`/tracks/${id}`, {
+      signal: options?.signal,
+    });
+    console.log(data);
+    return data.data;
   },
 
   // ==========================================
@@ -86,6 +89,47 @@ const trackApi = {
       trackIds,
       updates,
     });
+    return data;
+  },
+
+  // Bulk retry endpoints (Admin): accept array of track IDs
+  bulkRetryTranscode: async (trackIds: string[]) => {
+    const { data } = await api.post<ApiResponse<any>>(
+      "/tracks/bulk/retry/transcode",
+      { trackIds },
+    );
+    return data;
+  },
+
+  bulkRetryLyrics: async (trackIds: string[]) => {
+    const { data } = await api.post<ApiResponse<any>>(
+      "/tracks/bulk/retry/lyrics",
+      { trackIds },
+    );
+    return data;
+  },
+
+  bulkRetryKaraoke: async (trackIds: string[]) => {
+    const { data } = await api.post<ApiResponse<any>>(
+      "/tracks/bulk/retry/karaoke",
+      { trackIds },
+    );
+    return data;
+  },
+
+  bulkRetryMood: async (trackIds: string[]) => {
+    const { data } = await api.post<ApiResponse<any>>(
+      "/tracks/bulk/retry/mood",
+      { trackIds },
+    );
+    return data;
+  },
+
+  bulkRetryFull: async (trackIds: string[]) => {
+    const { data } = await api.post<ApiResponse<any>>(
+      "/tracks/bulk/retry/full",
+      { trackIds },
+    );
     return data;
   },
 

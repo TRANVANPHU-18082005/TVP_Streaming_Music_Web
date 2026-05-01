@@ -7,6 +7,7 @@ export const AUTH_PATHS = {
   VERIFY_OTP: "/verify-otp",
   FORGOT_PASSWORD: "/forgot-password",
   AUTH_GOOGLE: "/auth/google",
+  AUTH_FACEBOOK: "/auth/facebook",
   FORCE_CHANGE_PASSWORD: "/force-change-password",
   RESET_PASSWORD: (token: string) => `/reset-password/${token}`,
 } as const;

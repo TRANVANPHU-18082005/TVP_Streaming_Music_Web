@@ -15,6 +15,8 @@ import MusicResult from "@/components/ui/Result";
 
 import SectionAmbient from "@/components/SectionAmbient";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { APP_CONFIG } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
@@ -66,13 +68,13 @@ const FeaturedHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
           <Disc3 className="size-3.5" />
         </div>
         <span className="text-overline" style={{ color: "hsl(var(--wave-7))" }}>
-          Selection
+          Lựa chọn
         </span>
       </div>
 
       {/* Title */}
       <h2 className="text-section-title text-foreground leading-tight">
-        Featured Albums
+        Album nổi bật
       </h2>
 
       {/* Description — hidden on small mobile to save vertical space */}
@@ -203,13 +205,13 @@ AlbumScroll.displayName = "AlbumScroll";
 // FEATURED ALBUMS — main section orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 export function FeaturedAlbums() {
-  const { data: albums, isLoading, isError, refetch } = useFeatureAlbums(6);
+  const { data: albums, isLoading, isError, refetch } = useFeatureAlbums();
 
   const albumIds = useMemo(() => albums?.map((a) => a._id) ?? [], [albums]);
 
   useSyncInteractions(albumIds, "like", "album", albumIds.length > 0);
   const hasResults = albums && albums?.length > 0;
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
 
   const renderContent = () => {
     if (isLoading && !hasResults) {
@@ -219,8 +221,9 @@ export function FeaturedAlbums() {
     if (isLoading && hasResults) {
       return <WaveformLoader glass={false} text="Đang tải" />;
     }
-    // Deep Error
+    // Error or Empty
     if (isError || !hasResults) {
+      if (!isError && !hasResults) return null; // Prevent showing error when just empty
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
@@ -245,7 +248,7 @@ export function FeaturedAlbums() {
       </div>
     );
   };
-  if (!albums || albums.length === 0) return null;
+  if (!isLoading && !hasResults && !isError) return null;
   return (
     <>
       <div

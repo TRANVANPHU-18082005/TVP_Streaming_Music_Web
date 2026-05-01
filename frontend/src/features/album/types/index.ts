@@ -33,6 +33,7 @@ export interface IAlbum {
   totalDuration: number; // Tổng thời lượng tất cả track trong album (tính bằng giây)
   createdAt: string;
   updatedAt: string;
+  trackIds: string[];
 }
 
 // ==========================================

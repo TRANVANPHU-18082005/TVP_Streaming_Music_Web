@@ -20,13 +20,44 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
     return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
   }
 
-  const { accessToken, refreshToken } = generateTokens(user._id, user.role);
+  const { accessToken, refreshToken } = generateTokens(
+    user._id.toString(),
+    user.role,
+  );
 
   user.refreshToken = refreshToken;
   await user.save();
   setRefreshTokenCookie(res, refreshToken);
+  console.log(`Set refresh cookie for user=${user._id}`);
 
   res.redirect(`${process.env.CLIENT_URL}/auth/google?token=${accessToken}`);
+};
+
+// Facebook Auth (Start)
+export const facebookAuth = passport.authenticate("facebook", {
+  scope: ["email"],
+  session: false,
+});
+
+// Facebook Callback (End)
+export const facebookCallbackHandler = async (req: Request, res: Response) => {
+  const user: any = req.user;
+
+  if (!user) {
+    return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
+  }
+
+  const { accessToken, refreshToken } = generateTokens(
+    user._id.toString(),
+    user.role,
+  );
+
+  user.refreshToken = refreshToken;
+  await user.save();
+  setRefreshTokenCookie(res, refreshToken);
+  console.log(`Set refresh cookie for user=${user._id}`);
+
+  res.redirect(`${process.env.CLIENT_URL}/auth/facebook?token=${accessToken}`);
 };
 
 // 3. Register

@@ -18,6 +18,7 @@ import {
   getTracksSchema,
   changeStatusSchema,
   bulkUpdateTracksSchema,
+  bulkRetryTracksSchema,
 } from "../validations/track.validation";
 
 const router = express.Router();
@@ -66,6 +67,38 @@ router.patch(
   authorize("admin"),
   validate(bulkUpdateTracksSchema),
   trackController.bulkUpdateTracks,
+);
+
+// Bulk retry endpoints (admin)
+router.post(
+  "/bulk/retry/transcode",
+  authorize("admin"),
+  validate(bulkRetryTracksSchema),
+  trackController.bulkRetryTranscode,
+);
+router.post(
+  "/bulk/retry/lyrics",
+  authorize("admin"),
+  validate(bulkRetryTracksSchema),
+  trackController.bulkRetryLyrics,
+);
+router.post(
+  "/bulk/retry/karaoke",
+  authorize("admin"),
+  validate(bulkRetryTracksSchema),
+  trackController.bulkRetryKaraoke,
+);
+router.post(
+  "/bulk/retry/mood",
+  authorize("admin"),
+  validate(bulkRetryTracksSchema),
+  trackController.bulkRetryMood,
+);
+router.post(
+  "/bulk/retry/full",
+  authorize("admin"),
+  validate(bulkRetryTracksSchema),
+  trackController.bulkRetryFull,
 );
 
 // ── Status ────────────────────────────────────────────────────────────────────

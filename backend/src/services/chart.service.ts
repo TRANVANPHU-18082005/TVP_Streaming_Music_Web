@@ -91,6 +91,15 @@ export const getRealtimeChart = async () => {
       },
     },
     { $unwind: { path: "$artist", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "artists", // Tên collection chứa nghệ sĩ
+        localField: "track.featuringArtists",
+        foreignField: "_id",
+        as: "featuringArtistsDetails",
+      },
+    },
+    { $unwind: { path: "$artist", preserveNullAndEmptyArrays: true } },
 
     // FIX #4 — Chỉ project đúng fields cần cho Chart, loại bỏ plainLyrics / lyricPreview / description
     {
@@ -100,7 +109,18 @@ export const getRealtimeChart = async () => {
         slug: "$track.slug",
         duration: "$track.duration",
         coverImage: "$track.coverImage",
-        featuringArtists: "$track.featuringArtists",
+        featuringArtists: {
+          $map: {
+            input: "$featuringArtistsDetails",
+            as: "feat",
+            in: {
+              _id: "$$feat._id",
+              name: "$$feat.name",
+              slug: "$$feat.slug",
+              avatar: "$$feat.avatar",
+            },
+          },
+        },
         playCount: "$track.playCount",
         album: {
           _id: "$albumDetails._id",

@@ -1,56 +1,3 @@
-/**
- * MiniPlayer.tsx — Production v3.0 — Zero-Jank Edition
- * ─────────────────────────────────────────────────────────────────────────────
- * PERF AUDIT v2 → v3:
- *
- * PERF-1  currentTime prop gây re-render toàn bộ MiniPlayer mỗi giây
- *         (audio timeupdate fires ~4Hz, hoặc 60Hz nếu qua rAF).
- *         MiniPlayer → TrackInfo → VinylArtwork → DesktopProgressLine
- *         → MobileProgressBar: tất cả đều re-render dù chỉ time thay đổi.
- *         Fix: currentTime chỉ được đọc bởi progress elements qua ref/callback.
- *              MiniPlayer không nhận currentTime prop trực tiếp.
- *              Thay bằng getCurrentTime() callback đã có sẵn trong props.
- *
- * PERF-2  DesktopProgressLine nhận currentTime prop → re-render + DOM diff mỗi update
- *         Fix: imperative DOM update qua useEffect + requestAnimationFrame.
- *              Width set trực tiếp via style ref. React không reconcile.
- *
- * PERF-3  MobileProgressBar: displayTime text re-render mỗi drag move (pointer capture)
- *         Fix: tooltip time update via direct DOM ref. Không setState cho position.
- *              Chỉ setState cho isDragging (boolean — ít thay đổi hơn nhiều).
- *
- * PERF-4  TrackInfo nhận isPlaying → re-render khi pause/play dù track không đổi
- *         VinylArtwork animation được kiểm soát qua CSS class (đã đúng).
- *         Fix: tách VinylArtwork ra component riêng nhận isPlaying trực tiếp,
- *              TrackInfo không cần biết isPlaying nữa.
- *
- * PERF-5  MobileProgressBar: getPercent() recreated mỗi render vì phụ thuộc barRef
- *         Fix: barRef.current đọc trực tiếp trong callback, không cần dep.
- *
- * PERF-6  Framer Motion spring animation trên motion.div wrapper của MiniPlayer
- *         chạy mỗi khi component mount/unmount. Đây là đúng — giữ nguyên.
- *         Nhưng motion.div nhận thêm animate prop với object literal mới mỗi render.
- *         Fix: hoist animate objects ra ngoài component scope (stable reference).
- *
- * PERF-7  handleExpand, handleStop, handleStopKeyboard, handleExpandKeyboard:
- *         4 useCallback nhưng handleStop chỉ dùng dispatch (stable).
- *         handleExpandKeyboard chỉ forward onExpand (stable nếu caller memo đúng).
- *         Fix: simplify, giảm số useCallback.
- *
- * PERF-8  PremiumMusicVisualizer nhận active prop → re-render khi pause/play
- *         Đây là expected behavior — không thể tránh nhưng isolate để không
- *         kéo toàn bộ right panel re-render.
- *
- * PERF-9  MobileProgressBar progress bar width: `transition: "width 0.1s linear"`
- *         inline style tạo object mới mỗi render.
- *         Fix: CSS class thay vì inline style.
- *
- * ARCH:   Time-display isolation pattern:
- *         - TimeDisplay component tự subscribe qua setInterval/rAF
- *         - Progress bars tự đọc getCurrentTime() qua rAF
- *         - Parent không bị re-render khi time thay đổi
- */
-
 import { memo, useRef, useState, useCallback, useId, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Maximize2, X, CircleStop } from "lucide-react";
@@ -65,8 +12,10 @@ import { cn } from "@/lib/utils";
 import { formatTime } from "@/utils/format";
 import { useAppDispatch } from "@/store/hooks";
 import { ITrack } from "@/features/track";
-import { MarqueeText } from "./MarqueeText";
 import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
+
+import { TrackTitleMarquee } from "./TrackTitleMarquee";
+import { toCDN } from "@/utils/track-helper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -538,7 +487,7 @@ const TrackInfo = memo(
         onKeyDown={handleKeyDown}
       >
         <VinylArtwork
-          src={track.coverImage}
+          src={toCDN(track.coverImage) || track.coverImage}
           alt={`${track.title} album art`}
           isPlaying={isPlaying}
         />
@@ -552,17 +501,17 @@ const TrackInfo = memo(
           }
         >
           <div className="flex items-center gap-1.5 min-w-0">
-            <MarqueeText
-              text={track.title}
-              className="flex-1 min-w-0 text-[13px] font-semibold tracking-tight text-foreground"
-              speed={38}
-              pauseMs={1600}
+            <TrackTitleMarquee
+              title={track.title}
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="text-sm"
+              artistClassName="text-xs"
             />
             <div className="md:hidden shrink-0">
               <PremiumMusicVisualizer active={isPlaying} barCount={7} />
             </div>
           </div>
-          <p className="text-track-meta truncate">{track.artist?.name}</p>
         </div>
       </div>
     );
@@ -604,8 +553,8 @@ const DesktopRight = memo(
         size="icon"
         className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted/70 transition-all duration-150"
         onClick={onExpand}
-        title="Expand player"
-        aria-label="Expand to full player"
+        title="Mở rộng player"
+        aria-label="Mở rộng player"
       >
         <Maximize2 className="size-4" />
       </Button>
@@ -615,8 +564,8 @@ const DesktopRight = memo(
         size="icon"
         className="h-8 w-8 rounded-full text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
         onClick={onStop}
-        title="Stop playback"
-        aria-label="Stop playback"
+        title="Dừng phát"
+        aria-label="Dừng phát nhạc"
       >
         <CircleStop className="size-4" />
       </Button>
@@ -777,21 +726,28 @@ export const MiniPlayer = memo(
               <PlayerControls variant="mini" getCurrentTime={getCurrentTime} />
             </div>
 
-            {/* RIGHT (mobile) — stop */}
-            <button
-              type="button"
-              className={cn(
-                "md:hidden shrink-0 p-1.5 rounded-full",
-                "text-muted-foreground hover:bg-muted/70",
-                "transition-all duration-150 active:scale-90",
-                "focus-visible:outline-2 focus-visible:outline-ring",
-              )}
-              onClick={handleStop}
-              onKeyDown={handleStopMobileKeydown}
-              aria-label="Stop playback"
+            {/* RIGHT (mobile) — like + stop */}
+            <div
+              className="md:hidden flex items-center gap-1 shrink-0"
+              onClick={(e) => e.stopPropagation()}
             >
-              <X className="size-3.5" />
-            </button>
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.88 }}
+                transition={{ type: "spring", stiffness: 500, damping: 24 }}
+                className={cn(
+                  "shrink-0 p-1.5 rounded-full",
+                  "text-muted-foreground hover:bg-muted/70",
+                  "transition-colors duration-150",
+                  "focus-visible:outline-2 focus-visible:outline-ring",
+                )}
+                onClick={handleStop}
+                onKeyDown={handleStopMobileKeydown}
+                aria-label="Dừng phát nhạc"
+              >
+                <X className="size-3.5" />
+              </motion.button>
+            </div>
 
             {/* RIGHT (desktop) — waveform + volume + expand + stop */}
             <DesktopRight

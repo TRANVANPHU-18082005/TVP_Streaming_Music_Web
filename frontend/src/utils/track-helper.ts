@@ -1,3 +1,5 @@
+import { env } from "@/config/env";
+
 // utils/track-helper.ts
 export const formatDuration = (seconds: number | undefined): string => {
   if (!seconds || isNaN(seconds)) return "--:--";
@@ -142,3 +144,31 @@ export async function extractDominantColor(imageUrl?: string): Promise<string> {
     img.src = imageUrl;
   });
 }
+const CDN_DOMAIN = env.CDN_DOMAIN;
+
+export const toCDN = (url?: string) => {
+  if (!url) return url;
+
+  // ✅ Case 1: bucket.subdomain (PHẢI để lên trước)
+  if (url.includes(".s3.ca-east-006.backblazeb2.com")) {
+    const [prefix, path] = url.split(".s3.ca-east-006.backblazeb2.com");
+    const bucket = prefix.replace("https://", "");
+
+    return `${CDN_DOMAIN}/file/${bucket}${path}`;
+  }
+
+  // Case 2: s3 dạng chuẩn
+  if (url.includes("s3.ca-east-006.backblazeb2.com")) {
+    return url.replace(
+      "https://s3.ca-east-006.backblazeb2.com",
+      CDN_DOMAIN + "/file",
+    );
+  }
+
+  // Case 3: f006
+  if (url.includes("f006.backblazeb2.com")) {
+    return url.replace("https://f006.backblazeb2.com", CDN_DOMAIN);
+  }
+
+  return url;
+};

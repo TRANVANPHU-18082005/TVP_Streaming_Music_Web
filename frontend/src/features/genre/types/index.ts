@@ -18,7 +18,7 @@ export interface IGenre {
   priority: number; // Càng cao càng ưu tiên lên đầu
   isTrending: boolean;
   isActive: boolean;
-
+  trackIds: string[];
   // Stats (Denormalized)
   trackCount: number;
   albumCount: number;

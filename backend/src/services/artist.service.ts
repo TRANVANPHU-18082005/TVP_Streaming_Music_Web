@@ -87,7 +87,7 @@ class ArtistService {
       // C. Lấy mảng ID của TOÀN BỘ bài hát (Để làm Virtual Scroll)
       // Sắp xếp theo playCount để lấy danh sách "Top Tracks" đầy đủ
       Track.find({ artist: artistId, status: "ready", isPublic: true })
-        .sort({ playCount: -1 })
+        .sort({ playCount: -1, createdAt: -1 })
         .select("_id")
         .lean(),
     ]);
@@ -241,8 +241,7 @@ class ArtistService {
 
     let baseQuery = Artist.find(filterQuery)
       .select(
-        "name avatar coverImage slug isVerified nationality genres themeColor " +
-          "totalFollowers monthlyListeners isActive",
+        "name avatar coverImage totalFollowers monthlyListeners slug isVerified nationality themeColor totalTracks",
       )
       .sort(sortOption!)
       .skip(skip)

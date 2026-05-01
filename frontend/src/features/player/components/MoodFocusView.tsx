@@ -1,5 +1,4 @@
 import { useRef, useEffect, useState, useMemo, useCallback, memo } from "react";
-import { motion } from "framer-motion";
 import { VideoMoodEngine } from "./VideoMoodEngine";
 import { MoodLyricLine, type MoodWord } from "./MoodLyricLine";
 import { ITrack } from "@/features";
@@ -188,53 +187,6 @@ export interface MoodFocusViewProps {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMPTY / LOADING STATE
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MoodEmpty = memo(({ loading }: { loading: boolean }) => (
-  <motion.div
-    className="h-full flex flex-col items-center justify-center gap-4 select-none"
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    transition={{ duration: 0.5 }}
-  >
-    {loading ? (
-      <div
-        style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 32 }}
-      >
-        {[0.4, 0.7, 1, 0.7, 0.4].map((h, i) => (
-          <motion.span
-            key={i}
-            style={{
-              display: "block",
-              width: 3,
-              height: "100%",
-              borderRadius: 99,
-              background: "rgba(255,255,255,0.32)",
-              transformOrigin: "bottom",
-              scaleY: h,
-            }}
-            animate={{ scaleY: [h, 1, h] }}
-            transition={{ duration: 0.85, repeat: Infinity, delay: i * 0.1 }}
-          />
-        ))}
-      </div>
-    ) : (
-      <p
-        style={{
-          color: "rgba(255,255,255,0.2)",
-          fontSize: "0.95rem",
-          fontStyle: "italic",
-        }}
-      >
-        Không có lời bài hát
-      </p>
-    )}
-  </motion.div>
-));
-MoodEmpty.displayName = "MoodEmpty";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -307,7 +259,6 @@ export const MoodFocusView = memo(
             accentColor={accentColor}
             opacity={0.55}
           />
-          <MoodEmpty loading={loading} />
         </div>
       );
     }

@@ -22,14 +22,7 @@
  *   7. onTrackPlay gọi trước dispatch → swap thứ tự, dispatch trước
  */
 
-import React, {
-  memo,
-  useCallback,
-  useRef,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, { memo, useCallback, useRef, useEffect, useMemo } from "react";
 import { useVirtualizer, useWindowVirtualizer } from "@tanstack/react-virtual";
 import { Clock, Disc3, AlertCircle, RefreshCw } from "lucide-react";
 import { shallowEqual } from "react-redux";
@@ -319,7 +312,7 @@ const ColumnHeaders = memo(
                 className={cn(
                   "inline-flex items-center px-1.5 py-0.5 rounded-full",
                   "text-[10px] font-medium tabular-nums leading-none",
-                  "bg-muted/60 text-muted-foreground/70 border border-border/40",
+                  "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary)/0.6)] border border-[hsl(var(--primary)/0.15)]",
                 )}
               >
                 {loadedCount != null && loadedCount < totalItems
@@ -353,17 +346,67 @@ ColumnHeaders.displayName = "ColumnHeaders";
 // ScrollProgressBar — chỉ fixed height mode
 // ─────────────────────────────────────────────────────────────
 
-const ScrollProgressBar = memo(({ progress }: { progress: number }) => (
-  <div
-    className="absolute top-[50px] left-0 right-0 h-[2px] z-20 overflow-hidden rounded-t-2xl"
-    aria-hidden="true"
-  >
-    <div
-      className="h-full bg-linear-to-r from-primary/60 via-primary to-primary/60 transition-[width] duration-75 ease-linear"
-      style={{ width: `${progress * 100}%` }}
-    />
-  </div>
-));
+const ScrollProgressBar = memo(
+  ({
+    containerRef,
+  }: {
+    containerRef: React.RefObject<HTMLDivElement | null>;
+  }) => {
+    const fillRef = useRef<HTMLDivElement>(null);
+    const rafRef = useRef(0);
+    const visibleRef = useRef(false);
+    const barRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const handleScroll = () => {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => {
+          const max = container.scrollHeight - container.clientHeight;
+          if (max <= 0) {
+            if (visibleRef.current && barRef.current) {
+              barRef.current.style.opacity = "0";
+              visibleRef.current = false;
+            }
+            return;
+          }
+          const pct = Math.min(1, container.scrollTop / max);
+          if (fillRef.current) fillRef.current.style.width = `${pct * 100}%`;
+          if (!visibleRef.current && pct > 0 && barRef.current) {
+            barRef.current.style.opacity = "1";
+            visibleRef.current = true;
+          } else if (pct === 0 && visibleRef.current && barRef.current) {
+            barRef.current.style.opacity = "0";
+            visibleRef.current = false;
+          }
+        });
+      };
+
+      container.addEventListener("scroll", handleScroll, { passive: true });
+      return () => {
+        cancelAnimationFrame(rafRef.current);
+        container.removeEventListener("scroll", handleScroll);
+      };
+    }, [containerRef]);
+
+    return (
+      <div
+        ref={barRef}
+        className="absolute top-[50px] left-0 right-0 h-[2px] z-20 overflow-hidden rounded-t-2xl transition-opacity duration-150"
+        style={{ opacity: 0 }}
+        aria-hidden="true"
+      >
+        <div
+          ref={fillRef}
+          className="h-full bg-linear-to-r from-primary/60 via-primary to-primary/60"
+          style={{ width: "0%" }}
+        />
+      </div>
+    );
+  },
+);
 ScrollProgressBar.displayName = "ScrollProgressBar";
 
 // ─────────────────────────────────────────────────────────────
@@ -371,12 +414,9 @@ ScrollProgressBar.displayName = "ScrollProgressBar";
 // ─────────────────────────────────────────────────────────────
 
 interface VirtualTableBodyProps {
-  virtualItems: Array<{
-    index: number;
-    start: number;
-    end: number;
-    key: string | number;
-  }>;
+  virtualItems: ReturnType<
+    ReturnType<typeof useVirtualizer>["getVirtualItems"]
+  >;
   totalVirtualH: number;
   tracks: ITrack[];
   activeId: string | null;
@@ -485,7 +525,6 @@ export const TrackList = memo(
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const sentinelRef = useRef<HTMLDivElement>(null);
-    const [scrollProgress, setScrollProgress] = useState(0);
 
     const isFixedHeight = maxHeight !== "auto";
     const isEmpty = !isLoading && !error && tracks.length === 0;
@@ -537,17 +576,6 @@ export const TrackList = memo(
     const virtualItems = virtualizer.getVirtualItems();
     const totalVirtualH = virtualizer.getTotalSize();
 
-    // ── Progress bar (fixed height mode) ──────────────────────
-    const handleScroll = useCallback(
-      (e: React.UIEvent<HTMLDivElement>) => {
-        if (!isFixedHeight) return;
-        const el = e.currentTarget;
-        const max = el.scrollHeight - el.clientHeight;
-        setScrollProgress(max > 0 ? Math.min(1, el.scrollTop / max) : 0);
-      },
-      [isFixedHeight],
-    );
-
     // ── Intersection Observer sentinel ─────────────────────────
     useEffect(() => {
       const sentinel = sentinelRef.current;
@@ -571,7 +599,6 @@ export const TrackList = memo(
      * @fix #7 — dispatch trước, onTrackPlay callback sau
      *           (onTrackPlay trước có thể dispatch action → activeId stale trong closure)
      */
-    console.log(tracksRef.current);
     const handlePlayTrack = useCallback(
       (track: ITrack, index: number) => {
         if (activeId === track._id) {
@@ -647,9 +674,9 @@ export const TrackList = memo(
           } as React.CSSProperties
         }
       >
-        {/* Progress bar — fixed height only */}
-        {isFixedHeight && scrollProgress > 0 && (
-          <ScrollProgressBar progress={scrollProgress} />
+        {/* Progress bar — fixed height only, imperative rAF */}
+        {isFixedHeight && (
+          <ScrollProgressBar containerRef={scrollContainerRef} />
         )}
 
         {/* Sticky header — ngoài scroll container */}
@@ -662,7 +689,6 @@ export const TrackList = memo(
           aria-label="Danh sách bài hát"
           className={cn("px-4 pb-4 flex-1", className)}
           style={scrollStyle}
-          onScroll={handleScroll}
         >
           {/* CASE 1 — Initial loading */}
           {isLoading && (

@@ -268,9 +268,10 @@ const TrackHistoryPage: React.FC = () => {
             <AnimatePresence mode="popLayout" initial={false}>
               <TrackList
                 {...trackListProps}
-                maxHeight="auto" // page tự scroll, không giới hạn height
+                maxHeight={700}
+                // page tự scroll, không giới hạn height
                 moodColor={`var(--wave-2)`}
-                skeletonCount={12} // nhiều hơn để fill viewport lúc đầu
+                skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
                 staggerAnimation={true}
               />
             </AnimatePresence>

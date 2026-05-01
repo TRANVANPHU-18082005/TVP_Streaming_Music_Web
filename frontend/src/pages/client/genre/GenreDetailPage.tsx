@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { SubGenreGrid } from "@/features/genre/components/SubGenreGrid";
 import { TrackList } from "@/features/track/components/TrackList";
 
-import { Genredetailskeleton, ITrack } from "@/features";
+import { Genredetailskeleton, IGenre, ITrack } from "@/features";
 import {
   useGenreDetailQuery,
   useGenreTracksInfinite,
@@ -50,6 +50,8 @@ import { useTitleStyle } from "@/hooks/useTitleStyle";
 
 import MusicResult from "@/components/ui/Result";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { APP_CONFIG } from "@/config/constants";
+import { useContextSheet } from "@/app/provider/SheetProvider";
 
 dayjs.extend(relativeTime);
 
@@ -410,6 +412,8 @@ GenreContextMenu.displayName = "GenreContextMenu";
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ActionBarProps {
+  genre: IGenre;
+  handleMoreOptions: (genre: IGenre) => void;
   palette: Palette;
   isLoadingPlay: boolean;
   isLoadingShuffle: boolean;
@@ -423,6 +427,8 @@ interface ActionBarProps {
 
 const ActionBar = memo<ActionBarProps>(
   ({
+    genre,
+    handleMoreOptions,
     palette,
     isLoadingPlay,
     isLoadingShuffle,
@@ -544,7 +550,13 @@ const ActionBar = memo<ActionBarProps>(
         </motion.button>
 
         <div className="flex-1" aria-hidden="true" />
-        <GenreContextMenu size={isCompact ? "sm" : "md"} align="end" />
+        <button
+          className="rounded-full flex items-center justify-center border border-border/50  size-10  text-white/70 hover:text-white  active:scale-90 transition-all"
+          aria-label="More options"
+          onClick={() => handleMoreOptions(genre)}
+        >
+          <MoreHorizontal className="size-6" strokeWidth={2} />
+        </button>
       </div>
     );
   },
@@ -641,10 +653,22 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
       }
     }
   }, [isEmbedded, onClose, navigate]);
-
+  const { openGenreSheet } = useContextSheet();
+  const openSheet = useCallback(
+    (g: IGenre) => {
+      openGenreSheet(g);
+    },
+    [openGenreSheet],
+  );
+  const handleMoreOptions = useCallback(
+    (g: IGenre) => openSheet(g),
+    [openSheet],
+  );
   // ── Shared props ──────────────────────────────────────────────────────────
   const sharedActionBarProps: ActionBarProps = useMemo(
     () => ({
+      genre: genre!,
+      handleMoreOptions,
       palette,
       isLoadingPlay: isFetching,
       isLoadingShuffle: isFetching,
@@ -655,6 +679,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
       onShuffle: shuffleGenre,
     }),
     [
+      genre,
       palette,
       isFetching,
       isThisGenrePlaying,
@@ -835,9 +860,9 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
             <EmbeddedSectionHeader label="Bài hát nổi bật" />
             <TrackList
               {...trackListProps}
-              maxHeight={400}
+              maxHeight={700}
               moodColor={palette.hex}
-              skeletonCount={7}
+              skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
               staggerAnimation={false}
             />
           </div>
@@ -1147,9 +1172,9 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
             </div>
             <TrackList
               {...trackListProps}
-              maxHeight="auto"
+              maxHeight={700}
               moodColor={palette.hslChannels}
-              skeletonCount={12}
+              skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
               staggerAnimation={true}
             />
           </motion.section>

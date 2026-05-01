@@ -6,6 +6,7 @@ import {
 import artistApi from "../api/artistApi";
 import { artistKeys } from "@/features/artist/utils/artistKeys";
 import type { ArtistFilterParams } from "../types";
+import { APP_CONFIG } from "@/config/constants";
 
 // ==========================================
 // 1. PUBLIC HOOKS (Dành cho Người dùng cuối)
@@ -39,7 +40,7 @@ export const useArtistsQuery = (params: ArtistFilterParams) => {
 /**
  * Hook lấy danh sách Nghệ sĩ nổi bật (Trang chủ)
  */
-export const useSpotlightArtists = (limit = 10) => {
+export const useSpotlightArtists = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
   return useQuery({
     // Đảm bảo queryKey phản ánh đúng params được truyền vào API
     queryKey: artistKeys.list({ sort: "popular", limit, isActive: true }),

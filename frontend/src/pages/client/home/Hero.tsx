@@ -555,7 +555,7 @@ const ContentText = memo(
           custom={direction}
           variants={contentStagger}
           initial="enter"
-          animate={() => contentStagger.center(0) as any}
+          animate={contentStagger.center(0) as any}
           className="flex items-center gap-3 flex-wrap justify-center lg:justify-start"
         >
           <div className="flex items-center gap-1.5 px-1">
@@ -571,7 +571,7 @@ const ContentText = memo(
               className="text-overline text-primary/80 font-bold tracking-[0.15em]"
               style={{ fontSize: "10px" }}
             >
-              FEATURED COLLECTION
+              BỘ SƯU TẬP NỔI BẬT
             </span>
           </div>
 
@@ -587,7 +587,7 @@ const ContentText = memo(
               >
                 <WaveformBars active={isPlaying || false} bars={3} />
                 <span className="text-[9px] font-black text-primary uppercase tracking-widest">
-                  {isPlaying ? "Now Streaming" : "Paused"}
+                  {isPlaying ? "Đang phát" : "Tạm dừng"}
                 </span>
               </motion.div>
             )}
@@ -603,7 +603,7 @@ const ContentText = memo(
             onClick={onNavigate}
             className={cn(
               "cursor-pointer transition-all duration-500",
-              "text-center lg:text-left flex-1",
+              "text-center lg:text-left flex-1 line-clamp-2",
               "group-hover/title:text-primary group-hover/title:translate-x-1",
               isActive && "text-brand drop-shadow-brand-glow",
             )}
@@ -613,14 +613,6 @@ const ContentText = memo(
               lineHeight: 1.15,
               // FIX 2: padding-bottom tạo khoảng thở cho descender (ý, ợ, ụ...)
               paddingBottom: "0.12em",
-              // FIX 3: thay line-clamp bằng max-height + overflow hidden
-              // để tự kiểm soát clip boundary, không dùng -webkit-line-clamp
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              // FIX 4: clip-path thay vì overflow:hidden để không cắt shadow/glow
-              // nhưng vẫn giới hạn số dòng — dùng padding bù thêm ở dưới
             }}
           >
             {album.title}
@@ -724,7 +716,7 @@ const ActionBar = memo(
         whileHover={!isLoading ? { scale: 1.03, y: -1 } : {}}
         whileTap={!isLoading ? { scale: 0.96 } : {}}
         transition={SPRING_SNAPPY}
-        aria-label={isPlaying ? "Pause album" : "Play album"}
+        aria-label={isPlaying ? "Tạm dừng album" : "Phát album"}
         aria-pressed={isPlaying}
         className={cn(
           // .btn-primary + .btn-lg gives gradient + glow + font-weight
@@ -761,7 +753,7 @@ const ActionBar = memo(
           transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
           className="relative z-10 font-semibold tracking-wide"
         >
-          {isLoading ? "Loading…" : isPlaying ? "Pause" : "Play Now"}
+          {isLoading ? "Đang tải…" : isPlaying ? "Tạm dừng" : "Phát ngay"}
         </motion.span>
       </motion.button>
 
@@ -942,7 +934,7 @@ function HeroSkeleton() {
   return (
     <section
       className="relative min-h-[88dvh] flex items-center overflow-hidden bg-background"
-      aria-label="Loading featured albums"
+      aria-label="Đang tải album nổi bật"
       aria-busy="true"
     >
       {/* Subtle shimmer background */}
@@ -984,6 +976,27 @@ function HeroSkeleton() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// useOnlineStatus
+// Lắng nghe sự kiện kết nối mạng chuẩn cho Client
+// ─────────────────────────────────────────────────────────────────────────────
+function useOnlineStatus(): boolean {
+  const [online, setOnline] = useState(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
+  useEffect(() => {
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+  return online;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HERO — main orchestrator
 // All hooks run unconditionally; guard is deferred to JSX return
 // ─────────────────────────────────────────────────────────────────────────────
@@ -992,7 +1005,7 @@ export function Hero() {
 
   // 3. Logic kiểm tra Album đang phát (Giữ nguyên nhưng an toàn hơn)
 
-  const { data, isLoading, isError, refetch } = useFeatureAlbums(6);
+  const { data, isLoading, isError, refetch } = useFeatureAlbums();
   const albums = useMemo(() => data ?? [], [data]);
   // Normalize API data to HeroAlbum shape
   const { currentIndex, nextSlide, prevSlide, goToSlide } = useHeroSlider(
@@ -1107,7 +1120,7 @@ export function Hero() {
     }
   }, [currentAlbum, navigate]);
   const hasResults = albums.length > 0;
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
 
   if (isLoading && !hasResults) {
     return <HeroSkeleton />;

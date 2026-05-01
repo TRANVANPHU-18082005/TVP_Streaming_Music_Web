@@ -489,7 +489,7 @@ class AlbumService {
       status: "ready",
       isDeleted: false,
     })
-      .sort({ diskNumber: 1, trackNumber: 1, createdAt: 1 })
+      .sort({ trackNumber: 1, createdAt: 1 })
       .select("_id")
       .lean();
 

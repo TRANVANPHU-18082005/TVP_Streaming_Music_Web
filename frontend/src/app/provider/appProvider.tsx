@@ -23,10 +23,19 @@ import { queryClient } from "@/lib/queryClient";
 import { RadioLoader } from "@/components/ui/MusicLoadingEffects";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SocketProvider } from "@/app/provider/SocketProvider";
+// Note: router-aware sheet callbacks moved into RootLayout
 
 // ============================================================================
 // 1. APP PROVIDERS (Global Context Wrappers)
 // ============================================================================
+// ── Tách ra component riêng để dùng được hooks (cần nằm trong ReduxProvider) ──
+const InnerProviders: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  // Moved router-aware providers (ContextSheetProvider) into RootLayout so
+  // they live inside Router context. InnerProviders now only returns children.
+  return <>{children}</>;
+};
 
 export const AppProviders: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -51,7 +60,7 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({
         <SocketProvider>
           {/* ThemeProvider quản lý Class 'dark'/'light' trên thẻ HTML */}
           <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-            {children}
+            <InnerProviders>{children}</InnerProviders>
 
             {/* ========================================================= */}
             {/* PREMIUM TOASTER (Thông báo chuẩn Apple Music / Spotify) */}

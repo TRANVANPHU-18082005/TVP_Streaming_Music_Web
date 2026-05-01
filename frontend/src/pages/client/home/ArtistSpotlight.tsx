@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — vertical reveal suits portrait/avatar card rhythm
@@ -65,7 +66,7 @@ const ArtistSpotlightHeader = memo(
             className="text-overline"
             style={{ color: "hsl(var(--wave-9))" }}
           >
-            Spotlight
+            Tiêu điểm
           </span>
         </div>
 
@@ -73,7 +74,7 @@ const ArtistSpotlightHeader = memo(
           id="artist-spotlight-heading"
           className="text-section-title text-foreground leading-tight"
         >
-          Artist Spotlight
+          Nghệ sĩ nổi bật
         </h2>
 
         <p className="text-section-subtitle hidden sm:block">
@@ -206,8 +207,8 @@ ArtistScroll.displayName = "ArtistScroll";
 // not wrapped in a conditional — this is the correct pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 export function ArtistSpotlight() {
-  const { data: artists, isLoading, isError, refetch } = useSpotlightArtists(5);
-
+  const { data: artists, isLoading, isError, refetch } = useSpotlightArtists();
+  console.log(artists);
   const artistIds = useMemo(
     () => artists?.map((a: IArtist) => a._id),
     [artists],
@@ -219,7 +220,7 @@ export function ArtistSpotlight() {
     !isLoading && artistIds && artistIds?.length > 0,
   );
   const hasResults = artists && artists?.length > 0;
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
 
   const renderContent = () => {
     if (isLoading && !hasResults) {
@@ -229,8 +230,9 @@ export function ArtistSpotlight() {
     if (isLoading && hasResults) {
       return <VinylLoader />;
     }
-    // Deep Error
+    // Error or Empty
     if (isError || !hasResults) {
+      if (!isError && !hasResults) return null;
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
@@ -255,6 +257,9 @@ export function ArtistSpotlight() {
       </div>
     );
   };
+
+  if (!isLoading && !hasResults && !isError) return null;
+
   return (
     <>
       <div

@@ -103,6 +103,16 @@ export const bulkUpdateTracksSchema = z.object({
   }),
 });
 
+// --- BULK RETRY SCHEMA (Admin) ---
+export const bulkRetryTracksSchema = z.object({
+  body: z.object({
+    trackIds: formDataArrayHelper(objectIdSchema).refine(
+      (ids) => ids.length >= 1,
+      "Vui lòng chọn ít nhất 1 bài hát",
+    ),
+  }),
+});
+
 // --- 5. GET TRACKS SCHEMA (Filter nâng cao) ---
 export const getTracksSchema = z.object({
   query: z.object({
@@ -130,4 +140,5 @@ export type ChangeStatusInput = z.infer<typeof changeStatusSchema>["body"];
 export type BulkUpdateTrackInput = z.infer<
   typeof bulkUpdateTracksSchema
 >["body"];
+export type BulkRetryInput = z.infer<typeof bulkRetryTracksSchema>["body"];
 export type TrackFilterInput = z.infer<typeof getTracksSchema>["query"];

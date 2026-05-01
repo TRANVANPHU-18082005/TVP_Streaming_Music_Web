@@ -39,12 +39,16 @@ import {
 } from "@dnd-kit/sortable";
 
 // Hooks & Sub-components
-import { usePlaylistDetail } from "@/features/playlist/hooks/usePlaylistsQuery";
+import {
+  usePlaylistDetail,
+  usePlaylistTracksInfinite,
+} from "@/features/playlist/hooks/usePlaylistsQuery";
 import { usePlaylistMutations } from "@/features/playlist/hooks/usePlaylistMutations";
 import { SortablePlaylistTrackRow } from "@/features/playlist/components/SortablePlaylistTrackRow";
 import { ModalTrackFilter } from "@/features/track/components/ModalTrackFilter";
 import { ITrack, TrackFilterParams } from "@/features/track/types";
 import { usePublicTracks } from "@/features/track/hooks/useTracksQuery";
+import { toCDN } from "@/utils/track-helper";
 
 /* ---------------- Skeleton Loader Tinh Tế ---------------- */
 const TrackListSkeleton = () => (
@@ -82,7 +86,6 @@ export const EditPlaylistTracksModal: React.FC<
   const [activeTab, setActiveTab] = useState<"add" | "reorder" | "manage">(
     "add",
   );
-
   // 1. LOCAL STATE CHO BỘ LỌC TÌM KIẾM
   const [trackParams, setTrackParams] = useState<TrackFilterParams>({
     sort: "newest",
@@ -100,6 +103,10 @@ export const EditPlaylistTracksModal: React.FC<
   const { data: playlist, isLoading: isLoadingPlaylist } = usePlaylistDetail(
     playlistId || "",
   );
+
+  const trackFetchLimit = 50;
+  const { data: tracksData, isLoading: isLoadingTracks } =
+    usePlaylistTracksInfinite(playlistId, trackFetchLimit);
   const { addTracks, removeTrack, reorderTracks, isTrackMutating } =
     usePlaylistMutations();
 
@@ -109,15 +116,31 @@ export const EditPlaylistTracksModal: React.FC<
   const [mutatingTrackId, setMutatingTrackId] = useState<string | null>(null);
 
   const currentTracks = useMemo(
-    () => playlist?.tracks || [],
-    [playlist?.tracks],
+    () => tracksData?.allTracks ?? [],
+    [tracksData?.allTracks],
   );
 
   useEffect(() => {
-    if (playlist?.tracks && !isDirty) {
-      setOrderedTracks(playlist.tracks as ITrack[]);
+    if (isDirty) return;
+
+    const fetched = tracksData?.allTracks ?? [];
+    if (fetched.length > 0) {
+      const idOrder = playlist?.trackIds ?? fetched.map((t) => t._id);
+      const map = new Map(fetched.map((t) => [t._id, t]));
+      const ordered = idOrder
+        .map((id) => map.get(id))
+        .filter(Boolean) as ITrack[];
+      setOrderedTracks(ordered);
+      return;
     }
-  }, [playlist?.tracks, isDirty]);
+
+    if (playlist?.tracks && playlist.tracks.length) {
+      setOrderedTracks(playlist.tracks as ITrack[]);
+      return;
+    }
+
+    setOrderedTracks([]);
+  }, [tracksData?.allTracks, playlist?.trackIds, playlist?.tracks, isDirty]);
 
   const existingTrackIds = useMemo(
     () => new Set(currentTracks.map((t: ITrack) => t._id)),
@@ -263,7 +286,7 @@ export const EditPlaylistTracksModal: React.FC<
                   <TrackListSkeleton />
                 ) : searchResults.length === 0 ? (
                   <MusicResult
-                    status="empty"
+                    variant="empty"
                     title="Không tìm thấy bài hát"
                     description="Thử tìm kiếm với tên ca sĩ hoặc bài hát khác nhé."
                   />
@@ -287,7 +310,7 @@ export const EditPlaylistTracksModal: React.FC<
                         <div className="flex items-center gap-4 min-w-0 flex-1 mr-4">
                           <Avatar className="size-12 rounded-lg shrink-0 shadow-sm border border-border/50 group-hover:scale-105 transition-transform">
                             <AvatarImage
-                              src={track.coverImage}
+                              src={toCDN(track.coverImage) || track.coverImage}
                               className="object-cover"
                             />
                             <AvatarFallback className="bg-muted text-muted-foreground/50">
@@ -348,7 +371,7 @@ export const EditPlaylistTracksModal: React.FC<
           {activeTab === "reorder" && (
             <ScrollArea className="flex-1 h-full">
               <div className="p-4 sm:p-6 space-y-3 pb-24">
-                {isLoadingPlaylist ? (
+                {isLoadingPlaylist || isLoadingTracks ? (
                   <TrackListSkeleton />
                 ) : orderedTracks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4 animate-in fade-in">
@@ -400,7 +423,7 @@ export const EditPlaylistTracksModal: React.FC<
               <div className="p-4 sm:p-6 space-y-3 pb-24">
                 {currentTracks.length === 0 ? (
                   <MusicResult
-                    status="empty"
+                    variant="empty"
                     title="Chưa có bài hát"
                     description="Chuyển sang tab Thêm Nhạc để tìm bài hát nhé."
                   />
@@ -421,7 +444,7 @@ export const EditPlaylistTracksModal: React.FC<
                           </span>
                           <Avatar className="size-12 rounded-lg shrink-0 border border-border/50 shadow-sm group-hover:scale-105 transition-transform">
                             <AvatarImage
-                              src={track.coverImage}
+                              src={toCDN(track.coverImage) || track.coverImage}
                               className="object-cover"
                             />
                             <AvatarFallback className="bg-muted">

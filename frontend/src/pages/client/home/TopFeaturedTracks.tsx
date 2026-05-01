@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & VARIANTS
@@ -101,7 +102,7 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
           className="text-overline"
           style={{ color: "hsl(var(--brand-glow))" }}
         >
-          Top Charts
+          Xếp hạng
         </span>
       </div>
 
@@ -109,7 +110,7 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         className="text-section-title text-foreground leading-tight"
         id="top-featured-tracks-heading"
       >
-        Top Featured Tracks
+        Top nhạc nổi bật
       </h2>
 
       <p className="text-section-subtitle hidden sm:block">
@@ -392,7 +393,7 @@ export const TopFeaturedTracks = () => {
   const reduced = useReducedMotion() ?? false;
   const handleRetry = useCallback(() => refetch?.(), [refetch]);
   const hasResults = top10.length > 0;
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
 
   // ── Loading ──────────────────────────────────────────────────────────────
 

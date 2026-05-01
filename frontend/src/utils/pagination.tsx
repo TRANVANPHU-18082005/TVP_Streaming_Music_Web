@@ -110,7 +110,7 @@ const ProgressBar = memo(({ percent }: { percent: number }) => (
     <div
       className={cn(
         "h-full rounded-r-full",
-        "bg-gradient-to-r from-primary via-[hsl(var(--wave-1))] to-[hsl(var(--wave-2))]",
+        "bg-primary",
         "transition-[width] duration-400 ease-out",
         "shadow-[0_0_8px_hsl(var(--primary)/0.4)]",
       )}

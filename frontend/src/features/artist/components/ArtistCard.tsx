@@ -26,6 +26,7 @@ import {
 import { getInitialsTextAvartar } from "@/utils/genTextAvartar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 
 // Helper lấy cờ
 const getFlagEmoji = (countryCode: string) => {
@@ -58,14 +59,14 @@ const ArtistCard: React.FC<ArtistCardProps> = ({
           // Mobile: Viền đậm hơn (border-input) để tách nền rõ ràng
           "group relative flex flex-col bg-card border border-input rounded-2xl sm:rounded-3xl overflow-hidden transition-all duration-300",
           "hover:shadow-xl hover:border-primary/50 hover:-translate-y-1",
-          !artist.isActive && "opacity-70 grayscale-[0.8]"
+          !artist.isActive && "opacity-70 grayscale-[0.8]",
         )}
       >
         {/* --- 1. COVER IMAGE AREA --- */}
         {/* Mobile: Giảm chiều cao ảnh cover xuống h-24 */}
         <div className="relative h-24 sm:h-32 w-full overflow-hidden bg-muted/20">
           {artist.coverImage ? (
-            <img
+            <ImageWithFallback
               src={artist.coverImage}
               alt={artist.name}
               className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
@@ -88,7 +89,7 @@ const ArtistCard: React.FC<ArtistCardProps> = ({
                 "h-7 w-7 sm:h-8 sm:w-8 rounded-full backdrop-blur-md border border-white/20 shadow-sm",
                 artist.isActive
                   ? "bg-emerald-500/20 text-emerald-300"
-                  : "bg-black/40 text-white/70"
+                  : "bg-black/40 text-white/70",
               )}
               onClick={(e) => {
                 e.stopPropagation();
@@ -183,7 +184,7 @@ const ArtistCard: React.FC<ArtistCardProps> = ({
                   "h-5 text-[10px] px-2 font-bold uppercase tracking-wider border",
                   artist.user
                     ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400"
-                    : "bg-muted text-muted-foreground border-border"
+                    : "bg-muted text-muted-foreground border-border",
                 )}
               >
                 {artist.user ? "Verified Account" : "Internal Profile"}

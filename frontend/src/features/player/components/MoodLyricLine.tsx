@@ -18,23 +18,21 @@ const STYLE_ID = "__ml2-styles__";
 
 const CSS = `
 @keyframes ml-idle-pulse {
-  0%,100% { opacity: 0.18; transform: scale(1); }
-  50%     { opacity: 0.38; transform: scale(1.12); }
+  0%,100% { opacity: 0.15; transform: scale(1); filter: blur(1px); }
+  50%     { opacity: 0.6; transform: scale(1.15); filter: blur(0px); }
 }
-@keyframes ml-beat {
-  0%   { transform: scale(1); }
-  30%  { transform: scale(1.035); }
-  65%  { transform: scale(0.998); }
-  100% { transform: scale(1); }
+@keyframes ml-beat-glow {
+  0%   { filter: drop-shadow(0 0 12px var(--ml-accent-color, rgba(255,255,255,0.8))) brightness(1.2); }
+  100% { filter: drop-shadow(0 0 0px transparent) brightness(1); }
 }
 .ml-idle-dot {
-  animation: ml-idle-pulse 2.6s ease-in-out infinite;
+  animation: ml-idle-pulse 2.4s ease-in-out infinite;
 }
-.ml-line-beat {
-  animation: ml-beat 0.32s cubic-bezier(.34,1.56,.64,1) both;
+.ml-line-beat .ml-word--active {
+  animation: ml-beat-glow 0.4s ease-out;
 }
 
-/* Karaoke word fill — mirrors LyricsView KWord */
+/* Karaoke word fill */
 .ml-word {
   position: relative;
   display: inline-block;
@@ -42,9 +40,11 @@ const CSS = `
 }
 .ml-word__base {
   display: block;
-  color: rgba(255,255,255,0.22);
+  color: rgba(255,255,255,0.25);
   white-space: pre;
-  transition: color 0.14s ease, text-shadow 0.14s ease;
+  transition: color 0.15s ease, text-shadow 0.15s ease;
+  /* Multi-layered shadow cho base để chống chìm vào video sáng */
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 4px 12px rgba(0,0,0,0.6), 0 0 20px rgba(0,0,0,0.4);
 }
 .ml-word__fill {
   position: absolute; top: 0; left: 0;
@@ -55,27 +55,32 @@ const CSS = `
   clip-path: inset(0 calc(100% - var(--ml-fill, 0%)) 0 0);
   will-change: clip-path;
   transition: clip-path 0.05s linear;
+  /* Drop shadow xịn cho phần fill */
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
 }
 .ml-word--active .ml-word__base {
-  color: rgba(255,255,255,0.52);
-  text-shadow: 0 0 18px rgba(79,172,254,0.5);
+  color: rgba(255,255,255,0.4);
 }
 .ml-word--done .ml-word__fill { clip-path: inset(0 0 0 0); }
 
 /* Degraded: no fill */
 .ml-degraded .ml-word__fill { display: none; }
-.ml-degraded .ml-line-active .ml-word__base { color: #ffffff; }
+.ml-degraded .ml-line-active .ml-word__base { color: #ffffff; text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 24px rgba(0,0,0,0.7); }
 
 /* Synced mode: whole-line highlight */
 .ml-synced-text {
-  transition: color 0.28s ease, text-shadow 0.28s ease;
+  transition: color 0.3s ease, text-shadow 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: inline-block;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8), 0 8px 16px rgba(0,0,0,0.6), 0 0 24px rgba(0,0,0,0.5);
 }
 .ml-synced-text--active {
   color: #ffffff;
-  text-shadow: 0 0 28px rgba(79,172,254,0.45);
+  transform: scale(1.02);
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8), 0 8px 16px rgba(0,0,0,0.6), 0 0 32px var(--ml-accent-color, rgba(255,255,255,0.4));
 }
 .ml-synced-text--inactive {
-  color: rgba(255,255,255,0.22);
+  color: rgba(255,255,255,0.3);
+  transform: scale(0.98);
 }
 `;
 
@@ -140,7 +145,8 @@ const MoodKWord = memo(
     const isDone = progress >= 1;
     const isActive = active && progress > 0 && !isDone;
 
-    const fillGradient = `linear-gradient(90deg, ${accentColor} 0%, #00f2fe 50%, #ffffff 100%)`;
+    // Sử dụng accentColor để tạo gradient sáng đẹp mắt
+    const fillGradient = `linear-gradient(90deg, ${accentColor} 0%, #ffffff 60%, #ffffff 100%)`;
 
     return (
       <span
@@ -245,10 +251,9 @@ export const MoodLyricLine = memo(
       bottom: 0,
       left: 0,
       right: 0,
-      paddingBottom: 28,
-      paddingTop: 72,
-      background:
-        "linear-gradient(to top, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.22) 55%, transparent 100%)",
+      paddingBottom: 40,
+      paddingTop: 80,
+      background: "transparent",
       pointerEvents: "none",
       zIndex: 30,
       display: "flex",
@@ -309,21 +314,18 @@ export const MoodLyricLine = memo(
                 }}
                 style={{
                   display: "inline-block",
-                  padding: "0.2em 0.7em",
-                  borderRadius: "50px",
-                  background: "rgba(0,0,0,0.28)",
-                  backdropFilter: "blur(14px) saturate(1.35)",
-                  WebkitBackdropFilter: "blur(14px) saturate(1.35)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  lineHeight: 1,
+                  padding: "0.4em 0.2em",
+                  lineHeight: 1.1,
                   userSelect: "none",
                   textAlign: "center",
+                  // Set CSS variable cho accent color để xài trong animation
+                  ...( { "--ml-accent-color": accentColor } as React.CSSProperties),
                 }}
               >
                 <div
                   ref={lineRef}
                   className={`ml-line-active${degraded ? " ml-degraded" : ""}`}
-                  style={{ lineHeight: 1.42 }}
+                  style={{ lineHeight: 1.35, fontWeight: 750, letterSpacing: "-0.01em" }}
                 >
                   {hasWords ? (
                     // KARAOKE MODE — word-level fill
@@ -347,8 +349,8 @@ export const MoodLyricLine = memo(
                       className="ml-synced-text ml-synced-text--active"
                       style={{
                         fontSize,
-                        fontWeight: 650,
-                        letterSpacing: "0.012em",
+                        fontWeight: 750,
+                        letterSpacing: "-0.01em",
                       }}
                     >
                       {currentText}
@@ -376,12 +378,13 @@ export const MoodLyricLine = memo(
                     key={i}
                     className="ml-idle-dot bg-primary"
                     style={{
-                      width: 5,
-                      height: 5,
+                      width: 6,
+                      height: 6,
                       borderRadius: "50%",
                       background: accentColor,
-                      opacity: 0.5,
-                      animationDelay: `${i * 0.38}s`,
+                      opacity: 0.6,
+                      boxShadow: `0 0 12px ${accentColor}`,
+                      animationDelay: `${i * 0.4}s`,
                     }}
                   />
                 ))}

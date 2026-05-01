@@ -11,6 +11,7 @@ import {
   UpdateTrackInput,
   TrackFilterInput,
   BulkUpdateTrackInput,
+  BulkRetryInput,
   ChangeStatusInput,
 } from "../validations/track.validation";
 import { CreateTrackDTO, UpdateTrackDTO } from "../dtos/track.dto";
@@ -117,6 +118,72 @@ export const bulkUpdateTracks = catchAsync(
     });
   },
 );
+
+// ── BULK RETRY ENDPOINTS (Admin) ─────────────────────────────────────────
+export const bulkRetryTranscode = catchAsync(
+  async (req: Request, res: Response) => {
+    const { trackIds } = req.body as BulkRetryInput;
+    const result = await trackService.bulkRetryTranscode(
+      req.user as IUser,
+      trackIds,
+    );
+    res.status(httpStatus.ACCEPTED).json({
+      success: true,
+      message: `Queued transcode for ${result.queued}/${result.requested} tracks`,
+      data: result,
+    });
+  },
+);
+
+export const bulkRetryLyrics = catchAsync(
+  async (req: Request, res: Response) => {
+    const { trackIds } = req.body as BulkRetryInput;
+    const result = await trackService.bulkRetryLyrics(
+      req.user as IUser,
+      trackIds,
+    );
+    res.status(httpStatus.ACCEPTED).json({
+      success: true,
+      message: `Queued lyrics jobs for ${result.queued}/${result.requested} tracks`,
+      data: result,
+    });
+  },
+);
+
+export const bulkRetryKaraoke = catchAsync(
+  async (req: Request, res: Response) => {
+    const { trackIds } = req.body as BulkRetryInput;
+    const result = await trackService.bulkRetryKaraoke(
+      req.user as IUser,
+      trackIds,
+    );
+    res.status(httpStatus.ACCEPTED).json({
+      success: true,
+      message: `Queued karaoke for ${result.queued}/${result.requested} tracks`,
+      data: result,
+    });
+  },
+);
+
+export const bulkRetryMood = catchAsync(async (req: Request, res: Response) => {
+  const { trackIds } = req.body as BulkRetryInput;
+  const result = await trackService.bulkRetryMood(req.user as IUser, trackIds);
+  res.status(httpStatus.ACCEPTED).json({
+    success: true,
+    message: `Queued mood canvas jobs for ${result.queued}/${result.requested} tracks`,
+    data: result,
+  });
+});
+
+export const bulkRetryFull = catchAsync(async (req: Request, res: Response) => {
+  const { trackIds } = req.body as BulkRetryInput;
+  const result = await trackService.bulkRetryFull(req.user as IUser, trackIds);
+  res.status(httpStatus.ACCEPTED).json({
+    success: true,
+    message: `Queued full pipeline for ${result.queued}/${result.requested} tracks`,
+    data: result,
+  });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. RETRY OPERATIONS

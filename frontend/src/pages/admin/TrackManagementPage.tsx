@@ -61,6 +61,9 @@ const TrackManagementPage = () => {
     retryKaraoke,
     retryMood,
     bulkUpdateTrack,
+    bulkRetryTranscode,
+    bulkRetryLyrics,
+    bulkRetryMood,
     isMutating,
   } = useTrackMutations();
 
@@ -133,6 +136,37 @@ const TrackManagementPage = () => {
         },
       },
     );
+  };
+
+  const handleBulkRetryTranscode = () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Gửi lệnh retranscode cho ${selectedIds.length} bài hát?`))
+      return;
+    bulkRetryTranscode(selectedIds, {
+      onSuccess: () => setSelectedIds([]),
+    });
+  };
+
+  const handleBulkRetryLyrics = () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Gửi lệnh retry lyrics cho ${selectedIds.length} bài hát?`))
+      return;
+    bulkRetryLyrics(selectedIds, {
+      onSuccess: () => setSelectedIds([]),
+    });
+  };
+
+  const handleBulkRetryMood = () => {
+    if (selectedIds.length === 0) return;
+    if (
+      !confirm(
+        `Gửi lệnh retry mood matching cho ${selectedIds.length} bài hát?`,
+      )
+    )
+      return;
+    bulkRetryMood(selectedIds, {
+      onSuccess: () => setSelectedIds([]),
+    });
   };
 
   // Safe Access Data
@@ -290,6 +324,9 @@ const TrackManagementPage = () => {
             alert("Bulk delete functionality coming soon!");
           }
         }}
+        onRetryTranscode={handleBulkRetryTranscode}
+        onRetryLyrics={handleBulkRetryLyrics}
+        onRetryMood={handleBulkRetryMood}
       />
 
       {/* 2. Create/Edit Modal */}

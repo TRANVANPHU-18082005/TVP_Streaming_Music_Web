@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo } from "react";
+import { useState, useMemo, useCallback, memo, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Edit,
@@ -49,23 +49,26 @@ import {
   TrackList,
   useMyPlaylists,
 } from "@/features";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams, useLocation } from "react-router-dom";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
 // ─────────────────────────────────────────────────────────────────────────────
 const EASE_EXPO = [0.22, 1, 0.36, 1] as const;
 
-const fadeUpVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE_EXPO } },
-  exit: { opacity: 0, y: -10, transition: { duration: 0.22, ease: EASE_EXPO } },
-};
-
-const fadeVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.35, ease: EASE_EXPO } },
-  exit: { opacity: 0, transition: { duration: 0.2 } },
+// Slide variants for tab transitions (uses custom direction: 1 => forward, -1 => backward)
+const slideVariants = {
+  hidden: (dir: number) => ({ opacity: 0, x: 72 * dir }),
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.36, ease: EASE_EXPO },
+  },
+  exit: (dir: number) => ({
+    opacity: 0,
+    x: -72 * dir,
+    transition: { duration: 0.22, ease: EASE_EXPO },
+  }),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -451,9 +454,21 @@ FavouriteTrackList.displayName = "FavouriteTrackList";
 // ─────────────────────────────────────────────────────────────────────────────
 // PROFILE PAGE
 // ─────────────────────────────────────────────────────────────────────────────
-export default function ProfilePage() {
+const ProfilePage = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
+  // Controlled nested library tab (for linking directly to liked_tracks/liked_albums/etc.)
+  const [libraryTab, setLibraryTab] = useState("liked_tracks");
+
+  // Refs for scroll targets
+  const heroRef = useRef<HTMLElement | null>(null);
+  const overviewRef = useRef<HTMLDivElement | null>(null);
+  const playlistsRef = useRef<HTMLDivElement | null>(null);
+  const libraryRef = useRef<HTMLDivElement | null>(null);
+
+  // Read query params / location state to allow deep-linking into tabs/sections
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
 
   const { user } = useAppSelector((s) => s.auth);
   const { data: dashboard, isLoading: isDashboardLoading } =
@@ -479,6 +494,79 @@ export default function ProfilePage() {
     () => setIsCreatePlaylistOpen(false),
     [],
   );
+
+  // Tab direction handling for animated slide transitions
+  const tabOrder = useMemo(() => ["overview", "playlists", "library"], []);
+  const prevTabRef = useRef<string>(activeTab);
+  const [direction, setDirection] = useState<number>(1);
+
+  useEffect(() => {
+    const prev = prevTabRef.current;
+    const prevIndex = tabOrder.indexOf(prev);
+    const nextIndex = tabOrder.indexOf(activeTab);
+    setDirection(nextIndex >= prevIndex ? 1 : -1);
+    prevTabRef.current = activeTab;
+  }, [activeTab, tabOrder]);
+
+  // If user navigated here with ?tab=... or ?sub=... or via location.state,
+  // select the appropriate tab and scroll to its section.
+  useEffect(() => {
+    const tabParam =
+      searchParams.get("tab") ||
+      searchParams.get("section") ||
+      (location.state as any)?.tab;
+    const subParam = searchParams.get("sub") || (location.state as any)?.sub;
+    const scrollTo =
+      searchParams.get("scroll") || (location.state as any)?.scrollTo;
+
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+    if (subParam) {
+      setLibraryTab(subParam);
+    }
+
+    // Small delay to allow DOM to update after tab selection
+    const id = setTimeout(() => {
+      let el: HTMLElement | null = null;
+
+      const t = tabParam || scrollTo;
+      if (
+        t === "playlists" ||
+        scrollTo === "playlists" ||
+        scrollTo === "myplaylist"
+      ) {
+        el = playlistsRef.current;
+      } else if (
+        t === "library" ||
+        (scrollTo &&
+          ["liked_tracks", "liked_albums", "liked_playlists"].includes(
+            scrollTo,
+          ))
+      ) {
+        el = libraryRef.current;
+      } else if (
+        t === "overview" ||
+        scrollTo === "overview" ||
+        scrollTo === "hero"
+      ) {
+        el = heroRef.current as unknown as HTMLElement | null;
+      }
+
+      if (el) {
+        try {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          // focus for accessibility
+          (el as HTMLElement).focus?.({ preventScroll: true } as any);
+        } catch {
+          /* ignore */
+        }
+      }
+    }, 120);
+
+    return () => clearTimeout(id);
+    // run when params or location state change
+  }, [searchParams, location]);
 
   // Counts for hero stats — từ dashboard (tải ngay lập tức với hero)
   const tabCounts = useMemo(
@@ -511,6 +599,8 @@ export default function ProfilePage() {
 
       {/* ══ HERO ════════════════════════════════════════════════════════════ */}
       <section
+        ref={heroRef}
+        tabIndex={-1}
         className="relative w-full min-h-[38vh] sm:min-h-[44vh] flex items-end"
         aria-label="Profile header"
       >
@@ -616,7 +706,9 @@ export default function ProfilePage() {
       {/* ══ TABS ════════════════════════════════════════════════════════════ */}
       <div className="section-container mt-0">
         <Tabs
-          defaultValue="overview"
+          value={activeTab}
+          className="w-full"
+          onValueChange={setActiveTab}
           className="w-full"
           onValueChange={setActiveTab}
         >
@@ -662,8 +754,11 @@ export default function ProfilePage() {
               {/* ══ OVERVIEW ══════════════════════════════════════════════ */}
               {activeTab === "overview" && (
                 <motion.div
+                  ref={overviewRef}
+                  tabIndex={-1}
                   key="overview"
-                  variants={fadeUpVariants}
+                  variants={slideVariants}
+                  custom={direction}
                   initial="hidden"
                   animate="visible"
                   exit="exit"
@@ -926,8 +1021,11 @@ export default function ProfilePage() {
               {/* ══ PLAYLISTS ═══════════════════════════════════════════ */}
               {activeTab === "playlists" && (
                 <motion.div
+                  ref={playlistsRef}
+                  tabIndex={-1}
                   key="playlists"
-                  variants={fadeVariants}
+                  variants={slideVariants}
+                  custom={direction}
                   initial="hidden"
                   animate="visible"
                   exit="exit"
@@ -982,8 +1080,11 @@ export default function ProfilePage() {
               {/* ══ LIBRARY ═════════════════════════════════════════════ */}
               {activeTab === "library" && (
                 <motion.div
+                  ref={libraryRef}
+                  tabIndex={-1}
                   key="library"
-                  variants={fadeVariants}
+                  variants={slideVariants}
+                  custom={direction}
                   initial="hidden"
                   animate="visible"
                   exit="exit"
@@ -998,7 +1099,10 @@ export default function ProfilePage() {
                     </h2>
                   </div>
 
-                  <Tabs defaultValue="liked_tracks">
+                  <Tabs
+                    value={libraryTab}
+                    onValueChange={(v) => setLibraryTab(v)}
+                  >
                     <TabsList className="bg-muted/50 rounded-xl p-1 h-auto mb-7 border border-border/40 inline-flex flex-wrap gap-1">
                       {[
                         {
@@ -1096,4 +1200,5 @@ export default function ProfilePage() {
       />
     </div>
   );
-}
+};
+export default ProfilePage;

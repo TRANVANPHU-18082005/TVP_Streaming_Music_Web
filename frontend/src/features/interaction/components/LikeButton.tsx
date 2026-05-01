@@ -15,7 +15,7 @@ import { Heart, Loader2, BookHeart, Disc3 } from "lucide-react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useInteraction } from "../hooks/useInteraction";
-import { useAppSelector } from "@/store/hooks";
+import { useIsLiked, useIsLoading } from "../hooks/useIsLiked";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED
@@ -24,21 +24,6 @@ import { useAppSelector } from "@/store/hooks";
 const SPRING_SNAPPY = { type: "spring", stiffness: 500, damping: 28 } as const;
 const SPRING_SOFT = { type: "spring", stiffness: 340, damping: 26 } as const;
 const SPRING_BOUNCY = { type: "spring", stiffness: 560, damping: 22 } as const;
-
-function useIsLiked(id: string, type: "track" | "album" | "playlist") {
-  return useAppSelector((state) => {
-    const maps = {
-      track: "likedTracks",
-      album: "likedAlbums",
-      playlist: "likedPlaylists",
-    } as const;
-    return !!state.interaction[maps[type]][id];
-  });
-}
-
-function useIsLoading(id: string) {
-  return useAppSelector((state) => !!state.interaction.loadingIds[id]);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. TRACK LIKE BUTTON

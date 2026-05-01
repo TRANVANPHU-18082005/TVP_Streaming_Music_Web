@@ -177,11 +177,11 @@ const LYRICS_CSS = `
   contain: layout style; /* PERF: limit paint scope */
 }
 .sv-line:focus-visible {
-  outline: 2px solid rgba(79,172,254,0.6);
+  outline: 2px solid var(--lv-accent, rgba(79,172,254,0.6));
   outline-offset: 4px;
   border-radius: 4px;
 }
-.sv-line--current { transform: scale(1.05);  opacity: 1;    color: #fff; text-shadow: 0 0 28px rgba(79,172,254,.35); }
+.sv-line--current { transform: scale(1.05);  opacity: 1;    color: #fff; text-shadow: 0 0 28px var(--lv-accent-glow, rgba(79,172,254,.35)); }
 .sv-line--near1   { transform: scale(1.00);  opacity: .52;  color: rgba(255,255,255,.52); }
 .sv-line--near2   { transform: scale(.98);   opacity: .26;  color: rgba(255,255,255,.26); }
 .sv-line--far     { transform: scale(.96);   opacity: .1;   color: rgba(255,255,255,.1); }
@@ -218,24 +218,23 @@ const LYRICS_CSS = `
   display: block;
   white-space: pre;
   pointer-events: none;
-  /* Warmer gradient: amber-white → sky-blue → pure white */
+  /* Gradient: accentColor (via --lv-accent) → white. Falls back to amber-blue if var not set. */
   background: linear-gradient(
     90deg,
-    #ffe066 0%,
-    #4facfe 45%,
+    var(--lv-accent, #ffe066) 0%,
+    rgba(255,255,255,0.92) 55%,
     #ffffff 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  /* clip-path driven by --kv-fill; transition handled in rAF for smoothness */
+  /* clip-path driven by --kv-fill; no CSS transition — rAF updates at 60fps */
   clip-path: inset(0 calc(100% - var(--kv-fill, 0%)) 0 0);
   will-change: clip-path;
-  /* NO CSS transition here — rAF updates at 60fps, transition causes double-lerp lag */
 }
 .kv-word--active .kv-word__base {
-  color: rgba(255,255,255,.45);
-  text-shadow: 0 0 18px rgba(79,172,254,.35);
+  color: rgba(255,255,255,.5);
+  text-shadow: 0 0 20px var(--lv-accent-glow, rgba(79,172,254,.4));
 }
 .kv-word--backing .kv-word__base { opacity: .4; font-style: italic; }
 .kv-word--done .kv-word__fill    { clip-path: inset(0 0 0 0); }
@@ -259,7 +258,7 @@ const LYRICS_CSS = `
   contain: layout style;
 }
 .kv-line:focus-visible {
-  outline: 2px solid rgba(79,172,254,0.6);
+  outline: 2px solid var(--lv-accent, rgba(79,172,254,0.6));
   outline-offset: 4px;
   border-radius: 4px;
 }
@@ -303,8 +302,8 @@ const LYRICS_CSS = `
   background: rgba(255,255,255,.2);
   transition: transform .28s ease, background .28s ease, opacity .28s ease;
 }
-/* data-lit driven by rAF → no React state */
-.lv-dot[data-lit="1"] { transform: scale(2.2); background: #4facfe; opacity: 1; }
+/* data-lit driven by rAF -> no React state */
+.lv-dot[data-lit="1"] { transform: scale(2.2); background: var(--lv-accent, #4facfe); opacity: 1; box-shadow: 0 0 8px var(--lv-accent, #4facfe); }
 `;
 
 // Inject CSS synchronously — runs once at module evaluation on client
@@ -394,6 +393,41 @@ const useRafTime = () => {
     throw new Error("useRafTime must be used within RafTimeContext.Provider");
   return ctx;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOM SMOOTH SCROLL — rAF-based, ease-in-out cubic, no browser quirks
+// ─────────────────────────────────────────────────────────────────────────────
+
+const activeScrolls = new WeakMap<Element, number>();
+
+function smoothScrollTo(el: HTMLElement, target: number, duration = 520): void {
+  const start = el.scrollTop;
+  const delta = target - start;
+  if (Math.abs(delta) < 2) return; // already close enough
+
+  // Cancel any in-progress scroll on this element
+  const prev = activeScrolls.get(el);
+  if (prev) cancelAnimationFrame(prev);
+
+  const t0 = performance.now();
+  // cubic ease-in-out
+  const ease = (t: number) =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+  const tick = (now: number) => {
+    const elapsed = Math.min(now - t0, duration);
+    const progress = ease(elapsed / duration);
+    el.scrollTop = start + delta * progress;
+    if (elapsed < duration) {
+      const id = requestAnimationFrame(tick);
+      activeScrolls.set(el, id);
+    } else {
+      activeScrolls.delete(el);
+    }
+  };
+  const id = requestAnimationFrame(tick);
+  activeScrolls.set(el, id);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SANITIZE — PERF-7: stable reference guard
@@ -544,7 +578,7 @@ CountdownDots.displayName = "CountdownDots";
 
 const LyricsEmpty = memo(({ loading }: { loading: boolean }) => (
   <motion.div
-    className="h-full flex items-center justify-center select-none"
+    className="h-full flex flex-col items-center justify-center gap-4 select-none"
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     transition={{ duration: 0.4 }}
@@ -556,15 +590,25 @@ const LyricsEmpty = memo(({ loading }: { loading: boolean }) => (
             key={i}
             className="w-1 rounded-full bg-white/35"
             animate={{ scaleY: [h, 1, h] }}
-            transition={{ duration: 0.85, repeat: Infinity, delay: i * 0.1 }}
+            transition={{ duration: 0.85, repeat: Infinity, delay: i * 0.1, ease: "easeInOut" }}
             style={{ height: "100%", transformOrigin: "bottom" }}
           />
         ))}
       </div>
     ) : (
-      <p className="text-white/20 text-base font-semibold italic">
-        No lyrics available
-      </p>
+      <div className="flex flex-col items-center gap-3">
+        <div className="size-14 rounded-3xl bg-white/[0.04] border border-white/[0.07] flex items-center justify-center">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/20">
+            <path d="M9 18V5l12-2v13" />
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="16" r="3" />
+          </svg>
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-white/30 text-[13px] font-semibold">Chưa có lời bài hát</p>
+          <p className="text-white/18 text-[11px]">Hãy tận hưởng giai điệu</p>
+        </div>
+      </div>
     )}
   </motion.div>
 ));
@@ -576,7 +620,12 @@ LyricsEmpty.displayName = "LyricsEmpty";
 
 const PlainLyricsView = memo(({ text }: { text: string }) => (
   <div className="lv-scroll h-full">
-    <pre className="lv-plain">{text}</pre>
+    <pre
+      className="lv-plain"
+      style={{ paddingTop: "4rem", paddingBottom: "4rem" }}
+    >
+      {text}
+    </pre>
   </div>
 ));
 PlainLyricsView.displayName = "PlainLyricsView";
@@ -717,22 +766,26 @@ const SyncedLyricsView = memo(
       });
     }, [rafTime, lines]);
 
-    // PERF-4: Scroll from container, not from each line — avoids multiple
-    // scrollIntoView calls competing with each other
+    // Custom smooth scroll — rAF spring (PERF-4 + iOS fix)
     useEffect(() => {
       if (currentIndex < 0) return;
       const el = lineRefs.current[currentIndex];
       if (!el || !scrollRef.current) return;
       const container = scrollRef.current;
-      const elTop = el.offsetTop;
-      const elHeight = el.offsetHeight;
-      const containerHeight = container.offsetHeight;
-      const target = elTop - containerHeight / 2 + elHeight / 2;
-      container.scrollTo({ top: target, behavior: "smooth" });
+      const target =
+        el.offsetTop - container.offsetHeight / 2 + el.offsetHeight / 2;
+      smoothScrollTo(container, target, 500);
     }, [currentIndex]);
 
     return (
-      <div className="relative h-full">
+      <div
+        className="relative h-full"
+        style={{
+          // Inject accent CSS variables so all child CSS rules respond dynamically
+          ["--lv-accent" as string]: accentColor,
+          ["--lv-accent-glow" as string]: `${accentColor}55`,
+        }}
+      >
         <div
           ref={ambientRef}
           className="lv-ambient"
@@ -1079,7 +1132,7 @@ const KaraokeView = memo(
       });
     }, [rafTime, displayLines]);
 
-    // Centralized scroll — PERF-4
+    // Custom smooth scroll — rAF spring (PERF-4 + iOS fix)
     useEffect(() => {
       if (currentIndex < 0) return;
       const el = lineRefs.current[currentIndex];
@@ -1087,11 +1140,18 @@ const KaraokeView = memo(
       const container = scrollRef.current;
       const target =
         el.offsetTop - container.offsetHeight / 2 + el.offsetHeight / 2;
-      container.scrollTo({ top: target, behavior: "smooth" });
+      smoothScrollTo(container, target, 500);
     }, [currentIndex]);
 
     return (
-      <div className={cn("relative h-full", degraded && "kv-degraded")}>
+      <div
+        className={cn("relative h-full", degraded && "kv-degraded")}
+        style={{
+          // Inject accent CSS variables so all child CSS rules respond dynamically
+          ["--lv-accent" as string]: accentColor,
+          ["--lv-accent-glow" as string]: `${accentColor}55`,
+        }}
+      >
         <div
           ref={ambientRef}
           className="lv-ambient"
@@ -1103,8 +1163,8 @@ const KaraokeView = memo(
         />
 
         {degraded && (
-          <span className="absolute top-3 right-4 z-10 text-xs text-white/25 italic select-none pointer-events-none">
-            lyrics mode
+          <span className="absolute top-3 right-4 z-10 text-[10px] text-white/30 bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 rounded-full select-none pointer-events-none tracking-wide">
+            Chế độ lời
           </span>
         )}
 

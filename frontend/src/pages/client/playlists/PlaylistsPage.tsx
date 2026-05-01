@@ -10,22 +10,14 @@ import { usePlaylistParams } from "@/features/playlist/hooks/usePlaylistParams";
 import { usePlaylistsQuery } from "@/features/playlist/hooks/usePlaylistsQuery";
 
 import { Playlistpageskeleton, useSyncInteractions } from "@/features";
-import { APP_CONFIG } from "@/config/constants";
+import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-
-const DEFAULT_META = {
-  totalPages: 1,
-  totalItems: 0,
-  page: 1,
-  pageSize: 24,
-} as const;
 
 /** 45ms/item, capped at 700ms */
 const staggerDelay = (i: number) => Math.min(i * 45, 700);
@@ -66,19 +58,12 @@ const PageHero = memo(() => (
 
     {/* Title — text-gradient-warm: gold → pink = playlist identity */}
     <h1
-      className="text-display-xl text-gradient-wave mb-2 animate-fade-up animation-fill-both"
+      className="text-display-xl text-primary mb-2 animate-fade-up animation-fill-both"
       style={{ animationDelay: "60ms" }}
       id="playlist-page-heading"
     >
       Danh sách phát
     </h1>
-    {/* Subtitle */}
-    <p
-      className="text-section-subtitle hidden sm:block mb-5 animate-fade-up animation-fill-both"
-      style={{ animationDelay: "90ms" }}
-    >
-      Khám phá các playlist được tuyển chọn từ cộng đồng và hệ thống.
-    </p>
 
     {/* Animated divider */}
     <div
@@ -128,7 +113,7 @@ const PaginationStrip = memo(
         totalPages={totalPages}
         onPageChange={onPageChange}
         totalItems={totalItems}
-        itemsPerPage={pageSize || APP_CONFIG.PAGINATION_LIMIT}
+        itemsPerPage={pageSize || DEFAULT_GRID_META.pageSize}
       />
     </div>
   ),
@@ -145,13 +130,13 @@ const PlaylistPage: React.FC = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = usePlaylistParams(24);
+  } = usePlaylistParams(DEFAULT_GRID_META.pageSize);
 
   const { data, isLoading, isError, refetch } = usePlaylistsQuery(filterParams);
 
   const playlists = useMemo(() => data?.playlists ?? [], [data?.playlists]);
   const meta = useMemo(
-    () => ({ ...DEFAULT_META, ...data?.meta }),
+    () => ({ ...DEFAULT_GRID_META, ...data?.meta }),
     [data?.meta],
   );
   const playlistIds = useMemo(
@@ -175,7 +160,7 @@ const PlaylistPage: React.FC = () => {
     [handleSearch, handleFilterChange, clearFilters],
   );
 
-  const skeletonCount = meta.pageSize || APP_CONFIG.PAGINATION_LIMIT;
+  const skeletonCount = meta.pageSize || DEFAULT_GRID_META.pageSize;
   const hasResults = playlists.length > 0;
   const isFiltering = Boolean(filterParams.keyword);
 
@@ -184,7 +169,11 @@ const PlaylistPage: React.FC = () => {
   // ── Error state ─────────────────────────────────────────────────────────
   // Initial Load
   if (isLoading && !hasResults) {
-    return <Playlistpageskeleton cardCount={meta.pageSize || 18} />;
+    return (
+      <Playlistpageskeleton
+        cardCount={meta.pageSize || DEFAULT_GRID_META.pageSize}
+      />
+    );
   }
   // Switching
   if (isLoading && hasResults) {
@@ -284,10 +273,10 @@ const PlaylistPage: React.FC = () => {
         {/* ── Pagination */}
         {!isLoading && hasResults && (
           <PaginationStrip
-            currentPage={meta.page}
-            totalPages={meta.totalPages}
-            totalItems={meta.totalItems}
-            pageSize={meta.pageSize}
+            currentPage={meta.page || DEFAULT_GRID_META.page}
+            totalPages={meta.totalPages || DEFAULT_GRID_META.totalPages}
+            totalItems={meta.totalItems || DEFAULT_GRID_META.totalItems}
+            pageSize={meta.pageSize || DEFAULT_GRID_META.pageSize}
             onPageChange={handlePageChange}
           />
         )}

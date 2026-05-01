@@ -158,15 +158,37 @@ TrackSchema.pre("save", async function () {
 });
 // --- INDEXING STRATEGY ---
 
-// 1. Text Search: Bao gồm cả plainLyrics để user tìm bài hát qua lời
+// --- INDEXING STRATEGY ---
+
+// 1. Full Text Search (Giữ nguyên)
 TrackSchema.index({ title: "text", tags: "text", plainLyrics: "text" });
 
+// 2. Cơ bản & Mặc định
 TrackSchema.index({ isPublic: 1, isDeleted: 1, createdAt: -1 });
-TrackSchema.index({ playCount: -1, isPublic: 1, isDeleted: 1 });
+
+// 3. Phân trang Album (Giữ nguyên)
 TrackSchema.index({ album: 1, diskNumber: 1, trackNumber: 1 });
-TrackSchema.index({ artist: 1, isPublic: 1, releaseDate: -1 });
-TrackSchema.index({ genres: 1, playCount: -1, isPublic: 1, isDeleted: 1 });
+
+// 4. Tìm theo Nghệ sĩ chính (Main Artist)
+TrackSchema.index({ artist: 1, isPublic: 1, isDeleted: 1, releaseDate: -1 });
 TrackSchema.index({ artist: 1, playCount: -1, isPublic: 1, isDeleted: 1 });
+
+// 5. MỚI: Tìm theo Nghệ sĩ góp mặt (Featuring) - Rất quan trọng cho logic bạn vừa thêm
+TrackSchema.index({
+  featuringArtists: 1,
+  isPublic: 1,
+  isDeleted: 1,
+  releaseDate: -1,
+});
+TrackSchema.index({
+  featuringArtists: 1,
+  playCount: -1,
+  isPublic: 1,
+  isDeleted: 1,
+});
+
+// 6. Thể loại & Ngày phát hành (Giữ nguyên)
+TrackSchema.index({ genres: 1, playCount: -1, isPublic: 1, isDeleted: 1 });
 TrackSchema.index({ releaseDate: -1, isPublic: 1, isDeleted: 1 });
 const Track = mongoose.model<ITrack>("Track", TrackSchema);
 export default Track;

@@ -12,7 +12,6 @@ import { shallowEqual } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
 import { ListMusic, X, Play, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 
 // DnD Kit
 import {
@@ -44,9 +43,11 @@ import {
 import type { RootState } from "@/store/store";
 import type { ITrack } from "@/features/track/types";
 import { jumpToIndex, reorderQueue, setIsPlaying } from "@/features";
-import { MarqueeText } from "./MarqueeText";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { WaveformBars } from "@/components/MusicVisualizer";
+import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
+import { TrackTitleMarquee } from "./TrackTitleMarquee";
+import { toCDN } from "@/utils/track-helper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -294,24 +295,42 @@ const QueueItem = memo(
           isPlaying={isPlaying}
         />
         <TrackCover
-          src={track.coverImage}
+          src={toCDN(track.coverImage) || track.coverImage}
           title={track.title}
           isCurrent={isCurrent}
         />
 
         <div className="flex-1 min-w-0">
-          <MarqueeText
-            text={track.title}
-            className={cn(
-              "text-[13px] font-semibold tracking-tight",
-              isCurrent ? "text-[hsl(var(--primary))]" : "text-foreground",
+          {isCurrent ? (
+            <TrackTitleMarquee
+              title={track.title}
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="text-sm"
+              artistClassName="text-xs"
+            />
+          ) : (
+            <p
+              title={track.title}
+              className={cn(
+                "truncate text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
+                "text-foreground",
+              )}
+            >
+              {track.title}
+            </p>
+          )}
+
+          {/* Artist name — FIX B4: was missing entirely */}
+          <div className="min-w-0 truncate text-xs">
+            {!isCurrent && (
+              <ArtistDisplay
+                mainArtist={track.artist}
+                featuringArtists={track.featuringArtists}
+                className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
+              />
             )}
-            speed={38}
-            pauseMs={1600}
-          />
-          <p className="text-[11px] text-white/35 truncate leading-snug mt-0.5">
-            {track.artist?.name}
-          </p>
+          </div>
         </div>
 
         <span
@@ -492,24 +511,42 @@ export const SortableQueueItem = memo(
           isPlaying={isPlaying}
         />
         <TrackCover
-          src={track.coverImage}
+          src={toCDN(track.coverImage) || track.coverImage}
           title={track.title}
           isCurrent={isCurrent}
         />
 
         <div className="flex-1 min-w-0">
-          <MarqueeText
-            text={track.title}
-            className={cn(
-              "text-[13px] font-semibold tracking-tight",
-              isCurrent ? "text-[hsl(var(--primary))]" : "text-foreground",
+          {isCurrent ? (
+            <TrackTitleMarquee
+              title={track.title}
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="text-sm"
+              artistClassName="text-xs"
+            />
+          ) : (
+            <p
+              title={track.title}
+              className={cn(
+                "truncate text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
+                "text-foreground",
+              )}
+            >
+              {track.title}
+            </p>
+          )}
+
+          {/* Artist name — FIX B4: was missing entirely */}
+          <div className="min-w-0 truncate text-xs">
+            {!isCurrent && (
+              <ArtistDisplay
+                mainArtist={track.artist}
+                featuringArtists={track.featuringArtists}
+                className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
+              />
             )}
-            speed={38}
-            pauseMs={1600}
-          />
-          <p className="text-[11px] text-white/35 truncate leading-snug mt-0.5">
-            {track.artist?.name}
-          </p>
+          </div>
         </div>
 
         <span className="text-[10px] text-white/25 font-mono shrink-0 group-hover:opacity-0 transition-opacity tabular-nums">
@@ -877,7 +914,7 @@ export const QueuePanel = memo(
               aria-hidden="true"
             />
             <span className="text-[10px] font-bold text-white/65 tracking-[0.18em] uppercase">
-              Queue
+              Hàng chờ
             </span>
             {hasQueue && (
               <motion.span
@@ -885,23 +922,22 @@ export const QueuePanel = memo(
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={SP.snappy}
-                className="text-[10px] text-brand bg-white/[0.06] border border-white/[0.08] px-1.5 py-0.5 rounded-full font-mono tabular-nums"
-                aria-label={`${activeQueueIds.length} songs in queue`}
+                className="text-[10px] text-brand bg-[hsl(var(--primary)/0.12)] border border-[hsl(var(--primary)/0.2)] px-1.5 py-0.5 rounded-full font-mono tabular-nums"
+                aria-label={`${activeQueueIds.length} bài trong hàng chờ`}
               >
                 {activeQueueIds.length}
               </motion.span>
             )}
           </div>
           {showCloseButton && onClose && (
-            <Button
-              variant="ghost"
-              size="icon"
+            <motion.button
+              whileTap={{ scale: 0.88 }}
               onClick={onClose}
-              className="size-7 text-white/40 hover:text-white"
-              aria-label="Close queue panel"
+              className="size-7 flex items-center justify-center rounded-full text-white/35 hover:text-white hover:bg-white/[0.07] transition-colors"
+              aria-label="Đóng hàng chờ"
             >
               <X className="size-4" />
-            </Button>
+            </motion.button>
           )}
         </header>
 
@@ -909,28 +945,41 @@ export const QueuePanel = memo(
         <div
           ref={scrollRef}
           role="list"
-          aria-label="Playback queue"
-          className="custom-scrollbar flex-1 overflow-y-auto overscroll-contain"
+          aria-label="Hàng chờ phát nhạc"
+          className="custom-scrollbar queue-scroll flex-1 overflow-y-auto overscroll-contain"
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+          style={{ touchAction: "pan-y" }}
         >
           {!hasQueue ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center py-16">
-              <div className="size-12 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center py-16"
+            >
+              <div className="size-16 rounded-3xl bg-white/[0.04] border border-white/[0.07] flex items-center justify-center shadow-inner">
                 <ListMusic
-                  className="size-5 text-white/20"
+                  className="size-7 text-white/15"
                   aria-hidden="true"
                 />
               </div>
-              <p className="text-sm font-medium text-white/30">
-                Queue is empty
-              </p>
-              <p className="text-xs text-white/20">Add songs to get started</p>
-            </div>
+              <div className="space-y-1.5">
+                <p className="text-[13px] font-semibold text-white/30">
+                  Hàng chờ trống
+                </p>
+                <p className="text-[11px] text-white/18">
+                  Thêm bài hát để bắt đầu
+                </p>
+              </div>
+            </motion.div>
           ) : (
             <div className="p-2">
               {/* NOW PLAYING */}
               {currentTrack && (
                 <>
-                  <SectionLabel>Now Playing</SectionLabel>
+                  <SectionLabel>Đang phát</SectionLabel>
                   <AnimatePresence mode="popLayout">
                     <QueueItem
                       key={currentTrack._id}
@@ -950,9 +999,9 @@ export const QueuePanel = memo(
               {upNextEntries.length > 0 && (
                 <>
                   <SectionLabel>
-                    Next Up
-                    <span className="ml-1.5 text-white/20 normal-case tracking-normal font-normal text-[8px]">
-                      · drag to reorder
+                    Tiếp theo
+                    <span className="ml-1.5 text-[hsl(var(--primary)/0.4)] normal-case tracking-normal font-normal text-[8px]">
+                      {upNextEntries.length} bài · kéo để sắp xếp
                     </span>
                   </SectionLabel>
                   <UpNextDndSection
@@ -968,7 +1017,12 @@ export const QueuePanel = memo(
               {/* HISTORY */}
               {historyEntries.length > 0 && (
                 <>
-                  <SectionLabel dimmer>History</SectionLabel>
+                  <SectionLabel dimmer>
+                    Đã phát
+                    <span className="ml-1.5 normal-case tracking-normal font-normal text-[8px]">
+                      {historyEntries.length} bài
+                    </span>
+                  </SectionLabel>
                   <HistoryList
                     entries={historyEntries}
                     onPlay={handleItemPlay}
@@ -976,7 +1030,7 @@ export const QueuePanel = memo(
                 </>
               )}
 
-              <div className="h-4" aria-hidden="true" />
+              <div className="h-6" aria-hidden="true" />
             </div>
           )}
         </div>

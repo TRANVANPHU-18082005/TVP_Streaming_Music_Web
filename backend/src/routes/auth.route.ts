@@ -28,7 +28,19 @@ router.get(
     session: false,
     failureRedirect: `${process.env.CLIENT_URL}/login?error=auth_failed`,
   }),
-  authController.googleCallbackHandler
+  authController.googleCallbackHandler,
+);
+
+// Facebook Social Auth
+router.get("/facebook", authController.facebookAuth);
+
+router.get(
+  "/facebook/callback",
+  passport.authenticate("facebook", {
+    session: false,
+    failureRedirect: `${process.env.CLIENT_URL}/login?error=auth_failed`,
+  }),
+  authController.facebookCallbackHandler,
 );
 
 // ==========================================
@@ -40,7 +52,7 @@ router.post(
   "/register",
   authLimiter,
   validate(registerSchema),
-  authController.register
+  authController.register,
 );
 
 // Login: Giới hạn request + Validate Body
@@ -51,14 +63,14 @@ router.post("/login", authLimiter, validate(loginSchema), authController.login);
 router.post(
   "/verify-email",
   // validate(verifyEmailSchema), // Bật lên nếu schema khớp với body
-  authController.verifyEmail
+  authController.verifyEmail,
 );
 
 // Refresh Token
 router.post(
   "/refresh-token",
   // validate(refreshTokenSchema),
-  authController.refreshAccessToken
+  authController.refreshAccessToken,
 );
 
 // Logout
@@ -76,7 +88,7 @@ router.post(
   "/forgot-password",
   otpLimiter,
   validate(forgotPasswordSchema),
-  authController.forgotPassword
+  authController.forgotPassword,
 );
 
 // Reset Password
@@ -84,7 +96,7 @@ router.post(
 router.post(
   "/reset-password", // Hoặc "/reset-password/:token" nếu thích kiểu cũ
   validate(resetPasswordSchema),
-  authController.resetPassword
+  authController.resetPassword,
 );
 
 // ==========================================

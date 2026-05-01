@@ -178,6 +178,8 @@ export const bulkTrackSchema = z.object({
       val === "" || val === "null" || val === "undefined" ? null : val,
     ),
 
+  moodVideoId: relationId.optional(),
+
   artistId: z.string().trim().optional(), // Đổi chủ sở hữu hàng loạt (ít dùng nhưng nên có)
 
   featuringArtistIds: z

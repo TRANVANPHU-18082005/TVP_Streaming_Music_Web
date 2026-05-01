@@ -35,14 +35,22 @@ export function extractRelativePath(
   fileUrl: string,
   bucketName: string,
 ): string {
-  const marker = `${bucketName}/`;
-  const idx = fileUrl.indexOf(marker);
-  if (idx === -1) {
-    throw new Error(
-      `[extractRelativePath] fileUrl "${fileUrl}" does not contain bucket marker "${marker}".`,
-    );
+  const url = new URL(fileUrl);
+
+  // Case 1: virtual-hosted-style (bucket ở subdomain)
+  if (url.hostname.startsWith(bucketName)) {
+    return url.pathname.startsWith("/") ? url.pathname.slice(1) : url.pathname;
   }
-  return fileUrl.slice(idx + marker.length);
+
+  // Case 2: path-style (bucket nằm trong path)
+  const marker = `${bucketName}/`;
+  if (url.pathname.includes(marker)) {
+    return url.pathname.split(marker)[1];
+  }
+
+  throw new Error(
+    `[extractRelativePath] Cannot extract path from "${fileUrl}" with bucket "${bucketName}".`,
+  );
 }
 
 /**

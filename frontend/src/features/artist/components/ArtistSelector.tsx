@@ -16,6 +16,7 @@ import { getInitialsTextAvartar } from "@/utils/genTextAvartar";
 import { Label } from "@/components/ui/label";
 import { useArtistsQuery } from "@/features/artist/hooks/useArtistsQuery";
 import { IArtist } from "@/features";
+import { APP_CONFIG } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DEBOUNCE HOOK
@@ -202,7 +203,7 @@ export const ArtistSelector: React.FC<ArtistSelectorProps> = ({
 
   // B. Server-side search: keyword passed to query
   const { data, isLoading } = useArtistsQuery({
-    limit: 50,
+    limit: APP_CONFIG.SELECTOR_LIMIT,
     keyword: debouncedSearch || undefined,
   });
 

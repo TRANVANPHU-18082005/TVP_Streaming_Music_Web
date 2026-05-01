@@ -15,6 +15,8 @@ import { IAlbum, IPlaylist, ITrack, TrackList } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import MusicResult from "../../../components/ui/Result";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { APP_CONFIG } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -40,18 +42,18 @@ const EASE_EXPO = [0.22, 1, 0.36, 1] as const;
 const TABS: TabConfig[] = [
   {
     id: "tracks",
-    label: "Tracks",
+    label: "Bài hát",
     icon: <AudioLines className="size-3.5" aria-hidden="true" />,
     wave: "--wave-3",
-    viewAllHref: "/chart-top",
-    viewAllLabel: "Xem tất cả tracks",
+    viewAllHref: "/profile?tab=library&sub=liked_tracks",
+    viewAllLabel: "Xem tất cả bài hát",
   },
   {
     id: "albums",
     label: "Albums",
     icon: <DiscAlbum className="size-3.5" aria-hidden="true" />,
     wave: "--wave-4",
-    viewAllHref: "/albums",
+    viewAllHref: "/profile?tab=library&sub=liked_albums",
     viewAllLabel: "Xem tất cả albums",
   },
   {
@@ -59,7 +61,7 @@ const TABS: TabConfig[] = [
     label: "Playlists",
     icon: <ListMusic className="size-3.5" aria-hidden="true" />,
     wave: "--wave-5",
-    viewAllHref: "/playlists",
+    viewAllHref: "/profile?tab=library&sub=liked_playlists",
     viewAllLabel: "Xem tất cả playlists",
   },
 ];
@@ -218,7 +220,7 @@ const LibraryHeader = memo(
                 className="text-overline transition-colors duration-300"
                 style={{ color: `hsl(var(${activeConfig.wave}))` }}
               >
-                My Library
+                Thư viện
               </motion.span>
             </div>
 
@@ -226,7 +228,7 @@ const LibraryHeader = memo(
               className="text-section-title text-foreground leading-tight"
               id="library-section-heading"
             >
-              Favourite{" "}
+              Yêu thích{" "}
               <motion.span
                 key={activeTab}
                 initial={{ opacity: 0, y: 4 }}
@@ -453,7 +455,7 @@ export function LibrarySection() {
     error: tracksError,
     refetch: refetchTracks,
   } = useFavouriteTracksInfinite();
-  console.log(tracksData);
+
   const allTracks = useMemo<ITrack[]>(
     () => tracksData?.allTracks ?? [],
     [tracksData?.allTracks],
@@ -520,10 +522,13 @@ export function LibrarySection() {
       return totalItems ? "tracks" : "albums";
     return activeTab;
   }, [activeTab, totalItems, albums.length, playlists.length]);
+  const isOffline = !useOnlineStatus();
+  const activeTabConfig = TABS.find((t) => t.id === resolvedTab)!;
 
   // ── Nothing to show ───────────────────────────────────────────────────────
   if (
     !isLoading &&
+    !isLoadingTracks &&
     !error &&
     !totalItems &&
     !albums.length &&
@@ -531,8 +536,6 @@ export function LibrarySection() {
   ) {
     return null;
   }
-  const isOffline = !navigator.onLine;
-  const activeTabConfig = TABS.find((t) => t.id === resolvedTab)!;
 
   // ── Render tab content ────────────────────────────────────────────────────
   const renderContent = () => {
@@ -561,7 +564,7 @@ export function LibrarySection() {
           {...trackListProps}
           maxHeight={400}
           moodColor={`var(${activeTabConfig.wave})`}
-          skeletonCount={12}
+          skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
           staggerAnimation={true}
         />
       );

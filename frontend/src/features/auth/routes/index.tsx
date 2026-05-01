@@ -1,5 +1,6 @@
 import { type RouteObject } from "react-router-dom";
 import {
+  FacebookCallbackPage,
   ForgotPasswordPage,
   GoogleCallbackPage,
   LoginPage,
@@ -28,6 +29,10 @@ export const guestAuthRoutes: RouteObject[] = [
   {
     path: AUTH_PATHS.AUTH_GOOGLE,
     element: <GoogleCallbackPage />,
+  },
+  {
+    path: AUTH_PATHS.AUTH_FACEBOOK,
+    element: <FacebookCallbackPage />,
   },
   {
     path: AUTH_PATHS.FORGOT_PASSWORD,

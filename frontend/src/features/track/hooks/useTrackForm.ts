@@ -143,11 +143,6 @@ export const useTrackForm = ({
       return;
     }
 
-    // Logic "Chữa lành" Lời nhạc trước khi gửi
-    if (values.plainLyrics?.trim() && values.lyricType === "none") {
-      values.lyricType = "plain";
-    }
-
     try {
       const payload = buildTrackPayload(values, dirtyFields, isEditMode);
       console.log(values, payload, dirtyFields);

@@ -16,15 +16,10 @@ import {
   Globe,
   PenSquare,
   ListMusic,
-  PlusCircle,
-  Share2,
-  Music2,
-  SearchX,
   Loader2,
   ChevronLeft,
   Shuffle,
   Clock,
-  RefreshCw,
   Users,
   Sparkles,
 } from "lucide-react";
@@ -32,13 +27,7 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
 import { useAppSelector } from "@/store/hooks";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -70,6 +59,8 @@ import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 import MusicResult from "@/components/ui/Result";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { APP_CONFIG } from "@/config/constants";
+import { useContextSheet } from "@/app/provider/SheetProvider";
 
 dayjs.extend(relativeTime);
 
@@ -103,14 +94,6 @@ const SP_HERO = {
   damping: 26,
   mass: 0.9,
 } as const;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS — synced with AlbumDetailPage
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// useScrollY — synced with AlbumDetailPage
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VisibilityBadge
@@ -402,7 +385,8 @@ const TooltipAction: React.FC<{
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PlaylistActionBarProps {
-  playlistId: string;
+  playlist: IPlaylist;
+  handleMoreOptions: (playlist: IPlaylist) => void;
   palette: Palette;
   isLoadingPlay: boolean;
   isLoadingShuffle: boolean;
@@ -417,7 +401,8 @@ interface PlaylistActionBarProps {
 
 const PlaylistActionBar = memo<PlaylistActionBarProps>(
   ({
-    playlistId,
+    playlist,
+    handleMoreOptions,
     palette,
     isLoadingPlay,
     isLoadingShuffle,
@@ -539,7 +524,7 @@ const PlaylistActionBar = memo<PlaylistActionBarProps>(
           )}
         </motion.button>
 
-        <PlaylistLikeButton id={playlistId} variant="detail" />
+        <PlaylistLikeButton id={playlist._id} variant="detail" />
 
         {/* Owner tools */}
         {isOwner && (
@@ -553,172 +538,18 @@ const PlaylistActionBar = memo<PlaylistActionBarProps>(
         )}
 
         <div className="flex-1" aria-hidden="true" />
-
-        {/* More menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <ActionIconButton
-              className={isCompact ? "size-9" : "size-10 sm:size-11"}
-              aria-label="More options"
-            >
-              <MoreHorizontal
-                className={isCompact ? "size-4" : "size-[18px]"}
-                aria-hidden="true"
-              />
-            </ActionIconButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-52 rounded-2xl p-1.5 border-border/50 bg-background/95 backdrop-blur-xl shadow-2xl"
-          >
-            <DropdownMenuItem className="gap-2.5 py-2.5 px-3 rounded-xl cursor-pointer font-semibold text-sm">
-              <PlusCircle className="size-4 shrink-0" aria-hidden="true" /> Thêm
-              vào danh sách khác
-            </DropdownMenuItem>
-            <DropdownMenuItem className="gap-2.5 py-2.5 px-3 rounded-xl cursor-pointer font-semibold text-sm text-primary focus:text-primary focus:bg-primary/10">
-              <Share2 className="size-4 shrink-0" aria-hidden="true" /> Chia sẻ
-              Playlist
-            </DropdownMenuItem>
-            {isOwner && (
-              <>
-                <DropdownMenuSeparator className="bg-border/40 my-1" />
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <button
+          className="rounded-full flex items-center justify-center border border-border/50  size-10  text-white/70 hover:text-white  active:scale-90 transition-all"
+          aria-label="More options"
+          onClick={() => handleMoreOptions(playlist)}
+        >
+          <MoreHorizontal className="size-6" strokeWidth={2} />
+        </button>
       </div>
     );
   },
 );
 PlaylistActionBar.displayName = "PlaylistActionBar";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EmptyPlaylistState
-// ─────────────────────────────────────────────────────────────────────────────
-
-const EmptyPlaylistState = memo<{
-  isOwner: boolean;
-  onAdd: () => void;
-  compact?: boolean;
-}>(({ isOwner, onAdd, compact }) => (
-  <div
-    className={cn(
-      "flex flex-col items-center justify-center text-center",
-      compact ? "py-10 px-4 gap-4" : "py-20 px-6 gap-6",
-    )}
-    role="status"
-    aria-label="Empty playlist"
-  >
-    <div className="relative">
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 bg-primary/15 blur-2xl rounded-full scale-150 pointer-events-none"
-      />
-      <div
-        className={cn(
-          "relative rounded-full bg-card border-2 border-dashed border-border/50 flex items-center justify-center shadow-sm",
-          compact ? "size-16" : "size-28",
-        )}
-      >
-        <Music2
-          className={cn(
-            "text-muted-foreground/30",
-            compact ? "size-6" : "size-11",
-          )}
-          aria-hidden="true"
-        />
-      </div>
-    </div>
-    <div className="space-y-1.5 max-w-xs">
-      <h3
-        className={cn(
-          "font-black tracking-tight text-foreground",
-          compact ? "text-base" : "text-xl",
-        )}
-      >
-        Ở đây hơi vắng lặng
-      </h3>
-      <p
-        className={cn(
-          "text-muted-foreground font-medium leading-relaxed",
-          compact ? "text-xs" : "text-sm",
-        )}
-      >
-        {isOwner
-          ? "Thêm bài hát để xây dựng bộ sưu tập giai điệu riêng của bạn."
-          : "Danh sách phát này chưa có bài hát nào."}
-      </p>
-    </div>
-    {isOwner && (
-      <button
-        type="button"
-        onClick={onAdd}
-        className={cn(
-          "inline-flex items-center gap-2 rounded-full font-bold uppercase tracking-widest",
-          "bg-primary text-primary-foreground hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 shadow-md",
-          compact ? "h-9 px-5 text-[10px]" : "h-11 px-8 text-[11px] mt-1",
-        )}
-      >
-        <PlusCircle className="size-4" aria-hidden="true" />
-        Tìm bài hát
-      </button>
-    )}
-  </div>
-));
-EmptyPlaylistState.displayName = "EmptyPlaylistState";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PlaylistNotFound
-// ─────────────────────────────────────────────────────────────────────────────
-
-const PlaylistNotFound = memo<{ onBack: () => void; onRetry: () => void }>(
-  ({ onBack, onRetry }) => (
-    <div
-      className="flex flex-col items-center justify-center min-h-[60vh] gap-7 text-center px-6"
-      role="alert"
-      aria-live="assertive"
-    >
-      <div className="relative">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-destructive/15 blur-3xl rounded-full scale-150 pointer-events-none"
-        />
-        <div className="relative z-10 size-24 rounded-2xl bg-background border-2 border-muted flex items-center justify-center shadow-xl">
-          <SearchX
-            className="size-10 text-muted-foreground/60"
-            aria-hidden="true"
-          />
-        </div>
-      </div>
-      <div className="space-y-2 max-w-sm">
-        <h2 className="text-2xl sm:text-3xl font-black tracking-tighter text-foreground">
-          Không tìm thấy Playlist
-        </h2>
-        <p className="text-sm text-muted-foreground font-medium leading-relaxed">
-          Danh sách phát đã bị xóa, đặt về riêng tư, hoặc đường dẫn không hợp
-          lệ.
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onRetry}
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-border/60 text-sm font-bold text-foreground/80 hover:bg-muted/60 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        >
-          <RefreshCw className="size-3.5" aria-hidden="true" /> Thử lại
-        </button>
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        >
-          <ChevronLeft className="size-4" aria-hidden="true" /> Quay lại
-        </button>
-      </div>
-    </div>
-  ),
-);
-PlaylistNotFound.displayName = "PlaylistNotFound";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PlaylistModals
@@ -908,10 +739,21 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
   }, [playlist, deletePlaylist, isEmbedded, onClose, navigate]);
 
   // ── Shared props ──────────────────────────────────────────────────────────
-
+  const { openPlaylistSheet } = useContextSheet();
+  const openSheet = useCallback(
+    (p: IPlaylist) => {
+      openPlaylistSheet(p);
+    },
+    [openPlaylistSheet],
+  );
+  const handleMoreOptions = useCallback(
+    (p: IPlaylist) => openSheet(p),
+    [openSheet],
+  );
   const sharedActionBarProps: PlaylistActionBarProps = useMemo(
     () => ({
-      playlistId: playlist?._id || "",
+      playlist: playlist!,
+      handleMoreOptions,
       palette,
       isLoadingPlay: isFetching,
       isLoadingShuffle: isFetching,
@@ -923,7 +765,8 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
       onManageTracks: () => setIsManageTracksOpen(true),
     }),
     [
-      playlist?._id,
+      playlist,
+      handleMoreOptions,
       palette,
       isFetching,
       isThisPlaylistPlaying,
@@ -1112,9 +955,9 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
 
             <TrackList
               {...trackListProps}
-              maxHeight={400}
+              maxHeight={700}
               moodColor={palette.hslChannels}
-              skeletonCount={7}
+              skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
               staggerAnimation={false}
             />
           </div>
@@ -1418,8 +1261,8 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
         >
           <TrackList
             {...trackListProps}
-            maxHeight="auto"
-            skeletonCount={12}
+            maxHeight={700}
+            skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
             moodColor={palette.hslChannels}
             staggerAnimation={true}
           />

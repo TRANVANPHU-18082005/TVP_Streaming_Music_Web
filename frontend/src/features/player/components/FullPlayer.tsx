@@ -15,6 +15,7 @@ import {
   useTransform,
   AnimatePresence,
   type Variants,
+  type TargetAndTransition,
 } from "framer-motion";
 import {
   ChevronDown,
@@ -26,13 +27,12 @@ import {
   SkipForward,
   Play,
   Pause,
-  Download,
-  Clock,
   ListMusic,
   Loader2,
   Focus,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
+import type { RootState } from "@/store/store";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,7 @@ import {
   prevTrack,
   toggleShuffle,
   toggleRepeat,
-  PlayerSheetContext,
+  toggleAutoplay,
 } from "@/features/player/slice/playerSlice";
 import { ProgressBar } from "./ProgressBar";
 import { ILyricLine, ITrack } from "@/features/track";
@@ -54,9 +54,12 @@ import { MarqueeText } from "./MarqueeText";
 import { PlayerBackground } from "@/components/PlayerBackground";
 import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import { EyeViewBadge } from "@/components/ui/LiveViewBadge";
-import QueuePanel from "./Queuepanel";
 import { TrackDetailPanel } from "./TrackDetailPanel";
-import { AddToPlaylistSheet, OptionSheet } from "./Playersheets";
+import { useContextSheet } from "@/app/provider/SheetProvider";
+import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
+import QueuePanel from "./Queuepanel";
+import SleepTimerModal from "@/features/player/sleepTimer/SleepTimerModal";
+import { toCDN } from "@/utils/track-helper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CSS — PERF-2: inject synchronously, no FOUC
@@ -101,8 +104,6 @@ const PHASE_1_DELAY = 360;
 const PHASE_2_DELAY = 660;
 const DRAG_COLLAPSE_Y = 110;
 const DRAG_COLLAPSE_VY = 500;
-const QUEUE_COLLAPSE_Y = 72;
-const QUEUE_COLLAPSE_VY = 400;
 const SWIPE_THRESHOLD = 48;
 
 const VIEWS = ["mood", "lyrics", "artwork", "info"] as const;
@@ -126,7 +127,7 @@ const SP = {
 } as const;
 
 // Stable Framer animate objects — hoisted to avoid allocation per render
-const RING_ANIMATE = { opacity: [0.3, 0.75, 0.3] } as const;
+const RING_ANIMATE: TargetAndTransition = { opacity: [0.3, 0.75, 0.3] };
 const RING_INITIAL = { opacity: 0 } as const;
 const RING_EXIT = { opacity: 0 } as const;
 const RING_TRANS = {
@@ -144,8 +145,6 @@ const SWIPE_VARIANTS: Variants = {
 // ─────────────────────────────────────────────────────────────────────────────
 // GLOBAL SHEET CONTEXT — any child can open a sheet without prop drilling
 // ─────────────────────────────────────────────────────────────────────────────
-
-type SheetType = "playlist" | "options" | null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HOOKS
@@ -258,16 +257,35 @@ interface IsolatedProgressProps {
   hasLabels?: boolean;
 }
 
+interface IsolatedProgressProps {
+  getCurrentTime: () => number;
+  duration: number;
+  onSeek: (t: number) => void;
+  hasLabels?: boolean;
+  isPlaying: boolean;
+}
+
 const IsolatedProgress = memo(
-  ({ getCurrentTime, duration, onSeek, hasLabels }: IsolatedProgressProps) => {
-    // currentTime as state — updated by interval, not from parent
+  ({
+    getCurrentTime,
+    duration,
+    onSeek,
+    hasLabels,
+    isPlaying,
+  }: IsolatedProgressProps) => {
     const [currentTime, setCurrentTime] = useState(getCurrentTime);
 
     useEffect(() => {
+      // Sync 1 lần khi pause
+      if (!isPlaying) {
+        setCurrentTime(getCurrentTime());
+        return;
+      }
+      // Poll chỉ khi đang phát
       const id = setInterval(() => setCurrentTime(getCurrentTime()), 250);
       return () => clearInterval(id);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [duration]);
+    }, [isPlaying, duration]);
 
     return (
       <ProgressBar
@@ -287,55 +305,48 @@ IsolatedProgress.displayName = "IsolatedProgress";
 
 const VinylDisk = memo(
   ({ src, isPlaying }: { src?: string; isPlaying: boolean }) => (
-    <div
-      className={cn(
-        "relative aspect-square w-full max-w-[250px] lg:max-w-[320px]",
-        "rounded-full overflow-hidden border-[5px] border-[#191919] shadow-brand",
-        isPlaying ? "animate-vinyl-slow" : "pause-animation",
-      )}
-      style={{ willChange: "transform" }}
-      role="img"
-      aria-label="Album artwork"
-    >
-      <ImageWithFallback
-        src={src}
-        className="size-full object-cover"
-        fetchPriority="high"
+    <div className="relative">
+      {/* Outer glow ring — syncs with isPlaying */}
+      <motion.div
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          inset: -6,
+          border: "2px solid hsl(var(--primary) / 0.25)",
+          boxShadow: "0 0 24px hsl(var(--brand-glow) / 0.18)",
+        }}
+        animate={{ opacity: isPlaying ? 1 : 0, scale: isPlaying ? 1 : 0.96 }}
+        transition={{ duration: 0.5, ease: "easeInOut" }}
       />
       <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.07) 0%, transparent 55%), radial-gradient(circle at 70% 75%, rgba(0,0,0,0.3) 0%, transparent 50%)",
-        }}
-      />
-      {[18, 32, 44].map((pct) => (
-        <div
-          key={pct}
-          className="absolute rounded-full border border-white/[0.035]"
-          style={{ inset: `${pct}%` }}
+        className={cn(
+          "relative aspect-square w-full max-w-[200px] lg:max-w-[300px]",
+          "rounded-full overflow-hidden border-[5px] border-[#191919] shadow-brand",
+          isPlaying ? "animate-vinyl-slow" : "pause-animation",
+        )}
+        style={{ willChange: "transform" }}
+        role="img"
+        aria-label="Album artwork"
+      >
+        <ImageWithFallback
+          src={src}
+          className="size-full object-cover"
+          fetchPriority="high"
         />
-      ))}
-      <div
-        className="absolute rounded-full bg-[#0c0c0c] border border-white/10 shadow-inner z-10"
-        style={{
-          width: 17,
-          height: 17,
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%,-50%)",
-        }}
-      />
-      <div
-        className="absolute rounded-full bg-white/8 z-20"
-        style={{
-          width: 7,
-          height: 7,
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%,-50%)",
-        }}
-      />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.07) 0%, transparent 55%), radial-gradient(circle at 70% 75%, rgba(0,0,0,0.3) 0%, transparent 50%)",
+          }}
+        />
+        {[18, 32, 44].map((pct) => (
+          <div
+            key={pct}
+            className="absolute rounded-full border border-white/[0.035]"
+            style={{ inset: `${pct}%` }}
+          />
+        ))}
+      </div>
     </div>
   ),
 );
@@ -560,16 +571,17 @@ interface ControlsRowProps {
 const ControlsRow = memo(
   ({ size, phase, getCurrentTime }: ControlsRowProps) => {
     const dispatch = useDispatch();
-    const {
-      isPlaying,
-      isShuffling,
-      repeatMode,
-      loadingState,
-      activeQueueIds,
-      currentIndex,
-    } = useSelector(selectPlayer);
+    // Granular selectors — mỗi selector chỉ re-render khi field đó đổi
+    const isPlaying = useSelector((s: RootState) => s.player.isPlaying);
+    const isShuffling = useSelector((s: RootState) => s.player.isShuffling);
+    const repeatMode = useSelector((s: RootState) => s.player.repeatMode);
+    const loadingState = useSelector((s: RootState) => s.player.loadingState);
+    const activeQueueLen = useSelector(
+      (s: RootState) => s.player.activeQueueIds.length,
+    );
+    const currentIndex = useSelector((s: RootState) => s.player.currentIndex);
 
-    const queueLen = activeQueueIds.length;
+    const queueLen = activeQueueLen;
     const hasQueue = queueLen > 0;
     const isLg = size === "lg";
     const skipCls = isLg ? "size-9" : "size-7";
@@ -732,71 +744,99 @@ const Toolbar = memo(
     focusMode,
     onToggleFocus,
     bitrate = 320,
-  }: ToolbarProps) => (
-    <div
-      className="fp-stagger flex items-center justify-between pt-2 border-t border-white/[0.06]"
-      role="toolbar"
-      aria-label="Player tools"
-    >
-      {[
-        {
-          icon: <Clock className="size-5" />,
-          label: "Sleep timer",
-          active: false,
-          onClick: undefined,
-        },
-        {
-          icon: <Focus className="size-5" />,
-          label: focusMode ? "Exit focus" : "Focus mode",
-          active: focusMode,
-          onClick: onToggleFocus,
-        },
-        {
-          icon: (
-            <div className="px-3 py-1 bg-white/8 rounded-lg border border-white/10">
-              <span className="text-[10px] font-black text-white/65 tracking-wide">
-                {bitrate ? `${bitrate} kbps` : "Bitrate"}
-              </span>
-            </div>
-          ),
-          label: "Bitrate",
-          active: false,
-          onClick: undefined,
-        },
-        {
-          icon: <Download className="size-5" />,
-          label: "Download",
-          active: false,
-          onClick: undefined,
-        },
-        {
-          icon: <ListMusic className="size-5" />,
-          label: showQueue ? "Hide queue" : "Show queue",
-          active: showQueue,
-          onClick: onToggleQueue,
-        },
-      ].map(({ icon, label, active, onClick }) => (
-        <motion.button
-          key={label}
-          whileHover={{ scale: 1.14 }}
-          whileTap={{ scale: 0.86 }}
-          transition={SP.snappy}
-          onClick={onClick}
-          title={label}
-          aria-label={label}
-          aria-pressed={active}
-          className={cn(
-            "p-2 rounded-xl transition-colors",
-            active
-              ? "text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.12)]"
-              : "text-white/40 hover:text-white/75 hover:bg-white/[0.06]",
-          )}
-        >
-          {icon}
-        </motion.button>
-      ))}
-    </div>
-  ),
+  }: ToolbarProps) => {
+    const dispatch = useDispatch();
+    const autoplayEnabled = useSelector(
+      (s: RootState) => s.player.autoplayEnabled,
+    );
+    const items = [
+      {
+        icon: <Focus className="size-5" />,
+        label: focusMode ? "Exit focus" : "Focus mode",
+        title: focusMode ? "Thoát Focus Mode" : "Bật Focus Mode",
+        active: focusMode,
+        onClick: onToggleFocus,
+        disabled: false,
+      },
+      {
+        icon: (
+          <div
+            className="px-2 py-0.5 rounded-lg border"
+            style={{
+              background: "hsl(var(--muted) / 0.3)",
+              borderColor: "hsl(var(--border) / 0.4)",
+            }}
+          >
+            <span
+              className="text-[10px] font-black tracking-wide"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              {bitrate ? `${bitrate}k` : "--k"}
+            </span>
+          </div>
+        ),
+        label: "Bitrate",
+        title: `Bitrate: ${bitrate ?? 0} kbps`,
+        active: false,
+        onClick: undefined as (() => void) | undefined,
+        disabled: true,
+      },
+      {
+        icon: <Play className="size-5" />,
+        label: autoplayEnabled ? "Autoplay On" : "Autoplay Off",
+        title: autoplayEnabled
+          ? "Tắt tự động phát"
+          : "Bật tự động phát khi hết nhạc",
+        active: autoplayEnabled,
+        onClick: () => dispatch(toggleAutoplay()),
+        disabled: false,
+      },
+      {
+        icon: <ListMusic className="size-5" />,
+        label: showQueue ? "Hide queue" : "Show queue",
+        title: showQueue ? "Ẩn hàng chờ" : "Xem hàng chờ",
+        active: showQueue,
+        onClick: onToggleQueue,
+        disabled: false,
+      },
+    ];
+
+    return (
+      <div
+        className="fp-stagger flex items-center justify-between pt-3"
+        style={{ borderTop: "1px solid hsl(var(--border) / 0.12)" }}
+        role="toolbar"
+        aria-label="Player tools"
+      >
+        <div className="flex items-center gap-2 relative z-[100]">
+          <SleepTimerModal />
+        </div>
+
+        {items.map(({ icon, label, title, active, onClick, disabled }) => (
+          <motion.button
+            key={label}
+            whileHover={!disabled ? { scale: 1.12 } : {}}
+            whileTap={!disabled ? { scale: 0.86 } : {}}
+            transition={SP.snappy}
+            onClick={onClick}
+            title={title}
+            aria-label={label}
+            aria-pressed={active}
+            disabled={disabled}
+            className={cn(
+              "p-2 rounded-xl transition-colors",
+              "disabled:opacity-30 disabled:cursor-not-allowed",
+              active
+                ? "text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.12)] shadow-[0_0_12px_hsl(var(--brand-glow)/0.2)]"
+                : "text-white/40 hover:text-white/75 hover:bg-white/[0.06]",
+            )}
+          >
+            {icon}
+          </motion.button>
+        ))}
+      </div>
+    );
+  },
 );
 Toolbar.displayName = "Toolbar";
 
@@ -922,12 +962,9 @@ const ViewHeader = memo(
         <button
           className="flex items-center justify-center size-10 rounded-full text-white/70 hover:text-white hover:bg-white/[0.08] active:scale-90 transition-all"
           aria-label="More options"
+          onClick={handleMore}
         >
-          <MoreHorizontal
-            className="size-6"
-            strokeWidth={2}
-            onClick={handleMore}
-          />
+          <MoreHorizontal className="size-6" strokeWidth={2} />
         </button>
       </header>
     );
@@ -945,6 +982,8 @@ interface SwipeableViewsProps {
   currentTime: number;
   currentView: PlayerView;
   direction: number;
+  showQueue: boolean;
+  toggleQueue: () => void;
   track: ITrack;
   isPlaying: boolean;
   phase: number;
@@ -956,6 +995,8 @@ interface SwipeableViewsProps {
 const SwipeableViews = memo(
   ({
     lyrics,
+    showQueue,
+    toggleQueue,
     loadingLyrics,
     currentTime,
     currentView,
@@ -972,7 +1013,7 @@ const SwipeableViews = memo(
       {...swipeHandlers}
     >
       <AnimatePresence mode="wait" initial={false} custom={direction}>
-        {currentView === "artwork" && (
+        {!showQueue && currentView === "artwork" && (
           <motion.div
             key="artwork"
             custom={direction}
@@ -997,7 +1038,10 @@ const SwipeableViews = memo(
                 />
               )}
             </AnimatePresence>
-            <VinylDisk src={track.coverImage} isPlaying={isPlaying} />
+            <VinylDisk
+              src={toCDN(track.coverImage) || track.coverImage}
+              isPlaying={isPlaying}
+            />
           </motion.div>
         )}
 
@@ -1016,8 +1060,8 @@ const SwipeableViews = memo(
               isPlaying={isPlaying}
               lyricType={track.lyricType}
               plainLyrics={track.plainLyrics}
-              syncedLines={(lyrics as any) ?? []}
-              karaokeLines={(lyrics as any) ?? []}
+              syncedLines={lyrics ?? []}
+              karaokeLines={lyrics ?? []}
               currentTime={currentTime}
               onSeek={onSeek}
               loading={loadingLyrics}
@@ -1026,7 +1070,7 @@ const SwipeableViews = memo(
           </motion.div>
         )}
 
-        {currentView === "mood" && (
+        {currentView === "mood" && !showQueue && (
           <motion.div
             key="mood"
             custom={direction}
@@ -1047,8 +1091,30 @@ const SwipeableViews = memo(
           </motion.div>
         )}
 
-        {currentView === "info" && (
-          <TrackDetailPanel track={track} direction={direction} />
+        {currentView === "info" && !showQueue && (
+          <motion.div
+            key="track-detail"
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 24 }}
+            transition={SP.queue}
+            className="absolute inset-0 flex flex-col z-50"
+          >
+            <TrackDetailPanel track={track} direction={direction} />
+          </motion.div>
+        )}
+        {showQueue && (
+          /* Queue view — slides in when showQueue is active */
+          <motion.div
+            key="queue-panel"
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 24 }}
+            transition={SP.queue}
+            className="absolute inset-0 flex flex-col z-50"
+          >
+            <QueuePanel showCloseButton onClose={toggleQueue} />
+          </motion.div>
         )}
       </AnimatePresence>
     </main>
@@ -1076,7 +1142,7 @@ const TrackInfoRow = memo(
       {size === "sm" && (
         <div className="size-10 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10">
           <ImageWithFallback
-            src={track.coverImage}
+            src={toCDN(track.coverImage)}
             alt=""
             className="size-full object-cover"
           />
@@ -1093,18 +1159,11 @@ const TrackInfoRow = memo(
           speed={38}
           pauseMs={1600}
         />
-        <motion.p
-          key={track.artist?.name}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.06, ...SP.gentle }}
-          className={cn(
-            "text-white/45 mt-0.5 text-track-meta",
-            size === "sm" ? "text-xs truncate" : "text-sm",
-          )}
-        >
-          {track.artist?.name}
-        </motion.p>
+        <ArtistDisplay
+          mainArtist={track.artist}
+          featuringArtists={track.featuringArtists}
+          className="text-[11px] flex items-center justify-center gap-1"
+        />
       </div>
       {phase >= 1 ? (
         <TrackLikeButton id={track._id} />
@@ -1144,47 +1203,53 @@ export const FullPlayer = ({
   getCurrentTime,
   isPlaying,
 }: FullPlayerProps) => {
+  console.log(toCDN(track.coverImage), track.coverImage);
   const [currentView, setCurrentView] = useState<PlayerView>("artwork");
   const [swipeDir, setSwipeDir] = useState(0);
   const [showQueue, setShowQueue] = useState(false);
-  const [queueMounted, setQueueMounted] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  // Keep-alive: track views đã mount, không bao giờ unmount sau lần đầu
+  const [mountedViews, setMountedViews] = useState<Set<PlayerView>>(
+    () => new Set<PlayerView>(["artwork"]),
+  );
   const phase = usePhase();
   useViewportHeight();
 
-  // ── Sheet state — global, shared across all children via context ────────────
-  const [sheetType, setSheetType] = useState<SheetType>(null);
-  const [sheetTrack, setSheetTrack] = useState<ITrack | null>(null);
+  // ── Sheet delegation: use global sheet context (centralized rendering)
+  const { openOptionSheet, openAddToPlaylistSheet, closeContextSheet } =
+    useContextSheet();
 
-  const openSheet = useCallback((type: "playlist" | "options", t: ITrack) => {
-    setSheetTrack(t);
-    setSheetType(type);
-  }, []);
+  const openSheet = useCallback(
+    (type: "playlist" | "options", t: ITrack) => {
+      if (type === "options") openOptionSheet(t);
+      else if (type === "playlist") openAddToPlaylistSheet(undefined, [t]);
+    },
+    [openOptionSheet, openAddToPlaylistSheet],
+  );
   const handleMoreOptions = useCallback(
     (t: ITrack) => openSheet("options", t),
     [openSheet],
   );
   const closeSheet = useCallback(() => {
-    setSheetType(null);
-    // Keep sheetTrack briefly for exit animation
-    setTimeout(() => setSheetTrack(null), 400);
-  }, []);
-
-  // Transition between sheets (options → playlist)
-  const switchToPlaylist = useCallback((t: ITrack) => {
-    setSheetType(null);
-    setTimeout(() => {
-      setSheetTrack(t);
-      setSheetType("playlist");
-    }, 220);
-  }, []);
+    closeContextSheet();
+  }, [closeContextSheet]);
 
   const queueSheetRef = useRef<HTMLElement>(null);
-  const { lyrics, loading } = useLyrics(track.lyricUrl);
+  // Lazy fetch: chỉ fetch khi user vào tab Lyrics hoặc Mood
+  const lyricsEnabled = currentView === "lyrics" || currentView === "mood";
+  const rawLyricSrc = track.lyricUrl;
+  const LyricSrc = toCDN(rawLyricSrc) || rawLyricSrc;
+  const { lyrics, loading } = useLyrics(LyricSrc, lyricsEnabled);
 
+  // Lazy mount: khi chuyển view, thêm vào Set (không bao giờ unmount)
   useEffect(() => {
-    if (showQueue && !queueMounted) setQueueMounted(true);
-  }, [showQueue, queueMounted]);
+    setMountedViews((prev) => {
+      if (prev.has(currentView)) return prev;
+      const next = new Set(prev);
+      next.add(currentView);
+      return next;
+    });
+  }, [currentView]);
 
   useFocusTrap(showQueue, queueSheetRef as React.RefObject<HTMLElement>);
 
@@ -1199,13 +1264,12 @@ export const FullPlayer = ({
 
   // Close sheets on Escape
   useEffect(() => {
-    if (!sheetType) return;
     const h = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeSheet();
     };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
-  }, [sheetType, closeSheet]);
+  }, [closeSheet]);
 
   const dragY = useMotionValue(0);
   const cardScale = useTransform(dragY, [0, 300], [1, 0.94]);
@@ -1231,137 +1295,122 @@ export const FullPlayer = ({
   const toggleQueue = useCallback(() => setShowQueue((v) => !v), []);
   const toggleFocus = useCallback(() => setFocusMode((v) => !v), []);
   const isArtwork = currentView === "artwork";
-  const isFullView = currentView === "lyrics" || currentView === "mood";
 
   return (
-    <PlayerSheetContext.Provider value={{ openSheet, closeSheet }}>
+    <motion.div
+      className="fp-enter fixed inset-0 z-[60] flex flex-col h-dvh overflow-hidden select-none bg-[#0c0c0c] isolate"
+      style={{ scale: cardScale }}
+      drag="y"
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={{ top: 0, bottom: 0.13 }}
+      dragMomentum={false}
+      onDragEnd={(_, info) => {
+        if (
+          info.offset.y > DRAG_COLLAPSE_Y ||
+          info.velocity.y > DRAG_COLLAPSE_VY
+        )
+          onCollapse();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Now playing: ${track.title}`}
+    >
+      <PlayerBackground
+        coverImage={toCDN(track.coverImage) || track.coverImage}
+        dominantColor="primary"
+        focusMode={focusMode}
+        isPlaying={isPlaying}
+      />
       <motion.div
-        className="fp-enter fixed inset-0 z-[60] flex flex-col h-dvh overflow-hidden select-none bg-[#0c0c0c] isolate"
-        style={{ scale: cardScale }}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.13 }}
-        dragMomentum={false}
-        onDragEnd={(_, info) => {
-          if (
-            info.offset.y > DRAG_COLLAPSE_Y ||
-            info.velocity.y > DRAG_COLLAPSE_VY
-          )
-            onCollapse();
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Now playing: ${track.title}`}
+        className="absolute inset-0 bg-black pointer-events-none z-0"
+        style={{ opacity: rimOpacity }}
+        aria-hidden="true"
+      />
+
+      <motion.div
+        className="mx-auto w-full h-full relative z-10 flex flex-col lg:flex-row lg:items-stretch lg:max-w-4xl xl:max-w-5xl"
+        style={{ opacity: bgOpacity }}
       >
-        <PlayerBackground
-          coverImage={track.coverImage}
-          dominantColor="primary"
-          focusMode={focusMode}
-          isPlaying={isPlaying}
-        />
-        <motion.div
-          className="absolute inset-0 bg-black pointer-events-none z-0"
-          style={{ opacity: rimOpacity }}
-          aria-hidden="true"
-        />
-
-        <motion.div
-          className="mx-auto w-full h-full relative z-10 flex flex-col lg:flex-row lg:items-stretch lg:max-w-4xl xl:max-w-5xl"
-          style={{ opacity: bgOpacity }}
-        >
-          {/* ── LEFT PANEL ── */}
-          <div className="flex flex-col flex-1 min-h-0 lg:flex-initial lg:w-[50%] xl:w-[55%]">
-            {currentView !== "mood" && (
-              <ViewHeader
-                track={track}
-                handleMoreOptions={handleMoreOptions}
-                currentView={currentView}
-                phase={phase}
-                setView={setCurrentView}
-                setSwipeDir={setSwipeDir}
-                onCollapse={onCollapse}
-              />
-            )}
-            {currentView === "mood" &&
-              (!track.moodVideo || track.moodVideo === null) && (
-                <ViewHeader
-                  track={track}
-                  handleMoreOptions={handleMoreOptions}
-                  currentView={currentView}
-                  phase={phase}
-                  setView={setCurrentView}
-                  setSwipeDir={setSwipeDir}
-                  onCollapse={onCollapse}
-                />
-              )}
-
-            <SwipeableViews
-              lyrics={lyrics}
-              loadingLyrics={loading}
-              currentTime={currentTime}
-              currentView={currentView}
-              direction={swipeDir}
+        {/* ── LEFT PANEL ── */}
+        <div className="flex flex-col flex-1 min-h-0 lg:flex-initial lg:w-[50%] xl:w-[55%]">
+          {/* Fix: ViewHeader chỉ render 1 instance duy nhất */}
+          {(currentView !== "mood" || !track.moodVideo) && !showQueue && (
+            <ViewHeader
               track={track}
-              isPlaying={isPlaying}
+              handleMoreOptions={handleMoreOptions}
+              currentView={currentView}
               phase={phase}
-              swipeHandlers={swipeHandlers}
-              onSeek={onSeek}
-              focusMode={focusMode}
+              setView={setCurrentView}
+              setSwipeDir={setSwipeDir}
+              onCollapse={onCollapse}
             />
+          )}
 
-            {/* ── MOBILE CONTROLS ── */}
-            <div className="lg:hidden bg-transparent">
-              {isArtwork ? (
-                <div className="px-6 pb-2 pt-2 space-y-5 shrink-0 bg-transparent">
-                  <TrackInfoRow
-                    track={track}
-                    phase={phase}
-                    listenCount={listenCount}
+          <SwipeableViews
+            showQueue={showQueue}
+            toggleQueue={toggleQueue}
+            lyrics={lyrics}
+            loadingLyrics={loading}
+            currentTime={currentTime}
+            currentView={currentView}
+            direction={swipeDir}
+            track={track}
+            isPlaying={isPlaying}
+            phase={phase}
+            swipeHandlers={swipeHandlers}
+            onSeek={onSeek}
+            focusMode={focusMode}
+          />
+
+          {/* ── MOBILE CONTROLS ── */}
+          <div className="lg:hidden bg-transparent">
+            {isArtwork && !showQueue && (
+              <div className="px-6 pb-2 pt-2 space-y-5 shrink-0 bg-transparent">
+                <TrackInfoRow
+                  track={track}
+                  phase={phase}
+                  listenCount={listenCount}
+                />
+                {/* Divider */}
+                <div className="divider-glow" aria-hidden="true" />
+                <IsolatedProgress
+                  getCurrentTime={getCurrentTime}
+                  duration={duration}
+                  onSeek={onSeek}
+                  hasLabels
+                  isPlaying={isPlaying}
+                />
+                <ControlsRow
+                  size="lg"
+                  phase={phase}
+                  getCurrentTime={getCurrentTime}
+                />
+                {phase >= 1 && (
+                  <Toolbar
+                    bitrate={track.bitrate}
+                    showQueue={showQueue}
+                    onToggleQueue={toggleQueue}
+                    focusMode={focusMode}
+                    onToggleFocus={toggleFocus}
                   />
-                  {/* PERF-3: IsolatedProgress — no currentTime prop re-render */}
-                  <IsolatedProgress
-                    getCurrentTime={getCurrentTime}
-                    duration={duration}
-                    onSeek={onSeek}
-                    hasLabels
-                  />
-                  <ControlsRow
-                    size="lg"
-                    phase={phase}
-                    getCurrentTime={getCurrentTime}
-                  />
-                  {phase >= 1 && (
-                    <Toolbar
-                      bitrate={track.bitrate}
-                      showQueue={showQueue}
-                      onToggleQueue={toggleQueue}
-                      focusMode={focusMode}
-                      onToggleFocus={toggleFocus}
-                    />
-                  )}
-                </div>
-              ) : (
-                !isFullView && (
-                  <div className="px-5 pb-5 pt-2 space-y-4 shrink-0 bg-transparent shadow-[0_-4px_10px_rgba(0,0,0,0.1),0_-20px_40px_15px_rgba(0,0,0,0.15)]">
-                    <IsolatedProgress
-                      getCurrentTime={getCurrentTime}
-                      duration={duration}
-                      onSeek={onSeek}
-                    />
-                    <ControlsRow
-                      size="md"
-                      phase={phase}
-                      getCurrentTime={getCurrentTime}
-                    />
-                  </div>
-                )
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
+        </div>
 
-          {/* ── RIGHT PANEL (desktop) ── */}
-          <div className="hidden lg:flex flex-col lg:w-[50%] xl:w-[45%] border-l border-white/[0.05] overflow-hidden">
-            <div className="shrink-0 px-10 pt-16 pb-6 flex flex-col">
+        {/* ── RIGHT PANEL (desktop) ── */}
+        <div className="hidden lg:flex flex-col lg:w-[50%] xl:w-[45%] border-l border-white/[0.05] overflow-hidden relative">
+          <AnimatePresence mode="wait" initial={false}>
+            /* Controls view */
+            <motion.div
+              key="controls"
+              initial={{ opacity: 0, x: -24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -24 }}
+              transition={SP.queue}
+              className="absolute inset-0 shrink-0 px-10 pt-16 pb-6 flex flex-col"
+            >
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div className="min-w-0">
                   <MarqueeText
@@ -1375,7 +1424,8 @@ export const FullPlayer = ({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.07, ...SP.gentle }}
-                    className="text-base text-white/45 mt-1.5"
+                    className="text-sm mt-1.5"
+                    style={{ color: "hsl(var(--muted-foreground) / 0.7)" }}
                   >
                     {track.artist?.name}
                   </motion.p>
@@ -1390,12 +1440,12 @@ export const FullPlayer = ({
                 )}
               </div>
 
-              {/* PERF-3: IsolatedProgress for desktop */}
               <IsolatedProgress
                 getCurrentTime={getCurrentTime}
                 duration={duration}
                 onSeek={onSeek}
                 hasLabels
+                isPlaying={isPlaying}
               />
 
               <div className="mt-8">
@@ -1416,97 +1466,21 @@ export const FullPlayer = ({
                   />
                 </div>
               )}
-            </div>
-
-            {queueMounted && (
-              <motion.div
-                animate={{ opacity: showQueue ? 1 : 0, y: showQueue ? 0 : -8 }}
-                transition={SP.queue}
-                className={cn(
-                  "flex-1 min-h-0 mx-4 mb-4 rounded-2xl border border-white/[0.07] bg-white/[0.03] backdrop-blur-xl overflow-hidden",
-                  !showQueue && "pointer-events-none",
-                )}
-                aria-hidden={!showQueue}
-              >
-                <QueuePanel />
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* ── MOBILE QUEUE SHEET ── */}
-        <AnimatePresence>
-          {showQueue && (
-            <>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.18 }}
-                className="lg:hidden absolute inset-0 z-[75] bg-black/65 backdrop-blur-[2px]"
-                onClick={() => setShowQueue(false)}
-                aria-hidden="true"
-              />
-              <motion.div
-                ref={queueSheetRef as React.RefObject<HTMLDivElement>}
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                transition={SP.sheet}
-                className="lg:hidden absolute bottom-0 left-0 right-0 z-[80] bg-[#0f0f0f] border-t border-white/[0.08] rounded-t-3xl flex flex-col"
-                style={{ maxHeight: "calc(var(--vh, 1vh) * 76)" }}
-                drag="y"
-                dragConstraints={{ top: 0, bottom: 0 }}
-                dragElastic={{ top: 0, bottom: 0.22 }}
-                dragMomentum={false}
-                onDragEnd={(_, info) => {
-                  if (
-                    info.offset.y > QUEUE_COLLAPSE_Y ||
-                    info.velocity.y > QUEUE_COLLAPSE_VY
-                  )
-                    setShowQueue(false);
-                }}
-                role="dialog"
-                aria-modal="true"
-                aria-label="Queue"
-              >
-                <div className="flex justify-center pt-3 pb-2 shrink-0">
-                  <motion.div
-                    className="h-1 rounded-full bg-white/14"
-                    style={{ width: 36 }}
-                    whileHover={{
-                      width: 48,
-                      backgroundColor: "rgba(255,255,255,0.28)",
-                    }}
-                    transition={{ duration: 0.18 }}
-                    aria-hidden="true"
-                  />
-                </div>
-                <div className="flex-1 min-h-0">
-                  <QueuePanel
-                    onClose={() => setShowQueue(false)}
-                    showCloseButton
-                  />
-                </div>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-
-        {/* ── GLOBAL PLAYER SHEETS — rendered once, shared via context ── */}
-        <AddToPlaylistSheet
-          track={sheetTrack}
-          isOpen={sheetType === "playlist"}
-          onClose={closeSheet}
-        />
-        <OptionSheet
-          track={sheetTrack}
-          isOpen={sheetType === "options"}
-          onClose={closeSheet}
-          onAddToPlaylist={switchToPlaylist}
-        />
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </motion.div>
-    </PlayerSheetContext.Provider>
+
+      {/* ── GLOBAL PLAYER SHEETS — rendered once, shared via context ── */}
+      {/* Mobile: QueueSheet slides up from bottom. Desktop: shown inline in right panel (see above). */}
+
+      {/* Queue sheet — mobile only (lg:hidden via max-w gate inside the sheet) */}
+      {/* <div className="lg:hidden">
+        <QueueSheet isOpen={showQueue} onClose={toggleQueue} />
+      </div> */}
+
+      {/* OptionSheet handled globally by ContextSheetProvider */}
+    </motion.div>
   );
 };
 

@@ -22,8 +22,9 @@ export interface IUser extends Document {
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
   refreshToken?: string;
-  authProvider: "local" | "google";
+  authProvider: "local" | "google" | "facebook";
   googleId?: string;
+  facebookId?: string;
   // Trong UserSchema
 
   // Relations
@@ -80,13 +81,18 @@ const UserSchema = new Schema<IUser>(
     refreshToken: { type: String, select: false },
     lastOtpSentAt: { type: Date },
 
-    authProvider: { type: String, enum: ["local", "google"], default: "local" },
+    authProvider: {
+      type: String,
+      enum: ["local", "google", "facebook"],
+      default: "local",
+    },
     googleId: { type: String, index: true }, // Index để tìm user Google nhanh
+    facebookId: { type: String, index: true }, // Index để tìm user Facebook nhanh
 
     artistProfile: { type: Schema.Types.ObjectId, ref: "Artist" },
     likedTracks: [{ type: Schema.Types.ObjectId, ref: "Track" }],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // --- MIDDLEWARES ---
