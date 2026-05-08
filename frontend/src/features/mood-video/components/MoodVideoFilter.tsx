@@ -367,8 +367,8 @@ const ActiveTagsBar = memo(
 
           // Context-aware icon overrides for isActive
           let icon: React.ElementType = def.icon;
-          let iconColor = def.iconColor;
-          let bgClass = def.bgClass;
+          let iconColor: string = def.iconColor as string;
+          let bgClass: string = def.bgClass as string;
 
           if (def.key === "isActive" && params.isActive !== undefined) {
             const meta = getStatusMeta(params.isActive);

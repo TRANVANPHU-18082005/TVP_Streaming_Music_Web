@@ -143,7 +143,7 @@ const SectionLabel = memo(
     <p
       className={cn(
         "text-[9px] font-bold tracking-[0.2em] uppercase px-3 pt-4 pb-1.5",
-        dimmer ? "text-white/20" : "text-white/35",
+        dimmer ? "text-[var(--fp-fg-faint)]" : "text-[var(--fp-fg-subtle)]",
       )}
     >
       {children}
@@ -175,10 +175,10 @@ const IndexSlot = memo(
         <WaveformBars active={isPlaying} bars={4} />
       ) : (
         <div className="relative flex justify-center items-center w-full h-full">
-          <span className="text-xs font-mono text-white/30 group-hover:opacity-0 transition-opacity">
+          <span className="text-xs font-mono text-[var(--fp-fg-subtle)] group-hover:opacity-0 transition-opacity">
             {queueIndex + 1}
           </span>
-          <Play className="size-3.5 fill-current text-white absolute opacity-0 group-hover:opacity-100 transition-opacity" />
+          <Play className="size-3.5 fill-current text-[var(--fp-fg)] absolute opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
       )}
     </div>
@@ -204,7 +204,7 @@ const TrackCover = memo(
     title: string;
     isCurrent: boolean;
   }) => (
-    <div className="relative size-9 shrink-0 rounded-md overflow-hidden bg-white/10">
+    <div className="relative size-9 shrink-0 rounded-md overflow-hidden bg-[var(--fp-border)]">
       <ImageWithFallback
         src={src}
         alt={`${title} cover`}
@@ -272,7 +272,7 @@ const QueueItem = memo(
         className={cn(
           "group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer",
           "transition-colors duration-150 select-none",
-          isCurrent ? "bg-[hsl(var(--primary)/0.1)]" : "hover:bg-white/[0.05]",
+          isCurrent ? "bg-[var(--fp-active-bg)]" : "hover:bg-[var(--fp-hover-bg)]",
         )}
         onClick={onPlay}
         role="button"
@@ -334,7 +334,7 @@ const QueueItem = memo(
         </div>
 
         <span
-          className="text-[10px] text-white/25 font-mono shrink-0 group-hover:opacity-0 transition-opacity tabular-nums"
+          className="text-[10px] text-[var(--fp-fg-subtle)] font-mono shrink-0 group-hover:opacity-0 transition-opacity tabular-nums"
           aria-label={`Duration: ${cachedFormatTime(track.duration ?? 0)}`}
         >
           {cachedFormatTime(track.duration ?? 0)}
@@ -373,10 +373,10 @@ const DragHandle = memo(
       className={cn(
         "flex items-center justify-center size-6 rounded-md shrink-0",
         "touch-none select-none",
-        "text-white/20 transition-all duration-150",
+        "text-[var(--fp-fg-faint)] transition-all duration-150",
         isDragging
-          ? "cursor-grabbing text-white/60"
-          : "cursor-grab hover:text-white/50 hover:bg-white/[0.06]",
+          ? "cursor-grabbing text-[var(--fp-fg-muted)]"
+          : "cursor-grab hover:text-[var(--fp-fg)] hover:bg-[var(--fp-hover-bg)]",
         "-mr-1",
       )}
     >
@@ -395,11 +395,11 @@ const QueueSkeleton = memo(() => (
     aria-hidden="true"
     className="flex items-center gap-3 px-3 py-2 rounded-xl"
   >
-    <div className="w-7 h-4 bg-white/[0.06] rounded animate-pulse" />
-    <div className="size-9 bg-white/[0.06] rounded-md animate-pulse shrink-0" />
+    <div className="w-7 h-4 bg-[var(--fp-border)] rounded animate-pulse" />
+    <div className="size-9 bg-[var(--fp-border)] rounded-md animate-pulse shrink-0" />
     <div className="flex-1 space-y-1.5">
-      <div className="h-3 bg-white/[0.06] rounded animate-pulse w-3/4" />
-      <div className="h-2.5 bg-white/[0.06] rounded animate-pulse w-1/2" />
+      <div className="h-3 bg-[var(--fp-border)] rounded animate-pulse w-3/4" />
+      <div className="h-2.5 bg-[var(--fp-border)] rounded animate-pulse w-1/2" />
     </div>
   </div>
 ));
@@ -487,9 +487,9 @@ export const SortableQueueItem = memo(
         className={cn(
           "group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer",
           "transition-colors duration-150 select-none",
-          isCurrent ? "bg-[hsl(var(--primary)/0.1)]" : "hover:bg-white/[0.05]",
+          isCurrent ? "bg-[var(--fp-active-bg)]" : "hover:bg-[var(--fp-hover-bg)]",
           isOverlay &&
-            "shadow-2xl ring-1 ring-white/10 bg-[hsl(var(--surface-2))] opacity-95 scale-[1.02]",
+          "shadow-2xl ring-1 ring-[var(--fp-border)] bg-[hsl(var(--surface-2))] opacity-95 scale-[1.02]",
         )}
         onClick={onPlay}
         role="button"
@@ -549,7 +549,7 @@ export const SortableQueueItem = memo(
           </div>
         </div>
 
-        <span className="text-[10px] text-white/25 font-mono shrink-0 group-hover:opacity-0 transition-opacity tabular-nums">
+        <span className="text-[10px] text-[var(--fp-fg-subtle)] font-mono shrink-0 group-hover:opacity-0 transition-opacity tabular-nums">
           {cachedFormatTime(track.duration ?? 0)}
         </span>
 
@@ -598,7 +598,7 @@ const HistoryList = memo(
       <div className="opacity-35">
         {hiddenCount > 0 && !showAll && (
           <button
-            className="w-full py-2 text-center text-[10px] text-white/30 hover:text-white/50 transition-colors"
+            className="w-full py-2 text-center text-[10px] text-[var(--fp-fg-subtle)] hover:text-[var(--fp-fg)] transition-colors"
             onClick={() => setShowAll(true)}
             aria-label={`Show ${hiddenCount} earlier tracks`}
           >
@@ -812,7 +812,7 @@ const UpNextDndSection = memo(
               queueIndex={activeEntry.index}
               isCurrent={false}
               isPlaying={false}
-              onPlay={() => {}}
+              onPlay={() => { }}
               animate={false}
               isOverlay
             />
@@ -864,8 +864,8 @@ export const QueuePanel = memo(
       () =>
         currentIndex >= 0
           ? activeQueueIds
-              .slice(currentIndex + 1)
-              .map((id, i) => ({ id, index: currentIndex + 1 + i }))
+            .slice(currentIndex + 1)
+            .map((id, i) => ({ id, index: currentIndex + 1 + i }))
           : activeQueueIds.map((id, i) => ({ id, index: i })),
       [activeQueueIds, currentIndex],
     );
@@ -874,8 +874,8 @@ export const QueuePanel = memo(
       () =>
         currentIndex > 0
           ? activeQueueIds
-              .slice(0, currentIndex)
-              .map((id, i) => ({ id, index: i }))
+            .slice(0, currentIndex)
+            .map((id, i) => ({ id, index: i }))
           : [],
       [activeQueueIds, currentIndex],
     );
@@ -913,7 +913,7 @@ export const QueuePanel = memo(
               className="size-3.5 text-[hsl(var(--primary))]"
               aria-hidden="true"
             />
-            <span className="text-[10px] font-bold text-white/65 tracking-[0.18em] uppercase">
+            <span className="text-[10px] font-semibold text-[var(--fp-fg)] truncate leading-snug tracking-[0.18em] uppercase">
               Hàng chờ
             </span>
             {hasQueue && (
@@ -933,7 +933,7 @@ export const QueuePanel = memo(
             <motion.button
               whileTap={{ scale: 0.88 }}
               onClick={onClose}
-              className="size-7 flex items-center justify-center rounded-full text-white/35 hover:text-white hover:bg-white/[0.07] transition-colors"
+              className="size-7 flex items-center font-semibold text-[var(--fp-fg)] truncate leading-snug justify-center rounded-full text-[var(--fp-fg)] hover:text-[var(--fp-fg-active)] hover:bg-[var(--fp-hover-bg)] transition-colors"
               aria-label="Đóng hàng chờ"
             >
               <X className="size-4" />

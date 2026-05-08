@@ -43,7 +43,7 @@ const Button: React.FC<ButtonProps> = ({
       className={cn(
         "relative group w-full h-12 rounded-2xl font-semibold text-sm transition-all duration-300 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed overflow-hidden flex items-center justify-center",
         variants[variant],
-        className
+        className,
       )}
       {...props}
     >
@@ -67,7 +67,7 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
       <div
         className={cn(
           "absolute -inset-0.5 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-500",
-          error && "from-red-500/30 to-red-500/30 opacity-100"
+          error && "from-red-500/30 to-red-500/30 opacity-100",
         )}
       />
       <div className="relative w-full">
@@ -76,7 +76,7 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
             "absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none transition-colors duration-300",
             error
               ? "text-red-400"
-              : "text-gray-400 group-focus-within:text-white"
+              : "text-gray-400 group-focus-within:text-white",
           )}
         >
           <Icon className="w-4 h-4" />
@@ -89,14 +89,14 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
             error
               ? "border-red-500/50 focus:border-red-500 placeholder:text-red-300/30"
               : "border-white/5 focus:border-white/20",
-            className
+            className,
           )}
           placeholder={label}
           {...props}
         />
       </div>
     </div>
-  )
+  ),
 );
 InputField.displayName = "InputField";
 
@@ -115,7 +115,7 @@ const ResetPasswordForm = () => {
     watch,
     formState: { errors, isSubmitting },
   } = useForm<ResetPasswordInput>({
-    resolver: zodResolver(resetPasswordSchema),
+    resolver: zodResolver(resetPasswordSchema) as any,
     mode: "onChange",
   });
 
@@ -205,7 +205,7 @@ const ResetPasswordForm = () => {
             "overflow-hidden transition-all duration-500 ease-in-out bg-black/20 rounded-2xl",
             isFocused || passwordValue
               ? "max-h-[300px] opacity-100 p-3"
-              : "max-h-0 opacity-0 p-0"
+              : "max-h-0 opacity-0 p-0",
           )}
         >
           <div className="flex justify-between items-center mb-2 px-1">
@@ -215,14 +215,14 @@ const ResetPasswordForm = () => {
             <span
               className={cn(
                 "text-[10px] font-bold uppercase transition-colors duration-300",
-                getStrengthColor()
+                getStrengthColor(),
               )}
             >
               {strengthScore <= 2
                 ? "Weak"
                 : strengthScore === 3
-                ? "Medium"
-                : "Strong"}
+                  ? "Medium"
+                  : "Strong"}
             </span>
           </div>
 
@@ -237,9 +237,9 @@ const ResetPasswordForm = () => {
                     ? strengthScore <= 2
                       ? "bg-red-500"
                       : strengthScore === 3
-                      ? "bg-yellow-500"
-                      : "bg-emerald-500"
-                    : "bg-transparent"
+                        ? "bg-yellow-500"
+                        : "bg-emerald-500"
+                    : "bg-transparent",
                 )}
               />
             ))}

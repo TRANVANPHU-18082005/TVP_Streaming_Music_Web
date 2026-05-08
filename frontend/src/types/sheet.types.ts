@@ -22,7 +22,7 @@ export type ContextSheetPayload =
   | { type: "playlist"; entity: IPlaylist }
   | { type: "artist"; entity: IArtist }
   | { type: "genre"; entity: IGenre }
-  | { type: "options"; track: ITrack | null }
+  | { type: "track"; track: ITrack | null }
   | {
       type: "addToPlaylist";
       sourceEntity?: IAlbum | IArtist | IGenre;
@@ -43,7 +43,7 @@ export interface ContextSheetContextValue {
     sourceEntity?: IAlbum | IArtist | IGenre,
     tracks?: ITrack[] | null,
   ) => void;
-  openOptionSheet: (track?: ITrack | null) => void;
+  openTrackSheet: (track?: ITrack | null) => void;
   closeContextSheet: () => void;
 }
 

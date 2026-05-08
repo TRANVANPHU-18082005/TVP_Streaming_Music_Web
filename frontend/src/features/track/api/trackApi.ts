@@ -1,11 +1,11 @@
 import api from "@/lib/axios";
 import type { ApiResponse, PagedResponse } from "@/types";
-import type {
-  IChartResponse,
-  ITrack,
+import type { IChartResponse, ITrack } from "@/features/track/types";
+import {
+  BulkTrackUpdateFormValues,
+  TrackChangeStatusFormValues,
   TrackFilterParams,
-} from "@/features/track/types";
-import { BulkTrackFormValues } from "@/features/track/schemas/track.schema";
+} from "@/features/track/schemas/track.schema";
 
 /**
  * QUY TẮC ĐỒNG NHẤT:
@@ -17,8 +17,8 @@ const trackApi = {
   // 1. QUERIES (Lấy dữ liệu)
   // ==========================================
 
-  // Lấy danh sách (Dùng cho cả Admin & Public tùy vào params truyền vào)
-  getAll: async (params: TrackFilterParams) => {
+  // Lấy danh sách bài hát với filter, search, pagination
+  getTracks: async (params: TrackFilterParams) => {
     const { data } = await api.get<ApiResponse<PagedResponse<ITrack>>>(
       "/tracks",
       {
@@ -28,28 +28,65 @@ const trackApi = {
     return data;
   },
 
-  // Admin: Lấy chi tiết bài hát bằng ID
+  // Lấy chi tiết bài hát (slug hoặc id)
   getTrackDetail: async (id: string, options?: { signal?: AbortSignal }) => {
     const { data } = await api.get<ApiResponse<ITrack>>(`/tracks/${id}`, {
       signal: options?.signal,
     });
-    console.log(data);
+    return data;
+  },
+
+  // Lấy bài hát tương tự (dựa trên nghệ sĩ, thể loại, mood...)
+  getSimilarTracks: async (trackId: string, limit = 10) => {
+    const { data } = await api.get<ApiResponse<{ tracks: ITrack[] }>>(
+      `/tracks/${trackId}/similar`,
+      {
+        params: { limit },
+      },
+    );
     return data.data;
   },
 
   // ==========================================
-  // 2. MUTATIONS (Thêm / Sửa / Xóa cơ bản)
+  // 2. RECOMMENDATIONS (Gợi ý bài hát)
   // ==========================================
 
-  // Upload bài hát (Dùng FormData vì chứa file âm thanh/hình ảnh)
-  upload: async (formData: FormData) => {
+  // Lấy danh sách "Bài hát bạn có thể thích"
+  getRecommendations: async (limit = 20, excludeTrackId?: string) => {
+    const { data } = await api.get<ApiResponse<{ tracks: ITrack[] }>>(
+      "/tracks/recommendations",
+      {
+        params: { limit, excludeTrackId },
+      },
+    );
+    return data.data;
+  },
+
+  // ==========================================
+  // 3. CHARTS (Bảng xếp hạng)
+  // ==========================================
+
+  // Top 100 realtime chart
+  getRealtimeChart: async () => {
+    const { data } = await api.get<IChartResponse>(
+      "/tracks/charts/realtime",
+    );
+    return data;
+  },
+
+  // ==========================================
+  // 4. MUTATIONS (Thêm / Sửa / Xóa)
+  // ==========================================
+
+  // Upload bài hát mới (artist, admin)
+  create: async (formData: FormData) => {
     const { data } = await api.post<ApiResponse<ITrack>>("/tracks", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return data;
   },
 
-  // Cập nhật thông tin (Dùng FormData nếu có đổi ảnh bìa)
+  // Cập nhật thông tin bài hát (artist chỉ được chỉnh bài của mình, admin được chỉnh tất cả)
   update: async (id: string, formData: FormData) => {
     const isFormData = formData instanceof FormData;
     const { data } = await api.patch<ApiResponse<ITrack>>(
@@ -69,25 +106,17 @@ const trackApi = {
   },
 
   // ==========================================
-  // 3. ACTIONS (Các thao tác đặc thù)
+  // 5. BULK OPERATIONS (Admin)
   // ==========================================
 
-  // Đổi trạng thái hiển thị (Active/Inactive)
-  changeStatus: async (id: string, status: string) => {
-    const { data } = await api.patch<ApiResponse<ITrack>>(
-      `/tracks/change-status/${id}`,
-      {
-        status,
-      },
-    );
-    return data;
-  },
-
-  // Cập nhật hàng loạt (Bulk Update)
-  bulkUpdate: async (trackIds: string[], updates: BulkTrackFormValues) => {
+  // Cập nhật thông tin nhiều bài hát cùng lúc
+  bulkUpdate: async (
+    trackIds: string[],
+    payload: BulkTrackUpdateFormValues,
+  ) => {
     const { data } = await api.patch<ApiResponse<any>>("/tracks/bulk/update", {
       trackIds,
-      updates,
+      updates: payload,
     });
     return data;
   },
@@ -134,23 +163,23 @@ const trackApi = {
   },
 
   // ==========================================
-  // 4. ANALYTICS (Thống kê)
+  // 6. STATUS MANAGEMENT
   // ==========================================
 
-  getRealtimeChart: async () => {
-    // Giả sử ChartResponse được bọc trong ApiResponse từ backend
-    const data = await api.get<IChartResponse>("/tracks/charts/realtime");
-    return data.data;
-  },
-  // trackApi.ts thêm vào phần ACTIONS
-  recordView: async (trackId: string) => {
-    // Dùng api.post tương tự các hàm khác để giữ tính đồng nhất
-    const { data } = await api.post<ApiResponse<null>>(
-      `/tracks/${trackId}/view`,
+  // Thay đổi trạng thái bài hát (ready, failed) và lưu lý do nếu failed
+  changeStatus: async (id: string, payload: TrackChangeStatusFormValues) => {
+    const { data } = await api.patch<ApiResponse<ITrack>>(
+      `/tracks/change-status/${id}`,
+      payload,
     );
     return data;
   },
-  // 1. Retry Full: Xóa sạch làm lại từ đầu (HLS + Lyrics + Mood)
+
+  // ==========================================
+  // 7. RETRY OPERATIONS (Admin - Single Track)
+  // ==========================================
+
+  // Retry Full: Xóa sạch làm lại từ đầu (HLS + Lyrics + Mood)
   retryFull: async (id: string) => {
     const { data } = await api.post<ApiResponse<ITrack>>(
       `/tracks/${id}/retry/full`,
@@ -159,7 +188,7 @@ const trackApi = {
     return data;
   },
 
-  // 2. Retry Transcode: Chỉ xử lý lại file HLS (âm thanh), giữ nguyên Lyric/Mood
+  // Retry Transcode: Chỉ xử lý lại file HLS (âm thanh), giữ nguyên Lyric/Mood
   retryTranscode: async (id: string) => {
     const { data } = await api.post<ApiResponse<ITrack>>(
       `/tracks/${id}/retry/transcode`,
@@ -168,7 +197,7 @@ const trackApi = {
     return data;
   },
 
-  // 3. Retry Lyrics: Chỉ tìm lại lời bài hát trên LRCLIB + AI Karaoke
+  // Retry Lyrics: Chỉ tìm lại lời bài hát trên LRCLIB + AI Karaoke
   retryLyrics: async (id: string) => {
     const { data } = await api.post<ApiResponse<ITrack>>(
       `/tracks/${id}/retry/lyrics`,
@@ -177,7 +206,7 @@ const trackApi = {
     return data;
   },
 
-  // 4. Retry Karaoke: Chỉ chạy lại AI Forced Alignment (Dùng khi đã có plainLyrics trong DB)
+  // Retry Karaoke: Chỉ chạy lại AI Forced Alignment (Dùng khi đã có plainLyrics trong DB)
   retryKaraoke: async (id: string) => {
     const { data } = await api.post<ApiResponse<ITrack>>(
       `/tracks/${id}/retry/karaoke`,
@@ -186,47 +215,13 @@ const trackApi = {
     return data;
   },
 
-  // 5. Retry Mood: Chỉ tìm lại video nền (Mood Canvas) dựa trên tags
+  // Retry Mood: Chỉ tìm lại video nền (Mood Canvas) dựa trên tags
   retryMood: async (id: string) => {
     const { data } = await api.post<ApiResponse<ITrack>>(
       `/tracks/${id}/retry/mood`,
       {},
     );
     return data;
-  },
-  // ==========================================
-  // 5. RECOMMENDATIONS (Gợi ý bài hát)
-  // ==========================================
-
-  /**
-   * Lấy danh sách "Bài hát bạn có thể thích"
-   * @param limit - Số lượng bài trả về
-   * @param excludeTrackId - Loại trừ bài đang phát (nếu có)
-   */
-  getRecommendations: async (limit = 20, excludeTrackId?: string) => {
-    const { data } = await api.get<ApiResponse<{ tracks: ITrack[] }>>(
-      "/tracks/recommendations",
-      {
-        params: { limit, excludeTrackId },
-      },
-    );
-    console.log(data);
-    return data.data; // Trả về { tracks: ITrack[] }
-  },
-
-  /**
-   * Lấy bài hát liên quan (Autoplay Queue)
-   * @param slugOrId - Slug hoặc ID của bài hát gốc
-   * @param limit - Số lượng bài trả về
-   */
-  getSimilarTracks: async (trackId: string, limit = 10) => {
-    const { data } = await api.get<ApiResponse<{ tracks: ITrack[] }>>(
-      `/tracks/${trackId}/similar`,
-      {
-        params: { limit },
-      },
-    );
-    return data.data; // Trả về { tracks: ITrack[] }
   },
 };
 

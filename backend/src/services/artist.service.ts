@@ -8,15 +8,16 @@ import Track from "../models/Track";
 import Follow from "../models/Follow";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
-import { generateUniqueSlug } from "../utils/slug";
+
 import { deleteFileFromCloud } from "../utils/cloudinary";
-import { parseGenreIds, parseTags } from "../utils/helper";
+import { parseTags } from "../utils/helper";
 import {
+  ArtistAdminFilterInput,
+  ArtistUserFilterInput,
   CreateArtistInput,
   UpdateArtistInput,
-  ArtistFilterInput,
 } from "../validations/artist.validation";
-import Genre from "../models/Genre";
+
 import { cacheRedis } from "../config/redis";
 import {
   buildCacheKey,
@@ -24,6 +25,8 @@ import {
   invalidateArtistCache,
 } from "../utils/cacheHelper";
 import escapeStringRegexp from "escape-string-regexp";
+import { APP_CONFIG } from "../config/constants";
+import themeColorService from "./themeColor.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL HELPERS
@@ -43,32 +46,20 @@ async function syncArtistStats(artistId: string): Promise<void> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 class ArtistService {
-  // ── 1. GET DETAIL ──────────────────────────────────────────────────────────
-
-  /**
-   * NÂNG CẤP C: Dùng Virtual populate cho albums + topTracks.
-   * Model đã cấu hình sort/limit trong virtual options — không cần query thủ công.
-   *
-   * trackIds vẫn query riêng vì virtual topTracks chỉ lấy 5.
-   * Virtual scroll cần toàn bộ IDs để FE paginate.
-   */
-  async getArtistDetail(
-    slugOrId: string,
-    currentUserId?: string,
-    userRole: string = "guest",
-  ) {
+  // ── 1. GET ARTIST DETAIL ───────────────────────────────────────────────────
+  async getArtistDetail(slug: string, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
     // 1. Build Cache Key
-    const cacheKey = buildCacheKey(`artist:detail:${slugOrId}`, userRole, {});
+    const cacheKey = buildCacheKey(`artist:detail:${slug}`, userRole, {});
 
     // 2. Thử lấy từ cache
     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
     if (cached) return JSON.parse(cached as string);
 
     // 3. Query Database
-    const isId = mongoose.isValidObjectId(slugOrId);
-    const query = isId ? { _id: slugOrId } : { slug: slugOrId };
+    const query = { slug, isActive: true, isDeleted: false };
     // 1. Fetch thông tin Artist cơ bản
-    const artist = await Artist.findOne({ ...query, isActive: true }).lean();
+    const artist = await Artist.findOne(query).lean();
 
     if (!artist)
       throw new ApiError(httpStatus.NOT_FOUND, "Nghệ sĩ không tồn tại");
@@ -78,7 +69,7 @@ class ArtistService {
     // 2. 🔥 QUERY PARALLEL: Lấy các thông tin "vỏ"
     const [albums, allTrackIds] = await Promise.all([
       // B. Get Albums (Discography) - Lấy 10 album mới nhất
-      Album.find({ artist: artistId, isPublic: true })
+      Album.find({ artist: artistId, isPublic: true, isDeleted: false })
         .sort({ releaseYear: -1, createdAt: -1 })
         .limit(10)
         .select("title coverImage releaseYear slug type")
@@ -86,34 +77,37 @@ class ArtistService {
 
       // C. Lấy mảng ID của TOÀN BỘ bài hát (Để làm Virtual Scroll)
       // Sắp xếp theo playCount để lấy danh sách "Top Tracks" đầy đủ
-      Track.find({ artist: artistId, status: "ready", isPublic: true })
+      Track.find({
+        $or: [{ artist: artistId }, { featuringArtists: artistId }],
+        status: "ready",
+        isPublic: true,
+        isDeleted: false,
+      })
         .sort({ playCount: -1, createdAt: -1 })
+        .limit(APP_CONFIG.TRACKS_LIMIT) // Ngưỡng an toàn để tránh Payload quá lớn
         .select("_id")
         .lean(),
     ]);
 
     const result = {
-      artist: {
-        ...artist,
-        trackIds: allTrackIds.map((t) => t._id),
-      },
+      ...artist,
+      trackIds: allTrackIds.map((t) => t._id),
       albums,
     };
 
     // 4. Lưu Cache (TTL 1 giờ)
     await withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
-    );
+    ).catch((err) => console.error("Redis Set Error:", err));
 
     return result;
   }
 
   // ── 2. GET ARTIST TRACKS ───────────────────────────────────────────────────
-
-  async getArtistTracks(artistId: string, filter: any, userRole?: string) {
-    const { page = 1, limit = 20 } = filter;
-    const skip = (page - 1) * limit;
-    const isAdmin = userRole === "admin";
+  async getArtistTracks(artistId: string, filter: any, currentUser?: IUser) {
+    const { page = 1, limit = APP_CONFIG.VIRTUAL_SCROLL_LIMIT } = filter;
+    const skip = (Number(page) - 1) * Number(limit);
+    const userRole = currentUser?.role ? "user" : "guest";
 
     const cacheKey = buildCacheKey(
       `artist:tracks:${artistId}`,
@@ -124,11 +118,11 @@ class ArtistService {
     if (cached) return JSON.parse(cached);
 
     const trackQuery: Record<string, any> = {
-      artist: artistId,
+      $or: [{ artist: artistId }, { featuringArtists: artistId }],
       status: "ready",
+      isPublic: true,
+      isDeleted: false,
     };
-    if (!isAdmin) trackQuery.isPublic = true;
-
     const [tracks, total] = await Promise.all([
       Track.find(trackQuery)
         .sort({ playCount: -1, createdAt: -1 })
@@ -155,14 +149,13 @@ class ArtistService {
     const result = {
       data: tracks,
       meta: {
-        totalItems: total,
+        totalItems: Number(total),
         page: Number(page),
         pageSize: Number(limit),
-        totalPages: Math.ceil(total / limit),
-        hasNextPage: skip + limit < total,
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: skip + Number(limit) < Number(total),
       },
     };
-
     const ttl = 900 + Math.floor(Math.random() * 120);
     withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
@@ -171,39 +164,34 @@ class ArtistService {
     return result;
   }
 
-  // ── 3. GET ARTISTS LIST ────────────────────────────────────────────────────
+  // ── 3. GET ARTISTS LIST BY ADMIN ────────────────────────────────────────────────────
 
-  async getArtists(queryInput: ArtistFilterInput, currentUser?: IUser) {
+  async getArtistsByAdmin(
+    queryInput: ArtistAdminFilterInput,
+    currentUser?: IUser,
+  ) {
     const userRole = currentUser?.role ?? "guest";
     const isAdmin = userRole === "admin";
-
-    const cleanFilter = Object.fromEntries(
-      Object.entries(queryInput).filter(([, v]) => v !== undefined && v !== ""),
-    );
-    const cacheKey = buildCacheKey("artist:list", userRole, cleanFilter);
-
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
-    if (cached) return JSON.parse(cached as string);
+    if (!isAdmin) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "Chỉ admin mới có quyền truy cập danh sách thể loại đầy đủ",
+      );
+    }
 
     const {
       page = 1,
-      limit = 12,
+      limit = APP_CONFIG.GRID_LIMIT,
       keyword,
-      genreId,
       nationality,
       isVerified,
       sort,
       isActive,
+      isDeleted,
     } = queryInput;
 
-    const skip = (page - 1) * limit;
+    const skip = (Number(page) - 1) * Number(limit);
     const filterQuery: Record<string, any> = {};
-
-    if (!isAdmin) {
-      filterQuery.isActive = true;
-    } else if (isActive !== undefined) {
-      filterQuery.isActive = isActive;
-    }
 
     // BONUS: Dual search strategy
     let sortOption: Record<string, any>;
@@ -225,24 +213,22 @@ class ArtistService {
       }
     }
 
-    if (genreId) filterQuery.genres = genreId;
     if (nationality) filterQuery.nationality = nationality;
     if (isVerified !== undefined) filterQuery.isVerified = isVerified;
-
+    if (isDeleted !== undefined) filterQuery.isDeleted = isDeleted;
+    if (isActive !== undefined) filterQuery.isActive = isActive;
     if (!useTextScore) {
       const SORT_MAP: Record<string, any> = {
         popular: { playCount: -1, totalFollowers: -1, _id: 1 },
         monthlyListeners: { monthlyListeners: -1, _id: 1 },
         newest: { createdAt: -1, _id: 1 },
+        oldest: { createdAt: 1, _id: 1 },
         name: { name: 1, _id: 1 },
       };
       sortOption = SORT_MAP[sort ?? "popular"] ?? SORT_MAP.popular;
     }
 
     let baseQuery = Artist.find(filterQuery)
-      .select(
-        "name avatar coverImage totalFollowers monthlyListeners slug isVerified nationality themeColor totalTracks",
-      )
       .sort(sortOption!)
       .skip(skip)
       .limit(Number(limit))
@@ -261,11 +247,102 @@ class ArtistService {
     const result = {
       data: artists,
       meta: {
-        totalItems: total,
+        totalItems: Number(total),
         page: Number(page),
         pageSize: Number(limit),
-        totalPages: Math.ceil(total / Number(limit)),
-        hasNextPage: page * limit < total,
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: Number(page) * Number(limit) < Number(total),
+      },
+    };
+
+    return result;
+  }
+  // ── 4. GET ARTISTS LIST BY USER ────────────────────────────────────────────────────
+
+  async getArtistsByUser(
+    queryInput: ArtistUserFilterInput,
+    currentUser?: IUser,
+  ) {
+    const userRole = currentUser?.role ? "user" : "guest";
+
+    const cleanFilter = Object.fromEntries(
+      Object.entries(queryInput).filter(([, v]) => v !== undefined && v !== ""),
+    );
+    const cacheKey = buildCacheKey("artist:list", userRole, cleanFilter);
+
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cached) return JSON.parse(cached as string);
+
+    const {
+      page = 1,
+      limit = APP_CONFIG.GRID_LIMIT,
+      keyword,
+      nationality,
+      sort,
+    } = queryInput;
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const filterQuery: Record<string, any> = {
+      isActive: true,
+      isDeleted: false,
+    };
+
+    // BONUS: Dual search strategy
+    let sortOption: Record<string, any>;
+    let useTextScore = false;
+
+    if (keyword) {
+      if (!sort) {
+        // $text: relevance ranking, uses text index on name + aliases + bio
+        filterQuery.$text = { $search: keyword };
+        useTextScore = true;
+        sortOption = { score: { $meta: "textScore" }, _id: 1 };
+      } else {
+        // Prefix regex — compound index works with explicit sort
+        const safe = escapeStringRegexp(keyword.substring(0, 100));
+        filterQuery.$or = [
+          { name: { $regex: `^${safe}`, $options: "i" } },
+          { aliases: { $in: [new RegExp(`^${safe}`, "i")] } },
+        ];
+      }
+    }
+
+    if (nationality) filterQuery.nationality = nationality;
+
+    if (!useTextScore) {
+      const SORT_MAP: Record<string, any> = {
+        popular: { playCount: -1, totalFollowers: -1, _id: 1 },
+        monthlyListeners: { monthlyListeners: -1, _id: 1 },
+        newest: { createdAt: -1, _id: 1 },
+        name: { name: 1, _id: 1 },
+      };
+      sortOption = SORT_MAP[sort ?? "popular"] ?? SORT_MAP.popular;
+    }
+
+    let baseQuery = Artist.find(filterQuery)
+      .sort(sortOption!)
+      .skip(skip)
+      .limit(Number(limit))
+      .lean<IArtist & { score?: number }>();
+
+    if (useTextScore) {
+      baseQuery = baseQuery.select({
+        score: { $meta: "textScore" },
+      } as any);
+    }
+    const [artists, total] = await Promise.all([
+      baseQuery.lean(),
+      Artist.countDocuments(filterQuery),
+    ]);
+
+    const result = {
+      data: artists,
+      meta: {
+        totalItems: Number(total),
+        page: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: Number(page) * Number(limit) < Number(total),
       },
     };
 
@@ -277,30 +354,41 @@ class ArtistService {
     return result;
   }
 
-  // ── 4. CREATE ARTIST (ADMIN) ───────────────────────────────────────────────
+  // ── 5. CREATE ARTIST (ADMIN) ───────────────────────────────────────────────
 
   async createArtistByAdmin(
     data: CreateArtistInput,
     files?: { [fieldname: string]: Express.Multer.File[] },
   ) {
-    const existingArtist = await Artist.findOne({
+    // 1. Kiểm tra tồn tại (Case-insensitive nếu cần)
+    const existing = await Artist.exists({
       name: { $regex: new RegExp(`^${data.name}$`, "i") },
-    }).lean();
-
-    if (existingArtist)
+    });
+    if (existing)
       throw new ApiError(httpStatus.BAD_REQUEST, "Tên nghệ sĩ này đã tồn tại");
 
+    // 2. Tiền xử lý File & Theme Color
     const avatar = files?.["avatar"]?.[0]?.path || "";
     const coverImage = files?.["coverImage"]?.[0]?.path || "";
     const galleryImages = files?.["images"]?.map((f) => f.path) || [];
-    const aliases = parseTags(data.aliases);
+
+    let themeColor = data.themeColor || "#1db954"; // Màu mặc định nếu không có avatar hoặc không extract được
+    if (!data.themeColor && avatar) {
+      try {
+        themeColor = await themeColorService.extractThemeColor(avatar);
+      } catch (err) {
+        console.error("[ArtistService] Color extraction failed:", err);
+      }
+    }
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
       let userId = null;
-      if (data.userId) {
+
+      // 3. Liên kết User (nếu có)
+      if (data.userId && mongoose.Types.ObjectId.isValid(data.userId)) {
         const user = await User.findOneAndUpdate(
           {
             _id: data.userId,
@@ -314,12 +402,12 @@ class ArtistService {
         if (!user)
           throw new ApiError(
             httpStatus.BAD_REQUEST,
-            "User không tồn tại hoặc đã liên kết với một Artist khác",
+            "User không khả dụng hoặc đã là Artist",
           );
-
         userId = data.userId;
       }
 
+      // 4. Tạo Artist Profile
       const [artist] = await Artist.create(
         [
           {
@@ -327,8 +415,9 @@ class ArtistService {
             user: userId,
             avatar,
             coverImage,
+            themeColor,
             images: galleryImages,
-            aliases,
+            aliases: parseTags(data.aliases),
             socialLinks: {
               facebook: data.facebook || "",
               instagram: data.instagram || "",
@@ -337,11 +426,17 @@ class ArtistService {
               spotify: data.spotify || "",
               youtube: data.youtube || "",
             },
+            totalTracks: 0,
+            totalAlbums: 0,
+            totalFollowers: 0,
+            playCount: 0,
+            monthlyListeners: 0,
           },
         ],
         { session },
       );
 
+      // 5. Gắn ngược ID vào User
       if (userId) {
         await User.updateOne(
           { _id: userId },
@@ -352,25 +447,23 @@ class ArtistService {
 
       await session.commitTransaction();
 
-      // NÂNG CẤP A: Sync stats + invalidate cache — fire-and-forget
-      Promise.allSettled([
-        syncArtistStats(artist._id.toString()),
-        invalidateArtistCache(artist._id.toString()),
-      ]).catch(console.error);
+      // 6. Hậu kỳ (Async)
+      Promise.allSettled([invalidateArtistCache(artist._id.toString())]).catch(
+        console.error,
+      );
 
       return artist;
     } catch (error) {
       await session.abortTransaction();
-
       const allFiles = [avatar, coverImage, ...galleryImages].filter(Boolean);
       if (allFiles.length > 0) {
-        await Promise.allSettled(
+        Promise.allSettled(
           allFiles.map((path) => deleteFileFromCloud(path, "image")),
         );
       }
       throw error;
     } finally {
-      await session.endSession();
+      session.endSession();
     }
   }
 
@@ -385,67 +478,59 @@ class ArtistService {
     if (!artist)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ");
 
+    // 1. Tiền xử lý màu sắc (Ngoài transaction để tối ưu performance)
+    let newThemeColor = data.themeColor || artist.themeColor || "#1db954";
+    if (files?.["avatar"]?.[0] && !data.themeColor) {
+      try {
+        newThemeColor = await themeColorService.extractThemeColor(
+          files["avatar"][0].path,
+        );
+      } catch (err) {
+        console.error("[ArtistService] Theme color extraction failed", err);
+      }
+    }
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
       // ── A. User swap ─────────────────────────────────────────────────────
-      if (
-        data.userId !== undefined &&
-        String(data.userId) !== String(artist.user)
-      ) {
-        if (artist.user) {
-          await User.updateOne(
-            { _id: artist.user },
-            { role: "user", $unset: { artistProfile: 1 } },
-            { session },
-          );
-        }
+      if (data.userId !== undefined) {
+        const targetUserId = data.userId ? String(data.userId) : null;
+        const oldUserId = artist.user ? String(artist.user) : null;
 
-        // ── A. User Swap Logic ─────────────────────────────────────────────────────
-        if (data.userId !== undefined) {
-          const targetUserId = data.userId ? String(data.userId) : null;
-          const oldUserId = artist.user ? String(artist.user) : null;
-
-          if (targetUserId !== oldUserId) {
-            // 1. Gỡ quyền user cũ (nếu có)
-            if (oldUserId) {
-              await User.updateOne(
-                { _id: oldUserId },
-                { role: "user", $unset: { artistProfile: 1 } },
-                { session },
+        if (targetUserId !== oldUserId) {
+          if (oldUserId) {
+            await User.updateOne(
+              { _id: oldUserId },
+              { role: "user", $unset: { artistProfile: 1 } },
+              { session },
+            );
+          }
+          if (targetUserId) {
+            const newUser = await User.findOneAndUpdate(
+              { _id: targetUserId, artistProfile: { $exists: false } },
+              { role: "artist", artistProfile: artist._id },
+              { session, new: true },
+            );
+            if (!newUser)
+              throw new ApiError(
+                httpStatus.BAD_REQUEST,
+                "User mới không hợp lệ",
               );
-            }
-
-            // 2. Gán quyền cho user mới (nếu có)
-            if (targetUserId) {
-              const newUser = await User.findOneAndUpdate(
-                { _id: targetUserId, artistProfile: { $exists: false } },
-                { role: "artist", artistProfile: artist._id },
-                { session, new: true },
-              );
-              if (!newUser)
-                throw new ApiError(
-                  httpStatus.BAD_REQUEST,
-                  "User mới không hợp lệ hoặc đã là Artist",
-                );
-
-              artist.user = new mongoose.Types.ObjectId(targetUserId) as any;
-            } else {
-              artist.user = null as any;
-            }
+            artist.user = new mongoose.Types.ObjectId(targetUserId) as any;
+          } else {
+            artist.user = null as any;
           }
         }
       }
 
       // ── C. Images ─────────────────────────────────────────────────────────
-      const imagesToDelete: string[] = [];
 
+      // 3. Quản lý hình ảnh & Cleanup list
+      const imagesToDelete: string[] = [];
       if (files?.["avatar"]?.[0]) {
         if (artist.avatar) imagesToDelete.push(artist.avatar);
         artist.avatar = files["avatar"][0].path;
-        // NÂNG CẤP B: avatar thay đổi → pre("save") sẽ tự extract themeColor.
-        // KHÔNG gán themeColor ở đây trừ khi Admin gửi override tường minh.
       }
 
       if (files?.["coverImage"]?.[0]) {
@@ -459,7 +544,7 @@ class ArtistService {
       const deletedImages = artist.images.filter(
         (img) => !keptImages.includes(img),
       );
-      if (deletedImages.length > 0) imagesToDelete.push(...deletedImages);
+      imagesToDelete.push(...deletedImages);
 
       const newUploads = files?.["images"]?.map((f) => f.path) || [];
       artist.images = [...keptImages, ...newUploads];
@@ -474,12 +559,7 @@ class ArtistService {
       if (data.nationality !== undefined) artist.nationality = data.nationality;
       if (data.isVerified !== undefined) artist.isVerified = data.isVerified;
       if (data.aliases !== undefined) artist.aliases = parseTags(data.aliases);
-
-      // NÂNG CẤP B: chỉ override themeColor nếu Admin gửi tường minh.
-      // Khi avatar thay đổi mà không có themeColor override → middleware tự extract.
-      if (data.themeColor !== undefined) {
-        artist.themeColor = data.themeColor;
-      }
+      if (newThemeColor) artist.themeColor = newThemeColor;
 
       // Social links — explicit field-by-field để chống mass assignment
       if (data.facebook !== undefined)
@@ -494,15 +574,14 @@ class ArtistService {
       await artist.save({ session }); // pre("save") chạy tại đây: slug + themeColor nếu cần
       await session.commitTransaction();
 
-      // NÂNG CẤP A + BONUS: Sau commit
+      // 5. Hậu kỳ (Async)
       Promise.allSettled([
         syncArtistStats(id),
         invalidateArtistCache(id),
-        imagesToDelete.length > 0
-          ? Promise.allSettled(
-              imagesToDelete.map((img) => deleteFileFromCloud(img, "image")),
-            )
-          : Promise.resolve(),
+        imagesToDelete.length > 0 &&
+          Promise.allSettled(
+            imagesToDelete.map((img) => deleteFileFromCloud(img, "image")),
+          ),
       ]).catch(console.error);
 
       return artist;
@@ -531,23 +610,26 @@ class ArtistService {
 
   // ── 6. TOGGLE STATUS (truly atomic) ───────────────────────────────────────
 
-  /**
-   * BONUS: Comment cũ nói "Atomic" nhưng dùng findById + save không atomic.
-   * Fix thực sự atomic bằng findOneAndUpdate với conditional flip.
-   */
   async toggleStatus(id: string) {
-    // Dùng conditional update: đọc trạng thái hiện tại, flip nó
-    const artist = await Artist.findById(id).select("isActive").lean();
+    // 1. Kiểm tra tồn tại trước (Giữ nguyên logic của bạn)
+    const artist = await Artist.findById(id).select("_id").lean();
     if (!artist)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ");
 
+    // 2. Fix lỗi: Thêm option { overwrite: false } hoặc đơn giản là dùng cú pháp chuẩn
     const updated = await Artist.findByIdAndUpdate(
       id,
-      [{ $set: { isActive: { $not: "$isActive" } } }], // MongoDB aggregation pipeline update
-      { new: true, select: "_id isActive" },
-    ).lean();
+      [
+        {
+          $set: { isActive: { $not: "$isActive" } },
+        },
+      ],
+      { new: true }, // Mặc định khi truyền Array, Mongoose sẽ coi là pipeline
+    )
+      .select("_id isActive")
+      .lean();
 
-    // Invalidate cache vì isActive thay đổi ảnh hưởng visibility
+    // Invalidate cache
     invalidateArtistCache(id).catch(console.error);
 
     return { id: updated!._id, isActive: updated!.isActive };
@@ -555,24 +637,25 @@ class ArtistService {
 
   // ── 7. DELETE ARTIST ───────────────────────────────────────────────────────
 
-  /**
-   * BONUS: Cache invalidation sau khi xóa thành công.
-   */
   async deleteArtist(id: string) {
     const artist = await Artist.findById(id);
-    if (!artist)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy nghệ sĩ");
+    if (!artist || artist.isDeleted) {
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Không tìm thấy nghệ sĩ hoặc đã bị xóa",
+      );
+    }
 
-    // 1. Kiểm tra an toàn
+    // 1. Kiểm tra an toàn (Vẫn giữ nguyên vì không nên xóa Artist có dữ liệu liên quan)
     const [hasAlbums, hasTracks] = await Promise.all([
-      Album.exists({ artist: id }),
-      Track.exists({ artist: id }),
+      Album.exists({ artist: id, isDeleted: false }),
+      Track.exists({ artist: id, isDeleted: false }),
     ]);
 
     if (hasAlbums || hasTracks) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "Không thể xóa Nghệ sĩ đang sở hữu Album hoặc Bài hát",
+        "Không thể xóa Nghệ sĩ đang sở hữu Album hoặc Bài hát đang hoạt động",
       );
     }
 
@@ -580,10 +663,20 @@ class ArtistService {
     session.startTransaction();
 
     try {
-      // 2. Thực hiện xóa với Transaction
+      // 2. Thực hiện Xóa mềm với Transaction
       await Promise.all([
-        Follow.deleteMany({ following: id }, { session }),
-        Artist.deleteOne({ _id: id }).session(session),
+        // A. Đánh dấu Artist là đã xóa
+        Artist.updateOne(
+          { _id: id },
+          {
+            isDeleted: true,
+            isActive: false,
+            deletedAt: new Date(),
+          },
+          { session },
+        ),
+
+        // B. Gỡ quyền User (Về mặt logic, tài khoản này không còn là Artist nữa)
         artist.user
           ? User.updateOne(
               { _id: artist.user },
@@ -591,20 +684,18 @@ class ArtistService {
               { session },
             )
           : Promise.resolve(),
+
+        // C. Xử lý Follow (Tùy chọn: Có thể giữ lại nếu muốn bảo toàn stats cũ)
+        // Follow.deleteMany({ following: id }, { session }),
       ]);
 
       await session.commitTransaction();
 
-      // 3. Post-commit: Cleanup + Cache (Fire-and-forget)
-      const filesToDelete = [
-        artist.avatar,
-        artist.coverImage,
-        ...(artist.images || []),
-      ].filter(Boolean) as string[];
-
+      // 3. Post-commit: Cache (KHÔNG xóa file ảnh trên Cloud khi xóa mềm)
       Promise.allSettled([
-        ...filesToDelete.map((img) => deleteFileFromCloud(img, "image")),
         invalidateArtistCache(id),
+        // Cập nhật lại các cache danh sách nghệ sĩ phổ biến
+        cacheRedis.del("artists:popular"),
       ]).catch(console.error);
 
       return true;

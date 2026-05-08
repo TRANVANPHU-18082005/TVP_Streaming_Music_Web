@@ -17,7 +17,7 @@ const DEFAULT_MOOD_PARAMS: MoodVideoFilterParams = {
 export const useMoodVideoParams = (initialLimit = 12) => {
   // 1. Gọi Generic Hook để parse URL Search Params
   const { params: rawParams, setParams } =
-    useQueryParams<MoodVideoFilterParams>({
+    useQueryParams<MoodVideoFilterParams & Record<string, unknown>>({
       ...DEFAULT_MOOD_PARAMS,
       limit: initialLimit,
     });

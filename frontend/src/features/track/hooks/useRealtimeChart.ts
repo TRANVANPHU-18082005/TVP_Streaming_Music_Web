@@ -64,6 +64,7 @@ export const useRealtimeChart = () => {
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60,
   });
+  console.log(apiResponse)
   // ── Normalization ──────────────────────────────────────────────────────────
   const rawData = apiResponse?.data;
   // ── FIX #1 — Tính Trend ngay trong useMemo ────────────────────────────────
@@ -74,15 +75,21 @@ export const useRealtimeChart = () => {
     const items = extractItems(rawData);
     if (items.length === 0) return [];
 
-    return items.map((track, index) => {
+    const isInitial = Object.keys(prevRankMapRef.current).length === 0;
+
+    const result = items.map((track, index) => {
       const currentRank = index + 1;
       const previousRank = prevRankMapRef.current[track._id];
 
       let trend: RankTrend;
       let rankDelta: number;
 
-      if (previousRank === undefined) {
-        // Bài xuất hiện lần đầu trong Chart
+      if (isInitial) {
+        // Lần đầu tiên load trang -> mặc định 'same' (không hiện huy hiệu NEW cho cả 100 bài)
+        trend = "same";
+        rankDelta = 0;
+      } else if (previousRank === undefined) {
+        // Bài xuất hiện lần đầu trong Chart sau một bản cập nhật socket
         trend = "new";
         rankDelta = 0;
       } else {
@@ -94,6 +101,15 @@ export const useRealtimeChart = () => {
 
       return { ...track, rank: currentRank, trend, rankDelta };
     });
+
+    // Điền sẵn map cho lần cập nhật socket tiếp theo nếu đây là lần đầu
+    if (isInitial) {
+      items.forEach((t, i) => {
+        prevRankMapRef.current[t._id] = i + 1;
+      });
+    }
+
+    return result;
   }, [rawData]);
 
   const chartData = useMemo(() => extractChart(rawData), [rawData]);
@@ -110,19 +126,26 @@ export const useRealtimeChart = () => {
           ? oldChart
           : (payload?.chart ?? oldChart);
 
-        // Nếu danh sách không đổi → bail out, không tạo object mới
-        if (isSameTrackList(oldItems, newItems)) return old;
+        const isItemsSame = isSameTrackList(oldItems, newItems);
+        const finalItems = isItemsSame ? oldItems : newItems;
 
-        // Chụp snapshot thứ hạng CŨ trước khi ghi đè (dùng cho FIX #1)
-        const snapshot: Record<string, number> = {};
-        oldItems.forEach((t, i) => {
-          snapshot[t._id] = i + 1;
-        });
-        prevRankMapRef.current = snapshot;
+        // Chỉ update snapshot thứ hạng CŨ nếu danh sách có sự thay đổi
+        if (!isItemsSame) {
+          const snapshot: Record<string, number> = {};
+          oldItems.forEach((t, i) => {
+            snapshot[t._id] = i + 1;
+          });
+          prevRankMapRef.current = snapshot;
+        }
 
         return {
           ...old,
-          data: { items: newItems, chart: newChart },
+          data: {
+            ...(old.data || {}),
+            items: finalItems,
+            chart: newChart,
+            lastUpdatedAt: payload?.lastUpdatedAt ?? old.data?.lastUpdatedAt
+          },
         };
       });
     },

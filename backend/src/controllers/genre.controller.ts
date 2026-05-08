@@ -3,28 +3,44 @@ import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
 import genreService from "../services/genre.service";
 import {
-  GenreFilterInput,
+  GenreAdminFilterInput,
+  GenreUserFilterInput,
   getGenreTracksSchema,
 } from "../validations/genre.validation";
 import { IUser } from "../models/User";
+import { console } from "inspector";
 
 // 1. GET LIST
-export const getGenres = catchAsync(async (req: Request, res: Response) => {
-  // TypeScript sẽ tự infer từ Schema Validation ở Route, nhưng cast tay cho chắc chắn
-  const query = req.query as unknown as GenreFilterInput;
-  const currentUser = req.user as IUser | undefined;
+export const getGenresByUser = catchAsync(
+  async (req: Request, res: Response) => {
+    // TypeScript sẽ tự infer từ Schema Validation ở Route, nhưng cast tay cho chắc chắn
+    const query = req.query as unknown as GenreUserFilterInput;
+    const currentUser = req.user as IUser | undefined;
 
-  const result = await genreService.getAllGenres(query, currentUser);
+    const result = await genreService.getGenresByUser(query, currentUser);
 
-  res.status(httpStatus.OK).json({
-    success: true,
-    data: result,
-  });
-});
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: result,
+    });
+  },
+);
+// 2. GET LIST (Admin - Có thêm filter theo trạng thái Active/Inactive)
+export const getGenresByAdmin = catchAsync(
+  async (req: Request, res: Response) => {
+    // TypeScript sẽ tự infer từ Schema Validation ở Route, nhưng cast tay cho chắc chắn
+    const query = req.query as unknown as GenreAdminFilterInput;
+    const currentUser = req.user as IUser | undefined;
 
-// Các method Create/Update/Delete giữ nguyên logic gọi Service
-// ... (createGenre, updateGenre, deleteGenre, toggleGenreStatus)
-// 2. CREATE GENRE (Admin)
+    const result = await genreService.getGenresByAdmin(query, currentUser);
+
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: result,
+    });
+  },
+);
+// 3. CREATE GENRE (Admin)
 export const createGenre = catchAsync(async (req: Request, res: Response) => {
   // req.file do Multer xử lý
   const result = await genreService.createGenre(req.body, req.file);
@@ -35,7 +51,6 @@ export const createGenre = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
-
 // 3. UPDATE GENRE (Admin)
 export const updateGenre = catchAsync(async (req: Request, res: Response) => {
   const result = await genreService.updateGenre(
@@ -43,14 +58,13 @@ export const updateGenre = catchAsync(async (req: Request, res: Response) => {
     req.body,
     req.file,
   );
-
+  console.log(req.params.id, req.body, req.file);
   res.status(httpStatus.OK).json({
     success: true,
     message: "Cập nhật thể loại thành công",
     data: result,
   });
 });
-
 // 4. TOGGLE STATUS (Admin - Ẩn/Hiện)
 export const toggleGenreStatus = catchAsync(
   async (req: Request, res: Response) => {
@@ -58,12 +72,13 @@ export const toggleGenreStatus = catchAsync(
 
     res.status(httpStatus.OK).json({
       success: true,
-      message: "Đã cập nhật trạng thái thể loại",
+      message: result.isActive
+        ? "Đã Bật hiển thị trạng thái thể loại"
+        : "Đã tắt hiển thị trạng thái thể loại",
       data: result,
     });
   },
 );
-
 // 5. DELETE GENRE (Admin - Xóa vĩnh viễn)
 export const deleteGenre = catchAsync(async (req: Request, res: Response) => {
   await genreService.deleteGenre(req.params.id);
@@ -73,15 +88,14 @@ export const deleteGenre = catchAsync(async (req: Request, res: Response) => {
     message: "Đã xóa thể loại vĩnh viễn",
   });
 });
+// 7. GET GENRE DETAIL
 export const getGenreDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user as IUser | undefined;
-
-    const userRole = currentUser ? currentUser.role : undefined;
-
-    const genreDetailResult = await genreService.getGenreBySlug(
-      req.params.id,
-      userRole,
+    console.log(req.params, req.params.slug);
+    const genreDetailResult = await genreService.getGenreDetail(
+      req.params.slug,
+      currentUser,
     );
 
     res.status(httpStatus.OK).json({
@@ -90,7 +104,7 @@ export const getGenreDetail = catchAsync(
     });
   },
 );
-// genre.controller.ts
+// 8. GET GENRE TREE (Dành cho cả User & Admin - Không cần phân biệt)
 export const getTree = catchAsync(async (req, res) => {
   const result = await genreService.getGenreTree();
   res.status(httpStatus.OK).json({
@@ -98,19 +112,16 @@ export const getTree = catchAsync(async (req, res) => {
     data: result,
   });
 });
-
-// 6. GET ALBUM TRACKS
+// 9. GET GENRE TRACKS
 export const getGenreTracks = catchAsync(async (req, res) => {
   // 1. Parse query - Đảm bảo dữ liệu sạch
   const { query } = getGenreTracksSchema.parse({ query: req.query });
   const currentUser = req.user as IUser | undefined;
 
-  const userRole = currentUser ? currentUser.role : undefined;
-  console.log("id" + req.params.id);
   const result = await genreService.getGenreTracks(
     req.params.id,
     query,
-    userRole,
+    currentUser,
   );
 
   res.status(httpStatus.OK).json({

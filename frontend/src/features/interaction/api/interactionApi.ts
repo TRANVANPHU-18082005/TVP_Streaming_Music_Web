@@ -3,6 +3,15 @@ import { ApiResponse } from "@/types";
 import { InteractionTargetType } from "../slice/interactionSlice";
 import { BatchCheckResponse } from "../types";
 
+// Pending requests map to dedupe concurrent identical checkBatch calls
+const pendingChecks = new Map<string, Promise<string[]>>();
+
+const makeCheckKey = (
+  ids: string[],
+  type: "like" | "follow",
+  targetType?: InteractionTargetType,
+) => `${type}:${targetType ?? ""}:${[...ids].sort().join(",")}`;
+
 // Interface đồng nhất với Backend Response
 export interface ToggleLikeResponse {
   isLiked: boolean;
@@ -48,12 +57,21 @@ const interactionApi = {
     type: "like" | "follow",
     targetType?: InteractionTargetType,
   ) => {
-    const response = await api.post<ApiResponse<BatchCheckResponse>>(
-      "/interactions/check-batch",
-      { ids, type, targetType },
-    );
-    // Trả về interactedIds (mảng các ID mà user ĐÃ like/follow)
-    return response.data.data.interactedIds;
+    const key = makeCheckKey(ids, type, targetType);
+    if (pendingChecks.has(key)) return pendingChecks.get(key)!;
+
+    const promise = (async () => {
+      const response = await api.post<ApiResponse<BatchCheckResponse>>(
+        "/interactions/check-batch",
+        { ids, type, targetType },
+      );
+      return response.data.data.interactedIds;
+    })();
+
+    pendingChecks.set(key, promise);
+    // Cleanup after settled
+    promise.finally(() => pendingChecks.delete(key));
+    return promise;
   },
 };
 

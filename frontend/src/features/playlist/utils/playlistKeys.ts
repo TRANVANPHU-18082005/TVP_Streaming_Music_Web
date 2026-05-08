@@ -1,10 +1,11 @@
-import { PlaylistFilterParams } from "@/features/playlist/types";
+import { PlaylistAdminFilterParams } from "../schemas/playlist.schema";
 
 // features/playlist/utils/playlistKeys.ts
 export const playlistKeys = {
   all: ["playlists"] as const,
   lists: () => [...playlistKeys.all, "list"] as const,
-  list: (filter: PlaylistFilterParams) =>
+  myList: () => [...playlistKeys.lists(), "me"] as const,
+  list: (filter: PlaylistAdminFilterParams) =>
     [...playlistKeys.lists(), { filter }] as const,
   details: () => [...playlistKeys.all, "detail"] as const,
   detail: (slug: string) => [...playlistKeys.details(), slug] as const,

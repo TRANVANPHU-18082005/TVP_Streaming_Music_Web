@@ -1,24 +1,21 @@
 import React, {
   useState,
+  useEffect,
   useMemo,
   useCallback,
   useRef,
   memo,
+  Suspense,
   type FC,
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Play,
-  Pause,
-  MoreHorizontal,
   Lock,
   Globe,
   PenSquare,
   ListMusic,
-  Loader2,
   ChevronLeft,
-  Shuffle,
   Clock,
   Users,
   Sparkles,
@@ -27,31 +24,20 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
 import { useAppSelector } from "@/store/hooks";
-
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import ConfirmationModal from "@/components/ui/ConfirmationModal";
+import { ITrack } from "@/features/track/types";
+import { IPlaylist } from "@/features/playlist/types";
+import { usePlaylistMutations } from "@/features/playlist/hooks/usePlaylistMutations";
 import {
-  ITrack,
-  usePlaylistMutations,
   usePlaylistDetail,
-  TrackList,
-  EditPlaylistTracksModal,
-  PlaylistModal,
-  PlaylistDetailSkeleton,
-  IPlaylist,
   usePlaylistTracksInfinite,
-  useSyncInteractions,
-} from "@/features";
+} from "@/features/playlist/hooks/usePlaylistsQuery";
+import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
+import PlaylistDetailSkeleton from "@/features/playlist/components/PlaylistDetailSkeleton";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
-import { PlaylistLikeButton } from "@/features/interaction/components/LikeButton";
 import { usePlaylistPlayback } from "@/features/player/hooks/usePlaylistPlayback";
 import { formatDuration } from "@/utils/track-helper";
 import { buildPalette } from "@/utils/color";
@@ -59,45 +45,67 @@ import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 import MusicResult from "@/components/ui/Result";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
-import { APP_CONFIG } from "@/config/constants";
+import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
 import { useContextSheet } from "@/app/provider/SheetProvider";
+import { PlaylistActionBarProps } from "./components/PlaylistActionBar";
+import { PlaylistCoverProps } from "./components/PlaylistCover";
+import { useSmartBack } from "@/hooks/useSmartBack";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { WaveformBars } from "@/components/MusicVisualizer";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 
 dayjs.extend(relativeTime);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Lazy loads ───────────────────────────────────────────────────────────────
+const LazyTrackList = React.lazy(() =>
+  import("@/features/track/components/TrackList").then((m) => ({
+    default: m.TrackList,
+  })),
+);
+const LazyPlaylistModal = React.lazy(() =>
+  import("@/features/playlist/components/PlaylistModal").then((m) => ({
+    default: m.default,
+  })),
+);
+const LazyEditPlaylistTracksModal = React.lazy(() =>
+  import("@/features/playlist/components/EditPlaylistTracksModal").then(
+    (m) => ({
+      default: m.EditPlaylistTracksModal,
+    }),
+  ),
+);
 
+// Lightweight wrappers — single Suspense boundary per lazy component
+const LazyPlaylistCover = React.lazy(() =>
+  import("./components/PlaylistCover").then((m) => ({
+    default: m.PlaylistCover,
+  })),
+);
+const PlaylistCover = (props: PlaylistCoverProps) => (
+  <Suspense fallback={null}>
+    <LazyPlaylistCover {...props} />
+  </Suspense>
+);
+
+const LazyPlaylistActionBar = React.lazy(() =>
+  import("./components/PlaylistActionBar").then((m) => ({
+    default: m.PlaylistActionBar,
+  })),
+);
+const PlaylistActionBar = (props: PlaylistActionBarProps) => (
+  <Suspense fallback={null}>
+    <LazyPlaylistActionBar {...props} />
+  </Suspense>
+);
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 export interface PlaylistDetailPageProps {
   variant?: "page" | "embedded";
   slugOverride?: string;
   onClose?: () => void;
 }
 
-interface Palette {
-  hex: string;
-  r: (opacity: number) => string;
-  heroGradient: string;
-  hslChannels: string;
-  glowShadow: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SPRING PRESETS — synced with AlbumDetailPage
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SP_GENTLE = { type: "spring", stiffness: 300, damping: 30 } as const;
-const SP_SNAPPY = { type: "spring", stiffness: 440, damping: 28 } as const;
-const SP_HERO = {
-  type: "spring",
-  stiffness: 260,
-  damping: 26,
-  mass: 0.9,
-} as const;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VisibilityBadge
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 const VisibilityBadge = memo<{ visibility?: string }>(({ visibility }) => {
   if (visibility === "private") {
@@ -106,7 +114,7 @@ const VisibilityBadge = memo<{ visibility?: string }>(({ visibility }) => {
         variant="destructive"
         className="uppercase text-[9px] font-black tracking-widest px-2 py-0.5 gap-1 shrink-0"
       >
-        <Lock className="size-2.5" aria-hidden="true" /> Riêng tư
+        <Lock className="size-2.5" aria-hidden /> Riêng tư
       </Badge>
     );
   }
@@ -116,17 +124,13 @@ const VisibilityBadge = memo<{ visibility?: string }>(({ visibility }) => {
         variant="outline"
         className="uppercase text-[9px] font-black tracking-widest px-2 py-0.5 gap-1 border-border/40 shrink-0"
       >
-        <Globe className="size-2.5" aria-hidden="true" /> Công khai
+        <Globe className="size-2.5" aria-hidden /> Công khai
       </Badge>
     );
   }
   return null;
 });
 VisibilityBadge.displayName = "VisibilityBadge";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PlaylistMeta
-// ─────────────────────────────────────────────────────────────────────────────
 
 const PlaylistMeta = memo<{
   trackCount: number;
@@ -145,7 +149,7 @@ const PlaylistMeta = memo<{
     <span className="font-bold text-foreground/80">{trackCount} bài hát</span>
     {durationSec > 0 && (
       <>
-        <span className="opacity-40 hidden sm:inline" aria-hidden="true">
+        <span className="opacity-40 hidden sm:inline" aria-hidden>
           ·
         </span>
         <span>{formatDuration(durationSec)}</span>
@@ -153,7 +157,7 @@ const PlaylistMeta = memo<{
     )}
     {createdAt && !compact && (
       <>
-        <span className="opacity-40 hidden sm:inline" aria-hidden="true">
+        <span className="opacity-40 hidden sm:inline" aria-hidden>
           ·
         </span>
         <span>{dayjs(createdAt).fromNow()}</span>
@@ -163,400 +167,9 @@ const PlaylistMeta = memo<{
 ));
 PlaylistMeta.displayName = "PlaylistMeta";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PlaylistCover — upgraded with glow halo + conic ring + EQ overlay (like HeroCover)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface PlaylistCoverProps {
-  playlist: IPlaylist;
-  palette: Palette;
-  isOwner: boolean;
-  isPlaying?: boolean;
-  size: "sm" | "lg";
-  onEditCover: () => void;
-}
-
-const PlaylistCover = memo<PlaylistCoverProps>(
-  ({ playlist, palette, isOwner, isPlaying = false, size, onEditCover }) => {
-    const isLg = size === "lg";
-    const dim = isLg
-      ? "size-[200px] sm:size-[240px] md:size-[290px]"
-      : "size-[68px] sm:size-20";
-    return (
-      <div
-        className={cn(
-          "group relative shrink-0",
-          isLg ? "self-center md:self-auto" : "",
-        )}
-      >
-        {/* Glow halo — synced with HeroCover */}
-        <div
-          aria-hidden="true"
-          className="absolute -inset-3 rounded-2xl blur-3xl pointer-events-none transition-opacity duration-700"
-          style={{
-            backgroundColor: palette.hex,
-            opacity: isPlaying ? 0.48 : 0.2,
-          }}
-        />
-
-        {/* Spinning conic ring — only lg + playing */}
-        <AnimatePresence>
-          {isPlaying && isLg && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.4 }}
-              aria-hidden="true"
-              className="absolute -inset-[5px] rounded-2xl pointer-events-none"
-              style={{
-                background: `conic-gradient(
-                  ${palette.r(0.9)} 0deg,
-                  ${palette.r(0.1)} 120deg,
-                  ${palette.r(0.7)} 240deg,
-                  ${palette.r(0.9)} 360deg
-                )`,
-                animation: "album-ring-spin 4s linear infinite",
-              }}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Cover shell */}
-        <div
-          className={cn(
-            "relative rounded-2xl overflow-hidden border border-white/10 bg-muted",
-            "transition-[transform,box-shadow] duration-500 group-hover:scale-[1.012]",
-            dim,
-          )}
-          style={
-            isPlaying && isLg
-              ? {
-                  boxShadow: `0 0 0 3px ${palette.r(0.65)}, 0 24px 60px rgba(0,0,0,0.48)`,
-                }
-              : { boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }
-          }
-        >
-          {playlist.coverImage ? (
-            <img
-              src={playlist.coverImage}
-              alt={playlist.title}
-              className={cn(
-                "size-full object-cover transition-[transform,filter] duration-700",
-                isLg && "group-hover:scale-105",
-                isPlaying && isLg && "saturate-[1.15] brightness-[0.88]",
-              )}
-              loading={isLg ? "eager" : "lazy"}
-              fetchPriority={isLg ? "high" : "auto"}
-              decoding="async"
-            />
-          ) : (
-            <div
-              className="size-full flex items-center justify-center"
-              style={{
-                background: `linear-gradient(135deg, ${palette.r(0.3)} 0%, ${palette.r(0.08)} 100%)`,
-              }}
-            >
-              <ListMusic
-                className={cn(
-                  "text-muted-foreground/25",
-                  isLg ? "size-14" : "size-6",
-                )}
-                aria-hidden="true"
-              />
-            </div>
-          )}
-
-          {/* Now Playing overlay — EQ bars + gradient tint */}
-          <AnimatePresence>
-            {isPlaying && isLg && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.35 }}
-                className="absolute inset-0 flex flex-col items-center justify-end pb-5 gap-2"
-                style={{
-                  background: `linear-gradient(to top, ${palette.r(0.82)} 0%, ${palette.r(0.18)} 55%, transparent 100%)`,
-                }}
-                aria-hidden="true"
-              >
-                <div className="eq-bars h-7">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <span
-                      key={i}
-                      className="eq-bar"
-                      style={{ background: "rgba(255,255,255,0.88)" }}
-                    />
-                  ))}
-                </div>
-                <span className="text-[9px] font-black text-white/72 uppercase tracking-[0.22em]">
-                  Đang phát
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Inner vignette */}
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-gradient-to-tr from-black/15 to-transparent pointer-events-none ring-1 ring-inset ring-black/10 rounded-[inherit]"
-          />
-
-          {/* Owner edit overlay (lg only) */}
-          {isLg && isOwner && (
-            <button
-              type="button"
-              onClick={onEditCover}
-              aria-label="Edit cover image"
-              className={cn(
-                "absolute inset-0 flex flex-col items-center justify-center gap-2",
-                "bg-black/55 backdrop-blur-sm opacity-0 group-hover:opacity-100",
-                "transition-opacity duration-250 cursor-pointer",
-                "focus-visible:opacity-100 focus-visible:outline-none",
-              )}
-            >
-              <PenSquare className="size-7 text-white" aria-hidden="true" />
-              <span className="text-white text-[9px] font-black uppercase tracking-widest">
-                Chỉnh sửa
-              </span>
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  },
-);
-PlaylistCover.displayName = "PlaylistCover";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ActionIconButton
-// ─────────────────────────────────────────────────────────────────────────────
-
-const ActionIconButton = React.forwardRef<
-  HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement>
->(({ className, children, ...props }, ref) => (
-  <button
-    ref={ref}
-    type="button"
-    className={cn(
-      "size-10 sm:size-11 rounded-full flex items-center justify-center",
-      "border border-border/50 bg-background/25 backdrop-blur-sm",
-      "text-foreground/70 hover:text-foreground hover:bg-muted/60 hover:border-border",
-      "transition-all duration-150 active:scale-90",
-      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
-      "disabled:opacity-40 disabled:cursor-not-allowed",
-      className,
-    )}
-    {...props}
-  >
-    {children}
-  </button>
-));
-ActionIconButton.displayName = "ActionIconButton";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TooltipAction
-// ─────────────────────────────────────────────────────────────────────────────
-
-const TooltipAction: React.FC<{
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-}> = ({ label, icon, onClick }) => (
-  <TooltipProvider>
-    <Tooltip delayDuration={200}>
-      <TooltipTrigger asChild>
-        <ActionIconButton onClick={onClick} aria-label={label}>
-          {icon}
-        </ActionIconButton>
-      </TooltipTrigger>
-      <TooltipContent className="font-bold text-[10px] uppercase tracking-widest bg-foreground text-background border-none shadow-xl px-3 py-1.5 rounded-full">
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PlaylistActionBar — upgraded with Pause state + AnimatePresence icons + glow ring
-// Synced fully with AlbumDetailPage ActionBar
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface PlaylistActionBarProps {
-  playlist: IPlaylist;
-  handleMoreOptions: (playlist: IPlaylist) => void;
-  palette: Palette;
-  isLoadingPlay: boolean;
-  isLoadingShuffle: boolean;
-  isPlaying: boolean;
-  hasTracks: boolean;
-  isOwner: boolean;
-  density?: "compact" | "full";
-  onPlay: () => void;
-  onShuffle: () => void;
-  onManageTracks: () => void;
-}
-
-const PlaylistActionBar = memo<PlaylistActionBarProps>(
-  ({
-    playlist,
-    handleMoreOptions,
-    palette,
-    isLoadingPlay,
-    isLoadingShuffle,
-    isPlaying,
-    hasTracks,
-    isOwner,
-    density = "full",
-    onPlay,
-    onShuffle,
-    onManageTracks,
-  }) => {
-    const isCompact = density === "compact";
-    const playSz = isCompact ? "size-12" : "size-14 sm:size-16";
-    const playIconSz = isCompact ? "size-5" : "size-6 sm:size-7";
-    const ctrlSz = isCompact ? "size-10" : "size-10 sm:size-11";
-    const ctrlIconSz = isCompact ? "size-3.5" : "size-4";
-    const canPlay = hasTracks && !isLoadingPlay;
-    const canShuffle = hasTracks && !isLoadingShuffle;
-
-    return (
-      <div
-        className="flex items-center gap-3"
-        role="toolbar"
-        aria-label="Playlist controls"
-      >
-        {/* ── PLAY / PAUSE — synced with AlbumDetailPage */}
-        <motion.button
-          type="button"
-          onClick={onPlay}
-          disabled={!canPlay}
-          aria-label={isPlaying ? "Pause playlist" : "Play playlist"}
-          aria-pressed={isPlaying}
-          className={cn(
-            playSz,
-            "rounded-full flex items-center justify-center shrink-0 shadow-lg",
-            "transition-[box-shadow,transform] duration-300",
-            "disabled:opacity-60 disabled:cursor-not-allowed",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
-          )}
-          style={{
-            backgroundColor: palette.hex,
-            boxShadow: isPlaying
-              ? `${palette.glowShadow}, 0 0 0 5px ${palette.r(0.22)}`
-              : palette.glowShadow,
-          }}
-          whileHover={canPlay ? { scale: 1.06 } : undefined}
-          whileTap={canPlay ? { scale: 0.93 } : undefined}
-          transition={SP_SNAPPY}
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            {isLoadingPlay ? (
-              <motion.span
-                key="load"
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.6, opacity: 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <Loader2
-                  className={cn(playIconSz, "text-white animate-spin")}
-                  aria-hidden="true"
-                />
-              </motion.span>
-            ) : isPlaying ? (
-              <motion.span
-                key="pause"
-                initial={{ scale: 0.6, opacity: 0, rotate: -15 }}
-                animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                exit={{ scale: 0.6, opacity: 0, rotate: 15 }}
-                transition={SP_SNAPPY}
-              >
-                <Pause
-                  className={cn(playIconSz, "text-white fill-white")}
-                  aria-hidden="true"
-                />
-              </motion.span>
-            ) : (
-              <motion.span
-                key="play"
-                initial={{ scale: 0.6, opacity: 0, rotate: 15 }}
-                animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                exit={{ scale: 0.6, opacity: 0, rotate: -15 }}
-                transition={SP_SNAPPY}
-              >
-                <Play
-                  className={cn(playIconSz, "text-white fill-white ml-0.5")}
-                  aria-hidden="true"
-                />
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.button>
-
-        {/* ── SHUFFLE */}
-        <motion.button
-          type="button"
-          onClick={onShuffle}
-          disabled={!canShuffle}
-          aria-label="Shuffle playlist"
-          className={cn(
-            ctrlSz,
-            "rounded-full flex items-center justify-center border border-border/50",
-            "bg-background/30 backdrop-blur-sm text-foreground/70",
-            "hover:text-foreground hover:bg-muted/60 hover:border-border",
-            "transition-colors duration-150",
-            "disabled:opacity-40 disabled:cursor-not-allowed",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
-          )}
-          whileTap={canShuffle ? { scale: 0.9 } : undefined}
-          transition={SP_SNAPPY}
-        >
-          {isLoadingShuffle ? (
-            <Loader2
-              className={cn(ctrlIconSz, "animate-spin")}
-              aria-hidden="true"
-            />
-          ) : (
-            <Shuffle className={ctrlIconSz} aria-hidden="true" />
-          )}
-        </motion.button>
-
-        <PlaylistLikeButton id={playlist._id} variant="detail" />
-
-        {/* Owner tools */}
-        {isOwner && (
-          <>
-            <TooltipAction
-              label="Add tracks"
-              icon={<ListMusic className={ctrlIconSz} aria-hidden="true" />}
-              onClick={onManageTracks}
-            />
-          </>
-        )}
-
-        <div className="flex-1" aria-hidden="true" />
-        <button
-          className="rounded-full flex items-center justify-center border border-border/50  size-10  text-white/70 hover:text-white  active:scale-90 transition-all"
-          aria-label="More options"
-          onClick={() => handleMoreOptions(playlist)}
-        >
-          <MoreHorizontal className="size-6" strokeWidth={2} />
-        </button>
-      </div>
-    );
-  },
-);
-PlaylistActionBar.displayName = "PlaylistActionBar";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PlaylistModals
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Modals kept in one lazy boundary group — avoids 3 separate Suspense nodes
 const PlaylistModals = memo<{
-  playlist: IPlaylist;
+  playlist?: IPlaylist;
   isEditMetaOpen: boolean;
   isManageTracksOpen: boolean;
   isDeleteOpen: boolean;
@@ -580,18 +193,27 @@ const PlaylistModals = memo<{
     onConfirmDelete,
   }) => (
     <>
-      <PlaylistModal
-        isOpen={isEditMetaOpen}
-        onClose={onCloseEditMeta}
-        playlistToEdit={playlist}
-        onSubmit={handleSubmitForm}
-        isPending={isMutating}
-      />
-      <EditPlaylistTracksModal
-        isOpen={isManageTracksOpen}
-        onClose={onCloseManageTracks}
-        playlistId={playlist?._id}
-      />
+      {/* Only mount lazily when actually open — avoid rendering closed modals */}
+      {isEditMetaOpen && (
+        <Suspense fallback={null}>
+          <LazyPlaylistModal
+            isOpen
+            onClose={onCloseEditMeta}
+            playlistToEdit={playlist}
+            onSubmit={handleSubmitForm}
+            isPending={isMutating}
+          />
+        </Suspense>
+      )}
+      {isManageTracksOpen && (
+        <Suspense fallback={null}>
+          <LazyEditPlaylistTracksModal
+            isOpen
+            onClose={onCloseManageTracks}
+            playlistId={playlist?._id}
+          />
+        </Suspense>
+      )}
       <ConfirmationModal
         isOpen={isDeleteOpen}
         onCancel={onCloseDelete}
@@ -606,24 +228,28 @@ const PlaylistModals = memo<{
 );
 PlaylistModals.displayName = "PlaylistModals";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Sum track durations — extracted so it isn't inlined in render */
+function sumDuration(tracks: ITrack[]): number {
+  return tracks.reduce((s, t) => s + (t.duration ?? 0), 0);
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
   variant = "page",
   slugOverride,
   onClose,
 }) => {
-  const { slug: paramSlug } = useParams<{ slug: string }>();
-  const slug = slugOverride ?? paramSlug ?? "";
+  const { id: paramId } = useParams<{ id: string }>();
+  const id = slugOverride ?? paramId ?? "";
   const navigate = useNavigate();
 
   const isEmbedded = variant === "embedded";
-  const { user } = useAppSelector((state) => state.auth);
+  const user = useAppSelector((s) => s.auth.user);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  // useScrollY: embedded = track scrollRef, page = track window
   const scrollY = useScrollY(scrollRef, !isEmbedded);
   const isScrolled = scrollY > (isEmbedded ? 140 : 285);
 
@@ -633,12 +259,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
-  const {
-    data: playlist,
-    isLoading,
-    isError,
-    refetch,
-  } = usePlaylistDetail(slug);
+  const { data: playlist, isLoading, isError, refetch } = usePlaylistDetail(id);
 
   const {
     data: tracksData,
@@ -660,42 +281,55 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
+  // Stable reference only changes when the actual track list changes
   const allTracks = useMemo<ITrack[]>(
     () => tracksData?.allTracks ?? [],
     [tracksData?.allTracks],
   );
 
-  const totalItems = useMemo(
-    () => playlist?.trackIds.length ?? tracksData?.totalItems ?? 0,
-    [playlist?.trackIds.length, tracksData?.totalItems],
-  );
+  // Prefer authoritative length from playlist doc; fall back to paged count
+  const totalItems = playlist?.trackIds.length ?? tracksData?.totalItems ?? 0;
 
-  const playlistIds = useMemo(
-    () => (playlist?._id ? [playlist._id] : []),
-    [playlist?._id],
-  );
-  useSyncInteractions(playlistIds, "like", "playlist", !!playlist?._id);
+  // totalDurationSec — only recalculate when allTracks changes
+  const totalDurationSec = useMemo(() => sumDuration(allTracks), [allTracks]);
 
-  const syncEnabled = useMemo(
-    () => !isLoadingTracks && !!playlist?._id,
-    [isLoadingTracks, playlist?._id],
-  );
-  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", syncEnabled);
-
-  // ── Palette — full system like AlbumDetailPage
+  // Palette — derive once from themeColor
   const palette = useMemo(
     () => buildPalette(playlist?.themeColor ?? "#8b5cf6"),
     [playlist?.themeColor],
   );
 
-  const totalDurationSec = useMemo(
-    () => allTracks.reduce((s, t) => s + (t.duration ?? 0), 0),
-    [allTracks],
+  // Stable style objects — only rebuild when palette changes
+  const heroStyle = useMemo(
+    () => ({ background: palette.heroGradient }),
+    [palette.heroGradient],
+  );
+  const stickyStyle = useMemo(
+    () =>
+      ({
+        animationDelay: "80ms",
+        "--local-shadow-color": palette.hslChannels || "var(--primary)",
+      }) as React.CSSProperties,
+    [palette.hslChannels],
+  );
+
+  // Sync interaction hooks
+  const playlistIds = useMemo(
+    () => (playlist?._id ? [playlist._id] : []),
+    [playlist?._id],
+  );
+  useSyncInteractions(playlistIds, "like", "playlist", !!playlist?._id);
+  useSyncInteractionsPaged(
+    allTracks,
+    "like",
+    "track",
+    !isLoadingTracks && !!playlist?._id,
   );
 
   const { className: titleCls, style: titleStyle } = useTitleStyle(
     playlist?.title ?? "",
   );
+
   const { updatePlaylistAsync, deletePlaylist, isMutating } =
     usePlaylistMutations();
 
@@ -704,18 +338,16 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
     [playlist?.user?._id, user?._id, user?.role],
   );
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+  // Prefetch heavy chunks early — fire once on mount
+  useEffect(() => {
+    void import("@/features/track/components/TrackList");
+    void import("./components/PlaylistActionBar");
+    void import("./components/PlaylistCover");
+  }, []);
 
-  const handleBack = useCallback(() => {
-    if (isEmbedded && onClose) onClose();
-    else {
-      if (window.history.length > 1) {
-        navigate(-1);
-      } else {
-        navigate("/", { replace: true });
-      }
-    }
-  }, [isEmbedded, onClose, navigate]);
+  // ── Stable callbacks ──────────────────────────────────────────────────────
+
+  const handleBack = useSmartBack();
 
   const handleSubmitForm = useCallback(
     async (formData: FormData) => {
@@ -724,7 +356,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
         await updatePlaylistAsync(playlist._id, formData);
         setIsEditMetaOpen(false);
       } catch {
-        // Keep modal open for user to fix
+        // Keep modal open so user can fix errors
       }
     },
     [playlist, updatePlaylistAsync],
@@ -738,18 +370,20 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
     else navigate("/playlists");
   }, [playlist, deletePlaylist, isEmbedded, onClose, navigate]);
 
-  // ── Shared props ──────────────────────────────────────────────────────────
+  const closeEditMeta = useCallback(() => setIsEditMetaOpen(false), []);
+  const closeManageTracks = useCallback(() => setIsManageTracksOpen(false), []);
+  const closeDelete = useCallback(() => setIsDeleteOpen(false), []);
+  const openEditMeta = useCallback(() => setIsEditMetaOpen(true), []);
+  const openManageTracks = useCallback(() => setIsManageTracksOpen(true), []);
+
   const { openPlaylistSheet } = useContextSheet();
-  const openSheet = useCallback(
-    (p: IPlaylist) => {
-      openPlaylistSheet(p);
-    },
+  const handleMoreOptions = useCallback(
+    (p: IPlaylist) => openPlaylistSheet(p),
     [openPlaylistSheet],
   );
-  const handleMoreOptions = useCallback(
-    (p: IPlaylist) => openSheet(p),
-    [openSheet],
-  );
+
+  // ── Shared prop objects ───────────────────────────────────────────────────
+
   const sharedActionBarProps: PlaylistActionBarProps = useMemo(
     () => ({
       playlist: playlist!,
@@ -762,7 +396,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
       isOwner,
       onPlay: togglePlayPlaylist,
       onShuffle: shufflePlaylist,
-      onManageTracks: () => setIsManageTracksOpen(true),
+      onManageTracks: openManageTracks,
     }),
     [
       playlist,
@@ -774,6 +408,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
       isOwner,
       togglePlayPlaylist,
       shufflePlaylist,
+      openManageTracks,
     ],
   );
 
@@ -802,32 +437,43 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
     ],
   );
 
-  // ── Render guards ─────────────────────────────────────────────────────────
-  // ── Render guards ─────────────────────────────────────────────────────────
-  const isOffline = !navigator.onLine;
-  // ── Error state ─────────────────────────────────────────────────────────
-  // Initial Load
-  if (isLoading && !playlist) {
-    return <PlaylistDetailSkeleton />;
-  }
-  // Switching
-  if (isLoading && playlist) {
-    return <WaveformLoader glass={false} text="Đang tải" />;
-  }
-  // Deep Error
-  if (isError || !playlist) {
+  const modalProps = useMemo(
+    () => ({
+      playlist,
+      isEditMetaOpen,
+      isManageTracksOpen,
+      isDeleteOpen,
+      isMutating,
+      handleSubmitForm,
+      onCloseEditMeta: closeEditMeta,
+      onCloseManageTracks: closeManageTracks,
+      onCloseDelete: closeDelete,
+      onConfirmDelete: handleConfirmDelete,
+    }),
+    [
+      playlist,
+      isEditMetaOpen,
+      isManageTracksOpen,
+      isDeleteOpen,
+      isMutating,
+      handleSubmitForm,
+      closeEditMeta,
+      closeManageTracks,
+      closeDelete,
+      handleConfirmDelete,
+    ],
+  );
+  const isOnline = useOnlineStatus();
+  // ── Render guards — ordered from cheapest to most specific ────────────────
+
+  if (isLoading && !playlist) return <PlaylistDetailSkeleton />;
+
+  // Transitional skeleton while switching playlists
+  if (isLoading) return <WaveformLoader glass={false} text="Đang tải" />;
+  // Check offline FIRST — no point rendering if there's no network
+  if (!isOnline) {
     return (
-      <>
-        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
-        </div>
-      </>
-    );
-  }
-  // Offline
-  if (isOffline) {
-    return (
-      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+      <div className="section-container space-y-6 pt-4 pb-4">
         <MusicResult
           variant="error-network"
           onRetry={refetch}
@@ -836,24 +482,15 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
       </div>
     );
   }
+  if (isError || !playlist) {
+    return (
+      <div className="section-container space-y-6 pt-4 pb-4">
+        <MusicResult variant="error" onRetry={refetch} />
+      </div>
+    );
+  }
 
-  // ── Shared modal props
-  const modalProps = {
-    playlist,
-    isEditMetaOpen,
-    isManageTracksOpen,
-    isDeleteOpen,
-    isMutating,
-    handleSubmitForm,
-    onCloseEditMeta: () => setIsEditMetaOpen(false),
-    onCloseManageTracks: () => setIsManageTracksOpen(false),
-    onCloseDelete: () => setIsDeleteOpen(false),
-    onConfirmDelete: handleConfirmDelete,
-  };
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // EMBEDDED VARIANT
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── EMBEDDED ──────────────────────────────────────────────────────────────
 
   if (isEmbedded) {
     return (
@@ -864,10 +501,11 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
           role="region"
           aria-label={`Playlist: ${playlist.title}`}
         >
+          {/* Gradient hero strip */}
           <div
-            aria-hidden="true"
+            aria-hidden
             className="sticky top-0 h-[160px] shrink-0 pointer-events-none z-0"
-            style={{ background: palette.heroGradient }}
+            style={heroStyle}
           />
 
           <div className="relative z-10 -mt-[160px] px-4 pb-10">
@@ -878,7 +516,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                   onClick={handleBack}
                   className="flex items-center gap-1.5 text-sm font-bold text-foreground/70 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 rounded"
                 >
-                  <ChevronLeft className="size-4" aria-hidden="true" /> Đóng
+                  <ChevronLeft className="size-4" aria-hidden /> Đóng
                 </button>
               </div>
             )}
@@ -894,8 +532,9 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                 palette={palette}
                 isOwner={isOwner}
                 size="sm"
-                onEditCover={() => setIsEditMetaOpen(true)}
+                onEditCover={openEditMeta}
               />
+
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                   <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
@@ -903,9 +542,11 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                   </span>
                   <VisibilityBadge visibility={playlist.visibility} />
                 </div>
+
                 <h2 className="text-xl font-black tracking-tight leading-tight line-clamp-2 text-foreground">
                   {playlist.title}
                 </h2>
+
                 <PlaylistMeta
                   trackCount={totalItems}
                   durationSec={totalDurationSec}
@@ -913,24 +554,16 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                   className="mt-1"
                   compact
                 />
-                {/* Playing indicator in embedded — synced with AlbumDetailPage */}
+
                 <AnimatePresence>
                   {isThisPlaylistPlaying && (
                     <motion.div
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 4 }}
-                      className="flex items-center gap-1.5 mt-1.5"
+                      className="flex items-center gap-1.5 mt-2"
                     >
-                      <div className="eq-bars h-3">
-                        {[0, 1, 2].map((i) => (
-                          <span
-                            key={i}
-                            className="eq-bar"
-                            style={{ background: palette.hex }}
-                          />
-                        ))}
-                      </div>
+                      <WaveformBars color={palette.hex} active />
                       <span
                         className="text-[9px] font-black uppercase tracking-widest"
                         style={{ color: palette.hex }}
@@ -953,13 +586,17 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
               </p>
             )}
 
-            <TrackList
-              {...trackListProps}
-              maxHeight={700}
-              moodColor={palette.hslChannels}
-              skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
-              staggerAnimation={false}
-            />
+            <Suspense
+              fallback={<WaveformLoader glass={false} text="Đang tải" />}
+            >
+              <LazyTrackList
+                {...trackListProps}
+                maxHeight="auto"
+                moodColor={palette.hslChannels}
+                skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
+                staggerAnimation={false}
+              />
+            </Suspense>
           </div>
         </div>
 
@@ -968,20 +605,18 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PAGE VARIANT
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── PAGE ─────────────────────────────────────────────────────────────────
 
   return (
     <main className="relative min-h-screen bg-background text-foreground overflow-x-hidden selection:bg-primary/30 selection:text-primary">
-      {/* Background layers — synced with AlbumDetailPage */}
+      {/* Layered background — hero gradient + noise texture + fade-to-bg */}
       <div
-        aria-hidden="true"
+        aria-hidden
         className="absolute inset-0 h-[70vh] pointer-events-none transition-colors duration-1000"
-        style={{ background: palette.heroGradient }}
+        style={heroStyle}
       />
       <div
-        aria-hidden="true"
+        aria-hidden
         className="absolute inset-0 h-[70vh] pointer-events-none opacity-[0.03] dark:opacity-[0.06]"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
@@ -989,29 +624,29 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
         }}
       />
       <div
-        aria-hidden="true"
+        aria-hidden
         className="absolute inset-0 h-[70vh] bg-gradient-to-b from-transparent via-background/50 to-background pointer-events-none"
       />
 
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 pb-32">
-        {/* Back button */}
+        {/* ── Back button ── */}
         <div className="pt-5 pb-2">
           <button
             type="button"
             onClick={handleBack}
             className="inline-flex items-center gap-1.5 text-sm font-bold transition-all duration-200 text-foreground/60 hover:text-foreground px-2 py-1 rounded-lg hover:bg-background/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
           >
-            <ChevronLeft className="size-4" aria-hidden="true" /> Quay lại
+            <ChevronLeft className="size-4" aria-hidden /> Quay lại
           </button>
         </div>
 
-        {/* Hero section — motion stagger like AlbumDetailPage */}
+        {/* ── Hero section ── */}
         <motion.section
           aria-label="Playlist details"
           className="flex flex-col md:flex-row items-center md:items-end gap-7 md:gap-10 pt-10 pb-8 md:pt-16 md:pb-10"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ duration: 0.45, ease: "easeOut" }}
         >
           {/* Cover */}
           <motion.div
@@ -1025,7 +660,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
               isOwner={isOwner}
               isPlaying={isThisPlaylistPlaying}
               size="lg"
-              onEditCover={() => setIsEditMetaOpen(true)}
+              onEditCover={openEditMeta}
             />
           </motion.div>
 
@@ -1036,15 +671,16 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...SP_HERO, delay: 0.14 }}
           >
+            {/* Type + visibility badges */}
             <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-background/30 backdrop-blur-md border border-white/15 text-[10px] font-black uppercase tracking-[0.18em] text-foreground/85">
                 {playlist.isSystem ? (
                   <>
-                    <Sparkles className="size-3" aria-hidden="true" /> Hệ thống
+                    <Sparkles className="size-3" aria-hidden /> Hệ thống
                   </>
                 ) : (
                   <>
-                    <Users className="size-3" aria-hidden="true" /> Cộng đồng
+                    <Users className="size-3" aria-hidden /> Cộng đồng
                   </>
                 )}
               </div>
@@ -1052,20 +688,18 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
             </div>
 
             {/* Title */}
-            <div className="overflow-visible min-w-0 w-full">
-              <h1
-                className={cn(
-                  "font-black tracking-tighter text-foreground drop-shadow-lg w-full",
-                  "text-center md:text-left",
-                  titleCls,
-                )}
-                style={titleStyle}
-              >
-                {playlist.title}
-              </h1>
-            </div>
+            <h1
+              className={cn(
+                "font-black tracking-tighter text-foreground drop-shadow-lg w-full",
+                "text-center md:text-left",
+                titleCls,
+              )}
+              style={titleStyle}
+            >
+              {playlist.title}
+            </h1>
 
-            {/* Description */}
+            {/* Description or add-description prompt */}
             {playlist.description ? (
               <p className="text-sm md:text-[15px] text-muted-foreground font-medium line-clamp-2 max-w-xl mt-0.5 text-center md:text-left">
                 {playlist.description}
@@ -1073,21 +707,21 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
             ) : isOwner ? (
               <button
                 type="button"
-                onClick={() => setIsEditMetaOpen(true)}
+                onClick={openEditMeta}
                 className="text-sm text-muted-foreground/45 italic hover:text-primary transition-colors flex items-center gap-1.5 mt-0.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 rounded"
               >
-                <PenSquare className="size-3.5" aria-hidden="true" /> Thêm mô tả
-                cho danh sách phát…
+                <PenSquare className="size-3.5" aria-hidden /> Thêm mô tả cho
+                danh sách phát…
               </button>
             ) : null}
 
-            {/* Owner + meta row */}
+            {/* Owner row */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2.5 gap-y-1.5 mt-1.5">
               <button
                 type="button"
                 onClick={() => navigate(`/profile/${playlist.user?._id}`)}
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity group/user focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 rounded"
-                aria-label={`View profile: ${playlist.user?.fullName ?? "System"}`}
+                aria-label={`Xem hồ sơ: ${playlist.user?.fullName ?? "Hệ thống"}`}
               >
                 <Avatar className="size-6 border-[1.5px] border-background/70 shadow-sm">
                   <AvatarImage src={playlist.user?.avatar} />
@@ -1099,12 +733,14 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                   {playlist.user?.fullName ?? "Hệ thống"}
                 </span>
               </button>
+
               <span
                 className="text-foreground/30 text-xs hidden sm:inline"
-                aria-hidden="true"
+                aria-hidden
               >
                 •
               </span>
+
               <PlaylistMeta
                 trackCount={totalItems}
                 durationSec={totalDurationSec}
@@ -1112,7 +748,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
               />
             </div>
 
-            {/* Playing status pill — synced with AlbumDetailPage */}
+            {/* Now-playing status pill */}
             <AnimatePresence>
               {isThisPlaylistActive && (
                 <motion.div
@@ -1126,25 +762,10 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                     borderColor: palette.r(0.28),
                   }}
                 >
-                  <div
-                    aria-hidden="true"
-                    className={cn(
-                      "eq-bars shrink-0 flex items-end gap-[2px] h-4",
-                      !isThisPlaylistPlaying && "paused opacity-40",
-                      "transition-opacity duration-300",
-                    )}
-                  >
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <span
-                        key={i}
-                        className="eq-bar w-[3px] rounded-full sw-animate-eq"
-                        style={{
-                          animationDelay: `${i * 0.12}s`,
-                          backgroundColor: palette.hex,
-                        }}
-                      />
-                    ))}
-                  </div>
+                  <WaveformBars
+                    color={palette.hex}
+                    active={isThisPlaylistPlaying}
+                  />
                   <span
                     className="text-[10px] font-black uppercase tracking-widest"
                     style={{ color: palette.hex }}
@@ -1157,7 +778,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
           </motion.div>
         </motion.section>
 
-        {/* Sticky action bar — synced with AlbumDetailPage */}
+        {/* ── Sticky action bar ── */}
         <div
           className={cn(
             "sticky z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-8",
@@ -1165,22 +786,15 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
             "transition-[background,box-shadow,border-color] duration-300",
             "top-[var(--navbar-height,64px)]",
             "shadow-brand-dynamic",
-
             isScrolled
               ? "bg-background/88 backdrop-blur-2xl border-b border-border/40 shadow-sm"
               : "bg-transparent border-b border-transparent",
           )}
-          style={
-            {
-              animationDelay: "80ms",
-              // Nếu không có moodColor thì fallback về màu primary mặc định
-              "--local-shadow-color": palette.hslChannels || "var(--primary)",
-            } as React.CSSProperties
-          }
+          style={stickyStyle}
         >
           <PlaylistActionBar {...sharedActionBarProps} density="full" />
 
-          {/* Scrolled playlist identity — with playing state */}
+          {/* Scrolled identity strip */}
           <AnimatePresence>
             {isScrolled && (
               <motion.div
@@ -1189,30 +803,14 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 12 }}
                 transition={SP_GENTLE}
-                aria-hidden="true"
+                aria-hidden
               >
-                {/* Mini EQ when playing */}
                 <AnimatePresence>
                   {isThisPlaylistPlaying && (
-                    <div
-                      aria-hidden="true"
-                      className={cn(
-                        "eq-bars shrink-0 flex items-end gap-[2px] h-4",
-                        !isThisPlaylistPlaying && "paused opacity-40",
-                        "transition-opacity duration-300",
-                      )}
-                    >
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <span
-                          key={i}
-                          className="eq-bar w-[3px] rounded-full sw-animate-eq"
-                          style={{
-                            animationDelay: `${i * 0.12}s`,
-                            backgroundColor: palette.hex,
-                          }}
-                        />
-                      ))}
-                    </div>
+                    <WaveformBars
+                      color={palette.hex}
+                      active={isThisPlaylistPlaying}
+                    />
                   )}
                 </AnimatePresence>
 
@@ -1220,7 +818,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                   {playlist.title}
                 </span>
 
-                {/* Cover thumbnail — ring when playing */}
+                {/* Thumbnail with playing ring */}
                 <div
                   className={cn(
                     "size-9 sm:size-10 rounded-lg overflow-hidden shrink-0 border bg-muted flex items-center justify-center transition-all duration-300",
@@ -1235,16 +833,16 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                   }
                 >
                   {playlist.coverImage ? (
-                    <img
+                    <ImageWithFallback
                       src={playlist.coverImage}
                       alt=""
-                      aria-hidden="true"
+                      aria-hidden
                       className="size-full object-cover"
                     />
                   ) : (
                     <ListMusic
                       className="size-4 text-muted-foreground/40"
-                      aria-hidden="true"
+                      aria-hidden
                     />
                   )}
                 </div>
@@ -1253,31 +851,33 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
           </AnimatePresence>
         </div>
 
-        {/* Track list */}
+        {/* ── Track list ── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...SP_GENTLE, delay: 0.22 }}
         >
-          <TrackList
-            {...trackListProps}
-            maxHeight={700}
-            skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
-            moodColor={palette.hslChannels}
-            staggerAnimation={true}
-          />
+          <Suspense fallback={<PlaylistDetailSkeleton variant="page" />}>
+            <LazyTrackList
+              {...trackListProps}
+              maxHeight="auto"
+              skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
+              moodColor={palette.hslChannels}
+              staggerAnimation
+            />
+          </Suspense>
         </motion.div>
 
-        {/* Footer */}
+        {/* ── Footer ── */}
         {totalItems > 0 && (
           <footer className="mt-16 pt-7 border-t border-border/25 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground/60 font-medium pb-8">
             <span className="flex items-center gap-1.5">
-              <Clock className="size-3.5 opacity-50" aria-hidden="true" />
+              <Clock className="size-3.5 opacity-50" aria-hidden />
               Tạo ngày {dayjs(playlist.createdAt).format("DD/MM/YYYY")}
             </span>
             <span
               className="text-muted-foreground/30 hidden sm:inline"
-              aria-hidden="true"
+              aria-hidden
             >
               ·
             </span>
@@ -1288,7 +888,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
               <>
                 <span
                   className="text-muted-foreground/30 hidden sm:inline"
-                  aria-hidden="true"
+                  aria-hidden
                 >
                   ·
                 </span>

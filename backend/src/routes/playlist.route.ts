@@ -7,111 +7,144 @@ import {
 import validate from "../middlewares/validate";
 import * as playlistController from "../controllers/playlist.controller";
 
-import {
-  createPlaylistSchema,
-  updatePlaylistSchema,
-  addTracksToPlaylistSchema,
-  getPlaylistsSchema,
-  removeTracksToPlaylistSchema,
-  updatePlaylistTracksSchema,
-  // removeTrackSchema, // Nhớ tạo thêm schema này nếu cần check :trackId
-} from "../validations/playlist.validation";
 import { uploadImages } from "../config/upload";
+import {
+  addTracksToPlaylistSchema,
+  createPlaylistSchema,
+  createQuickPlaylistSchema,
+  deletePlaylistSchema,
+  getMyPlaylistsSchema,
+  getPlaylistDetailSchema,
+  getPlaylistsByAdminSchema,
+  getPlaylistsByUserSchema,
+  getPlaylistTracksSchema,
+  removeTracksFromPlaylistSchema,
+  reorderPlaylistTracksSchema,
+  togglePlaylistVisibilitySchema,
+  updatePlaylistSchema,
+  updateQuickPlaylistSchema,
+} from "../validations/playlist.validation";
 
 const router = express.Router();
 
-// ─────────────────────────────────────────────────────
-// 👤 USER ROUTES (Dành cho chính người dùng đang login)
-// ─────────────────────────────────────────────────────
+// ==========================================
+// 🟢 STATIC ROUTES (Phải để trên đầu)
+// ==========================================
 
-// 1. Tạo playlist nhanh (Spotify Style)
-router.post("/me", protect, playlistController.createMyPlaylist);
+// 1. Get My Playlists (Sidebar/Profile) - Cần protect
+router.get(
+  "/me",
+  protect,
+  validate(getMyPlaylistsSchema),
+  playlistController.getMyPlaylists,
+);
 
-// 2. Lấy tất cả playlist của tôi (Sidebar/Profile)
-router.get("/me", protect, playlistController.getMyPlaylists);
-
-// 3. Quản lý tracks (Có Smart Cover)
+// 2. Quick Create Playlist (Spotify Style)
 router.post(
-  "/me/:playlistId/tracks",
+  "/me",
   protect,
-  validate(addTracksToPlaylistSchema),
-  playlistController.userAddTracks,
-);
-// 4.
-router.delete(
-  "/me/:playlistId/tracks",
-  protect,
-  playlistController.userRemoveTracks,
+  validate(createQuickPlaylistSchema),
+  playlistController.createMyPlaylist,
 );
 
-// 4. Chuyển trạng thái nhanh
-router.patch(
-  "/me/:id/toggle-visibility",
+// 3. Admin Get All Playlists (Filter/Search)
+router.get(
+  "/admin",
   protect,
-  playlistController.togglePlaylistPrivacy,
+  authorize("admin"),
+  validate(getPlaylistsByAdminSchema),
+  playlistController.getPlaylistsByAdmin,
 );
 
+// 4. Public Get Playlists (Filter/Search)
+router.get(
+  "/",
+  optionalAuth,
+  validate(getPlaylistsByUserSchema),
+  playlistController.getPlaylistsByUser,
+);
+
+// 5. Create System Playlist (Admin)
 router.post(
   "/",
   protect,
+  authorize("admin"),
   uploadImages.single("coverImage"),
   validate(createPlaylistSchema),
   playlistController.createPlaylist,
 );
 
+// ==========================================
+// 🔵 DYNAMIC ROUTES (Các route chứa tham số :id)
+// ==========================================
+
+// 6. Get Detail (Public/Optional Auth)
 router.get(
-  "/",
+  "/:id",
   optionalAuth,
-  validate(getPlaylistsSchema),
-  playlistController.getPlaylists,
+  validate(getPlaylistDetailSchema),
+  playlistController.getPlaylistDetail,
 );
 
-// 2. TRACK MANAGEMENT
+// 7. Get Tracks (Phân trang/Filter)
+router.get(
+  "/:id/tracks",
+  optionalAuth,
+  validate(getPlaylistTracksSchema),
+  playlistController.getPlaylistTracks,
+);
 
-// Add Tracks (Batch)
+// --- Các thao tác thay đổi dữ liệu bên dưới cần Protect ---
+router.use(protect);
+
+// 8. Edit Quick Playlist (Chỉ đổi title/visibility)
+router.put(
+  "/me/:id",
+  validate(updateQuickPlaylistSchema),
+  playlistController.editMyPlaylist,
+);
+
+// 9. Add Tracks
 router.post(
-  "/:playlistId/tracks",
-  protect,
+  "/:id/tracks",
   validate(addTracksToPlaylistSchema),
   playlistController.addTracks,
 );
 
-// 🔥 Remove Single Track (Fix cho khớp với Hook Frontend cũ)
-// URL: DELETE /api/playlists/:playlistId/tracks/:trackId
+// 10. Remove Tracks
 router.delete(
-  "/:playlistId/tracks/:trackId",
-  protect,
-  validate(removeTracksToPlaylistSchema),
-  playlistController.removeTracks, // Controller xử lý xóa 1 bài
-);
-
-// Remove Tracks (Batch - Optional nếu bạn muốn làm tính năng xóa nhiều bài cùng lúc)
-router.delete(
-  "/:playlistId/tracks",
-  protect,
-  validate(addTracksToPlaylistSchema),
+  "/:id/tracks",
+  validate(removeTracksFromPlaylistSchema),
   playlistController.removeTracks,
 );
 
-// 3. DYNAMIC ROUTES
-router.get("/:id", optionalAuth, playlistController.getPlaylistDetail);
-// (Get Album Tracks) api/playlists/:id/tracks?page=?&limit=?
-router.get("/:id/tracks", optionalAuth, playlistController.getPlaylistTracks);
+// 11. Reorder Tracks
+router.put(
+  "/:id/tracks",
+  validate(reorderPlaylistTracksSchema),
+  playlistController.reorderTracks,
+);
 
+// 12. Toggle Privacy
+router.patch(
+  "/:id/toggle-visibility",
+  validate(togglePlaylistVisibilitySchema),
+  playlistController.togglePlaylistPrivacy,
+);
+
+// 13. Admin/Owner Update (Full Update với file)
 router.patch(
   "/:id",
-  protect,
   uploadImages.single("coverImage"),
   validate(updatePlaylistSchema),
   playlistController.updatePlaylist,
 );
 
-router.delete("/:id", protect, playlistController.deletePlaylist);
-router.put(
-  "/:id/tracks",
-  protect,
-  authorize("admin"), // Chỉ admin mới được reorder system playlist (hoặc chủ sở hữu)
-  validate(updatePlaylistTracksSchema),
-  playlistController.reorderTracks,
+// 14. Delete Playlist
+router.delete(
+  "/:id",
+  validate(deletePlaylistSchema),
+  playlistController.deletePlaylist,
 );
+
 export default router;

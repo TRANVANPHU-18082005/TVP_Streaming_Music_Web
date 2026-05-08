@@ -22,7 +22,7 @@ const CSS = `
   50%     { opacity: 0.6; transform: scale(1.15); filter: blur(0px); }
 }
 @keyframes ml-beat-glow {
-  0%   { filter: drop-shadow(0 0 12px var(--ml-accent-color, rgba(255,255,255,0.8))) brightness(1.2); }
+  0%   { filter: drop-shadow(0 0 12px var(--ml-accent-color, hsl(var(--foreground) / 0.8))) brightness(1.2); }
   100% { filter: drop-shadow(0 0 0px transparent) brightness(1); }
 }
 .ml-idle-dot {
@@ -40,7 +40,7 @@ const CSS = `
 }
 .ml-word__base {
   display: block;
-  color: rgba(255,255,255,0.25);
+  color: hsl(var(--foreground) / 0.25);
   white-space: pre;
   transition: color 0.15s ease, text-shadow 0.15s ease;
   /* Multi-layered shadow cho base để chống chìm vào video sáng */
@@ -59,13 +59,13 @@ const CSS = `
   filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
 }
 .ml-word--active .ml-word__base {
-  color: rgba(255,255,255,0.4);
+  color: hsl(var(--foreground) / 0.4);
 }
 .ml-word--done .ml-word__fill { clip-path: inset(0 0 0 0); }
 
 /* Degraded: no fill */
 .ml-degraded .ml-word__fill { display: none; }
-.ml-degraded .ml-line-active .ml-word__base { color: #ffffff; text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 24px rgba(0,0,0,0.7); }
+.ml-degraded .ml-line-active .ml-word__base { color: hsl(var(--foreground)); text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 24px rgba(0,0,0,0.7); }
 
 /* Synced mode: whole-line highlight */
 .ml-synced-text {
@@ -74,12 +74,12 @@ const CSS = `
   text-shadow: 0 2px 6px rgba(0,0,0,0.8), 0 8px 16px rgba(0,0,0,0.6), 0 0 24px rgba(0,0,0,0.5);
 }
 .ml-synced-text--active {
-  color: #ffffff;
+  color: var(--color-primary);  
   transform: scale(1.02);
-  text-shadow: 0 2px 6px rgba(0,0,0,0.8), 0 8px 16px rgba(0,0,0,0.6), 0 0 32px var(--ml-accent-color, rgba(255,255,255,0.4));
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8), 0 8px 16px rgba(0,0,0,0.6), 0 0 32px var(--ml-accent-color, hsl(var(--foreground) / 0.4));
 }
 .ml-synced-text--inactive {
-  color: rgba(255,255,255,0.3);
+  color: hsl(var(--foreground) / 0.3);
   transform: scale(0.98);
 }
 `;
@@ -146,7 +146,7 @@ const MoodKWord = memo(
     const isActive = active && progress > 0 && !isDone;
 
     // Sử dụng accentColor để tạo gradient sáng đẹp mắt
-    const fillGradient = `linear-gradient(90deg, ${accentColor} 0%, #ffffff 60%, #ffffff 100%)`;
+    const fillGradient = `linear-gradient(90deg, ${accentColor} 0%, hsl(var(--foreground)) 60%, hsl(var(--foreground)) 100%)`;
 
     return (
       <span
@@ -319,13 +319,19 @@ export const MoodLyricLine = memo(
                   userSelect: "none",
                   textAlign: "center",
                   // Set CSS variable cho accent color để xài trong animation
-                  ...( { "--ml-accent-color": accentColor } as React.CSSProperties),
+                  ...({
+                    "--ml-accent-color": accentColor,
+                  } as React.CSSProperties),
                 }}
               >
                 <div
                   ref={lineRef}
                   className={`ml-line-active${degraded ? " ml-degraded" : ""}`}
-                  style={{ lineHeight: 1.35, fontWeight: 750, letterSpacing: "-0.01em" }}
+                  style={{
+                    lineHeight: 1.35,
+                    fontWeight: 750,
+                    letterSpacing: "-0.01em",
+                  }}
                 >
                   {hasWords ? (
                     // KARAOKE MODE — word-level fill

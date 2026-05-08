@@ -2,7 +2,6 @@
 
 import mongoose, { Schema, Document, Model } from "mongoose";
 import { generateUniqueSlug } from "../utils/slug";
-import themeColorService from "../services/themeColor.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & INTERFACES
@@ -21,6 +20,7 @@ export interface IGenre extends Document {
   trackCount: number;
   playCount: number;
   isActive: boolean;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +63,7 @@ const GenreSchema = new Schema<IGenre>(
     playCount: { type: Number, default: 0, min: 0 },
 
     isActive: { type: Boolean, default: true },
+    isDeleted: { type: Boolean, default: false },
   },
   {
     timestamps: true,
@@ -95,23 +96,6 @@ GenreSchema.pre("save", async function () {
       genre.isNew ? undefined : genre._id,
     );
   }
-
-  // 2. Extract theme color và Gradient
-  if (genre.isModified("image") && genre.image) {
-    if (!genre.isModified("color")) {
-      try {
-        genre.color = await themeColorService.extractThemeColor(genre.image);
-        // Khi color tự động đổi do image đổi -> Trigger tạo gradient mới
-        genre.gradient = `linear-gradient(135deg, ${genre.color} 0%, #121212 100%)`;
-      } catch (err) {
-        genre.color = "#121212"; // Fallback color an toàn
-        genre.gradient = `linear-gradient(135deg, #121212 0%, #121212 100%)`;
-      }
-    } else if (genre.isModified("color") && !genre.isModified("gradient")) {
-      // Chỉ update gradient nếu color đổi mà gradient không bị override
-      genre.gradient = `linear-gradient(135deg, ${genre.color} 0%, #121212 100%)`;
-    }
-  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,24 +123,18 @@ GenreSchema.statics.calculateStats = async function (
   genreId: string,
 ): Promise<void> {
   const Track = mongoose.model("Track");
-  const genre = mongoose.model("genre");
-  const Artist = mongoose.model("Artist");
 
-  const [tCount, alCount, arCount] = await Promise.all([
+  const [tCount] = await Promise.all([
     Track.countDocuments({
       genres: genreId,
       status: "ready",
       isPublic: true,
       isDeleted: false,
     }),
-    genre.countDocuments({ genres: genreId, isPublic: true }),
-    Artist.countDocuments({ genres: genreId, isActive: true }),
   ]);
 
   await (this as Model<IGenre>).findByIdAndUpdate(genreId, {
     trackCount: tCount,
-    genreCount: alCount,
-    artistCount: arCount,
   });
 };
 

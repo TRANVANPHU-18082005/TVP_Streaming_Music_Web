@@ -29,9 +29,9 @@ export const useAlbumPlayback = (
       collectionName: album?.title,
       collectionType: "album" as const,
       queryKey: album?._id ? albumKeys.detail(album._id) : [],
-      fetchFn: () => albumApi.getDetail(album!._id),
+      fetchFn: () => albumApi.getAlbumDetail(album!.slug),
     }),
-    [album?._id, album?.title],
+    [album?._id, album?.title, album?.slug],
   );
 
   const { togglePlay, shuffle, isActive, isPlaying, isFetching } =

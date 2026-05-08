@@ -9,9 +9,10 @@ import {
   type AlbumCreateFormValues,
   type AlbumEditFormValues,
 } from "../schemas/album.schema";
-import type { Album } from "@/features/album/types";
+import type { IAlbum } from "@/features/album/types";
 import { mapEntityToForm } from "../utils/formMapper";
 import { buildAlbumPayload } from "../utils/payloadBuilder";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -26,20 +27,25 @@ interface UseAlbumFormCreateProps {
 
 interface UseAlbumFormEditProps {
   mode: "edit";
-  albumToEdit: Album;
+  albumToEdit: IAlbum;
   onSubmit: (formData: FormData) => Promise<void>;
 }
 
 type UseAlbumFormProps = UseAlbumFormCreateProps | UseAlbumFormEditProps;
 
+type FormValues<TMode extends "create" | "edit"> = TMode extends "edit"
+  ? AlbumEditFormValues
+  : AlbumCreateFormValues;
+
+// ────────────
 // ─────────────────────────────────────────────────────────────────────────────
 // HOOK
 // ─────────────────────────────────────────────────────────────────────────────
-export const useAlbumForm = ({
+export const useAlbumForm = <TMode extends "create" | "edit">({
   mode,
   albumToEdit,
   onSubmit,
-}: UseAlbumFormProps) => {
+}: UseAlbumFormProps & { mode: TMode }) => {
   const isEditMode = mode === "edit";
 
   // Schema khác nhau theo mode:
@@ -54,9 +60,9 @@ export const useAlbumForm = ({
   );
 
   // ── Init form ──────────────────────────────────────────────────────────────
-  const form = useForm<AlbumCreateFormValues | AlbumEditFormValues>({
-    resolver: zodResolver(schema),
-    defaultValues,
+  const form = useForm<FormValues<TMode>>({
+    resolver: zodResolver(schema) as any,
+    defaultValues: defaultValues as any, // Cast 1 lần ở đây, không ảnh hưởng DX bên ngoài
     mode: "onSubmit", // validate khi submit
     reValidateMode: "onChange", // sau lần submit đầu, re-validate realtime
   });
@@ -84,7 +90,49 @@ export const useAlbumForm = ({
 
     // Build payload — chỉ gửi dirtyFields khi Edit, gửi tất cả khi Create
     const payload = buildAlbumPayload(values, dirtyFields, isEditMode);
-    await onSubmit(payload);
+
+    try {
+      await onSubmit(payload);
+    } catch (err: any) {
+      // Map server-side validation errors to form fields where possible.
+      const resp = err?.response?.data || err?.response || null;
+
+      let handled = false;
+
+      const maybeFieldMap = resp?.data ?? resp?.errors ?? resp;
+      if (maybeFieldMap && typeof maybeFieldMap === "object") {
+        if (Array.isArray(maybeFieldMap)) {
+          for (const item of maybeFieldMap) {
+            if (!item) continue;
+            if (typeof item === "string") {
+              toast.error(item);
+            } else if (item.field && (item.message || item.msg)) {
+              form.setError(item.field, {
+                type: "server",
+                message: item.message || item.msg,
+              });
+              handled = true;
+            }
+          }
+        } else {
+          Object.entries(maybeFieldMap).forEach(([k, v]) => {
+            if (!k) return;
+            const msg = Array.isArray(v) ? v.join(" ") : String(v || "");
+            if (k === "message" || k === "errorCode") return;
+            form.setError(k as any, { type: "server", message: msg });
+            handled = true;
+          });
+        }
+      }
+
+      if (!handled) {
+        const message = resp?.message || err?.message || "Lỗi lưu album";
+        toast.error(message);
+      }
+
+      // Keep modal open for user to fix errors — swallow the error here.
+      return;
+    }
   });
 
   return {

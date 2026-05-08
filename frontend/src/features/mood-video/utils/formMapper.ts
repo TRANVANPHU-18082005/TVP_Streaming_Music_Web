@@ -1,5 +1,5 @@
-import type { MoodVideo } from "../types";
 import { type MoodVideoFormValues } from "../schemas/moodVideo.schema";
+import { IMoodVideo } from "../types";
 
 export const MOOD_VIDEO_DEFAULT_VALUES: MoodVideoFormValues = {
   title: "",
@@ -9,7 +9,7 @@ export const MOOD_VIDEO_DEFAULT_VALUES: MoodVideoFormValues = {
 };
 
 export const mapMoodVideoToForm = (
-  video?: MoodVideo | null,
+  video?: IMoodVideo | null,
 ): MoodVideoFormValues => {
   if (!video) return MOOD_VIDEO_DEFAULT_VALUES;
 

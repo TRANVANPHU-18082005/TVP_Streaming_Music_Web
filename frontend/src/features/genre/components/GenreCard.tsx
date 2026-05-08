@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { IGenre } from "../types";
-
 import { useGenrePlayback } from "@/features/player/hooks/useGenrePlayback";
 import {
   PremiumMusicVisualizer,
@@ -29,17 +28,18 @@ export const GenreCard = memo<GenreCardProps>(
       isFetching,
     } = useGenrePlayback(genre);
 
-    // FIX: Tạo moodColor đồng bộ với hệ thống shadow-brand-dynamic
-    // Nếu genre có màu dạng #hex, ta nên convert hoặc dùng trực tiếp nếu CSS hỗ trợ
+    // ── Style động theo màu/gradient của genre ──
     const moodColorStyle = useMemo(() => {
-      return {
+      const style: React.CSSProperties & { "--local-shadow-color"?: string } = {
         "--local-shadow-color": genre.color || "var(--primary)",
         ...(genre.gradient
           ? { background: genre.gradient }
           : { backgroundColor: genre.color || "hsl(var(--muted))" }),
-      } as React.CSSProperties;
+      };
+      return style;
     }, [genre.color, genre.gradient]);
 
+    // ── Stop propagation khi click nút play (giống AlbumCard dùng stopProp) ──
     const handleQuickPlay = useCallback(
       (e: React.MouseEvent) => {
         e.preventDefault();
@@ -50,133 +50,165 @@ export const GenreCard = memo<GenreCardProps>(
     );
 
     return (
-      <Link
-        to={`/genres/${genre.slug}`}
+      // Dùng <article> + onClick như AlbumCard thay vì <Link> bọc ngoài
+      // → tách biệt rõ "click card = navigate" vs "click play = play"
+      // → tránh nested interactive element (a > button) vi phạm a11y
+      <article
         className={cn(
-          "group relative flex flex-col overflow-hidden transition-all duration-500",
-          size === "lg" ? "aspect-[16/9]" : "aspect-[4/3] sm:aspect-square",
-          "rounded-[18px] sm:rounded-2xl shadow-brand-dynamic", // Thêm shadow xịn của Phú
-          "[will-change:transform] transform-gpu",
-          isThisGenreActive
-            ? "ring-2 ring-white/30 scale-[0.98]"
-            : "hover:-translate-y-1.5",
+          "group cursor-pointer flex flex-col gap-3 relative",
+          "genre-card !overflow-visible p-2 rounded-2xl transition-all duration-300",
+          "hover:bg-muted/10",
+          isThisGenreActive && "bg-primary/5 shadow-brand-soft",
           className,
         )}
-        style={moodColorStyle}
       >
-        {/* ── 1. BACKGROUND IMAGE ── */}
-        <div className="absolute inset-0 z-0">
-          {genre.image ? (
-            <ImageWithFallback
-              src={genre.image}
-              alt=""
-              className={cn(
-                "absolute inset-0 h-full w-full object-cover transition-all duration-1000",
-                "group-hover:scale-110",
-                isThisGenrePlaying
-                  ? "blur-[2px] opacity-70 scale-105"
-                  : "opacity-60 group-hover:opacity-80",
-              )}
-            />
-          ) : (
-            <div className="absolute inset-0 bg-black/20" />
-          )}
-        </div>
-
-        {/* ── 2. NEURAL VISUALIZER (Center-Center like Album Card) ── */}
-        <AnimatePresence>
-          {isThisGenreActive && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none bg-black/20 backdrop-blur-[2px]"
-            >
-              <PremiumMusicVisualizer
-                active={isThisGenrePlaying}
-                size={size === "lg" ? "md" : "sm"}
-                barCount={size === "lg" ? 24 : 16}
-                className="drop-shadow-brand-glow"
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Gradient Overlay để text dễ đọc */}
-        <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent z-10" />
-
-        {/* ── 3. QUICK PLAY BUTTON (Floating like Album Card) ── */}
-        <div
+        {/* ── ARTWORK CONTAINER — giữ aspect-square đồng bộ AlbumCard ── */}
+        <Link
+          to={`/genres/${genre.slug}`}
           className={cn(
-            "absolute right-3 bottom-3 z-30 transition-all duration-300 ease-out",
-            isThisGenreActive || isFetching
-              ? "translate-y-0 opacity-100 scale-100"
-              : "translate-y-3 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100",
+            "genre-card block aspect-square relative isolate overflow-hidden rounded-xl transition-all duration-500",
+            isThisGenreActive
+              ? "ring-2 ring-primary shadow-glow-md"
+              : "ring-1 ring-border/50",
           )}
+          style={moodColorStyle}
         >
-          <button
-            onClick={handleQuickPlay}
-            disabled={isFetching}
+          {/* Background image hoặc solid color từ genre.color */}
+          <ImageWithFallback
+            src={genre.image}
+            alt={genre.name}
             className={cn(
-              "control-btn control-btn--primary size-12 shadow-glow-sm",
-              isThisGenreActive && "bg-white text-black", // Làm nổi bật nút khi active
+              "img-cover transition-transform duration-1000",
+              "group-hover:scale-110",
+              // Làm mờ khi đang phát — giống AlbumCard
+              isThisGenrePlaying && "blur-[2px] opacity-70 scale-105",
+            )}
+          />
+
+          {/* ── Premium Visualizer — chỉ hiện khi ACTIVE (kể cả pause) ── */}
+          <AnimatePresence>
+            {isThisGenreActive && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="absolute inset-0 h-full flex items-center justify-center z-20 pointer-events-none bg-black/20 backdrop-blur-[2px]"
+              >
+                <PremiumMusicVisualizer
+                  active={isThisGenrePlaying}
+                  size={size === "lg" ? "md" : "sm"}
+                  barCount={size === "lg" ? 24 : 16}
+                  className="drop-shadow-brand-glow"
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Gradient overlay để text dễ đọc */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+
+          {/* ── Trending Badge — top-left (Like Button chiếm top-right) ── */}
+          {genre.isTrending && (
+            <div className="absolute top-2.5 left-2.5 z-20">
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-bold text-white border border-white/20">
+                <TrendingUp className="size-3 text-rose-400" />
+                HOT
+              </span>
+            </div>
+          )}
+
+          {/* ── Play Button — giống hệt AlbumCard ── */}
+          <div
+            className={cn(
+              "absolute right-3 bottom-3 z-20 transition-all duration-300 ease-out",
+              isThisGenreActive || isFetching
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-3 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100",
             )}
           >
-            {isFetching ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : isThisGenrePlaying ? (
-              <Pause className="size-5 fill-current" />
-            ) : (
-              <Play className="size-5 fill-current ml-0.5" />
-            )}
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={handleQuickPlay}
+              disabled={isFetching}
+              className={cn(
+                "control-btn control-btn--primary size-12 sm:size-14 shadow-glow-sm",
+                isThisGenreActive && "bg-primary text-white",
+              )}
+            >
+              <AnimatePresence mode="wait">
+                {isFetching ? (
+                  <motion.div
+                    key="loader"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <Loader2 className="size-5 animate-spin" />
+                  </motion.div>
+                ) : isThisGenrePlaying ? (
+                  <motion.div
+                    key="pause"
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.5, opacity: 0 }}
+                  >
+                    <Pause className="size-5 fill-current" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="play"
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.5, opacity: 0 }}
+                  >
+                    <Play className="size-5 ml-0.5 fill-current" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </button>
+          </div>
 
-        {/* ── 4. CONTENT ── */}
-        <div className="relative z-20 flex h-full flex-col justify-between p-4">
-          {/* Top Row: Trending & Mini Waveform */}
-          <div className="flex justify-between items-start">
-            {genre.isTrending ? (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-bold text-white border border-white/20">
-                <TrendingUp className="size-3 text-rose-400" /> HOT
-              </span>
-            ) : (
-              <div />
-            )}
+          {/* Active Glow Ring khi đang tải */}
+          {isFetching && (
+            <div className="absolute inset-0 rounded-xl ring-2 ring-primary animate-glow-pulse pointer-events-none" />
+          )}
+        </Link>
 
+        {/* ── INFO SECTION — đồng bộ AlbumCard ── */}
+        <div className="px-1 flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <h3
+              className={cn(
+                "text-track-title truncate transition-colors duration-200 flex-1",
+                isThisGenreActive
+                  ? "text-primary"
+                  : "text-foreground group-hover:text-primary",
+              )}
+            >
+              {genre.name}
+            </h3>
+
+            {/* Sóng nhạc mini cạnh tiêu đề — chỉ hiện khi Active, giống AlbumCard */}
             {isThisGenreActive && (
               <WaveformBars active={isThisGenrePlaying} bars={3} />
             )}
           </div>
 
-          {/* Bottom Row: Title & Desc */}
-          <div className="flex flex-col gap-0.5 pr-12">
-            {" "}
-            {/* pr-12 để né nút Play */}
-            <h3
-              className={cn(
-                "text-lg sm:text-xl font-black text-white drop-shadow-lg truncate leading-tight",
-                isThisGenrePlaying && "blur-[2px] opacity-70 scale-105",
-              )}
-            >
-              {genre.name}
-            </h3>
-            <p
-              className={cn(
-                "text-[11px] text-white/70 line-clamp-1 transition-all duration-500",
-                "lg:max-h-0 lg:opacity-0 lg:group-hover:max-h-8 lg:group-hover:opacity-100",
-                isThisGenreActive && "lg:max-h-8 lg:opacity-100",
-                isThisGenrePlaying && "blur-[2px] opacity-70 scale-105",
-              )}
-            >
-              {genre.description ||
-                `${genre.trackCount?.toLocaleString()} bài hát`}
-            </p>
+          {/* Sub-info: track count thay cho artist + releaseYear */}
+          <div className="flex items-center gap-2 text-track-meta truncate">
+            {genre.description ? (
+              <span className="truncate">{genre.description}</span>
+            ) : (
+              <span className="text-duration">
+                {genre.trackCount?.toLocaleString()} bài hát
+              </span>
+            )}
           </div>
         </div>
-      </Link>
+      </article>
     );
   },
+  // Memo comparator — đồng bộ AlbumCard
   (p, n) =>
     p.genre._id === n.genre._id &&
     p.genre.image === n.genre.image &&

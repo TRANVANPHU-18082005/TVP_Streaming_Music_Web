@@ -1,14 +1,14 @@
 import { z } from "zod";
 import {
   createArtistSchema,
+  getArtistsByUserSchema,
   updateArtistSchema,
-  getArtistsSchema,
 } from "../validations/artist.validation";
 
 // Input DTOs
 export type CreateArtistDTO = z.infer<typeof createArtistSchema>["body"];
 export type UpdateArtistDTO = z.infer<typeof updateArtistSchema>["body"];
-export type ArtistFilterDTO = z.infer<typeof getArtistsSchema>["query"];
+export type ArtistFilterDTO = z.infer<typeof getArtistsByUserSchema>["query"];
 
 // Response DTO
 export interface ArtistResponseDTO {

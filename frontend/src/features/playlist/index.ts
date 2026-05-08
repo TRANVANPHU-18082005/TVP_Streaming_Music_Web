@@ -7,7 +7,6 @@ export { default as Playlistpageskeleton } from "./components/Playlistpageskelet
 export { default as PlaylistFilter } from "./components/PlaylistFilter";
 export { default as PlaylistModal } from "./components/PlaylistModal";
 export { default as PublicPlaylistCard } from "./components/PublicPlaylistCard";
-export { default as PublicPlaylistFilter } from "./components/PublicPlaylistFilter";
 export { default as SortablePlaylistTrackRow } from "./components/SortablePlaylistTrackRow";
 
 export * from "./hooks/usePlaylistForm";

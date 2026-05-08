@@ -1,5 +1,5 @@
-import type { User } from "../types";
 import { type AdminUserFormValues } from "../schemas/user.schema";
+import { IUser } from "../types";
 
 export const USER_DEFAULT_VALUES: AdminUserFormValues = {
   fullName: "",
@@ -12,7 +12,7 @@ export const USER_DEFAULT_VALUES: AdminUserFormValues = {
   bio: "",
 };
 
-export const mapUserToForm = (user?: User | null): AdminUserFormValues => {
+export const mapUserToForm = (user?: IUser | null): AdminUserFormValues => {
   if (!user) return USER_DEFAULT_VALUES;
 
   return {

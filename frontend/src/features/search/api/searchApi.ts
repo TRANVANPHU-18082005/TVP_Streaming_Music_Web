@@ -19,6 +19,7 @@ const EMPTY_SEARCH_DATA: SearchData = {
   artists: [],
   albums: [],
   playlists: [],
+  genres: [],
 };
 
 export const searchApi = {

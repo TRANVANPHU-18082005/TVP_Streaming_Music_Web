@@ -78,7 +78,7 @@ const CSS_TEXT = `
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #000;
+  background: var(--color-background);
   contain: layout style paint;
 }
 
@@ -95,7 +95,7 @@ const CSS_TEXT = `
 .vme-loading {
   position: absolute;
   inset: 0;
-  background: #000;
+  background: var(--color-background);
   transition: opacity 0.55s ease;
   pointer-events: none;
   z-index: 8;

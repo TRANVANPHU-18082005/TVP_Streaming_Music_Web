@@ -5,8 +5,12 @@ import {
 } from "@tanstack/react-query";
 import playlistApi from "../api/playlistApi";
 import { playlistKeys } from "../utils/playlistKeys";
-import type { IPlaylist, PlaylistFilterParams } from "../types";
+import type { IPlaylist } from "../types";
 import { APP_CONFIG } from "@/config/constants";
+import {
+  PlaylistAdminFilterParams,
+  PlaylistFilterParams,
+} from "../schemas/playlist.schema";
 
 // ==========================================
 // 1. PUBLIC QUERIES (Khám phá & Tìm kiếm)
@@ -15,10 +19,32 @@ import { APP_CONFIG } from "@/config/constants";
 /**
  * Hook lấy danh sách Playlist Public (Phân trang, Lọc)
  */
-export const usePlaylistsQuery = (params: PlaylistFilterParams) => {
+export const usePlaylistsByUserQuery = (params: PlaylistFilterParams) => {
   return useQuery({
     queryKey: playlistKeys.list(params),
-    queryFn: () => playlistApi.getPlaylists({ ...params }),
+    queryFn: () => playlistApi.getPlaylistsByUser({ ...params }),
+
+    // UX: Giữ data cũ khi chuyển trang -> Tránh Layout Shift
+    placeholderData: keepPreviousData,
+
+    // Performance: Cache 2 phút
+    staleTime: 1000 * 60 * 2,
+
+    // Select: Bóc tách data gọn gàng
+    select: (response) => ({
+      playlists: response.data.data as IPlaylist[],
+      meta: response.data.meta,
+      isEmpty: response.data.data.length === 0,
+    }),
+  });
+};
+/**
+ * Hook lấy danh sách Playlist Public (Phân trang, Lọc)
+ */
+export const usePlaylistsByAdminQuery = (params: PlaylistAdminFilterParams) => {
+  return useQuery({
+    queryKey: playlistKeys.list(params),
+    queryFn: () => playlistApi.getPlaylistsByAdmin({ ...params }),
 
     // UX: Giữ data cũ khi chuyển trang -> Tránh Layout Shift
     placeholderData: keepPreviousData,
@@ -79,13 +105,11 @@ export const useFeaturedPlaylists = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
   const params: PlaylistFilterParams = {
     limit,
     sort: "popular",
-    isSystem: true, // Thường hiển thị playlist của Hệ thống trên trang chủ
-    visibility: "public",
   };
 
   return useQuery({
     queryKey: playlistKeys.list(params),
-    queryFn: () => playlistApi.getPlaylists(params),
+    queryFn: () => playlistApi.getPlaylistsByUser({ ...params }),
     staleTime: 1000 * 60 * 15, // Playlist hệ thống ít đổi, cache 15 phút
     select: (response) => response.data.data as IPlaylist[],
   });
@@ -114,25 +138,9 @@ export const usePlaylistDetail = (slugOrId: string) => {
  */
 export const useMyPlaylists = () => {
   return useQuery({
-    queryKey: playlistKeys.list({ type: "all" }), // Key riêng biệt
-    queryFn: () => playlistApi.getMyPlaylists(),
+    queryKey: playlistKeys.myList(), // Key riêng biệt
+    queryFn: () => playlistApi.getMyLibrary(),
     staleTime: 1000 * 60 * 5,
-    select: (response) => response.data,
-  });
-};
-/**
- * Hook lấy danh sách Playlist của chính User đang đăng nhập
- * Dùng cho Sidebar hoặc trang My Playlists trong Profile
- */
-export const useMyLibraryQuery = (params?: PlaylistFilterParams) => {
-  return useQuery({
-    // Sử dụng một queryKey riêng biệt ['playlists', 'me'] để tránh cache chung với public lists
-    queryKey: [...playlistKeys.all, "me", params],
-    queryFn: () => playlistApi.getMyLibrary(params),
-    staleTime: 1000 * 60 * 5, // Cache 5 phút
-    select: (response) => ({
-      playlists: response.data.data as IPlaylist[],
-      meta: response.data.meta,
-    }),
+    select: (response) => response.data.data,
   });
 };

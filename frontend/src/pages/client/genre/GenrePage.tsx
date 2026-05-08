@@ -6,15 +6,15 @@ import Pagination from "@/utils/pagination";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import { GenreFilters } from "@/features/genre/components/GenreFilters";
 import { useGenreParams } from "@/features/genre/hooks/useGenreParams";
-import { useGenresQuery } from "@/features/genre/hooks/useGenresQuery";
 import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
-import { Genrepageskeleton } from "@/features";
+import { Genrepageskeleton, useGenresByUserQuery } from "@/features";
 import SectionAmbient from "@/components/SectionAmbient";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { KeyboardMusic } from "lucide-react";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -123,10 +123,11 @@ const GenrePage: React.FC = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useGenreParams(DEFAULT_GRID_META.pageSize);
-
-  const { data, isLoading, isError, refetch } = useGenresQuery(filterParams);
-
+  } = useGenreParams();
+  console.log("GenrePage - filterParams:", filterParams);
+  const { data, isLoading, isError, refetch } =
+    useGenresByUserQuery(filterParams);
+  console.log("GenrePage - data:", data);
   // Granular derived slices — avoids full object diff
   const genres = useMemo(() => data?.genres ?? [], [data?.genres]);
   const meta = useMemo(
@@ -147,7 +148,7 @@ const GenrePage: React.FC = () => {
   const hasResults = genres.length > 0;
   const isFiltering = Boolean(filterParams.keyword);
 
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
   // ── Error state ─────────────────────────────────────────────────────────
   // Initial Load
   if (isLoading && !hasResults) {

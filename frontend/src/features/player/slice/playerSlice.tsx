@@ -15,6 +15,7 @@ import {
 } from "@reduxjs/toolkit";
 import type { RootState } from "@/store/store";
 import { ITrack } from "@/features/track/types";
+import { toast } from "sonner";
 
 // ============================================================================
 // 1. HELPER: SMART SHUFFLE (ID-based, Spotify Style)
@@ -512,6 +513,7 @@ const playerSlice = createSlice({
     /** Toggle autoplay when queue ends */
     toggleAutoplay: (state) => {
       state.autoplayEnabled = !state.autoplayEnabled;
+      toast.success(`${state.autoplayEnabled ? "Bật" : "Tắt"} tự động phát`);
     },
 
     nextTrack: (state) => {
@@ -646,8 +648,8 @@ export const selectNextTrack = createSelector(
 /** Kiểm tra nhanh metadata của một trackId có trong cache chưa. */
 export const selectIsTrackCached =
   (trackId: string) =>
-  (state: RootState): boolean =>
-    Boolean(state.player.trackMetadataCache[trackId]);
+    (state: RootState): boolean =>
+      Boolean(state.player.trackMetadataCache[trackId]);
 
 /** Tổng số bài trong queue (dùng cho Virtual Scroll totalCount). */
 export const selectQueueLength = (state: RootState): number =>

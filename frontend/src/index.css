@@ -3,7 +3,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
 
 @import "tailwindcss";
-
+/* Quick wins (0–2 ngày): extract tokens, enable Tailwind purge, lazy-load heavy components, optimize images & fonts, run bundle analyzer.
+Medium (1–2 tuần): scaffold src/ui component lib + Storybook, enforce tokens, add CI perf budget.
+Long (2–6 tuần): SSR/SSG cho pages quan trọng, PWA, deeper refactor render paths. */
 /* ================================================================
    SOUNDWAVE — Production CSS v3.0 (Refactored)
    Design Language: Obsidian Luxury / Neural Audio Experience
@@ -21,331 +23,7 @@
 @custom-variant motion-reduce (@media (prefers-reduced-motion: reduce));
 
 /* --- 2. DESIGN TOKENS (Tailwind v4) --- */
-@theme inline {
-
-  /* -- Font Families -- */
-  --font-display: "Space Grotesk", sans-serif;
-  --font-body:    "Inter", sans-serif;
-  --font-mono:    "JetBrains Mono", monospace;
-
-  /* -- Radius Scale -- */
-  --radius-2xs:  2px;
-  --radius-xs:   4px;
-  --radius-sm:   6px;
-  --radius-md:   10px;
-  --radius-lg:   14px;
-  --radius-xl:   18px;
-  --radius-2xl:  24px;
-  --radius-3xl:  32px;
-  --radius-4xl:  40px;
-  --radius-pill: 9999px;
-
-  /* -- Colors -- */
-  --color-background:             hsl(var(--background));
-  --color-foreground:             hsl(var(--foreground));
-  --color-surface-1:              hsl(var(--surface-1));
-  --color-surface-2:              hsl(var(--surface-2));
-  --color-surface-3:              hsl(var(--surface-3));
-  --color-card:                   hsl(var(--card));
-  --color-card-foreground:        hsl(var(--card-foreground));
-  --color-popover:                hsl(var(--popover));
-  --color-popover-foreground:     hsl(var(--popover-foreground));
-  --color-primary:                hsl(var(--primary));
-  --color-primary-foreground:     hsl(var(--primary-foreground));
-  --color-secondary:              hsl(var(--secondary));
-  --color-secondary-foreground:   hsl(var(--secondary-foreground));
-  --color-muted:                  hsl(var(--muted));
-  --color-muted-foreground:       hsl(var(--muted-foreground));
-  --color-accent:                 hsl(var(--accent));
-  --color-accent-foreground:      hsl(var(--accent-foreground));
-  --color-destructive:            hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-border:                 hsl(var(--border));
-  --color-border-strong:          hsl(var(--border-strong));
-  --color-input:                  hsl(var(--input));
-  --color-ring:                   hsl(var(--ring));
-  --color-overlay:                hsl(var(--overlay));
-
-  /* Brand Spectrum */
-  --color-brand-25:   hsl(var(--brand-25));
-  --color-brand-50:   hsl(var(--brand-50));
-  --color-brand-100:  hsl(var(--brand-100));
-  --color-brand-200:  hsl(var(--brand-200));
-  --color-brand-300:  hsl(var(--brand-300));
-  --color-brand-400:  hsl(var(--brand-400));
-  --color-brand-500:  hsl(var(--brand-500));
-  --color-brand-600:  hsl(var(--brand-600));
-  --color-brand-700:  hsl(var(--brand-700));
-  --color-brand-800:  hsl(var(--brand-800));
-  --color-brand-glow: hsl(var(--brand-glow));
-  --color-brand-halo: hsl(var(--brand-halo));
-
-  /* Chromatic Spectrum */
-  --color-wave-1: hsl(var(--wave-1));
-  --color-wave-2: hsl(var(--wave-2));
-  --color-wave-3: hsl(var(--wave-3));
-  --color-wave-4: hsl(var(--wave-4));
-
-  /* Functional */
-  --color-success: hsl(var(--success));
-  --color-warning: hsl(var(--warning));
-  --color-error:   hsl(var(--error));
-  --color-info:    hsl(var(--info));
-
-  /* Sidebar */
-  --color-sidebar:                    hsl(var(--sidebar-background));
-  --color-sidebar-foreground:         hsl(var(--sidebar-foreground));
-  --color-sidebar-primary:            hsl(var(--sidebar-primary));
-  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
-  --color-sidebar-accent:             hsl(var(--sidebar-accent));
-  --color-sidebar-accent-foreground:  hsl(var(--sidebar-accent-foreground));
-  --color-sidebar-border:             hsl(var(--sidebar-border));
-  --color-sidebar-ring:               hsl(var(--sidebar-ring));
-
-  /* ============================================================
-     EASING CURVES — Refactored v3
-     Nguyên tắc: Fast in, slow out. Theme transitions "tan chảy".
-     ============================================================ */
-  --ease-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-snappy:      cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-smooth:      cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-overshoot:   cubic-bezier(0.47, 1.64, 0.41, 0.8);
-  --ease-decelerate:  cubic-bezier(0, 0, 0.2, 1);
-  --ease-accelerate:  cubic-bezier(0.4, 0, 1, 1);
-  /* Mới: theme morph — cực kỳ mượt cho color transitions */
-  --ease-theme:       cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  /* Mới: glass breathe — cho backdrop transitions */
-  --ease-breath:      cubic-bezier(0.37, 0, 0.63, 1);
-
-  /* ============================================================
-     DURATION SCALE — Refactored
-     Micro-interactions nhanh hơn, theme transitions dài hơn.
-     ============================================================ */
-  --duration-instant:  50ms;
-  --duration-fast:    100ms;
-  --duration-normal:  200ms;
-  --duration-slow:    320ms;
-  --duration-slower:  480ms;
-  --duration-sluggish:720ms;
-  /* Mới: theme-specific duration */
-  --duration-theme:   380ms;
-  --duration-morph:   560ms;
-
-  /* ============================================================
-     TRANSITION PRESETS — Refactored
-     Áp dụng --ease-theme cho color properties.
-     ============================================================ */
-  --transition-base:   all var(--duration-normal) var(--ease-smooth);
-  --transition-fast:   all var(--duration-fast)   var(--ease-smooth);
-  --transition-spring: all var(--duration-slow)   var(--ease-spring);
-  --transition-snappy: all var(--duration-slow)   var(--ease-snappy);
-  /* Refactored: theme-aware color transitions */
-  --transition-color:
-    color            var(--duration-theme) var(--ease-theme),
-    background-color var(--duration-theme) var(--ease-theme),
-    border-color     var(--duration-theme) var(--ease-theme),
-    box-shadow       var(--duration-theme) var(--ease-theme),
-    opacity          var(--duration-normal) var(--ease-smooth);
-  /* Mới: glass morph transition */
-  --transition-glass:
-    background       var(--duration-theme)  var(--ease-theme),
-    backdrop-filter  var(--duration-morph)  var(--ease-breath),
-    border-color     var(--duration-theme)  var(--ease-theme),
-    box-shadow       var(--duration-theme)  var(--ease-theme);
-
-  /* -- Animations -- */
-  --animate-accordion-down: accordion-down 0.22s var(--ease-snappy);
-  --animate-accordion-up:   accordion-up   0.22s var(--ease-snappy);
-  --animate-fade-in:        fadeIn         var(--duration-slower) var(--ease-snappy) both;
-  --animate-fade-up:        fadeUp         var(--duration-slower) var(--ease-snappy) both;
-  --animate-fade-down:      fadeDown       var(--duration-slower) var(--ease-snappy) both;
-  --animate-scale-in:       scaleIn        0.28s  var(--ease-spring) both;
-  --animate-scale-out:      scaleOut       0.22s  var(--ease-accelerate) both;
-  --animate-slide-in-left:  slideInLeft    var(--duration-slow) var(--ease-snappy) both;
-  --animate-slide-in-right: slideInRight   var(--duration-slow) var(--ease-snappy) both;
-  --animate-slide-in-up:    slideInUp      var(--duration-slow) var(--ease-snappy) both;
-  --animate-slide-out-down: slideOutDown   var(--duration-normal) var(--ease-accelerate) both;
-  --animate-pop-in:         popIn          0.4s   var(--ease-overshoot) both;
-  --animate-text-reveal:    text-reveal    0.7s   var(--ease-snappy) both;
-
-  /* Visualizer Bars */
-  --animate-bar-1: bar-bounce 0.80s ease-in-out infinite;
-  --animate-bar-2: bar-bounce 1.10s ease-in-out infinite  0.09s;
-  --animate-bar-3: bar-bounce 0.92s ease-in-out infinite  0.18s;
-  --animate-bar-4: bar-bounce 1.28s ease-in-out infinite  0.13s;
-  --animate-bar-5: bar-bounce 0.74s ease-in-out infinite  0.04s;
-  --animate-bar-6: bar-bounce 1.04s ease-in-out infinite  0.22s;
-  --animate-bar-7: bar-bounce 0.86s ease-in-out infinite  0.31s;
-  --animate-bar-8: bar-bounce 0.98s ease-in-out infinite  0.07s;
-
-  /* Waveform / VU */
-  --animate-wave-pulse: wave-pulse 2.2s ease-in-out infinite;
-  --animate-vu-meter:   vu-level   1.6s ease-in-out infinite alternate;
-
-  /* Loading */
-  --animate-shimmer:  shimmer  1.8s linear infinite;
-  --animate-progress: progress 1.8s var(--ease-snappy) infinite;
-  --animate-spinner:  spin     0.7s linear infinite;
-
-  /* Ambient */
-  --animate-float-slow:   float-orb 22s ease-in-out infinite;
-  --animate-float-slower: float-orb 34s ease-in-out infinite reverse;
-  --animate-float-fast:   float-orb 14s ease-in-out infinite 5s;
-  --animate-twinkle:      twinkle    4s ease-in-out infinite;
-  --animate-aurora:       aurora    16s ease-in-out infinite alternate;
-  --animate-aurora-2:     aurora    24s ease-in-out infinite alternate-reverse;
-
-  /* Glow */
-  --animate-glow-pulse:   glow-pulse   3.2s ease-in-out infinite;
-  --animate-glow-ring:    glow-ring    2.0s ease-in-out infinite;
-  --animate-glow-breathe: glow-breathe 4.0s ease-in-out infinite;
-  --animate-halo:         halo-pulse   3.5s ease-in-out infinite;
-
-  /* Vinyl */
-  --animate-vinyl:      vinyl-spin 3.8s linear infinite;
-  --animate-vinyl-slow: vinyl-spin 20s linear infinite;
-
-  /* -- Keyframes -- */
-  @keyframes sw-blink {
-  0%, 92%, 100% { transform: scaleY(1); }
-  95%           { transform: scaleY(0.08); }
-  97%           { transform: scaleY(1); }
-  }
-  @keyframes sw-pupil {
-    0%, 100% { transform: scale(1); }
-    50%      { transform: scale(1.15); }
-  }
-  @keyframes sw-count-pop {
-    0%   { transform: translateY(6px) scale(0.7); opacity: 0; }
-    100% { transform: translateY(0)   scale(1);   opacity: 1; }
-  }
-  @keyframes accordion-down {
-    from { height: 0; opacity: 0; }
-    to   { height: var(--radix-accordion-content-height); opacity: 1; }
-  }
-  @keyframes glow-breathe {
-    0%, 100% { opacity: 0.2; }
-    50%       { opacity: 0.55; }
-  }
-  @keyframes accordion-up {
-    from { height: var(--radix-accordion-content-height); opacity: 1; }
-    to   { height: 0; opacity: 0; }
-  }
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes fadeDown {
-    from { opacity: 0; transform: translateY(-16px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.88); }
-    to   { opacity: 1; transform: scale(1); }
-  }
-  @keyframes scaleOut {
-    from { opacity: 1; transform: scale(1); }
-    to   { opacity: 0; transform: scale(0.92); }
-  }
-  @keyframes popIn {
-    from { opacity: 0; transform: scale(0.7); }
-    to   { opacity: 1; transform: scale(1); }
-  }
-  @keyframes slideInLeft {
-    from { opacity: 0; transform: translateX(-24px); }
-    to   { opacity: 1; transform: translateX(0); }
-  }
-  @keyframes slideInRight {
-    from { opacity: 0; transform: translateX(24px); }
-    to   { opacity: 1; transform: translateX(0); }
-  }
-  @keyframes slideInUp {
-    from { opacity: 0; transform: translateY(24px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes slideOutDown {
-    from { opacity: 1; transform: translateY(0); }
-    to   { opacity: 0; transform: translateY(20px); }
-  }
-  @keyframes text-reveal {
-    from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
-    to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
-  }
-  @keyframes bar-bounce {
-    0%, 100% { height: 15%; }
-    50%       { height: 100%; }
-  }
-  @keyframes wave-pulse {
-    0%   { transform: scaleY(0.35); opacity: 0.45; }
-    50%  { transform: scaleY(1);    opacity: 1;    }
-    100% { transform: scaleY(0.35); opacity: 0.45; }
-  }
-  @keyframes vu-level {
-    0%   { height: 20%; }
-    100% { height: 85%; }
-  }
-  @keyframes shimmer {
-    from { background-position: -400% center; }
-    to   { background-position:  400% center; }
-  }
-  @keyframes progress {
-    0%   { transform: translateX(-100%); }
-    60%  { transform: translateX(20%);   }
-    100% { transform: translateX(100%);  }
-  }
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-  @keyframes twinkle {
-    0%, 100% { opacity: 0.15; transform: scale(0.65); }
-    50%       { opacity: 1;   transform: scale(1.3);  }
-  }
-  @keyframes float-orb {
-    0%   { transform: translate(0px, 0px)     rotate(0deg)   scale(1);    }
-    25%  { transform: translate(48px, -72px)  rotate(9deg)   scale(1.08); }
-    50%  { transform: translate(-28px, -32px) rotate(-5deg)  scale(0.95); }
-    75%  { transform: translate(32px, 40px)   rotate(12deg)  scale(1.05); }
-    100% { transform: translate(0px, 0px)     rotate(0deg)   scale(1);    }
-  }
-  @keyframes aurora {
-    0%   { transform: translate(-20%, -20%) rotate(0deg)   scale(1);    opacity: 0.35; }
-    33%  { transform: translate(10%, -10%)  rotate(20deg)  scale(1.15); opacity: 0.55; }
-    66%  { transform: translate(-5%, 15%)   rotate(-10deg) scale(0.9);  opacity: 0.4;  }
-    100% { transform: translate(20%, -5%)   rotate(30deg)  scale(1.2);  opacity: 0.5;  }
-  }
-  @keyframes glow-pulse {
-    0%, 100% { opacity: 0.35; filter: blur(22px); }
-    50%       { opacity: 0.95; filter: blur(36px); }
-  }
-  @keyframes glow-ring {
-    0%, 100% { box-shadow: 0 0 0 0    hsl(var(--primary) / 0.35); }
-    50%       { box-shadow: 0 0 0 10px hsl(var(--primary) / 0);   }
-  }
-  @keyframes glow-breathe {
-    0%, 100% {
-      box-shadow:
-        0 0 16px hsl(var(--brand-glow) / 0.2),
-        0 0 32px hsl(var(--brand-glow) / 0.08);
-    }
-    50% {
-      box-shadow:
-        0 0 32px hsl(var(--brand-glow) / 0.5),
-        0 0 64px hsl(var(--brand-glow) / 0.18);
-    }
-  }
-  @keyframes halo-pulse {
-    0%, 100% { opacity: 0; transform: scale(0.96); }
-    50%       { opacity: 1; transform: scale(1.04); }
-  }
-  @keyframes vinyl-spin {
-    from { transform: rotate(0deg);   }
-    to   { transform: rotate(360deg); }
-  }
-}
+@import "./styles/design-tokens.css";
 
 /* ================================================================
    3. COLOR PALETTE & SEMANTIC TOKENS — REFACTORED v3
@@ -1050,6 +728,14 @@
     transition: var(--transition-color);
   }
 
+  mark {
+    background-color: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+    font-weight: 700;
+    border-radius: 2px;
+    padding: 0 2px;
+  }
+
   hr {
     border: none;
     height: 1px;
@@ -1461,6 +1147,19 @@
         hsl(var(--wave-2) / 0.06) 0%, transparent 60%);
   }
 
+  /* Small semantic background utilities used by page heroes */
+  .bg-primary-07 { background: hsl(var(--primary) / 0.07); }
+  .bg-wave-2-042 { background: hsl(var(--wave-2) / 0.042); }
+  .bg-wave-3-032 { background: hsl(var(--wave-3) / 0.032); }
+
+  /* Sheet surface tokenized utility */
+  .sheet-surface {
+    background: hsl(var(--surface-1, 15 15 15) / 1);
+    background-color: #111111;
+    border-top: 1px solid hsl(var(--border) / 0.5);
+    box-shadow: 0 -8px 60px rgba(0,0,0,0.55), 0 -1px 0 hsl(var(--border) / 0.4);
+  }
+
   /* Shimmer skeleton */
   .bg-shimmer {
     background: linear-gradient(
@@ -1478,6 +1177,31 @@
   /* Overlay gradients */
   .overlay-bottom { background: linear-gradient(to top, hsl(var(--background)) 0%, transparent 100%); }
   .overlay-top    { background: linear-gradient(to bottom, hsl(var(--background)) 0%, transparent 100%); }
+
+  /* ================================================================
+     8.1 BADGE UTILITIES — Unified badge tokens for charts & lists
+     Use semantic tokens (wave/success/error) instead of hard-coded hex
+     ================================================================ */
+  .badge-new {
+    color: hsl(var(--wave-4));
+    background: hsl(var(--wave-4) / 0.10);
+    border: 1px solid hsl(var(--wave-4) / 0.14);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .badge-up {
+    color: hsl(var(--success));
+    background: hsl(var(--success) / 0.10);
+    border: 1px solid hsl(var(--success) / 0.14);
+  }
+
+  .badge-down {
+    color: hsl(var(--destructive));
+    background: hsl(var(--destructive) / 0.10);
+    border: 1px solid hsl(var(--destructive) / 0.14);
+  }
   .overlay-album {
     background: linear-gradient(to top,
       hsl(228 36% 4% / 0.95) 0%,

@@ -14,7 +14,7 @@ import {
   BulkRetryInput,
   ChangeStatusInput,
 } from "../validations/track.validation";
-import { CreateTrackDTO, UpdateTrackDTO } from "../dtos/track.dto";
+
 import { getRealtimeChart } from "../services/chart.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ import { getRealtimeChart } from "../services/chart.service";
 // ─────────────────────────────────────────────────────────────────────────────
 export const uploadTrack = catchAsync(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-  const body = req.body as CreateTrackDTO;
+  const body = req.body as CreateTrackInput;
 
   const track = await trackService.createTrack(req.user as IUser, body, files);
 
@@ -38,7 +38,7 @@ export const uploadTrack = catchAsync(async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateTrack = catchAsync(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-  const body = req.body as UpdateTrackDTO;
+  const body = req.body as UpdateTrackInput;
 
   const track = await trackService.updateTrack(
     req.params.id,
@@ -83,7 +83,7 @@ export const getTracks = catchAsync(async (req: Request, res: Response) => {
 export const getTrackDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user ? (req.user as IUser) : undefined;
-    const track = await trackService.getTrackById(req.params.id, currentUser);
+    const track = await trackService.getTrackDetail(req.params.id, currentUser);
 
     res.status(httpStatus.OK).json({ success: true, data: track });
   },
@@ -119,7 +119,7 @@ export const bulkUpdateTracks = catchAsync(
   },
 );
 
-// ── BULK RETRY ENDPOINTS (Admin) ─────────────────────────────────────────
+// 8. BULK RETRY (Transcode, Lyrics, Karaoke, Mood Canvas) - Queue lại các job xử lý cho nhiều track cùng lúc
 export const bulkRetryTranscode = catchAsync(
   async (req: Request, res: Response) => {
     const { trackIds } = req.body as BulkRetryInput;
@@ -186,7 +186,7 @@ export const bulkRetryFull = catchAsync(async (req: Request, res: Response) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. RETRY OPERATIONS
+// 9. RETRY OPERATIONS
 //    Mỗi retry là 1 endpoint riêng — rõ ràng, dễ gọi từ dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 

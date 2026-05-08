@@ -37,7 +37,7 @@ export const BecomeArtistPage = () => {
     watch,
     formState: { errors },
   } = useForm<BecomeArtistFormValues>({
-    resolver: zodResolver(becomeArtistSchema),
+    resolver: zodResolver(becomeArtistSchema) as any,
     defaultValues: {
       artistName: "",
       realName: "",
@@ -64,13 +64,13 @@ export const BecomeArtistPage = () => {
   const renderUploadArea = (
     name: "frontImage" | "backImage",
     label: string,
-    file: File | undefined
+    file: File | undefined,
   ) => (
     <div className="space-y-3">
       <Label
         className={cn(
           "text-sm font-bold text-foreground",
-          errors[name] && "text-destructive"
+          errors[name] && "text-destructive",
         )}
       >
         {label} <span className="text-destructive">*</span>
@@ -82,7 +82,7 @@ export const BecomeArtistPage = () => {
           errors[name]
             ? "border-destructive bg-destructive/5"
             : "border-border hover:border-primary hover:bg-primary/5",
-          file && "border-solid border-primary/50 bg-background"
+          file && "border-solid border-primary/50 bg-background",
         )}
       >
         {file ? (
@@ -107,7 +107,7 @@ export const BecomeArtistPage = () => {
                 "p-3 rounded-full inline-flex shadow-sm transition-colors",
                 errors[name]
                   ? "bg-destructive/10 text-destructive"
-                  : "bg-background text-muted-foreground group-hover:text-primary group-hover:bg-primary/10"
+                  : "bg-background text-muted-foreground group-hover:text-primary group-hover:bg-primary/10",
               )}
             >
               <FileImage className="size-6" />
@@ -203,7 +203,7 @@ export const BecomeArtistPage = () => {
                       className={cn(
                         "pl-9 h-11 bg-background font-medium",
                         errors.artistName &&
-                          "border-destructive focus-visible:ring-destructive/30"
+                          "border-destructive focus-visible:ring-destructive/30",
                       )}
                     />
                   </div>
@@ -226,7 +226,7 @@ export const BecomeArtistPage = () => {
                       className={cn(
                         "pl-9 h-11 bg-background font-medium",
                         errors.socialLink &&
-                          "border-destructive focus-visible:ring-destructive/30"
+                          "border-destructive focus-visible:ring-destructive/30",
                       )}
                     />
                   </div>
@@ -261,7 +261,7 @@ export const BecomeArtistPage = () => {
                     className={cn(
                       "h-11 bg-background font-medium",
                       errors.realName &&
-                        "border-destructive focus-visible:ring-destructive/30"
+                        "border-destructive focus-visible:ring-destructive/30",
                     )}
                   />
                   {errors.realName && (
@@ -283,7 +283,7 @@ export const BecomeArtistPage = () => {
                       className={cn(
                         "pl-9 h-11 bg-background font-medium",
                         errors.emailWork &&
-                          "border-destructive focus-visible:ring-destructive/30"
+                          "border-destructive focus-visible:ring-destructive/30",
                       )}
                     />
                   </div>
@@ -323,7 +323,7 @@ export const BecomeArtistPage = () => {
                 {renderUploadArea(
                   "frontImage",
                   "Mặt trước CCCD",
-                  frontImageFile
+                  frontImageFile,
                 )}
                 {renderUploadArea("backImage", "Mặt sau CCCD", backImageFile)}
               </div>

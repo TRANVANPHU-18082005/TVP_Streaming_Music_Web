@@ -19,7 +19,18 @@ import {
   AlignLeft,
   Palette,
   Music2,
+  Calendar,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { useAppSelector } from "@/store/hooks";
+import { PLAYLIST_TYPES } from "../schemas/playlist.schema";
 import { cn } from "@/lib/utils";
 import { usePlaylistForm } from "../hooks/usePlaylistForm";
 import { TagInput } from "@/components/ui/tag-input";
@@ -322,6 +333,9 @@ const PlaylistModal = memo<PlaylistModalProps>(
       watch,
     } = form;
 
+    const { user } = useAppSelector((s) => s.auth);
+    const isAdmin = user?.role === "admin";
+
     // FIX 10: single useMemo
     const isWorking = useMemo(
       () => isPending || isFormSubmitting,
@@ -412,7 +426,6 @@ const PlaylistModal = memo<PlaylistModalProps>(
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 bg-black/80 backdrop-blur-md"
-              onClick={!isWorking ? onClose : undefined}
             />
 
             {/* Content — FIX 4: stopPropagation */}
@@ -570,15 +583,140 @@ const PlaylistModal = memo<PlaylistModalProps>(
                             </p>
                           )}
                         </div>
+
+                        {/* Publish At */}
+                        <div className="space-y-2">
+                          <Label htmlFor="pl-publishAt" className={LABEL_CLASS}>
+                            <Calendar className="size-3.5" /> Ngày công bố
+                          </Label>
+                          <Input
+                            id="pl-publishAt"
+                            type="datetime-local"
+                            {...register("publishAt")}
+                            className={cn(
+                              "h-10 bg-transparent border-input rounded-md text-sm",
+                              errors.publishAt &&
+                                "border-destructive focus-visible:ring-destructive",
+                            )}
+                          />
+                          {errors.publishAt && (
+                            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1.5">
+                              <AlertCircle className="size-3.5" />{" "}
+                              {errors.publishAt.message as string}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </SectionBlock>
+
+                  {/* Admin-only fields */}
+                  {isAdmin && (
+                    <>
+                      <hr className="border-border border-dashed" />
+                      <SectionBlock title="Quản trị">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <Label className={LABEL_CLASS}>Chủ sở hữu</Label>
+                            <Controller
+                              name="userId"
+                              control={control}
+                              render={({ field }) => (
+                                <div>
+                                  <UserSelector
+                                    singleSelect
+                                    value={field.value as any}
+                                    onChange={(val) => {
+                                      field.onChange(val as any);
+                                      setValue("userId", val as any, {
+                                        shouldDirty: true,
+                                        shouldValidate: true,
+                                      });
+                                    }}
+                                    initialUsers={playlistToEdit?.user as any}
+                                  />
+                                  {errors.userId && (
+                                    <p className="text-[12px] text-destructive mt-1">
+                                      {errors.userId?.message as string}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className={LABEL_CLASS}>Hệ thống</Label>
+                            <div className="flex items-center gap-3">
+                              <Controller
+                                name="isSystem"
+                                control={control}
+                                render={({ field }) => (
+                                  <Switch
+                                    checked={!!field.value}
+                                    onCheckedChange={(v) => {
+                                      const val = Boolean(v);
+                                      field.onChange(val as any);
+                                      setValue("isSystem", val as any, {
+                                        shouldDirty: true,
+                                        shouldValidate: true,
+                                      });
+                                    }}
+                                  />
+                                )}
+                              />
+                              <span className="text-sm text-muted-foreground">
+                                Đánh dấu là hệ thống (không thể xóa)
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </SectionBlock>
+                    </>
+                  )}
 
                   <hr className="border-border border-dashed" />
 
                   {/* ── Section 2: Tags & Collaborators ── */}
                   <SectionBlock title="Phân loại & Hợp tác">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* Type Select */}
+                      <div className="space-y-2">
+                        <Label className={LABEL_CLASS}>
+                          <Type className="size-3.5" /> Loại
+                        </Label>
+                        <Controller
+                          name="type"
+                          control={control}
+                          render={({ field }) => (
+                            <div>
+                              <Select
+                                value={field.value}
+                                onValueChange={(v) => {
+                                  field.onChange(v);
+                                  setValue("type", v, { shouldDirty: true });
+                                }}
+                              >
+                                <SelectTrigger className="h-9 w-full bg-background/80 text-sm rounded-lg border-border/60 focus:ring-1 focus:ring-primary/30">
+                                  <SelectValue placeholder="Chọn loại" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PLAYLIST_TYPES.map((t) => (
+                                    <SelectItem key={t} value={t}>
+                                      {t}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {errors.type && (
+                                <p className="text-[12px] text-destructive mt-1">
+                                  {errors.type?.message as string}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        />
+                      </div>
                       {/* Tags */}
                       <div className="space-y-2">
                         <Label className={LABEL_CLASS}>

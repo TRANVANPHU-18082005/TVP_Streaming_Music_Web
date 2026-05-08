@@ -1,6 +1,8 @@
 // 1. User Entity (Khớp với Model Mongo)
 export interface IUser {
   _id: string;
+  // Backwards-compatible alias used in some components
+  id?: string;
   fullName: string;
   username: string;
   email: string;
@@ -16,6 +18,8 @@ export interface IUser {
 }
 export interface UserProfile {
   _id: string;
+  // Backwards-compatible alias used in some components
+  id?: string;
   fullName: string;
   username: string;
   email: string;
@@ -91,3 +95,6 @@ export interface UserFilterParams {
   isVerified?: boolean;
   isActive?: boolean;
 }
+
+// Compatibility alias
+export type User = IUser;

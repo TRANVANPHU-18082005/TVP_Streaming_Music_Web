@@ -1,6 +1,5 @@
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { Artist } from "@/features/artist/types";
 import { cn } from "@/lib/utils";
 import {
   MoreHorizontal,
@@ -27,6 +26,7 @@ import { getInitialsTextAvartar } from "@/utils/genTextAvartar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { IArtist } from "@/features";
 
 // Helper lấy cờ
 const getFlagEmoji = (countryCode: string) => {
@@ -39,7 +39,7 @@ const getFlagEmoji = (countryCode: string) => {
 };
 
 interface ArtistCardProps {
-  artist: Artist;
+  artist: IArtist;
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
@@ -190,25 +190,6 @@ const ArtistCard: React.FC<ArtistCardProps> = ({
                 {artist.user ? "Verified Account" : "Internal Profile"}
               </Badge>
             </div>
-          </div>
-
-          {/* Genres: ẨN TRÊN MOBILE, Chỉ hiện Desktop */}
-          <div className="hidden sm:flex flex-wrap justify-center gap-1.5 min-h-[1.5rem]">
-            {artist.genres?.length > 0 ? (
-              artist.genres.slice(0, 2).map((g) => (
-                <Badge
-                  key={g._id}
-                  variant="outline"
-                  className="text-[10px] px-2 h-6 font-bold uppercase bg-secondary/50 border-border/50"
-                >
-                  {g.name}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-[10px] text-muted-foreground font-medium italic opacity-70">
-                Uncategorized
-              </span>
-            )}
           </div>
 
           {/* --- 3. STATS FOOTER --- */}

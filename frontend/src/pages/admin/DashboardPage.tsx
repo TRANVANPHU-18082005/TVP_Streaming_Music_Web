@@ -415,7 +415,7 @@ const UserGrowthChart = ({ data, range }: { data: any[]; range: string }) => (
               fontWeight: 600,
               padding: "10px 16px",
             }}
-            formatter={(value: number) => [value, "New Users"]}
+            formatter={(value?: number) => [value, "New Users"]}
             labelFormatter={(label) => new Date(label).toLocaleDateString()}
           />
           <Area
@@ -714,7 +714,7 @@ const DashboardPage = () => {
                       fontWeight: 600,
                       padding: "10px 16px",
                     }}
-                    formatter={(value: number) => [value, "New Tracks"]}
+                    formatter={(value?: number) => [value, "New Tracks"]}
                     labelFormatter={(label) =>
                       new Date(label).toLocaleDateString()
                     }
@@ -784,7 +784,7 @@ const DashboardPage = () => {
                       </p>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-xs font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 tabular-nums">
-                          {formatNumber(artist?.totalPlays)} plays
+                          {formatNumber(artist?.playCount)} plays
                         </span>
                       </div>
                     </div>

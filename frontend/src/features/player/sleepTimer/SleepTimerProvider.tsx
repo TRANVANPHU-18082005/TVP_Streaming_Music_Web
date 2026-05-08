@@ -20,6 +20,7 @@ interface SleepTimerContextValue {
   active: boolean;
   remainingMs: number;
   mode: SleepMode;
+  fadeDurationMs: number;
   open: (
     minutes: number,
     opts?: { mode?: SleepMode; fadeDurationMs?: number },
@@ -36,6 +37,7 @@ const DEFAULT: SleepTimerContextValue = {
   active: false,
   remainingMs: 0,
   mode: "pause",
+  fadeDurationMs: 30000,
   open: () => {},
   cancel: () => {},
   openModal: () => {},
@@ -72,6 +74,30 @@ export const SleepTimerProvider: React.FC<{ children: React.ReactNode }> = ({
   const isFadingRef = useRef(false);
   const bcRef = useRef<BroadcastChannel | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const currentTrackId = useAppSelector((s) => s.player.currentTrackId);
+  const currentTrackIdRef = useRef<string | null>(currentTrackId);
+  const startedTrackIdRef = useRef<string | null>(null);
+  const audioEndedHandlerRef = useRef<((ev?: Event) => void) | null>(null);
+
+  useEffect(() => {
+    currentTrackIdRef.current = currentTrackId;
+  }, [currentTrackId]);
+
+  // If user skips track while waiting for "after-track", cancel timer
+  useEffect(() => {
+    if (!active) return;
+    if (mode !== "after-track") return;
+    const started = startedTrackIdRef.current;
+    if (
+      started &&
+      currentTrackIdRef.current &&
+      started !== currentTrackIdRef.current
+    ) {
+      // user changed track → cancel after-track session
+      cancel();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrackId]);
 
   useEffect(() => {
     if (typeof BroadcastChannel !== "undefined") {
@@ -136,6 +162,16 @@ export const SleepTimerProvider: React.FC<{ children: React.ReactNode }> = ({
     }
     isFadingRef.current = false;
     programmaticVolumeRef.current = null;
+    // remove audio ended listener if attached
+    try {
+      const audio = document.querySelector("audio");
+      if (audio && audioEndedHandlerRef.current) {
+        audio.removeEventListener("ended", audioEndedHandlerRef.current);
+        audioEndedHandlerRef.current = null;
+      }
+    } catch (e) {
+      // ignore
+    }
   };
 
   const finalizeAction = useCallback(
@@ -273,6 +309,35 @@ export const SleepTimerProvider: React.FC<{ children: React.ReactNode }> = ({
     const mode = state.mode;
     const fadeMs = state.fadeDurationMs ?? 30000;
     const finalDelay = Math.max(0, end - now);
+    // record which track was active at start (for after-track semantics)
+    try {
+      startedTrackIdRef.current = currentTrackIdRef.current;
+    } catch (e) {
+      startedTrackIdRef.current = null;
+    }
+    // attach audio 'ended' handler for after-track so we can finalize earlier
+    if (mode === "after-track") {
+      try {
+        const audio = document.querySelector(
+          "audio",
+        ) as HTMLMediaElement | null;
+        if (audio) {
+          const handler = () => {
+            // ensure it's the same track we started with
+            if (
+              startedTrackIdRef.current &&
+              currentTrackIdRef.current === startedTrackIdRef.current
+            ) {
+              finalizeAction("after-track");
+            }
+          };
+          audioEndedHandlerRef.current = handler;
+          audio.addEventListener("ended", handler);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
     if (mode === "fade") {
       const fadeStartDelay = Math.max(0, finalDelay - fadeMs);
       fadeTimeoutRef.current = window.setTimeout(() => {
@@ -375,6 +440,7 @@ export const SleepTimerProvider: React.FC<{ children: React.ReactNode }> = ({
     active,
     remainingMs,
     mode,
+    fadeDurationMs,
     open: start,
     cancel: () => cancel(true),
     openModal: () => setShowModal(true),

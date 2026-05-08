@@ -51,7 +51,6 @@ export const usePlayCollection = () => {
         });
         const root = res?.data ?? res;
         let tracks: ITrack[] = [];
-        console.log(res);
         // Chiết xuất danh sách tracks
         if (Array.isArray(root)) {
           tracks = root;
@@ -64,8 +63,8 @@ export const usePlayCollection = () => {
 
         // Chiết xuất danh sách IDs
         const trackIds =
-          root.trackIds || root.artist.trackIds
-            ? (root.trackIds ?? root.artist.trackIds)
+          root.trackIds || root.artist?.trackIds
+            ? (root.trackIds ?? root.artist?.trackIds)
             : tracks
                 .map((t: any) => (typeof t === "string" ? t : t?._id))
                 .filter(Boolean);
@@ -83,13 +82,15 @@ export const usePlayCollection = () => {
             startIndex,
             isShuffling: shuffle, // 🔥 Truyền trạng thái shuffle vào Reducer
             source: {
-              id: root._id || root.artist._id,
+              id: root._id || root.artist?._id,
               type: sourceType,
               title:
                 root.title ||
                 root.name ||
-                root.artist.name ||
-                root.artist.title,
+                root.artist?.name ||
+                root.artist?.title ||
+                collectionName ||
+                "Danh sách phát",
               // Tự động thêm chữ 's' vào sourceType để match với route (ví dụ: /albums/, /playlists/)
               url: `/${sourceType}s/${root.slug || root._id}`,
             },

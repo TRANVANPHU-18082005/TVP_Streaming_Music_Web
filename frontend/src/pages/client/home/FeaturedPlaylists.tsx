@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { Music2, AlertCircle, ListMusic, ChevronRight } from "lucide-react";
+import { Music2, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { Link } from "react-router-dom";
@@ -143,7 +143,6 @@ const SkeletonGrid = memo(({ count }: { count: number }) => (
   </>
 ));
 SkeletonGrid.displayName = "SkeletonGrid";
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST GRID — desktop whileInView stagger

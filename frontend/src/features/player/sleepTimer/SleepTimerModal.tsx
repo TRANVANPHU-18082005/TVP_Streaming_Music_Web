@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +11,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Input } from "@/components/ui/input";
 import { Clock } from "lucide-react";
 import { useSleepTimer } from "./SleepTimerProvider";
+import { cn } from "@/lib/utils";
 
 const PRESETS = [10, 20, 30, 60];
 
@@ -33,6 +36,17 @@ export const SleepTimerModal: React.FC = () => {
   const [fadeSec, setFadeSec] = useState<number>(60);
   const [showHistory, setShowHistory] = useState(false);
 
+  useEffect(() => {
+    if (sleep.showModal && sleep.active) {
+      const mins = Math.max(1, Math.ceil(sleep.remainingMs / 60000));
+      setMinutes(mins);
+      setMode(sleep.mode as any);
+      setFadeSec(
+        Math.max(5, Math.round((sleep.fadeDurationMs || 30000) / 1000)),
+      );
+    }
+  }, [sleep.showModal]);
+
   const remaining = useMemo(
     () => formatMs(sleep.remainingMs),
     [sleep.remainingMs],
@@ -49,9 +63,17 @@ export const SleepTimerModal: React.FC = () => {
       onOpenChange={(v) => (v ? sleep.openModal() : sleep.closeModal())}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title="Sleep timer">
+        <button
+          className={cn(
+            "p-2 rounded-xl transition-colors",
+            sleep.active
+              ? "bg-[var(--fp-active-bg)] text-[hsl(var(--primary))]"
+              : "text-[var(--fp-fg-subtle)] hover:text-[var(--fp-fg)] hover:bg-[var(--fp-hover-bg)]",
+          )}
+          title="Sleep timer"
+        >
           <Clock className="size-5" />
-        </Button>
+        </button>
       </DialogTrigger>
 
       <DialogContent className="max-w-sm">
@@ -74,14 +96,18 @@ export const SleepTimerModal: React.FC = () => {
               </Button>
             ))}
             <div className="flex items-center gap-2">
-              <input
+              <Input
                 type="number"
                 min={1}
+                max={1440}
                 value={minutes}
                 onChange={(e) =>
-                  setMinutes(Math.max(1, Number(e.target.value || 0)))
+                  setMinutes(
+                    Math.max(1, Math.min(1440, Number(e.target.value || 0))),
+                  )
                 }
-                className="w-20 bg-background border border-border rounded px-2 py-1"
+                className="w-24"
+                aria-label="Minutes"
               />
               <span className="text-sm text-muted-foreground">minutes</span>
             </div>
@@ -89,44 +115,26 @@ export const SleepTimerModal: React.FC = () => {
 
           <div>
             <div className="text-sm font-medium mb-2">Action</div>
-            <div className="grid gap-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="mode"
-                  checked={mode === "fade"}
-                  onChange={() => setMode("fade")}
-                />
-                <span className="ml-2">Fade out then pause</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="mode"
-                  checked={mode === "pause"}
-                  onChange={() => setMode("pause")}
-                />
-                <span className="ml-2">Pause immediately</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="mode"
-                  checked={mode === "stop"}
-                  onChange={() => setMode("stop")}
-                />
-                <span className="ml-2">Stop (reset player)</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="mode"
-                  checked={mode === "after-track"}
-                  onChange={() => setMode("after-track")}
-                />
-                <span className="ml-2">After current track ends</span>
-              </label>
-            </div>
+            <RadioGroup value={mode} onValueChange={(v) => setMode(v as any)}>
+              <div className="grid gap-2">
+                <label className="flex items-center gap-2">
+                  <RadioGroupItem value="fade" />
+                  <span className="ml-2">Fade out then pause</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <RadioGroupItem value="pause" />
+                  <span className="ml-2">Pause immediately</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <RadioGroupItem value="stop" />
+                  <span className="ml-2">Stop (reset player)</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <RadioGroupItem value="after-track" />
+                  <span className="ml-2">After current track ends</span>
+                </label>
+              </div>
+            </RadioGroup>
           </div>
 
           {mode === "fade" && (
@@ -166,7 +174,9 @@ export const SleepTimerModal: React.FC = () => {
               History
             </Button>
             <div className="flex-1" />
-            <Button onClick={start}>Start</Button>
+            <Button onClick={start} disabled={minutes <= 0}>
+              {sleep.active ? "Update timer" : "Start"}
+            </Button>
           </div>
         </DialogFooter>
 
@@ -201,7 +211,26 @@ export const SleepTimerModal: React.FC = () => {
                         : "active"}
                     </div>
                   </div>
-                  <div className="ml-3">
+                  <div className="ml-3 flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const mins = s.plannedEnd
+                          ? Math.max(
+                              1,
+                              Math.round((s.plannedEnd - s.startedAt) / 60000),
+                            )
+                          : minutes;
+                        sleep.open(mins, {
+                          mode: s.mode,
+                          fadeDurationMs: s.fadeDurationMs ?? 30000,
+                        });
+                        sleep.closeModal();
+                      }}
+                    >
+                      Restart
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"

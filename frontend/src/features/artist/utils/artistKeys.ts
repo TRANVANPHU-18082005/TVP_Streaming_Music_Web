@@ -1,9 +1,9 @@
-import { ArtistFilterParams } from "@/features/artist/types";
+import { ArtistAdminFilterParams } from "../schemas/artist.schema";
 
 export const artistKeys = {
   all: ["artists"] as const,
   lists: () => [...artistKeys.all, "list"] as const,
-  list: (filter: ArtistFilterParams) =>
+  list: (filter: ArtistAdminFilterParams) =>
     [...artistKeys.lists(), { filter }] as const,
   details: () => [...artistKeys.all, "detail"] as const,
   profile: () => ["profile"] as const,

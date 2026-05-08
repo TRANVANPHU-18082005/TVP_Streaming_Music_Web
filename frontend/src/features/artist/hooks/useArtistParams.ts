@@ -1,38 +1,38 @@
 import { useMemo, useCallback, useEffect } from "react";
 import { useQueryParams } from "@/hooks/useQueryParams";
 import {
-  artistParamsSchema,
-  type ArtistFilterParams,
+  ArtistAdminFilterParams,
+  artistAdminParamsSchema,
 } from "../schemas/artist.schema";
+import { APP_CONFIG } from "@/config/constants";
 
-const DEFAULT_PARAMS: ArtistFilterParams = {
+const DEFAULT_PARAMS: ArtistAdminFilterParams = {
   page: 1,
-  limit: 10,
-  keyword: undefined,
-  sort: "newest",
+  limit: APP_CONFIG.GRID_LIMIT,
+  keyword: "",
+  sort: "popular",
   nationality: undefined,
   isVerified: undefined,
   isActive: undefined,
-  genreId: undefined,
+  isDeleted: undefined,
 };
 
-export const useArtistParams = (initialLimit = 10) => {
+export const useArtistParams = () => {
   // 1. Lấy raw params từ URL
   const { params: rawParams, setParams } = useQueryParams({
     ...DEFAULT_PARAMS,
-    limit: initialLimit,
   });
 
-  // 2. Màng lọc Zod: Tự động biến "true" -> true, ép kiểu số, fallback khi lỗi
+  // 2. Validate params with admin schema (includes isVerified, isActive)
   const filterParams = useMemo(() => {
-    return artistParamsSchema.parse(rawParams);
+    return artistAdminParamsSchema.parse(rawParams);
   }, [rawParams]);
 
   // 3. ĐỒNG BỘ URL (Self-healing): Nắn lại URL nếu user nhập bậy
   useEffect(() => {
     const isDirty = JSON.stringify(rawParams) !== JSON.stringify(filterParams);
     if (isDirty) {
-      setParams(filterParams, { replace: true });
+      setParams({ ...filterParams }, { replace: true });
     }
   }, [rawParams, filterParams, setParams]);
 
@@ -54,9 +54,9 @@ export const useArtistParams = (initialLimit = 10) => {
   );
 
   const handleFilterChange = useCallback(
-    <K extends keyof ArtistFilterParams>(
+    <K extends keyof ArtistAdminFilterParams>(
       key: K,
-      value: ArtistFilterParams[K] | null | undefined,
+      value: ArtistAdminFilterParams[K] | null | undefined,
     ) => {
       const cleanValue = value === "" ? undefined : value;
       setParams({ [key]: cleanValue, page: 1 });
@@ -65,8 +65,8 @@ export const useArtistParams = (initialLimit = 10) => {
   );
 
   const clearFilters = useCallback(() => {
-    setParams({ ...DEFAULT_PARAMS, limit: initialLimit });
-  }, [setParams, initialLimit]);
+    setParams({ ...DEFAULT_PARAMS });
+  }, [setParams]);
 
   return {
     filterParams,

@@ -5,10 +5,9 @@ import { Link } from "react-router-dom";
 
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { GenreCard } from "@/features/genre/components/GenreCard";
-import { useGenresQuery } from "@/features/genre/hooks/useGenresQuery";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
-import { IGenre } from "@/features";
+import { IGenre, useGenresByUserQuery } from "@/features";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
@@ -196,7 +195,7 @@ GenreScroll.displayName = "GenreScroll";
 // FEATURED GENRES — section orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 export function FeaturedGenres() {
-  const { data, isLoading, isError, refetch } = useGenresQuery({
+  const { data, isLoading, isError, refetch } = useGenresByUserQuery({
     page: 1,
     limit: APP_CONFIG.HOME_PAGE_LIMIT,
     isTrending: true,

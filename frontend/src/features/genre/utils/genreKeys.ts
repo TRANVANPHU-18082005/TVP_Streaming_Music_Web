@@ -1,4 +1,4 @@
-import { GenreFilterParams } from "../types";
+import { GenreFilterParams } from "../schemas/genre.schema";
 
 export const genreKeys = {
   all: ["genres"] as const,

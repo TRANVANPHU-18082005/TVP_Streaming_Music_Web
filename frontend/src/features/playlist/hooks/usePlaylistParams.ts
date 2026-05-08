@@ -1,33 +1,36 @@
 import { useMemo, useCallback, useEffect } from "react";
 import { useQueryParams } from "@/hooks/useQueryParams";
 import {
-  playlistParamsSchema,
-  type PlaylistFilterParams,
+  PlaylistAdminFilterParams,
+  playlistAdminParamsSchema,
 } from "../schemas/playlist.schema";
+import { APP_CONFIG } from "@/config/constants";
 
 // Default Values - Dùng làm mốc để Reset
-const DEFAULT_PLAYLIST_PARAMS: PlaylistFilterParams = {
+const DEFAULT_PLAYLIST_PARAMS: PlaylistAdminFilterParams = {
   page: 1,
-  limit: 12,
-  keyword: undefined,
+  limit: APP_CONFIG.GRID_LIMIT,
+  keyword: "",
   sort: "newest",
   type: undefined,
   visibility: undefined,
   isSystem: undefined,
+  isDeleted: undefined,
+  userId: undefined,
+  tag: undefined,
 };
 
-export const usePlaylistParams = (initialLimit = 12) => {
+export const usePlaylistParams = () => {
   // 1. Lấy dữ liệu thô (raw) từ URL thông qua Generic Hook
   const { params: rawParams, setParams } = useQueryParams({
     ...DEFAULT_PLAYLIST_PARAMS,
-    limit: initialLimit,
   });
 
   // 2. MÀNG LỌC ZOD (Data sạch):
   // Biến "true"/"false" thành boolean thực, "abc" thành undefined...
   const filterParams = useMemo(() => {
     // .parse() kết hợp với .catch() trong schema sẽ trả về data an toàn nhất
-    return playlistParamsSchema.parse(rawParams);
+    return playlistAdminParamsSchema.parse(rawParams);
   }, [rawParams]);
 
   // 3. ĐỒNG BỘ URL (Self-healing):
@@ -66,9 +69,9 @@ export const usePlaylistParams = (initialLimit = 12) => {
 
   // Thay đổi Filter chung (Type, Sort, Visibility...)
   const handleFilterChange = useCallback(
-    <K extends keyof PlaylistFilterParams>(
+    <K extends keyof PlaylistAdminFilterParams>(
       key: K,
-      value: PlaylistFilterParams[K] | null | undefined,
+      value: PlaylistAdminFilterParams[K] | null | undefined,
     ) => {
       // Chuẩn hóa giá trị rỗng thành undefined để URL "đẹp" hơn
       const cleanValue = value === "" ? undefined : value;
@@ -81,9 +84,8 @@ export const usePlaylistParams = (initialLimit = 12) => {
   const clearFilters = useCallback(() => {
     setParams({
       ...DEFAULT_PLAYLIST_PARAMS,
-      limit: initialLimit,
     });
-  }, [setParams, initialLimit]);
+  }, [setParams]);
 
   return {
     filterParams,

@@ -10,24 +10,9 @@ import {
   optionalObjectIdSchema,
   tagsSchema,
 } from "./common.validate";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SHARED PRIMITIVES (album-specific)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * UPC / EAN-13 barcode.
- * Chuẩn quốc tế: 12 chữ số (UPC-A) hoặc 13 chữ số (EAN-13).
- * Trước đây chỉ `.max(50)` — không bắt format, nhận "abc" vào DB.
- */
-const upcSchema = z.preprocess(
-  emptyToUndefined,
-  z
-    .string()
-    .trim()
-    .regex(/^\d{12,13}$/, "UPC phải là 12 hoặc 13 chữ số (UPC-A / EAN-13)")
-    .optional(),
-);
+import { APP_CONFIG } from "../config/constants";
+import { getGenresByUserSchema } from "./genre.validation";
+import { is } from "zod/v4/locales";
 
 /**
  * releaseDate dùng chung cho create & update.
@@ -54,25 +39,24 @@ const albumSortEnum = z.enum(["newest", "oldest", "popular", "name"]);
 // 1. CREATE ALBUM
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * FIX: artist → optionalObjectIdSchema thay vì objectIdSchema.
- * Lý do: Artist user không gửi artist (service tự lấy từ currentUser.artistProfile).
- *        Admin mới cần gửi — service tự enforce bằng if (role === "admin") check.
- *        Validate chỉ đảm bảo: NẾU gửi lên thì phải là MongoId hợp lệ.
- */
 export const createAlbumSchema = z.object({
   body: z
     .object({
       title: z
         .string({ message: "Tên album là bắt buộc" })
         .trim()
-        .min(1, "Tên album không được để trống")
-        .max(150, "Tên album tối đa 150 ký tự"),
+        .min(1, { message: "Tên album không được để trống" })
+        .max(150, { message: "Tên album tối đa 150 ký tự" }),
 
-      description: z.string().trim().max(2000).optional(),
+      description: z
+        .string({ message: "Mô tả là bắt buộc" })
+        .trim()
+        .max(200, { message: "Mô tả tối đa 200 ký tự" })
+        .optional(),
       // FIX: optional — service tự validate dựa trên role
       artist: optionalObjectIdSchema,
       releaseDate: releaseDateSchema,
+      themeColor: hexColorSchema.optional(),
       type: albumTypeEnum.default("album"),
       tags: tagsSchema.optional(),
       isPublic: booleanSchema.default(false),
@@ -93,11 +77,15 @@ export const updateAlbumSchema = z.object({
       title: z
         .string()
         .trim()
-        .min(1, "Tên album không được để trống")
-        .max(150)
+        .min(1, { message: "Tên album không được để trống" })
+        .max(150, { message: "Tên album tối đa 150 ký tự" })
         .optional(),
 
-      description: z.string().trim().max(2000).optional(),
+      description: z
+        .string({ message: "Mô tả là bắt buộc" })
+        .trim()
+        .max(200, { message: "Mô tả tối đa 200 ký tự" })
+        .optional(),
 
       // Artist chỉ được thay đổi bởi Admin — validation chỉ check format
       artist: optionalObjectIdSchema,
@@ -120,100 +108,80 @@ export const updateAlbumSchema = z.object({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. GET ALBUMS LIST
+// 3. GET ALBUMS LIST (BY User)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const albumListQueryBase = z
-  .object({
-    // Phân trang — giới hạn chặt để tránh DB scan
-    page: z.coerce.number().min(1).default(1),
-    limit: z.coerce.number().min(1).max(50).default(12),
+export const getAlbumsByUserSchema = z.object({
+  query: z
+    .object({
+      page: z.coerce.number().int().min(1).max(APP_CONFIG.MAX_PAGES).default(1),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(APP_CONFIG.MAX_PAGES)
+        .default(APP_CONFIG.GRID_LIMIT),
 
-    // Keyword — chặn ReDoS với .max(100)
-    keyword: z.preprocess(
-      emptyToUndefined,
-      z.string().trim().min(1).max(100).optional(),
-    ),
+      keyword: z.preprocess(
+        emptyToUndefined,
+        z.string().trim().min(1).max(100).optional(),
+      ),
 
-    // IDs
-    artistId: optionalObjectIdSchema,
-    genreId: optionalObjectIdSchema,
+      artistId: optionalObjectIdSchema,
+      year: z.preprocess(
+        emptyToUndefined,
+        z.coerce
+          .number()
+          .min(1900, "Năm phát hành quá cũ")
+          .max(new Date().getFullYear() + 2, "Năm phát hành vượt quá giới hạn")
+          .int("Năm phải là số nguyên")
+          .optional(),
+      ),
+      type: albumTypeEnum.optional(),
+      sort: albumSortEnum.default("popular"),
+    })
+    .strict(),
+});
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. GET ALBUMS LIST (BY ADMIN) - Có thêm filter để xem private/draft của tất cả user
+// ─────────────────────────────────────────────────────────────────────────────
 
-    // Privacy
+export const getAlbumByAdminSchema = getAlbumsByUserSchema.extend({
+  query: getAlbumsByUserSchema.shape.query.extend({
     isPublic: z.preprocess(
       (val) => (val === "true" ? true : val === "false" ? false : undefined),
       z.boolean().optional(),
     ),
-
-    // Năm — chặn giá trị phi lý
-    year: z.preprocess(
-      emptyToUndefined,
-      z.coerce
-        .number()
-        .min(1900, "Năm phát hành quá cũ")
-        .max(new Date().getFullYear() + 2, "Năm phát hành vượt quá giới hạn")
-        .int("Năm phải là số nguyên")
-        .optional(),
+    isDeleted: z.preprocess(
+      (val) => (val === "true" ? true : val === "false" ? false : undefined),
+      z.boolean().optional(),
     ),
-
-    type: albumTypeEnum.optional(),
-
-    // FIX: bỏ "trending" — service không xử lý case này, sort sẽ fallback "newest" lặng lẽ
-    sort: albumSortEnum.default("newest"),
-  })
-  .strict(); // Chặn query param lạ (SQLi attempt qua query string)
-
-export const getAlbumsSchema = z.object({
-  query: albumListQueryBase,
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. GET ALBUM TRACKS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * FIX: Không extend getAlbumsSchema (gây sai type inference).
- * Dùng albumListQueryBase.omit() → type sạch, không kéo theo shape của getAlbumsSchema.
- */
-export const getAlbumTracksSchema = z.object({
-  params: z.object({
-    albumId: objectIdSchema,
   }),
-  query: albumListQueryBase
-    .omit({
-      artistId: true,
-      genreId: true,
-      year: true,
-      type: true, // tracks trong album đã cùng type → filter vô nghĩa
-      sort: true, // tracks luôn sort theo trackNumber — không cho override
-    })
-    // Override limit: tracks/page thường lấy nhiều hơn list album
-    .extend({
-      limit: z.coerce.number().min(1).max(100).default(20),
-    })
-    .strict(),
+});
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. GET ALBUM TRACKS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getAlbumTracksSchema = getAlbumsByUserSchema.extend({
+  query: getAlbumsByUserSchema.shape.query.omit({
+    keyword: true,
+    artistId: true,
+    year: true,
+    type: true,
+    sort: true,
+  }),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. GET ALBUM DETAIL
+// 6. GET ALBUM DETAIL
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getAlbumDetailSchema = z.object({
-  params: z.object({
-    // Chấp nhận cả slug (chữ-hoa-thường-gạch-ngang) lẫn MongoId 24 hex
-    slugOrId: z
-      .string()
-      .min(1)
-      .max(200)
-      .regex(
-        /^[a-zA-Z0-9-]{1,200}$|^[0-9a-fA-F]{24}$/,
-        "slugOrId phải là slug hợp lệ hoặc MongoId 24 ký tự",
-      ),
-  }),
+  params: z.object({ slug: z.string().trim().min(2).max(100) }),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. DELETE ALBUM
+// 7. DELETE ALBUM
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const deleteAlbumSchema = z.object({
@@ -221,18 +189,21 @@ export const deleteAlbumSchema = z.object({
     id: objectIdSchema,
   }),
 });
-
+// 8. TOGGLE ALBUM PUBLIC/PRIVATE
+export const toggleAlbumPublicSchema = z.object({
+  params: z.object({
+    id: objectIdSchema,
+  }),
+});
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPORTED TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CreateAlbumInput = z.infer<typeof createAlbumSchema>["body"];
 export type UpdateAlbumInput = z.infer<typeof updateAlbumSchema>["body"];
-export type AlbumFilterInput = z.infer<typeof getAlbumsSchema>["query"];
-export type AlbumTracksFilterInput = z.infer<
-  typeof getAlbumTracksSchema
+export type AlbumUserFilterInput = z.infer<
+  typeof getAlbumsByUserSchema
 >["query"];
-export type GetAlbumDetailParams = z.infer<
-  typeof getAlbumDetailSchema
->["params"];
-export type DeleteAlbumParams = z.infer<typeof deleteAlbumSchema>["params"];
+export type AlbumAdminFilterInput = z.infer<
+  typeof getAlbumByAdminSchema
+>["query"];

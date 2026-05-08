@@ -1,23 +1,4 @@
-// ═════════════════════════════════════════════════════════════════════════════
-// FILTER DROPDOWN
-// ═════════════════════════════════════════════════════════════════════════════
-/**
- * FilterDropdown.tsx — Popover wrapper for filter selectors
- *
- * IMPROVEMENTS
- *   • `onClear` button: changed from `<div role="button">` to a proper
- *     `<button type="button">` — fixes the interactive element role violation.
- *
- *   • `ChevronDown` rotation: `group-data-[state=open]:rotate-180` relies on
- *     the Radix `data-state` attribute being present on a parent with `group`
- *     class. Radix `PopoverTrigger` does set `data-state`, but the `group`
- *     class must be on the trigger itself — moved to the trigger wrapper.
- *
- *   • `PopoverContent`: `z-[100]` preserved. Added `onOpenAutoFocus` to prevent
- *     Radix's default focus-trap from moving focus to the popover container
- *     (we want focus to go to the search input inside, not the container).
- */
-
+// FilterDropdown.tsx
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -47,10 +28,6 @@ export const FilterDropdown = ({
   align = "start",
 }: FilterDropdownProps) => (
   <Popover>
-    {/*
-     * `group` on the trigger enables `group-data-[state=open]` for ChevronDown.
-     * Radix sets `data-state="open"` on the trigger when the popover is open.
-     */}
     <PopoverTrigger asChild>
       <Button
         variant="outline"
@@ -68,7 +45,6 @@ export const FilterDropdown = ({
         )}
       >
         <div className="flex items-center gap-2 max-w-[200px]">
-          {/* Label */}
           <span
             className={cn(
               "truncate text-sm tracking-tight transition-colors",
@@ -80,30 +56,31 @@ export const FilterDropdown = ({
             {label}
           </span>
 
-          {/* Action icons */}
           <div className="flex items-center shrink-0">
             {isActive && onClear ? (
-              /*
-               * FIX: original used `<div role="button">` — invalid HTML.
-               * Must be `<button>` for keyboard access and ARIA compliance.
+              /* * FIX: Thay đổi từ <button> sang <span> với role="button"
+               * Để tránh lỗi lồng <button> bên trong <button> (Button của Shadcn)
                */
-              <button
-                type="button"
+              <span
+                role="button"
                 tabIndex={0}
                 aria-label="Clear filter"
                 onClick={(e) => {
-                  e.stopPropagation();
+                  e.stopPropagation(); // Ngăn Popover mở ra khi click clear
                   onClear();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClear();
+                  }
                 }}
                 className="ml-1 p-0.5 rounded-full text-primary hover:bg-primary/18 hover:text-destructive transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40"
               >
                 <X className="size-3.5 stroke-[2.5]" aria-hidden="true" />
-              </button>
+              </span>
             ) : (
-              /*
-               * `group-data-[state=open]:rotate-180` works because Radix sets
-               * `data-state="open"` on the trigger (which has `group` class).
-               */
               <ChevronDown
                 className={cn(
                   "size-4 transition-transform duration-200 ease-out",
@@ -121,10 +98,6 @@ export const FilterDropdown = ({
     <PopoverContent
       align={align}
       sideOffset={8}
-      /*
-       * `onOpenAutoFocus`: prevent Radix from moving focus to the popover
-       * container — the search input inside should handle its own focus.
-       */
       onOpenAutoFocus={(e) => e.preventDefault()}
       className={cn(
         "z-[100] p-1.5 overflow-hidden rounded-xl",

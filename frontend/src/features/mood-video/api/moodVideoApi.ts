@@ -1,10 +1,10 @@
 import api from "@/lib/axios";
-import type { MoodVideo, MoodVideoFilterParams } from "../types";
+import type { IMoodVideo, MoodVideoFilterParams } from "../types";
 import type { ApiResponse, PagedResponse } from "@/types";
 
 const moodVideoApi = {
   getAll: async (params: MoodVideoFilterParams) => {
-    const response = await api.get<ApiResponse<PagedResponse<MoodVideo>>>(
+    const response = await api.get<ApiResponse<PagedResponse<IMoodVideo>>>(
       "/mood-videos",
       { params },
     );
@@ -18,7 +18,7 @@ const moodVideoApi = {
     return response.data;
   },
 
-  update: async (id: string, data: FormData | Partial<MoodVideo>) => {
+  update: async (id: string, data: FormData | Partial<IMoodVideo>) => {
     const isFormData = data instanceof FormData;
     const response = await api.patch(`/mood-videos/${id}`, data, {
       headers: {

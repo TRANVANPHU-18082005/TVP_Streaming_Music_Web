@@ -3,16 +3,16 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
-import type { User } from "../types";
 import {
   adminUserSchema,
   type AdminUserFormValues,
 } from "../schemas/user.schema";
 import { mapUserToForm } from "../utils/formMapper";
 import { buildUserPayload } from "../utils/payloadBuilder";
+import { IUser } from "../types";
 
 interface UseUserFormProps {
-  userToEdit?: User | null;
+  userToEdit?: IUser | null;
   isOpen: boolean; // Dùng để trigger reset form mỗi khi mở Modal
   onSubmit: (formData: FormData) => Promise<void>; // Inject mutation function vào đây
 }
@@ -29,7 +29,7 @@ export const useUserForm = ({
 
   // 2. Khởi tạo React Hook Form
   const form = useForm<AdminUserFormValues>({
-    resolver: zodResolver(adminUserSchema),
+    resolver: zodResolver(adminUserSchema) as any,
     defaultValues,
     mode: "onSubmit", // Chỉ hiện lỗi khi bấm submit
   });

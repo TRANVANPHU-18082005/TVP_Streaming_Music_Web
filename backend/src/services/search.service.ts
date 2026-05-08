@@ -2,6 +2,7 @@ import Album from "../models/Album";
 import Artist from "../models/Artist";
 import Playlist from "../models/Playlist";
 import Track from "../models/Track";
+import Genre from "../models/Genre";
 import { cacheRedis } from "../config/redis";
 
 // ─────────────────────────────────────────────
@@ -52,12 +53,12 @@ class SearchService {
     if (!keyword?.trim()) return [];
 
     const safe = keyword.trim();
-    const cacheKey = `suggest:v2:${safe.toLowerCase()}:${limit}`;
+    const cacheKey = `suggest:${safe.toLowerCase()}:${limit}`;
 
     try {
       const cached = await cacheRedis.get(cacheKey);
       if (cached) return JSON.parse(cached);
-    } catch (_) {}
+    } catch (_) { }
 
     // Atlas $search với prefix — nhanh hơn fuzzy cho autocomplete
     const atlasPipeline = (nameField: string) => [
@@ -101,7 +102,7 @@ class SearchService {
 
       cacheRedis
         .setex(cacheKey, SUGGEST_CACHE_TTL, JSON.stringify(result))
-        .catch(() => {});
+        .catch(() => { });
 
       return result;
     } catch (err) {
@@ -147,10 +148,11 @@ class SearchService {
         artists: [],
         albums: [],
         playlists: [],
+        genres: [],
       };
 
     const safe = keyword.trim();
-    const cacheKey = `search:v4:${safe.toLowerCase()}:${limit}`;
+    const cacheKey = `search:${safe.toLowerCase()}:${limit}`;
 
     // ghi nhận trending (không await — fire & forget)
     this.recordTrending(safe);
@@ -158,19 +160,14 @@ class SearchService {
     try {
       const cached = await cacheRedis.get(cacheKey);
       if (cached) return JSON.parse(cached);
-    } catch (_) {}
+    } catch (_) { }
 
-    const [tracks, artists, albums, playlists] = await Promise.all([
+    const [tracks, artists, albums, playlists, genres] = await Promise.all([
       this.searchCollection(Track, safe, limit, "track"),
       this.searchCollection(Artist, safe, limit, "artist"),
       this.searchCollection(Album, safe, limit, "album"),
-      Playlist.find({
-        title: new RegExp(escapeRegex(safe), "i"),
-        isPublic: true,
-      })
-        .select("title coverImage slug")
-        .limit(limit)
-        .lean(),
+      this.searchCollection(Playlist, safe, limit, "playlist"),
+      this.searchCollection(Genre, safe, limit, "genre"),
     ]);
 
     // Xác định topResult
@@ -186,16 +183,18 @@ class SearchService {
         ...(tracks as any[]).map((t: any) => ({ ...t, type: "track" })),
         ...(artists as any[]).map((a: any) => ({ ...a, type: "artist" })),
         ...(albums as any[]).map((al: any) => ({ ...al, type: "album" })),
+        ...(playlists as any[]).map((pl: any) => ({ ...pl, type: "playlist" })),
+        ...(genres as any[]).map((g: any) => ({ ...g, type: "genre" })),
       ].sort((a: any, b: any) => (b._score || 0) - (a._score || 0));
 
       topResult = all[0] ?? null;
     }
 
-    const result = { topResult, tracks, artists, albums, playlists };
+    const result = { topResult, tracks, artists, albums, playlists, genres };
 
     cacheRedis
       .setex(cacheKey, SEARCH_CACHE_TTL, JSON.stringify(result))
-      .catch(() => {});
+      .catch(() => { });
 
     return result;
   };
@@ -212,7 +211,7 @@ class SearchService {
     cacheRedis
       .zincrby(TRENDING_KEY, 1, normalized)
       .then(() => cacheRedis.expire(TRENDING_KEY, TRENDING_WINDOW))
-      .catch(() => {});
+      .catch(() => { });
   }
 
   /** Lấy top trending keywords */
@@ -239,9 +238,9 @@ class SearchService {
     Model: any,
     keyword: string,
     limit: number,
-    type: "track" | "artist" | "album",
+    type: "track" | "artist" | "album" | "playlist" | "genre",
   ) {
-    const nameField = type === "track" || type === "album" ? "title" : "name";
+    const nameField = ["track", "album", "playlist"].includes(type) ? "title" : "name";
 
     try {
       /**
@@ -275,10 +274,10 @@ class SearchService {
             _atlasScore: { $meta: "searchScore" },
             _highlights: { $meta: "searchHighlights" },
             _popularityScore: (() => {
-              if (type === "track") {
+              if (type === "track" || type === "album" || type === "playlist" || type === "genre") {
                 return {
                   $multiply: [
-                    { $log: [{ $add: ["$plays", 1] }, 10] },
+                    { $log: [{ $add: [{ $ifNull: ["$playCount", 0] }, 1] }, 10] },
                     0.5, // weight = 0.5 (có thể tune)
                   ],
                 };
@@ -286,12 +285,12 @@ class SearchService {
               if (type === "artist") {
                 return {
                   $multiply: [
-                    { $log: [{ $add: ["$totalFollowers", 1] }, 10] },
+                    { $log: [{ $add: [{ $ifNull: ["$totalFollowers", 0] }, 1] }, 10] },
                     0.5,
                   ],
                 };
               }
-              return 0; // album không có plays
+              return 0;
             })(),
           },
         },
@@ -310,7 +309,18 @@ class SearchService {
           $match: { isDeleted: false, isPublic: true, status: "ready" },
         });
       } else if (type === "album") {
-        pipeline.push({ $match: { isPublic: true } });
+        pipeline.push({ $match: { isPublic: true, isDeleted: false } });
+      } else if (type === "artist") {
+        // có thể thêm filter nếu cần, hiện tại trả về tất cả artist matching
+        pipeline.push({ $match: { isActive: true, isDeleted: false } });
+      } else if (type === "playlist") {
+        pipeline.push({
+          $match: { visibility: "public", isDeleted: false, isSystem: true },
+        });
+      } else if (type === "genre") {
+        pipeline.push({
+          $match: { isDeleted: false, isActive: true },
+        });
       }
 
       pipeline.push({ $sort: { _score: -1 } }, { $limit: limit });
@@ -328,15 +338,27 @@ class SearchService {
             title: 1,
             coverImage: 1,
             duration: 1,
-            plays: 1,
+            playCount: 1,
             artist: 1,
+            featuringArtists: 1,
           }),
           ...(type === "artist" && { name: 1, avatar: 1, totalFollowers: 1 }),
           ...(type === "album" && {
             title: 1,
             coverImage: 1,
-            year: 1,
+            releaseYear: 1,
             artist: 1,
+            totalTracks: 1,
+          }),
+          ...(type === "genre" && {
+            name: 1,
+            image: 1,
+            trackCount: 1,
+          }),
+          ...(type === "playlist" && {
+            title: 1,
+            coverImage: 1,
+            totalTracks: 1,
           }),
         },
       });
@@ -355,7 +377,12 @@ class SearchService {
           select: "name slug",
         });
       }
-
+      if (type === "track") {
+        populated = await Model.populate(populated, {
+          path: "featuringArtists",
+          select: "name slug",
+        });
+      }
       // Xử lý highlight ở backend → FE chỉ việc render innerHTML
       return populated.map((doc: any) => ({
         ...doc,
@@ -378,28 +405,58 @@ class SearchService {
     type: string,
   ) {
     const regex = new RegExp(escapeRegex(keyword), "i");
-    const query: any =
-      type === "artist" ? { name: regex } : { title: regex, isPublic: true };
+    const nameField = ["track", "album", "playlist"].includes(type) ? "title" : "name";
+    const query: any = { [nameField]: regex };
 
     if (type === "track") {
       query.isDeleted = false;
       query.status = "ready";
+      query.isPublic = true;
+    } else if (type === "album") {
+      query.isPublic = true;
+      query.isDeleted = false;
+    } else if (type === "artist") {
+      query.isActive = true;
+      query.isDeleted = false;
+    } else if (type === "playlist") {
+      query.visibility = "public";
+      query.isDeleted = false;
+    } else if (type === "genre") {
+      query.isActive = true;
+      query.isDeleted = false;
     }
 
     const base = Model.find(query);
 
+    let result: any[] = [];
+
     if (type === "track") {
-      return base
+      result = await base
         .populate("artist", "name slug")
-        .sort({ plays: -1 })
+        .populate("featuringArtists", "name slug")
+        .sort({ playCount: -1 })
         .limit(limit)
         .lean();
+    } else if (type === "artist") {
+      result = await base.sort({ totalFollowers: -1 }).limit(limit).lean();
+    } else if (type === "album") {
+      result = await base.populate("artist", "name slug").sort({ playCount: -1 }).limit(limit).lean();
+    } else if (type === "playlist") {
+      result = await base.sort({ playCount: -1 }).limit(limit).lean();
+    } else if (type === "genre") {
+      result = await base.sort({ trackCount: -1 }).limit(limit).lean();
+    } else {
+      result = await base.limit(limit).lean();
     }
-    if (type === "artist") {
-      return base.sort({ totalFollowers: -1 }).limit(limit).lean();
-    }
-    return base.populate("artist", "name").limit(limit).lean();
+
+    return result.map((doc: any) => {
+      const fieldVal = doc[nameField] || "";
+      const escapedQuery = escapeRegex(keyword);
+      const highlightRegex = new RegExp(`(${escapedQuery})`, "gi");
+      const highlightHtml = fieldVal.replace(highlightRegex, "<mark>$1</mark>");
+      return { ...doc, highlightHtml };
+    });
   }
 }
 
-export default new SearchService();
+export default new SearchService

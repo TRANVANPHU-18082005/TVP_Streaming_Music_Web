@@ -1,4 +1,13 @@
-import { useState, useMemo, useCallback, memo, useEffect, useRef } from "react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  memo,
+  useEffect,
+  useRef,
+  lazy,
+  Suspense,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Edit,
@@ -19,37 +28,18 @@ import {
   Shield,
   Headphones,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  Tooltip,
-  ResponsiveContainer,
-  XAxis,
-  CartesianGrid,
-} from "recharts";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppSelector } from "@/store/hooks";
 import { formatDate } from "@/utils/track-helper";
-import {
-  useProfileDashboard,
-  useFavouriteTracksInfinite,
-  useRecentlyPlayedInfinite,
-} from "@/features/profile/hooks/useProfileQuery";
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
+import { useProfileDashboard } from "@/features/profile/hooks/useProfileQuery";
 import UserPlaylistModal from "@/features/playlist/components/UserPlaylistModal";
 import { cn } from "@/lib/utils";
-import {
-  IAlbum,
-  IMyPlaylist,
-  IPlaylist,
-  PublicAlbumCard,
-  PublicPlaylistCard,
-  TrackList,
-  useMyPlaylists,
-} from "@/features";
+import { IAlbum, IPlaylist, PublicAlbumCard, useMyPlaylists } from "@/features";
 import { Link, useSearchParams, useLocation } from "react-router-dom";
+import PlaylistCardSkeleton from "@/features/playlist/components/PlaylistCardSkeleton";
+import MusicResult from "@/components/ui/Result";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
@@ -70,6 +60,17 @@ const slideVariants = {
     transition: { duration: 0.22, ease: EASE_EXPO },
   }),
 };
+
+// Lazy-loaded subcomponents to reduce initial bundle and improve TTI
+const ProfileChart = lazy(() => import("./profile/ProfileChart"));
+const RecentlyPlayedTrackList = lazy(
+  () => import("./profile/RecentlyPlayedTrackList"),
+);
+const FavouriteTrackList = lazy(() => import("./profile/FavouriteTrackList"));
+// Lazy-load heavy playlist card to reduce initial bundle
+const PublicPlaylistCard = lazy(
+  () => import("@/features/playlist/components/PublicPlaylistCard"),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AMBIENT BACKGROUND
@@ -290,166 +291,11 @@ const GuestState = memo(() => (
 ));
 GuestState.displayName = "GuestState";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CHART TOOLTIP
-// ─────────────────────────────────────────────────────────────────────────────
-const ChartTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="glass-frosted rounded-xl px-3 py-2.5 shadow-floating border border-border/50 text-xs font-medium">
-      <p className="text-muted-foreground mb-1">{label}</p>
-      <p className="text-foreground font-bold">{payload[0].value} lượt nghe</p>
-    </div>
-  );
-};
+// Chart tooltip: moved into the lazy-loaded `ProfileChart` component to reduce bundle size.
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RECENTLY PLAYED TRACK LIST
-// Mirrors RecentlyListenedTrack's hook pattern — renders inline (no section wrapper)
-// ─────────────────────────────────────────────────────────────────────────────
-const RecentlyPlayedTrackList = memo(() => {
-  const {
-    data: tracksData,
-    isLoading,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-    error,
-    refetch,
-  } = useRecentlyPlayedInfinite();
-
-  const allTracks = useMemo(
-    () => tracksData?.allTracks ?? [],
-    [tracksData?.allTracks],
-  );
-  const totalItems = useMemo(
-    () => tracksData?.totalItems ?? 0,
-    [tracksData?.totalItems],
-  );
-  const allTrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
-
-  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", !isLoading);
-
-  const trackListProps = useMemo(
-    () => ({
-      allTrackIds,
-      tracks: allTracks,
-      totalItems,
-      isLoading,
-      error: error as Error | null,
-      isFetchingNextPage,
-      hasNextPage: hasNextPage ?? false,
-      onFetchNextPage: fetchNextPage,
-      onRetry: refetch,
-    }),
-    [
-      allTrackIds,
-      allTracks,
-      totalItems,
-      isLoading,
-      error,
-      isFetchingNextPage,
-      hasNextPage,
-      fetchNextPage,
-      refetch,
-    ],
-  );
-
-  if (!isLoading && totalItems === 0) {
-    return (
-      <EmptyState
-        icon={History}
-        title="Chưa có lịch sử"
-        description="Các bài bạn nghe sẽ xuất hiện ở đây."
-      />
-    );
-  }
-
-  return (
-    <TrackList
-      {...trackListProps}
-      moodColor="primary"
-      maxHeight={400}
-      skeletonCount={8}
-      staggerAnimation
-    />
-  );
-});
-RecentlyPlayedTrackList.displayName = "RecentlyPlayedTrackList";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FAVOURITE TRACK LIST
-// Mirrors FavouriteTrack's hook pattern — renders inline (no section wrapper)
-// ─────────────────────────────────────────────────────────────────────────────
-const FavouriteTrackList = memo(() => {
-  const {
-    data: tracksData,
-    isLoading,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-    error,
-    refetch,
-  } = useFavouriteTracksInfinite();
-
-  const allTracks = useMemo(
-    () => tracksData?.allTracks ?? [],
-    [tracksData?.allTracks],
-  );
-  const totalItems = useMemo(
-    () => tracksData?.totalItems ?? 0,
-    [tracksData?.totalItems],
-  );
-  const allTrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
-
-  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", !isLoading);
-
-  const trackListProps = useMemo(
-    () => ({
-      allTrackIds,
-      tracks: allTracks,
-      totalItems,
-      isLoading,
-      error: error as Error | null,
-      isFetchingNextPage,
-      hasNextPage: hasNextPage ?? false,
-      onFetchNextPage: fetchNextPage,
-      onRetry: refetch,
-    }),
-    [
-      allTrackIds,
-      allTracks,
-      totalItems,
-      isLoading,
-      error,
-      isFetchingNextPage,
-      hasNextPage,
-      fetchNextPage,
-      refetch,
-    ],
-  );
-
-  if (!isLoading && totalItems === 0) {
-    return (
-      <EmptyState
-        icon={Heart}
-        title="Chưa có bài đã thích"
-        description="Bài hát bạn thích sẽ xuất hiện ở đây."
-      />
-    );
-  }
-
-  return (
-    <TrackList
-      {...trackListProps}
-      moodColor="primary"
-      maxHeight={400}
-      skeletonCount={10}
-      staggerAnimation
-    />
-  );
-});
-FavouriteTrackList.displayName = "FavouriteTrackList";
+// RecentlyPlayedTrackList and FavouriteTrackList have been moved to
+// lazy-loaded modules under ./profile/ to keep this file lightweight.
+// See: ./profile/RecentlyPlayedTrackList.tsx and ./profile/FavouriteTrackList.tsx
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PROFILE PAGE
@@ -473,8 +319,16 @@ const ProfilePage = () => {
   const { user } = useAppSelector((s) => s.auth);
   const { data: dashboard, isLoading: isDashboardLoading } =
     useProfileDashboard();
-  const { data: myPlaylists } = useMyPlaylists();
-  console.log(myPlaylists);
+  const { data: myPlaylists, isLoading: isMyPlaylistsLoading } =
+    useMyPlaylists();
+  // Normalize playlists: ensure we have a flat array and guard against unexpected shapes
+  const myPlaylistsNormalized = useMemo(() => {
+    if (!myPlaylists) return [] as IPlaylist[];
+    if (Array.isArray(myPlaylists))
+      return myPlaylists.flat(Infinity).filter(Boolean) as IPlaylist[];
+    return [] as IPlaylist[];
+  }, [myPlaylists]);
+  // myPlaylists is used to render the user's playlists; avoid noisy logging in production
   const userInitials = useMemo(
     () =>
       user?.fullName
@@ -514,10 +368,9 @@ const ProfilePage = () => {
     const tabParam =
       searchParams.get("tab") ||
       searchParams.get("section") ||
-      (location.state as any)?.tab;
-    const subParam = searchParams.get("sub") || (location.state as any)?.sub;
-    const scrollTo =
-      searchParams.get("scroll") || (location.state as any)?.scrollTo;
+      location.state?.tab;
+    const subParam = searchParams.get("sub") || location.state?.sub;
+    const scrollTo = searchParams.get("scroll") || location.state?.scrollTo;
 
     if (tabParam) {
       setActiveTab(tabParam);
@@ -557,7 +410,7 @@ const ProfilePage = () => {
         try {
           el.scrollIntoView({ behavior: "smooth", block: "start" });
           // focus for accessibility
-          (el as HTMLElement).focus?.({ preventScroll: true } as any);
+          (el as HTMLElement).focus?.({ preventScroll: true });
         } catch {
           /* ignore */
         }
@@ -571,12 +424,12 @@ const ProfilePage = () => {
   // Counts for hero stats — từ dashboard (tải ngay lập tức với hero)
   const tabCounts = useMemo(
     () => ({
-      playlists: myPlaylists?.length ?? 0,
+      playlists: myPlaylistsNormalized.length ?? 0,
       likedTracks: dashboard?.library?.tracks?.length ?? 0,
       likedAlbums: dashboard?.library?.albums?.length ?? 0,
       likedPlaylists: dashboard?.library?.playlists?.length ?? 0,
     }),
-    [dashboard, myPlaylists],
+    [dashboard, myPlaylistsNormalized],
   );
 
   const statsMax = useMemo(
@@ -587,6 +440,31 @@ const ProfilePage = () => {
         tabCounts.likedAlbums,
         1,
       ),
+    [tabCounts],
+  );
+
+  // Stable stats items to avoid recreating arrays on each render
+  const statsItems = useMemo(
+    () => [
+      {
+        icon: Music2,
+        label: "Bài đã thích",
+        value: tabCounts.likedTracks,
+        color: "hsl(var(--primary))",
+      },
+      {
+        icon: ListMusic,
+        label: "Playlist",
+        value: tabCounts.playlists,
+        color: "hsl(var(--wave-2))",
+      },
+      {
+        icon: Disc,
+        label: "Album đã lưu",
+        value: tabCounts.likedAlbums,
+        color: "hsl(var(--success))",
+      },
+    ],
     [tabCounts],
   );
 
@@ -615,22 +493,10 @@ const ProfilePage = () => {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, ease: EASE_EXPO }}
             >
-              <div
-                className="p-[3px] rounded-full"
-                style={{
-                  background:
-                    "linear-gradient(135deg, hsl(var(--brand-500)), hsl(var(--wave-1)) 55%, hsl(var(--wave-2)))",
-                }}
-              >
+              <div className="p-[3px] rounded-full avatar-gradient">
                 <Avatar className="size-32 sm:size-40 md:size-52 border-[3px] border-background shadow-floating">
                   <AvatarImage src={user?.avatar} alt={user?.fullName} />
-                  <AvatarFallback
-                    className="text-4xl sm:text-5xl font-black text-white"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, hsl(var(--brand-500)), hsl(var(--wave-2)))",
-                    }}
-                  >
+                  <AvatarFallback className="text-4xl sm:text-5xl font-black text-white avatar-fallback-gradient">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
@@ -705,13 +571,7 @@ const ProfilePage = () => {
 
       {/* ══ TABS ════════════════════════════════════════════════════════════ */}
       <div className="section-container mt-0">
-        <Tabs
-          value={activeTab}
-          className="w-full"
-          onValueChange={setActiveTab}
-          className="w-full"
-          onValueChange={setActiveTab}
-        >
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Tab rail */}
           <div className="sticky top-0 z-40 py-0 bg-background/90 backdrop-blur-2xl border-b border-border/30">
             <TabsList className="bg-transparent w-full justify-start rounded-none h-auto p-0 gap-0">
@@ -796,72 +656,15 @@ const ProfilePage = () => {
                             aria-hidden="true"
                           />
                         </div>
-                        <div className="h-48 sm:h-60 p-4">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart
-                              data={dashboard?.analytics}
-                              margin={{
-                                top: 4,
-                                right: 4,
-                                left: -22,
-                                bottom: 0,
-                              }}
-                            >
-                              <defs>
-                                <linearGradient
-                                  id="profileChartGrad"
-                                  x1="0"
-                                  y1="0"
-                                  x2="0"
-                                  y2="1"
-                                >
-                                  <stop
-                                    offset="5%"
-                                    stopColor="hsl(var(--primary))"
-                                    stopOpacity={0.28}
-                                  />
-                                  <stop
-                                    offset="95%"
-                                    stopColor="hsl(var(--primary))"
-                                    stopOpacity={0}
-                                  />
-                                </linearGradient>
-                              </defs>
-                              <CartesianGrid
-                                strokeDasharray="3 7"
-                                vertical={false}
-                                stroke="hsl(var(--border))"
-                                opacity={0.4}
-                              />
-                              <XAxis
-                                dataKey="label"
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{
-                                  fill: "hsl(var(--muted-foreground))",
-                                  fontSize: 10,
-                                  fontWeight: 600,
-                                }}
-                                dy={8}
-                              />
-                              <Tooltip content={<ChartTooltip />} />
-                              <Area
-                                type="monotone"
-                                dataKey="count"
-                                stroke="hsl(var(--primary))"
-                                strokeWidth={2}
-                                fill="url(#profileChartGrad)"
-                                dot={false}
-                                activeDot={{
-                                  r: 4,
-                                  fill: "hsl(var(--primary))",
-                                  stroke: "hsl(var(--background))",
-                                  strokeWidth: 2,
-                                }}
-                              />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        </div>
+                        <Suspense
+                          fallback={
+                            <div className="h-48 sm:h-60 p-4">
+                              <div className="skeleton rounded-lg h-full" />
+                            </div>
+                          }
+                        >
+                          <ProfileChart data={dashboard?.analytics} />
+                        </Suspense>
                       </div>
                     </section>
 
@@ -886,7 +689,15 @@ const ProfilePage = () => {
                           </Link>
                         }
                       />
-                      <RecentlyPlayedTrackList />
+                      <Suspense
+                        fallback={
+                          <div className="h-44">
+                            <div className="skeleton rounded-lg h-full" />
+                          </div>
+                        }
+                      >
+                        <RecentlyPlayedTrackList />
+                      </Suspense>
                     </section>
                   </div>
 
@@ -897,13 +708,7 @@ const ProfilePage = () => {
                       <div className="flex items-center gap-3">
                         <Avatar className="size-10 border border-border/40 shrink-0">
                           <AvatarImage src={user?.avatar} />
-                          <AvatarFallback
-                            className="text-sm font-black text-white"
-                            style={{
-                              background:
-                                "linear-gradient(135deg, hsl(var(--brand-500)), hsl(var(--wave-2)))",
-                            }}
-                          >
+                          <AvatarFallback className="text-sm font-black text-white avatar-fallback-gradient">
                             {userInitials}
                           </AvatarFallback>
                         </Avatar>
@@ -941,53 +746,36 @@ const ProfilePage = () => {
                         Thống kê
                       </p>
                       <div className="space-y-4">
-                        {[
-                          {
-                            icon: Music2,
-                            label: "Bài đã thích",
-                            value: tabCounts.likedTracks,
-                            color: "hsl(var(--primary))",
-                          },
-                          {
-                            icon: ListMusic,
-                            label: "Playlist",
-                            value: tabCounts.playlists,
-                            color: "hsl(var(--wave-2))",
-                          },
-                          {
-                            icon: Disc,
-                            label: "Album đã lưu",
-                            value: tabCounts.likedAlbums,
-                            color: "hsl(var(--success))",
-                          },
-                        ].map(({ icon: Icon, label, value, color }) => (
-                          <div key={label} className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Icon
-                                  className="size-3 shrink-0"
-                                  style={{ color }}
-                                  aria-hidden="true"
-                                />
-                                {label}
+                        {statsItems.map(
+                          ({ icon: Icon, label, value, color }) => (
+                            <div key={label} className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <Icon
+                                    className="size-3 shrink-0"
+                                    style={{ color }}
+                                    aria-hidden="true"
+                                  />
+                                  {label}
+                                </div>
+                                <span className="text-counter font-bold text-foreground">
+                                  {value}
+                                </span>
                               </div>
-                              <span className="text-counter font-bold text-foreground">
-                                {value}
-                              </span>
-                            </div>
-                            <div
-                              className="progress-track"
-                              style={{ height: "3px" }}
-                            >
                               <div
-                                className="progress-fill transition-all duration-700 ease-out"
-                                style={{
-                                  width: `${Math.min((value / statsMax) * 100, 100)}%`,
-                                }}
-                              />
+                                className="progress-track"
+                                style={{ height: "3px" }}
+                              >
+                                <div
+                                  className="progress-fill transition-all duration-700 ease-out"
+                                  style={{
+                                    width: `${Math.min((value / statsMax) * 100, 100)}%`,
+                                  }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ),
+                        )}
                       </div>
                     </div>
 
@@ -1051,27 +839,43 @@ const ProfilePage = () => {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
-                    {!myPlaylists?.length ? (
-                      <EmptyState
-                        icon={ListMusic}
-                        title="Chưa có playlist"
-                        description="Tạo playlist đầu tiên để bắt đầu."
-                      />
-                    ) : (
-                      myPlaylists?.map((p: IMyPlaylist, i: number) => (
-                        <motion.div
-                          key={p._id}
-                          initial={{ opacity: 0, y: 12 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{
-                            duration: 0.38,
-                            ease: EASE_EXPO,
-                            delay: Math.min(i * 45, 500),
-                          }}
-                        >
-                          <PublicPlaylistCard playlist={p} />
-                        </motion.div>
+                    {isMyPlaylistsLoading ? (
+                      // show skeletons while fetching user's playlists
+                      Array.from({ length: 6 }).map((_, i) => (
+                        <PlaylistCardSkeleton key={i} />
                       ))
+                    ) : (
+                      <Suspense
+                        fallback={Array.from({ length: 6 }).map((_, i) => (
+                          <PlaylistCardSkeleton key={i} />
+                        ))}
+                      >
+                        {!myPlaylistsNormalized.length ? (
+                          <MusicResult
+                            variant="empty-playlists"
+                            title="Chưa có playlists"
+                            description="Tạo playlist đầu tiên để bắt đầu."
+                          />
+                        ) : (
+                          myPlaylistsNormalized.map(
+                            (p: IPlaylist, i: number) => (
+                              <motion.div
+                                key={p._id}
+                                // avoid starting hidden due to nested AnimatePresence/tab transitions
+                                initial={false}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{
+                                  duration: 0.38,
+                                  ease: EASE_EXPO,
+                                  delay: Math.min(i * 45, 500),
+                                }}
+                              >
+                                <PublicPlaylistCard playlist={p} />
+                              </motion.div>
+                            ),
+                          )
+                        )}
+                      </Suspense>
                     )}
                   </div>
                 </motion.div>
@@ -1147,13 +951,21 @@ const ProfilePage = () => {
 
                     {/* Liked tracks — useFavouriteTracksInfinite + virtual scroll */}
                     <TabsContent value="liked_tracks" className="mt-0">
-                      <FavouriteTrackList />
+                      <Suspense
+                        fallback={
+                          <div className="h-44">
+                            <div className="skeleton rounded-lg h-full" />
+                          </div>
+                        }
+                      >
+                        <FavouriteTrackList />
+                      </Suspense>
                     </TabsContent>
 
                     <TabsContent value="liked_albums" className="mt-0">
                       {!dashboard?.library?.albums?.length ? (
-                        <EmptyState
-                          icon={Disc}
+                        <MusicResult
+                          variant="empty-albums"
                           title="Chưa có album đã lưu"
                           description="Album bạn lưu sẽ xuất hiện ở đây."
                         />
@@ -1168,22 +980,37 @@ const ProfilePage = () => {
 
                     <TabsContent value="liked_playlists" className="mt-0">
                       {!dashboard?.library?.playlists?.length ? (
-                        <EmptyState
-                          icon={ListMusic}
+                        <MusicResult
+                          variant="empty-playlists"
                           title="Chưa có playlist đã lưu"
                           description="Playlist bạn lưu sẽ xuất hiện ở đây."
                         />
                       ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                          {dashboard.library.playlists.map(
-                            (playlist: IPlaylist) => (
-                              <PublicPlaylistCard
-                                key={playlist._id}
-                                playlist={playlist}
-                              />
-                            ),
-                          )}
-                        </div>
+                        <Suspense
+                          fallback={
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                              {Array.from({
+                                length: Math.min(
+                                  dashboard.library.playlists.length,
+                                  6,
+                                ),
+                              }).map((_, i) => (
+                                <PlaylistCardSkeleton key={i} />
+                              ))}
+                            </div>
+                          }
+                        >
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            {dashboard.library.playlists.map(
+                              (playlist: IPlaylist) => (
+                                <PublicPlaylistCard
+                                  key={playlist._id}
+                                  playlist={playlist}
+                                />
+                              ),
+                            )}
+                          </div>
+                        </Suspense>
                       )}
                     </TabsContent>
                   </Tabs>

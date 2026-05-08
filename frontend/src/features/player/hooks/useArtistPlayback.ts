@@ -29,9 +29,9 @@ export const useArtistPlayback = (
       collectionName: artist?.name,
       collectionType: "artist" as const,
       queryKey: artist?._id ? artistKeys.detail(artist._id) : [],
-      fetchFn: () => artistApi.getDetail(artist!._id),
+      fetchFn: () => artistApi.getArtistDetail(artist!.slug),
     }),
-    [artist?._id, artist?.name],
+    [artist?._id, artist?.name, artist?.slug],
   );
 
   const { togglePlay, shuffle, isActive, isPlaying, isFetching } =

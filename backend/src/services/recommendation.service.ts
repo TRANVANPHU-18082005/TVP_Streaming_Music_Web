@@ -17,6 +17,7 @@ import Like from "../models/Like";
 import PlayLog from "../models/PlayLog";
 import { cacheRedis } from "../config/redis";
 import { withCacheTimeout } from "../utils/cacheHelper";
+import { APP_CONFIG } from "../config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & TYPES
@@ -153,7 +154,7 @@ class RecommendationService {
     userId: string | undefined | null,
     options: RecommendOptions = {},
   ): Promise<TrackDoc[]> {
-    const { limit = 20, excludeTrackId } = options;
+    const { limit = APP_CONFIG.PAGINATION_LIMIT, excludeTrackId } = options;
     const resolvedUserId = userId ?? "guest";
 
     // ── 1. Cache check ────────────────────────────────────────────────────────

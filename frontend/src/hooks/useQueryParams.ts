@@ -9,7 +9,7 @@ export const useQueryParams = <T extends Record<string, unknown>>(
 
   const params = useMemo(() => {
     const defaults = defaultsRef.current;
-    const result = { ...defaults } as T;
+    const result: Record<string, unknown> = { ...defaults };
 
     Object.keys(defaults).forEach((key) => {
       const urlValue = searchParams.get(key);
@@ -18,15 +18,15 @@ export const useQueryParams = <T extends Record<string, unknown>>(
       const defaultVal = defaults[key];
       if (typeof defaultVal === "number") {
         const n = Number(urlValue);
-        if (!isNaN(n)) (result as any)[key] = n;
+        if (!isNaN(n)) result[key] = n;
       } else if (typeof defaultVal === "boolean") {
-        (result as any)[key] = urlValue === "true";
+        result[key] = urlValue === "true";
       } else {
-        (result as any)[key] = urlValue;
+        result[key] = urlValue;
       }
     });
 
-    return result;
+    return result as T;
   }, [searchParams]);
 
   // 🔥 Fix ở đây: Thêm tham số options cho navigate

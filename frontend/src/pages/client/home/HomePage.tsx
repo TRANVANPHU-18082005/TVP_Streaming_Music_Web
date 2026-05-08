@@ -1,12 +1,25 @@
-import { ArtistSpotlight } from "@/pages/client/home/ArtistSpotlight";
-import { FeaturedPlaylists } from "@/pages/client/home/FeaturedPlaylists";
-import { FeaturedGenres } from "@/pages/client/home/FeaturedGenres";
-import TopFeaturedTracks from "@/pages/client/home/TopFeaturedTracks";
+import React, { Suspense, lazy } from "react";
 import { RecentlyListenedTrack } from "@/pages/client/home/RecentlyListenedTrack";
 import MyPlaylist from "@/pages/client/home/MyPlaylist";
 import LibrarySection from "@/pages/client/home/Librarysection";
 import Hero from "./Hero";
-import FeaturedAlbums from "./FeaturedAlbums";
+
+const FeaturedAlbums = lazy(() => import("./FeaturedAlbums"));
+const FeaturedPlaylists = lazy(() => import("./FeaturedPlaylists"));
+const ArtistSpotlight = lazy(() => import("./ArtistSpotlight"));
+const FeaturedGenres = lazy(() => import("./FeaturedGenres"));
+const TopFeaturedTracks = lazy(() => import("./TopFeaturedTracks"));
+
+function SectionSkeleton({ height = 48 }: { height?: number }) {
+  return (
+    <div className="section-container">
+      <div
+        className="skeleton rounded-2xl w-full"
+        style={{ height: `${height}px` }}
+      />
+    </div>
+  );
+}
 
 export function HomePage() {
   return (
@@ -15,12 +28,28 @@ export function HomePage() {
       <RecentlyListenedTrack />
       <LibrarySection />
       <MyPlaylist />
-      <FeaturedAlbums />
-      <FeaturedPlaylists />
-      <ArtistSpotlight />
-      <FeaturedGenres />
-      <TopFeaturedTracks />
+
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <FeaturedAlbums />
+      </Suspense>
+
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <FeaturedPlaylists />
+      </Suspense>
+
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <ArtistSpotlight />
+      </Suspense>
+
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <FeaturedGenres />
+      </Suspense>
+
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <TopFeaturedTracks />
+      </Suspense>
     </>
   );
 }
+
 export default HomePage;

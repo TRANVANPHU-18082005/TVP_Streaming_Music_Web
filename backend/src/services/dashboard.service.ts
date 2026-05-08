@@ -348,10 +348,10 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
       {
         $group: {
           _id: "$artist",
-          totalPlays: { $sum: { $ifNull: ["$playCount", 0] } },
+          playCount: { $sum: { $ifNull: ["$playCount", 0] } },
         },
       },
-      { $sort: { totalPlays: -1 } },
+      { $sort: { playCount: -1 } },
       { $limit: 5 },
       {
         $lookup: {
@@ -367,7 +367,7 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
           _id: "$artistInfo._id",
           name: "$artistInfo.name",
           avatar: "$artistInfo.avatar",
-          totalPlays: 1,
+          playCount: 1,
         },
       },
     ]),

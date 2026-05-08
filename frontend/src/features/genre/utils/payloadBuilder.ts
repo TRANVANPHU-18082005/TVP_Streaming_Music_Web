@@ -1,28 +1,41 @@
-import { GenreFormValues } from "../schemas/genre.schema";
+// utils/payloadBuilder.ts
+import {
+  GenreCreateFormValues,
+  GenreEditFormValues,
+} from "../schemas/genre.schema";
+
+type FormValues = GenreCreateFormValues | GenreEditFormValues;
+
+const serializeValue = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+};
 
 export const buildGenrePayload = (
-  values: GenreFormValues,
-  dirtyFields: Partial<Record<keyof GenreFormValues, boolean | any>>,
+  values: FormValues,
+  dirtyFields: Partial<Record<keyof FormValues, boolean>>,
   isEditMode: boolean,
 ): FormData => {
   const formData = new FormData();
 
-  const append = (key: string, value: any) => {
-    if (value !== undefined && value !== null) formData.append(key, value);
-  };
-
-  // 1. File Upload: Chỉ gửi nếu là File mới
+  // 1. Image: File mới, xóa ảnh (null), hoặc bỏ qua (URL string giữ nguyên)
   if (values.image instanceof File) {
     formData.append("image", values.image);
+  } else if (isEditMode && dirtyFields.image && values.image === null) {
+    formData.append("image", ""); // Signal xóa ảnh
   }
 
-  // 2. Các field khác: Chỉ gửi nếu thay đổi (Dirty Checking)
-  (Object.keys(values) as Array<keyof GenreFormValues>).forEach((key) => {
-    if (key === "image") return; // Đã xử lý ở trên
-
+  // 2. Các field còn lại
+  (Object.keys(values) as Array<keyof FormValues>).forEach((key) => {
+    if (key === "image") return;
     if (!isEditMode || dirtyFields[key]) {
-      const value = values[key];
-      append(key, String(value)); // Convert primitive to string
+      const val = values[key];
+      // Omit undefined (not provided). Still send null/"" to signal explicit clear.
+      if (val === undefined) return;
+      const serialized = serializeValue(val);
+      // Send empty string for null to signal deletion (backend accepts "" or null)
+      formData.append(key, serialized ?? "");
     }
   });
 

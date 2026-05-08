@@ -1,8 +1,6 @@
 // models/Playlist.ts
 
 import mongoose, { Schema, Document, Model } from "mongoose";
-import { generateUniqueSlug } from "../utils/slug";
-import themeColorService from "../services/themeColor.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -26,6 +24,8 @@ export interface IPlaylist extends Document {
   publishAt: Date;
   visibility: "public" | "private" | "unlisted";
   isSystem: boolean;
+  isDeleted: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -75,6 +75,7 @@ const PlaylistSchema = new Schema<IPlaylist>(
       index: true,
     },
     isSystem: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
   },
   {
     timestamps: true,
@@ -94,39 +95,6 @@ PlaylistSchema.index({ tags: 1, visibility: 1 });
 
 // FIX: Thêm index cho collaborators — frequent query trong phân quyền
 PlaylistSchema.index({ collaborators: 1 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MIDDLEWARE
-// ─────────────────────────────────────────────────────────────────────────────
-
-PlaylistSchema.pre("save", async function () {
-  const playlist = this as any;
-
-  // 1. SEO slug — dùng generateUniqueSlug để đảm bảo không collision
-  if (playlist.isModified("title")) {
-    const PlaylistModel = playlist.constructor as mongoose.Model<IPlaylist>;
-    playlist.slug = await generateUniqueSlug(
-      PlaylistModel,
-      playlist.title,
-      playlist.isNew ? undefined : playlist._id,
-    );
-  }
-
-  // 2. ThemeColor từ cover image
-  if (playlist.isModified("coverImage") && playlist.coverImage) {
-    // CHỈ auto-extract nếu themeColor KHÔNG bị sửa đổi trong cùng một thao tác lưu
-    // Nếu Admin gửi data.themeColor, nó đã bị modified trước khi tới pre("save")
-    if (!playlist.isModified("themeColor")) {
-      try {
-        playlist.themeColor = await themeColorService.extractThemeColor(
-          playlist.coverImage,
-        );
-      } catch {
-        playlist.themeColor = "#1db954";
-      }
-    }
-  }
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC: calculateStats

@@ -1,4 +1,3 @@
-export { default as FullPlayer } from "./components/FullPlayer";
 export { default as MiniPlayer } from "./components/MiniPlayer";
 export { default as MusicPlayer } from "./components/MusicPlayer";
 export { default as PlayerControls } from "./components/PlayerControls";

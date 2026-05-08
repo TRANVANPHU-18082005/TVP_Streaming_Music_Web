@@ -197,76 +197,71 @@ interface RankBadgeProps {
   score: number; // lượt nghe hiện tại — dùng để glow
 }
 
-const ChartRankBadge = memo(
-  ({ rank, rankDelta, trend, score }: RankBadgeProps) => {
-    // Bài lần đầu lọt Top — badge "MỚI" đặc biệt
-    if (trend === "new") {
-      return (
-        <motion.span
-          initial={{ scale: 0.6, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 600,
-            damping: 22,
-            delay: 0.1,
-          }}
-          aria-label="Bài hát mới vào bảng xếp hạng"
-          className={cn(
-            "inline-flex items-center gap-0.5 text-[9px] font-semibold tracking-wide",
-            "leading-none px-1.5 py-0.5 rounded-full",
-            "text-amber-400 bg-amber-400/10 ring-1 ring-amber-400/20",
-          )}
-        >
-          <Sparkles className="w-2.5 h-2.5" aria-hidden="true" />
-          MỚI
-        </motion.span>
-      );
-    }
-
-    // Hạng không đổi
-    if (trend === "same") {
-      return (
-        <span
-          aria-label="Hạng không thay đổi"
-          className="inline-flex items-center justify-center w-4 h-4 rounded-full text-muted-foreground/40"
-        >
-          <Minus className="w-2.5 h-2.5" aria-hidden="true" />
-        </span>
-      );
-    }
-
-    // Tăng / giảm hạng
-    const isUp = trend === "up";
+const ChartRankBadge = memo(({ rankDelta, trend }: RankBadgeProps) => {
+  // Bài lần đầu lọt Top — badge "MỚI" đặc biệt
+  if (trend === "new") {
     return (
       <motion.span
-        initial={{ scale: 0.7, opacity: 0 }}
+        initial={{ scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{
           type: "spring",
           stiffness: 600,
-          damping: 28,
-          delay: 0.12,
+          damping: 22,
+          delay: 0.1,
         }}
-        aria-label={`Hạng ${isUp ? "tăng" : "giảm"} ${Math.abs(rankDelta)}`}
+        aria-label="Bài hát mới vào bảng xếp hạng"
         className={cn(
-          "inline-flex items-center gap-0.5 text-[9px] font-semibold font-mono tracking-wide",
-          "leading-none px-1 py-0.5 rounded-full",
-          isUp
-            ? "text-emerald-400 bg-emerald-400/10"
-            : "text-rose-400   bg-rose-400/10",
+          "badge-new inline-flex items-center gap-0.5 text-[9px] font-semibold tracking-wide",
+          "leading-none px-1.5 py-0.5 rounded-full",
         )}
       >
-        {isUp ? (
-          <TrendingUp className="w-2.5 h-2.5" aria-hidden="true" />
-        ) : (
-          <TrendingDown className="w-2.5 h-2.5" aria-hidden="true" />
-        )}
-        {Math.abs(rankDelta)}
+        <Sparkles className="w-2.5 h-2.5" aria-hidden="true" />
+        MỚI
       </motion.span>
     );
-  },
-);
+  }
+
+  // Hạng không đổi
+  if (trend === "same") {
+    return (
+      <span
+        aria-label="Hạng không thay đổi"
+        className="inline-flex items-center justify-center w-4 h-4 rounded-full text-muted-foreground/40"
+      >
+        <Minus className="w-2.5 h-2.5" aria-hidden="true" />
+      </span>
+    );
+  }
+
+  // Tăng / giảm hạng
+  const isUp = trend === "up";
+  return (
+    <motion.span
+      initial={{ scale: 0.7, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{
+        type: "spring",
+        stiffness: 600,
+        damping: 28,
+        delay: 0.12,
+      }}
+      aria-label={`Hạng ${isUp ? "tăng" : "giảm"} ${Math.abs(rankDelta)}`}
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[9px] font-semibold font-mono tracking-wide",
+        "leading-none px-1 py-0.5 rounded-full",
+        isUp ? "badge-up" : "badge-down",
+      )}
+    >
+      {isUp ? (
+        <TrendingUp className="w-2.5 h-2.5" aria-hidden="true" />
+      ) : (
+        <TrendingDown className="w-2.5 h-2.5" aria-hidden="true" />
+      )}
+      {Math.abs(rankDelta)}
+    </motion.span>
+  );
+});
 ChartRankBadge.displayName = "ChartRankBadge";
 
 // ─────────────────────────────────────────────────────────────────────────────

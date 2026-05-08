@@ -5,6 +5,8 @@ import React, {
   useCallback,
   useRef,
   useEffect,
+  lazy,
+  Suspense,
 } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
@@ -21,18 +23,21 @@ import {
   ArrowDown,
 } from "lucide-react";
 
-import {
-  useRealtimeChart,
-  RankedTrack,
-} from "@/features/track/hooks/useRealtimeChart";
-import { ChartItem } from "@/features/track/components/ChartItem";
-import {
-  ChartDataPoint,
-  ChartLine,
-} from "@/features/track/components/ChartLine";
+import { useRealtimeChart } from "@/features/track/hooks/useRealtimeChart";
+// Lazy-load heavy track components to split large chart/vendor bundles
+const ChartItem = lazy(() =>
+  import("@/features/track/components/ChartItem").then((m) => ({
+    default: m.default ?? m.ChartItem,
+  })),
+);
+const ChartLine = lazy(() =>
+  import("@/features/track/components/ChartLine").then((m) => ({
+    default: m.default ?? m.ChartLine,
+  })),
+);
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useSyncInteractions } from "@/features";
+import { IChartDataPoint, RankedTrack, useSyncInteractions } from "@/features";
 import SectionAmbient from "@/components/SectionAmbient";
 import TopChartPageSkeleton from "@/features/analytics/components/TopChartPageSkeleton";
 
@@ -51,9 +56,9 @@ const INITIAL_VISIBLE = 10;
 const EXPO_EASE = [0.22, 1, 0.36, 1] as const;
 
 const RANK_STYLES = [
-  { border: "border-amber-400", dot: "bg-amber-400", label: "Gold" },
-  { border: "border-slate-400", dot: "bg-slate-400", label: "Silver" },
-  { border: "border-orange-500", dot: "bg-orange-500", label: "Bronze" },
+  { token: "--wave-4", label: "Gold" },
+  { token: "--brand-400", label: "Silver" },
+  { token: "--wave-2", label: "Bronze" },
 ] as const;
 
 const SKELETON_WIDTHS = [
@@ -309,11 +314,11 @@ const LeaderAvatars = memo(({ tracks }: { tracks: RankedTrack[] }) => {
             <div
               className={cn(
                 "w-8 h-8 rounded-full overflow-hidden",
-                "border-[2.5px] border-background shadow-sm",
+                "border-[2.5px] shadow-sm",
                 "transition-transform duration-200 ease-out",
                 "group-hover/avatar:scale-110 group-hover/avatar:z-10",
-                RANK_STYLES[i].border,
               )}
+              style={{ borderColor: `hsl(var(${RANK_STYLES[i].token}))` }}
             >
               <ImageWithFallback
                 src={toCDN(t.coverImage) || t.coverImage}
@@ -330,8 +335,8 @@ const LeaderAvatars = memo(({ tracks }: { tracks: RankedTrack[] }) => {
                 "flex items-center justify-center",
                 "text-[7px] font-black text-white leading-none",
                 "border border-background shadow-sm",
-                RANK_STYLES[i].dot,
               )}
+              style={{ backgroundColor: `hsl(var(${RANK_STYLES[i].token}))` }}
             >
               {i + 1}
             </span>
@@ -589,7 +594,7 @@ ShowMoreButton.displayName = "ShowMoreButton";
 
 interface HeroSectionProps {
   tracks: RankedTrack[];
-  chartData: ChartDataPoint[];
+  chartData: IChartDataPoint[];
   lastUpdated: string;
   reduced: boolean;
   isLoading: boolean;
@@ -612,23 +617,20 @@ const HeroSection = memo(
         aria-hidden="true"
         style={{ contain: "strict" }}
       >
-        <div
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(1000px,100%)] h-80 blur-[100px] rounded-full"
-          style={{ background: "hsl(var(--primary)/0.07)" }}
-        />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(1000px,100%)] h-80 blur-[100px] rounded-full bg-primary-07" />
         <div
           className={cn(
             "absolute top-12 right-[8%] w-[280px] h-[180px] rounded-full blur-[72px]",
             !reduced && "animate-float-slow",
+            "bg-wave-2-042",
           )}
-          style={{ background: "hsl(var(--wave-2)/0.042)" }}
         />
         <div
           className={cn(
             "absolute bottom-0 left-[5%] w-[220px] h-[150px] rounded-full blur-[60px]",
             !reduced && "animate-float-slower",
+            "bg-wave-3-032",
           )}
-          style={{ background: "hsl(var(--wave-3)/0.032)" }}
         />
         <div
           className="absolute inset-0 opacity-[0.022] dark:opacity-[0.036]"
@@ -653,19 +655,8 @@ const HeroSection = memo(
 
         <motion.div {...fadeUp(0.07, reduced)} className="text-center mb-11">
           <h1 className="font-black tracking-[-0.045em] leading-[0.88] mb-3 select-none text-[clamp(3.2rem,11vw,6.5rem)]">
-            <span
-              className="text-transparent bg-clip-text bg-gradient-to-r"
-              style={{
-                backgroundImage:
-                  "linear-gradient(to right, hsl(var(--wave-1)), hsl(var(--primary)), hsl(var(--wave-2)))",
-              }}
-            >
-              #Charts
-            </span>
+            <span className="text-primary bg-clip-text  ">#Charts</span>
           </h1>
-          <p className="text-section-subtitle font-medium text-sm sm:text-[15px] max-w-[340px] mx-auto leading-relaxed">
-            The most-listened tracks, updated in real time.
-          </p>
         </motion.div>
 
         {/* Chart card — ChartLine staggered 200ms after title (0.07 + 0.54 ≈ 0.61s → +0.2 = 0.81) */}
@@ -701,12 +692,20 @@ const HeroSection = memo(
                 Adding 0.2s gap gives the eye time to land before lines draw.
                 ChartLine should accept this prop and pass it to its draw animation.
               */}
-                <ChartLine
-                  data={chartData}
-                  tracks={tracks}
-                  animationDelay={reduced ? 0 : 0.81}
-                  isLoading={isLoading}
-                />
+                <Suspense
+                  fallback={
+                    <div className="h-44">
+                      <div className="skeleton rounded-lg h-full" />
+                    </div>
+                  }
+                >
+                  <ChartLine
+                    data={chartData}
+                    tracks={tracks}
+                    animationDelay={reduced ? 0 : 0.81}
+                    isLoading={isLoading}
+                  />
+                </Suspense>
               </div>
             </div>
           </div>
@@ -879,17 +878,19 @@ const TrackListSection = memo(
           ) : tracks.length === 0 ? (
             <EmptyState />
           ) : (
-            <AnimatePresence mode="popLayout" initial={false}>
-              {visibleTracks.map((track, index) => (
-                <motion.div key={track._id} {...listItem(index, reduced)}>
-                  {/*
-                    ChartItem v5: takes RankedTrack directly.
-                    rank/trend/rankDelta pre-computed in hook — no prevRank needed.
-                  */}
-                  <ChartItem track={track} rank={track.rank} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
+            <Suspense fallback={<TrackSkeletonList count={INITIAL_VISIBLE} />}>
+              <AnimatePresence mode="popLayout" initial={false}>
+                {visibleTracks.map((track, index) => (
+                  <motion.div key={track._id} {...listItem(index, reduced)}>
+                    {/*
+                      ChartItem v5: takes RankedTrack directly.
+                      rank/trend/rankDelta pre-computed in hook — no prevRank needed.
+                    */}
+                    <ChartItem track={track} rank={track.rank} />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </Suspense>
           )}
         </div>
 
@@ -985,13 +986,13 @@ export const TopChartPage = () => {
 
   const hasResults = tracks.length > 0 && chartData.length > 0;
   const isOffline = !useOnlineStatus();
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (window.history.length > 1) {
       navigate(-1);
     } else {
       navigate("/", { replace: true });
     }
-  };
+  }, [navigate]);
   if (isLoading && !hasResults) {
     return <TopChartPageSkeleton />;
   }

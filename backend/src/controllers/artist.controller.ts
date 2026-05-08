@@ -6,35 +6,49 @@ import Artist from "../models/Artist";
 import ApiError from "../utils/ApiError";
 import { IUser } from "../models/User";
 import {
-  ArtistFilterInput,
+  ArtistAdminFilterInput,
+  ArtistUserFilterInput,
   getArtistTracksSchema,
 } from "../validations/artist.validation";
 
-// 1. PUBLIC: GET LIST
-export const getArtists = catchAsync(async (req: Request, res: Response) => {
-  // Cast Type từ Zod Schema (Query params đã được validate)
-  const query = req.query as unknown as ArtistFilterInput;
-  const currentUser = req.user as IUser | undefined;
-  const result = await artistService.getArtists(query, currentUser);
+// 1. PUBLIC: GET LIST THEO USER
+export const getArtistsByUser = catchAsync(
+  async (req: Request, res: Response) => {
+    // Cast Type từ Zod Schema (Query params đã được validate)
+    const query = req.query as unknown as ArtistUserFilterInput;
+    const currentUser = req.user as IUser | undefined;
+    const result = await artistService.getArtistsByUser(query, currentUser);
 
-  res.status(httpStatus.OK).json({
-    success: true,
-    data: result,
-  });
-});
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: result,
+    });
+  },
+);
+// 2. PUBLIC: GET LIST BY ADMIN
+export const getArtistsByAdmin = catchAsync(
+  async (req: Request, res: Response) => {
+    // Cast Type từ Zod Schema (Query params đã được validate)
+    const query = req.query as unknown as ArtistAdminFilterInput;
+    const currentUser = req.user as IUser | undefined;
+    const result = await artistService.getArtistsByAdmin(query, currentUser);
 
-// 2. PUBLIC: GET DETAIL
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: result,
+    });
+  },
+);
+
+// 3. PUBLIC: GET DETAIL
 export const getArtistDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user as IUser | undefined;
 
-    const currentUserId = currentUser ? currentUser._id.toString() : undefined;
-    console.log(req.params.id);
     const albumDetailResult = await artistService.getArtistDetail(
-      req.params.id,
-      currentUserId,
+      req.params.slug,
+      currentUser,
     );
-
     res.status(httpStatus.OK).json({
       success: true,
       data: albumDetailResult,
@@ -42,7 +56,7 @@ export const getArtistDetail = catchAsync(
   },
 );
 
-// 3. ARTIST: GET MY PROFILE
+// 4. ARTIST: GET MY PROFILE
 export const getMyProfile = catchAsync(async (req: Request, res: Response) => {
   const artist = await Artist.findOne({ user: req.user!._id }).lean();
 
@@ -56,7 +70,7 @@ export const getMyProfile = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-// 4. ARTIST: UPDATE SELF
+// 5. ARTIST: UPDATE SELF
 export const updateMyProfile = catchAsync(
   async (req: Request, res: Response) => {
     // Cast Multer Fields
@@ -76,7 +90,7 @@ export const updateMyProfile = catchAsync(
   },
 );
 
-// 5. ADMIN: CREATE
+// 6. ADMIN: CREATE
 export const createArtist = catchAsync(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -89,7 +103,7 @@ export const createArtist = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-// 6. ADMIN: UPDATE
+// 7. ADMIN: UPDATE
 export const updateArtist = catchAsync(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -106,7 +120,7 @@ export const updateArtist = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-// 7. ADMIN: TOGGLE STATUS
+// 8. ADMIN: TOGGLE STATUS
 export const toggleStatus = catchAsync(async (req: Request, res: Response) => {
   const result = await artistService.toggleStatus(req.params.id);
 
@@ -119,7 +133,7 @@ export const toggleStatus = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-// 8. ADMIN: DELETE
+// 9. ADMIN: DELETE
 export const deleteArtist = catchAsync(async (req: Request, res: Response) => {
   await artistService.deleteArtist(req.params.id);
 
@@ -128,18 +142,16 @@ export const deleteArtist = catchAsync(async (req: Request, res: Response) => {
     message: "Đã xóa nghệ sĩ vĩnh viễn",
   });
 });
-// 6. GET ALBUM TRACKS
+// 10. GET ARTIST TRACKS
 export const getArtistTracks = catchAsync(async (req, res) => {
   // 1. Parse query - Đảm bảo dữ liệu sạch
   const { query } = getArtistTracksSchema.parse({ query: req.query });
   const currentUser = req.user as IUser | undefined;
 
-  const userRole = currentUser ? currentUser.role : undefined;
-
   const result = await artistService.getArtistTracks(
     req.params.id,
     query,
-    userRole,
+    currentUser,
   );
 
   res.status(httpStatus.OK).json({

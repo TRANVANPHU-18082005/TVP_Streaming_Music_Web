@@ -1,7 +1,5 @@
 // features/dashboard/types/index.ts
 
-export type DashboardRange = "7d" | "30d" | "90d";
-
 // ── Primitives ──────────────────────────────────────────────────────────────
 
 export interface StatItem {
@@ -9,7 +7,7 @@ export interface StatItem {
   growth: number;
 }
 
-export interface ChartDataPoint {
+export interface ChartDashbordDataPoint {
   _id: string; // "yyyy-MM-dd"
   count: number;
 }
@@ -141,8 +139,8 @@ export interface DashboardData {
   };
   systemHealth: SystemHealthData;
   charts: {
-    userGrowth: ChartDataPoint[];
-    trackGrowth: ChartDataPoint[];
+    userGrowth: ChartDashbordDataPoint[];
+    trackGrowth: ChartDashbordDataPoint[];
   };
   topLists: {
     topTracks: TopTrack[];
@@ -165,8 +163,8 @@ export interface DashboardData {
   };
   systemHealth: SystemHealthData;
   charts: {
-    userGrowth: ChartDataPoint[];
-    trackGrowth: ChartDataPoint[];
+    userGrowth: ChartDashbordDataPoint[];
+    trackGrowth: ChartDashbordDataPoint[];
   };
   topLists: {
     topTracks: TopTrack[];
@@ -180,3 +178,6 @@ export interface DashboardResponse {
   status: string;
   data: DashboardData;
 }
+
+// Compatibility re-exports
+export type { DashboardRange } from "../schemas/dashboard.schema";

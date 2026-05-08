@@ -23,8 +23,14 @@ import {
   Video,
   Sparkles,
   CheckCircle2,
+  FileText,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// UI Components
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 // Components Selector
 import { AlbumSelector } from "@/features/album/components/AlbumSelector";
@@ -32,17 +38,17 @@ import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import { TagInput } from "@/components/ui/tag-input";
 import { MoodVideoPicker } from "@/features/mood-video/components/MoodVideoPicker";
 import {
-  BulkTrackFormValues,
-  bulkTrackSchema,
-} from "@/features/track/schemas/track.schema";
+  BulkTrackUpdateFormValues,
+  bulkTrackUpdateSchema,
+} from "../schemas/track.schema";
 
 interface BulkEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedCount: number;
-  onSubmit: (data: BulkTrackFormValues) => void;
+  onSubmit: (data: BulkTrackUpdateFormValues) => void;
   isPending: boolean;
-  initialTab?: "metadata" | "album" | "mood";
+  initialTab?: "metadata" | "album" | "mood" | "legal";
 }
 
 export const BulkEditModal: React.FC<BulkEditModalProps> = ({
@@ -54,8 +60,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
   initialTab = "metadata",
 }) => {
   const { control, handleSubmit, setValue, watch } =
-    useForm<BulkTrackFormValues>({
-      resolver: zodResolver(bulkTrackSchema),
+    useForm<BulkTrackUpdateFormValues>({
+      resolver: zodResolver(bulkTrackUpdateSchema) as any,
       defaultValues: {
         tags: [],
         isPublic: undefined, // undefined = không thay đổi
@@ -102,7 +108,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
           >
             {/* TABS LIST */}
             <div className="px-5 pt-5 pb-2 shrink-0">
-              <TabsList className="grid w-full grid-cols-3 bg-muted h-11 p-1 rounded-lg">
+              <TabsList className="grid w-full grid-cols-4 bg-muted h-11 p-1 rounded-lg">
                 <TabsTrigger
                   value="metadata"
                   className="gap-2 text-xs sm:text-sm font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md transition-all"
@@ -120,6 +126,12 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                   className="gap-2 text-xs sm:text-sm font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md transition-all"
                 >
                   <Disc className="size-3.5 sm:size-4" /> Album
+                </TabsTrigger>
+                <TabsTrigger
+                  value="legal"
+                  className="gap-2 text-xs sm:text-sm font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md transition-all"
+                >
+                  <FileText className="size-3.5 sm:size-4" /> Legal
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -355,6 +367,65 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         <span className="opacity-70">
                           Lưu ý: Track Number có thể cần sắp xếp lại thủ công.
                         </span>
+                      </p>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* --- TAB: LEGAL --- */}
+                <TabsContent
+                  value="legal"
+                  className="space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-300 outline-none"
+                >
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-foreground/80">
+                      Copyright Notice
+                    </Label>
+                    <div className="bg-background p-2 border border-input rounded-xl focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all shadow-sm">
+                      <Controller
+                        control={control}
+                        name="copyright"
+                        render={({ field }) => (
+                          <Textarea
+                            {...field}
+                            placeholder="© 2024 Artist Name. All rights reserved."
+                            className="min-h-[80px] bg-transparent border-none resize-none"
+                          />
+                        )}
+                      />
+                    </div>
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
+                      <AlertTriangle className="size-4 shrink-0" />
+                      <p className="text-[11px] font-medium leading-tight">
+                        Sẽ <strong>thay thế</strong> bản quyền cũ.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-foreground/80">
+                      ISRC Code
+                    </Label>
+                    <div className="bg-background p-2 border border-input rounded-xl focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all shadow-sm">
+                      <Controller
+                        control={control}
+                        name="isrc"
+                        render={({ field }) => (
+                          <Input
+                            {...field}
+                            placeholder="USRC17607839"
+                            className="bg-transparent border-none font-mono uppercase"
+                          />
+                        )}
+                      />
+                    </div>
+                    <div className="flex items-start gap-2 text-muted-foreground/55 px-1">
+                      <Info
+                        className="size-3 mt-0.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <p className="text-[10px] leading-relaxed">
+                        International Standard Recording Code (optional).
                       </p>
                     </div>
                   </div>

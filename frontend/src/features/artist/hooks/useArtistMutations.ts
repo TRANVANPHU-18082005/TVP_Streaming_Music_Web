@@ -17,7 +17,7 @@ export const useArtistMutations = () => {
   // 1. CREATE (FormData)
   // ==========================================
   const createMutation = useMutation({
-    mutationFn: (data: FormData) => artistApi.adminCreate(data),
+    mutationFn: (data: FormData) => artistApi.create(data),
     onSuccess: () => {
       toast.success("Tạo nghệ sĩ thành công");
       invalidateList();
@@ -30,7 +30,7 @@ export const useArtistMutations = () => {
   // ==========================================
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: FormData }) =>
-      artistApi.adminUpdate(id, data),
+      artistApi.update(id, data),
     onSuccess: (_, { id }) => {
       toast.success("Cập nhật thành công");
       invalidateList();
@@ -43,7 +43,7 @@ export const useArtistMutations = () => {
   // 3. DELETE
   // ==========================================
   const deleteMutation = useMutation({
-    mutationFn: artistApi.adminDelete,
+    mutationFn: artistApi.delete,
     onSuccess: () => {
       toast.success("Đã xóa nghệ sĩ");
       invalidateList();
@@ -55,7 +55,7 @@ export const useArtistMutations = () => {
   // 4. TOGGLE STATUS / VERIFY (JSON)
   // ==========================================
   const toggleStatusMutation = useMutation({
-    mutationFn: (id: string) => artistApi.adminToggleStatus(id),
+    mutationFn: (id: string) => artistApi.toggleStatus(id),
     onSuccess: () => {
       toast.success("Đã thay đổi trạng thái");
       invalidateList();
@@ -74,8 +74,10 @@ export const useArtistMutations = () => {
       updateMutation.mutateAsync({ id, data }),
 
     deleteArtist: deleteMutation.mutate,
+    deleteArtistAsync: deleteMutation.mutateAsync,
 
     toggleArtistStatus: toggleStatusMutation.mutate,
+    toggleArtistStatusAsync: toggleStatusMutation.mutateAsync,
 
     // --- Loading States ---
     isCreating: createMutation.isPending,

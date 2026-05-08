@@ -1,47 +1,27 @@
+import { IAlbum, IArtist, ITrack } from "@/features";
+import { IGenre } from "@/features/genre";
+import { IPlaylist } from "@/features/playlist";
+
 // --- Base Entities ---
-export interface SearchArtist {
-  _id: string;
-  name: string;
-  slug: string;
-  avatar: string;
-  totalFollowers: number;
+export interface SearchArtist extends IArtist {
+
   highlightHtml?: string; // Mới thêm từ backend v4
 }
 
-export interface SearchTrack {
-  _id: string;
-  title: string;
-  slug: string;
-  coverImage: string;
-  duration: number;
-  plays: number;
-  artist: {
-    name: string;
-    slug: string;
-  };
+export interface SearchTrack extends ITrack {
   highlightHtml?: string; // Mới thêm từ backend v4
 }
 
-export interface SearchAlbum {
-  _id: string;
-  title: string;
-  slug: string;
-  coverImage: string;
-  year: number;
-  artist: {
-    name: string;
-  };
+export interface SearchAlbum extends IAlbum {
+  highlightHtml?: string; // Mới thêm từ backend v4
+
+}
+export interface SearchGenre extends IGenre {
   highlightHtml?: string; // Mới thêm từ backend v4
 }
 
-export interface SearchPlaylist {
-  _id: string;
-  title: string;
-  slug: string;
-  coverImage: string;
-  user: {
-    fullName: string;
-  };
+export interface SearchPlaylist extends IPlaylist {
+  highlightHtml?: string; // Mới thêm từ backend v4
 }
 
 // --- Suggestion Types (Endpoint /suggest) ---
@@ -49,14 +29,16 @@ export interface SuggestItem {
   id: string;
   label: string; // Title hoặc Name
   slug: string;
-  type: "track" | "artist" | "album";
+  type: "track" | "artist" | "album" | "genre";
 }
 
 // --- Top Result Union Type ---
 export type TopResultItem =
   | ({ type: "artist" } & SearchArtist)
   | ({ type: "track" } & SearchTrack)
-  | ({ type: "album" } & SearchAlbum);
+  | ({ type: "album" } & SearchAlbum)
+  | ({ type: "playlist" } & SearchPlaylist)
+  | ({ type: "genre" } & SearchGenre);
 
 // --- Main Data Structure ---
 export interface SearchData {
@@ -65,6 +47,7 @@ export interface SearchData {
   artists: SearchArtist[];
   albums: SearchAlbum[];
   playlists: SearchPlaylist[];
+  genres: SearchGenre[];
 }
 
 // --- API Generic Response ---

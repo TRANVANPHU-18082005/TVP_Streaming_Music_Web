@@ -26,15 +26,26 @@ export const useSyncInteractionsPaged = (
 
   // Set chứa IDs đã sync — persist across re-renders, reset khi unmount
   const syncedIds = useRef<Set<string>>(new Set());
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Chỉ lấy IDs chưa sync — tránh tính lại không cần thiết
+  // Also skip IDs we already have in Redux to avoid redundant server checks
+  const interactionMap = useAppSelector((state) => {
+    const maps = {
+      track: state.interaction.likedTracks,
+      album: state.interaction.likedAlbums,
+      playlist: state.interaction.likedPlaylists,
+      artist: state.interaction.followedArtists,
+    } as const;
+    return maps[targetType];
+  });
+
   const newIds = useMemo(() => {
     if (!allTracks?.length) return [];
     return allTracks
       .map((t) => t._id)
-      .filter((id) => !syncedIds.current.has(id));
-  }, [allTracks]); // allTracks ref thay đổi khi page mới append vào
+      .filter((id) => !syncedIds.current.has(id) && !interactionMap[id]);
+  }, [allTracks, interactionMap]); // allTracks ref thay đổi khi page mới append vào
 
   useEffect(() => {
     if (!user || !enabled || newIds.length === 0) return;

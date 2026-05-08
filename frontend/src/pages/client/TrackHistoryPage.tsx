@@ -1,19 +1,24 @@
-import React, { useMemo, memo, useCallback } from "react";
+import React, { useMemo, memo, useCallback, lazy, Suspense } from "react";
 
 import { History } from "lucide-react";
 
 import MusicResult from "@/components/ui/Result";
 import Pagination from "@/utils/pagination";
 
-import { ITrack, TrackList } from "@/features";
+import { ITrack } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { AnimatePresence } from "framer-motion";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
-import { useFavouriteTracksInfinite } from "@/features/profile/hooks/useProfileQuery";
+import { useRecentlyPlayedInfinite } from "@/features/profile/hooks/useProfileQuery";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
+const TrackListModule = import("@/features/track/components/TrackList");
+const TrackListLazy = lazy(() =>
+  TrackListModule.then((m) => ({ default: m.TrackList })),
+);
 /** Module-scoped grid constant — zero allocation per render */
 const GRID_LAYOUT = cn(
   "grid",
@@ -50,7 +55,7 @@ const PageHero = memo(() => (
     </div>
     {/* Title */}
     <h1
-      className="text-display-xl text-gradient-wave mb-2 animate-fade-up animation-fill-both"
+      className="text-display-xl text-primary mb-2 animate-fade-up animation-fill-both"
       style={{ animationDelay: "60ms" }}
       id="album-page-heading"
     >
@@ -176,7 +181,7 @@ const TrackHistoryPage: React.FC = () => {
     error: tracksError,
     isError,
     refetch: refetchTracks,
-  } = useFavouriteTracksInfinite();
+  } = useRecentlyPlayedInfinite();
 
   const allTracks = useMemo<ITrack[]>(
     () => tracksData?.allTracks ?? [],
@@ -266,14 +271,15 @@ const TrackHistoryPage: React.FC = () => {
           {" "}
           <div className="relative">
             <AnimatePresence mode="popLayout" initial={false}>
-              <TrackList
-                {...trackListProps}
-                maxHeight={700}
-                // page tự scroll, không giới hạn height
-                moodColor={`var(--wave-2)`}
-                skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
-                staggerAnimation={true}
-              />
+              <Suspense fallback={<WaveformLoader />}>
+                <TrackListLazy
+                  {...trackListProps}
+                  maxHeight="auto"
+                  moodColor={`var(--wave-2)`}
+                  skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
+                  staggerAnimation={true}
+                />
+              </Suspense>
             </AnimatePresence>
           </div>
         </section>

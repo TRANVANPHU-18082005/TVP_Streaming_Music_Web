@@ -28,7 +28,11 @@ import { useTrackParams } from "@/features/track/hooks/useTrackParams";
 import { useTrackMutations } from "@/features/track/hooks/useTrackMutations";
 
 // Types & Config
-import { BulkTrackFormValues } from "@/features/track/schemas/track.schema";
+import {
+  BulkTrackFormValues,
+  TRACK_STATUS_OPTIONS,
+  TrackStatus,
+} from "@/features/track/schemas/track.schema";
 import { APP_CONFIG } from "@/config/constants";
 import { ITrack } from "@/features/track/types";
 import { useAdminTracks } from "@/features/track/hooks/useTracksQuery";
@@ -45,7 +49,7 @@ const TrackManagementPage = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters, // Added clear filters handler
-  } = useTrackParams(APP_CONFIG.PAGINATION_LIMIT);
+  } = useTrackParams();
 
   // --- 2. DATA FETCHING (Read) ---
   const { data, isLoading, isError, refetch } = useAdminTracks(filterParams);
@@ -55,15 +59,21 @@ const TrackManagementPage = () => {
     createTrackAsync,
     updateTrackAsync,
     deleteTrack,
+
+    bulkDeleteTracks,
     retryFull,
     retryTranscode,
     retryLyrics,
     retryKaraoke,
     retryMood,
+
+    bulkChangeTrackStatus,
     bulkUpdateTrack,
     bulkRetryTranscode,
     bulkRetryLyrics,
+    bulkRetryKaraoke,
     bulkRetryMood,
+    bulkRetryFull,
     isMutating,
   } = useTrackMutations();
 
@@ -74,7 +84,9 @@ const TrackManagementPage = () => {
 
   // Bulk Selection State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkMode, setBulkMode] = useState<"metadata" | "album" | null>(null);
+  const [bulkMode, setBulkMode] = useState<
+    "metadata" | "album" | "mood" | "legal" | null
+  >(null);
 
   // --- HANDLERS ---
 
@@ -169,6 +181,85 @@ const TrackManagementPage = () => {
     });
   };
 
+  const handleBulkRetryKaraoke = () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Gửi lệnh retry karaoke cho ${selectedIds.length} bài hát?`))
+      return;
+    bulkRetryKaraoke(selectedIds, {
+      onSuccess: () => setSelectedIds([]),
+    });
+  };
+
+  const handleBulkRetryFull = () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Gửi lệnh retry full cho ${selectedIds.length} bài hát?`))
+      return;
+    bulkRetryFull(selectedIds, {
+      onSuccess: () => setSelectedIds([]),
+    });
+  };
+
+  const handleBulkTogglePublic = () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Đặt ${selectedIds.length} bài hát thành công khai?`)) return;
+    bulkUpdateTrack(
+      { ids: selectedIds, data: { isPublic: true } },
+      {
+        onSuccess: () => setSelectedIds([]),
+      },
+    );
+  };
+
+  const handleBulkToggleExplicit = () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Đặt ${selectedIds.length} bài hát thành explicit (18+)?`))
+      return;
+    bulkUpdateTrack(
+      { ids: selectedIds, data: { isExplicit: true } },
+      {
+        onSuccess: () => setSelectedIds([]),
+      },
+    );
+  };
+
+  const handleBulkChangeStatus = () => {
+    if (selectedIds.length === 0) return;
+
+    const status = window
+      .prompt(
+        `Nhập trạng thái mới cho ${selectedIds.length} bài hát: ${TRACK_STATUS_OPTIONS.join(", ")}`,
+        "ready",
+      )
+      ?.trim() as TrackStatus | undefined;
+
+    if (!status || !TRACK_STATUS_OPTIONS.includes(status)) return;
+
+    let errorReason: string | undefined;
+    if (status === "failed") {
+      errorReason = window
+        .prompt("Nhập lý do lỗi cho trạng thái failed (tùy chọn):", "")
+        ?.trim();
+    }
+
+    bulkChangeTrackStatus(
+      selectedIds,
+      { status, errorReason: errorReason || undefined },
+      {
+        onSuccess: () => setSelectedIds([]),
+      },
+    );
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Bạn có chắc muốn xóa ${selectedIds.length} bài hát đã chọn?`))
+      return;
+
+    bulkDeleteTracks(selectedIds, {
+      onSuccess: () => setSelectedIds([]),
+    });
+  };
+
   // Safe Access Data
   const tracks = data?.tracks || [];
   const meta = data?.meta || {
@@ -231,6 +322,7 @@ const TrackManagementPage = () => {
       <div className="bg-card rounded-2xl shadow-sm">
         {/* FILTERS */}
         <TrackFilters
+          isAdmin
           params={filterParams}
           onSearch={handleSearch}
           onFilterChange={handleFilterChange}
@@ -263,12 +355,12 @@ const TrackManagementPage = () => {
         ) : !hasResults ? (
           !isLoading && !isFiltering ? (
             <MusicResult
-              variant="empty-genres"
-              description="Genre hiện đang trống"
+              variant="empty-tracks"
+              description="Không có bài hát nào trong thư viện"
             />
           ) : (
             <MusicResult
-              variant="empty-genres"
+              variant="empty-tracks"
               description="Không có kết quả! Thử bộ lọc khác "
               onClearFilters={clearFilters}
               onBack={onBack}
@@ -308,25 +400,21 @@ const TrackManagementPage = () => {
       )}
       {/* --- Action Bar & Modals --- */}
 
-      {/* 1. Bulk Action Bar */}
       <BulkActionBar
         selectedCount={selectedIds.length}
         onClear={() => setSelectedIds([])}
         onEditAlbum={() => setBulkMode("album")}
         onEditMetadata={() => setBulkMode("metadata")}
-        onDelete={() => {
-          if (
-            confirm(
-              `Are you sure you want to delete ${selectedIds.length} tracks?`,
-            )
-          ) {
-            // Implement bulk delete if API supports it
-            alert("Bulk delete functionality coming soon!");
-          }
-        }}
+        onEditLegal={() => setBulkMode("legal")}
+        onDelete={handleBulkDelete}
         onRetryTranscode={handleBulkRetryTranscode}
         onRetryLyrics={handleBulkRetryLyrics}
+        onRetryKaraoke={handleBulkRetryKaraoke}
         onRetryMood={handleBulkRetryMood}
+        onRetryFull={handleBulkRetryFull}
+        onTogglePublic={handleBulkTogglePublic}
+        onToggleExplicit={handleBulkToggleExplicit}
+        onChangeStatus={handleBulkChangeStatus}
       />
 
       {/* 2. Create/Edit Modal */}

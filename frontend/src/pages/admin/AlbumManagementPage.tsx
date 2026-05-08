@@ -14,13 +14,10 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 
 // Hooks
 import { useAlbumParams } from "@/features/album/hooks/useAlbumParams";
-import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
 import { useAlbumMutations } from "@/features/album/hooks/useAlbumMutations";
 import AlbumModal from "@/features/album/components/album-modal";
-import { Albumpageskeleton, IAlbum } from "@/features";
-import {
-  WaveformLoader,
-} from "@/components/ui/MusicLoadingEffects";
+import { Albumpageskeleton, IAlbum, useAlbumsByAdminQuery } from "@/features";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useSmartBack } from "@/hooks/useSmartBack";
 
 const AlbumManagementPage = () => {
@@ -31,8 +28,9 @@ const AlbumManagementPage = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useAlbumParams(APP_CONFIG.PAGINATION_LIMIT || 12);
-  const { data, isLoading, isError, refetch } = useAlbumsQuery(filterParams);
+  } = useAlbumParams();
+  const { data, isLoading, isError, refetch } =
+    useAlbumsByAdminQuery(filterParams);
   const { createAlbumAsync, updateAlbumAsync, deleteAlbum, isMutating } =
     useAlbumMutations();
 
@@ -69,7 +67,7 @@ const AlbumManagementPage = () => {
     console.log("Form data received in AlbumManagementPage:", formData);
     try {
       if (editingAlbum) {
-        await updateAlbumAsync(editingAlbum._id, formData);
+        await updateAlbumAsync({ id: editingAlbum._id, data: formData });
       } else {
         await createAlbumAsync(formData);
       }
@@ -77,7 +75,8 @@ const AlbumManagementPage = () => {
       setIsModalOpen(false);
     } catch (error) {
       console.error("Failed to save album", error);
-      // Giữ modal mở để user sửa lỗi nếu cần
+      // Rethrow so the form hook can map server validation errors to fields
+      throw error;
     }
   };
 
@@ -144,6 +143,7 @@ const AlbumManagementPage = () => {
       {/* --- FILTER --- */}
       <div className="bg-card rounded-2xl shadow-sm">
         <AlbumFilter
+          isAdmin
           params={filterParams}
           onSearch={handleSearch}
           onFilterChange={handleFilterChange}

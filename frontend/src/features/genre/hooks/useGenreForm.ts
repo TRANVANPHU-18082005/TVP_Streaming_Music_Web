@@ -1,7 +1,6 @@
 import { useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Genre } from "../types";
 import {
   genreCreateSchema,
   genreEditSchema,
@@ -10,11 +9,13 @@ import {
 } from "../schemas/genre.schema";
 import { mapEntityToForm } from "../utils/formMapper";
 import { buildGenrePayload } from "../utils/payloadBuilder";
+import { IGenre } from "../types";
+import { env } from "@/config/env";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TYPES — Sử dụng Overload để đảm bảo Type-safe theo Mode
+// TYPES
 // ─────────────────────────────────────────────────────────────────────────────
-
 interface UseGenreFormCreateProps {
   mode: "create";
   genreToEdit?: never;
@@ -23,72 +24,118 @@ interface UseGenreFormCreateProps {
 
 interface UseGenreFormEditProps {
   mode: "edit";
-  genreToEdit: Genre;
+  genreToEdit: IGenre;
   onSubmit: (formData: FormData) => Promise<void>;
 }
 
 type UseGenreFormProps = UseGenreFormCreateProps | UseGenreFormEditProps;
 
+type FormValues<TMode extends "create" | "edit"> = TMode extends "edit"
+  ? GenreEditFormValues
+  : GenreCreateFormValues;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HOOK
 // ─────────────────────────────────────────────────────────────────────────────
-
-export const useGenreForm = ({
+export const useGenreForm = <TMode extends "create" | "edit">({
   mode,
   genreToEdit,
   onSubmit,
-}: UseGenreFormProps) => {
+}: UseGenreFormProps & { mode: TMode }) => {
   const isEditMode = mode === "edit";
 
-  // 1. Chọn Schema dựa trên Mode (Create bắt buộc File/Edit cho phép URL string)
+  // Schema theo mode — không cần memo vì schema là module-level constant
   const schema = isEditMode ? genreEditSchema : genreCreateSchema;
 
-  // 2. Memoize default values - Dùng _id để tránh reset form không cần thiết
+  // QUAN TRỌNG: genreToEdit phải stable ở component cha (memo theo _id)
   const defaultValues = useMemo(
     () => mapEntityToForm(isEditMode ? genreToEdit : undefined),
-    [genreToEdit?._id, isEditMode],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [genreToEdit, isEditMode],
   );
 
-  // 3. Khởi tạo Form
-  const form = useForm<GenreCreateFormValues | GenreEditFormValues>({
-    resolver: zodResolver(schema),
-    defaultValues,
+  const form = useForm<FormValues<TMode>>({
+    resolver: zodResolver(schema) as any,
+    defaultValues: defaultValues as any, // cast chỉ ở đây, không ảnh hưởng DX
     mode: "onSubmit",
     reValidateMode: "onChange",
   });
 
-  // 4. Đồng bộ dữ liệu khi data đầu vào thay đổi (Reset form)
+  // Sync khi genreToEdit thay đổi (chuyển sang genre khác để edit)
+  // Bỏ `form` khỏi deps — reset là stable, form object thì không
   useEffect(() => {
     form.reset(defaultValues);
-  }, [defaultValues, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultValues]);
 
-  // 5. Submit Handler tối ưu hóa
   const handleSubmit = form.handleSubmit(async (values) => {
     const { dirtyFields } = form.formState;
 
-    // --- OPTIMIZATION: DIRTY CHECKING ---
     if (isEditMode) {
-      const hasFile = values.image instanceof File;
+      // dirtyFields.image = true khi xóa ảnh (image = null) hoặc đổi file
       const hasChanges = Object.keys(dirtyFields).length > 0;
-
-      // Nếu đang sửa mà không đổi text/color và không up ảnh mới -> Bỏ qua API
-      if (!hasChanges && !hasFile) {
+      if (!hasChanges) {
         console.warn("[GenreForm] No changes detected, skipping...");
         return;
       }
     }
 
-    // Build Payload (FormData)
-    // buildGenrePayload sẽ tự động xử lý chuyển parentId thành null nếu rỗng
-    const payload = buildGenrePayload(values, dirtyFields, isEditMode);
+    if (env.NODE_ENV === "development") {
+      console.log("🚀 Submitting Genre Payload:", {
+        mode,
+        values,
+        dirtyFields,
+      });
+    }
 
-    console.log("🚀 Submitting Genre Payload:", {
-      mode,
-      values,
-      dirtyFields,
-    });
+    const payload = buildGenrePayload(
+      values as any,
+      dirtyFields as any,
+      isEditMode,
+    );
 
-    await onSubmit(payload);
+    try {
+      await onSubmit(payload);
+    } catch (err: any) {
+      // Map server-side validation errors to form fields where possible.
+      const resp = err?.response?.data || err?.response || null;
+
+      let handled = false;
+
+      const maybeFieldMap = resp?.data ?? resp?.errors ?? resp;
+      if (maybeFieldMap && typeof maybeFieldMap === "object") {
+        if (Array.isArray(maybeFieldMap)) {
+          for (const item of maybeFieldMap) {
+            if (!item) continue;
+            if (typeof item === "string") {
+              toast.error(item);
+            } else if (item.field && (item.message || item.msg)) {
+              form.setError(item.field, {
+                type: "server",
+                message: item.message || item.msg,
+              });
+              handled = true;
+            }
+          }
+        } else {
+          Object.entries(maybeFieldMap).forEach(([k, v]) => {
+            if (!k) return;
+            const msg = Array.isArray(v) ? v.join(" ") : String(v || "");
+            if (k === "message" || k === "errorCode") return;
+            form.setError(k as any, { type: "server", message: msg });
+            handled = true;
+          });
+        }
+      }
+
+      if (!handled) {
+        const message = resp?.message || err?.message || "Lỗi lưu thể loại";
+        toast.error(message);
+      }
+
+      // Keep modal open for user to fix errors — swallow the error here.
+      return;
+    }
   });
 
   return {

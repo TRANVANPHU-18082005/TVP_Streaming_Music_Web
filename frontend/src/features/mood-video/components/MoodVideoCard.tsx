@@ -36,11 +36,11 @@ import {
   Waves,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MoodVideo } from "../types";
+import { IMoodVideo } from "../types";
 
 interface MoodVideoCardProps {
-  video: MoodVideo;
-  onEdit: (video: MoodVideo) => void;
+  video: IMoodVideo;
+  onEdit: (video: IMoodVideo) => void;
   onDelete: (id: string) => void;
   onToggleActive: (id: string, isActive: boolean) => void;
 }

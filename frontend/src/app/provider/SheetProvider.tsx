@@ -11,7 +11,7 @@ import {
   PlaylistSheet,
   ArtistSheet,
   GenreSheet,
-  OptionSheet,
+  TrackSheet,
   AddToPlaylistSheet,
 } from "@/app/context/SheetContext";
 
@@ -32,7 +32,7 @@ const ContextSheetContext = createContext<ContextSheetContextValue>({
   openArtistSheet: () => {},
   openGenreSheet: () => {},
   openAddToPlaylistSheet: () => {},
-  openOptionSheet: () => {},
+  openTrackSheet: () => {},
   closeContextSheet: () => {},
 });
 
@@ -94,12 +94,14 @@ export function ContextSheetProvider({
   useEffect(() => () => clearTimeout(closeTimerRef.current), []);
 
   const openAlbumSheet = useCallback((entity: IAlbum) => {
+    clearTimeout(closeTimerRef.current);
     setFrozen({ type: "album", entity });
     setActive({ type: "album", entity });
   }, []);
 
   const openAddToPlaylistSheet = useCallback(
     (sourceEntity?: IAlbum | IArtist | IGenre, tracks?: ITrack[] | null) => {
+      clearTimeout(closeTimerRef.current);
       setFrozen({
         type: "addToPlaylist",
         sourceEntity,
@@ -115,21 +117,25 @@ export function ContextSheetProvider({
   );
 
   const openPlaylistSheet = useCallback((entity: IPlaylist) => {
+    clearTimeout(closeTimerRef.current);
     setFrozen({ type: "playlist", entity });
     setActive({ type: "playlist", entity });
   }, []);
 
-  const openOptionSheet = useCallback((track?: ITrack | null) => {
-    setFrozen({ type: "options", track: track ?? null } as ContextSheetPayload);
-    setActive({ type: "options", track: track ?? null } as ContextSheetPayload);
+  const openTrackSheet = useCallback((track?: ITrack | null) => {
+    clearTimeout(closeTimerRef.current);
+    setFrozen({ type: "track", track: track ?? null } as ContextSheetPayload);
+    setActive({ type: "track", track: track ?? null } as ContextSheetPayload);
   }, []);
 
   const openArtistSheet = useCallback((entity: IArtist) => {
+    clearTimeout(closeTimerRef.current);
     setFrozen({ type: "artist", entity });
     setActive({ type: "artist", entity });
   }, []);
 
   const openGenreSheet = useCallback((entity: IGenre) => {
+    clearTimeout(closeTimerRef.current);
     setFrozen({ type: "genre", entity });
     setActive({ type: "genre", entity });
   }, []);
@@ -145,9 +151,9 @@ export function ContextSheetProvider({
   const genreEntity = display?.type === "genre" ? display.entity : undefined;
   const addToPlaylistEntity =
     display?.type === "addToPlaylist" ? display : undefined;
-  const optionEntity =
-    display?.type === "options"
-      ? (display as { type: "options"; track: ITrack | null })
+  const trackEntity =
+    display?.type === "track"
+      ? (display as { type: "track"; track: ITrack | null })
       : undefined;
 
   return (
@@ -157,7 +163,7 @@ export function ContextSheetProvider({
         openPlaylistSheet,
         openArtistSheet,
         openGenreSheet,
-        openOptionSheet,
+        openTrackSheet,
         openAddToPlaylistSheet,
         closeContextSheet,
       }}
@@ -222,14 +228,14 @@ export function ContextSheetProvider({
         onShare={onGenreShare}
       />
 
-      {/* Option Sheet (global) */}
-      {optionEntity && (
-        <OptionSheet
-          track={optionEntity.track ?? null}
-          isOpen={active?.type === "options"}
+      {/* Track Sheet (global) */}
+      {trackEntity && (
+        <TrackSheet
+          track={trackEntity.track ?? null}
+          isOpen={active?.type === "track"}
           onClose={closeContextSheet}
           onAddToPlaylist={(t: ITrack) => {
-            // Close option sheet, then open AddToPlaylistSheet after exit animation
+            // Close track sheet, then open AddToPlaylistSheet after exit animation
             closeContextSheet();
             setTimeout(() => openAddToPlaylistSheet(undefined, [t]), 220);
           }}
@@ -251,31 +257,3 @@ export function ContextSheetProvider({
 // ─────────────────────────────────────────────────────────────────────────────
 // USAGE HOOK — convenience shortcuts
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Shorthand hook để chỉ lấy openSheet functions, không cần destructure thủ công.
- *
- * @example
- *   const { openAlbum, openPlaylist } = useOpenContextSheet();
- *   <AlbumCard onLongPress={() => openAlbum(album)} />
- */
-export function useOpenContextSheet() {
-  const {
-    openAlbumSheet,
-    openPlaylistSheet,
-    openArtistSheet,
-    openGenreSheet,
-    openAddToPlaylistSheet,
-    openOptionSheet,
-    closeContextSheet,
-  } = useContextSheet();
-  return {
-    openAlbum: openAlbumSheet,
-    openPlaylist: openPlaylistSheet,
-    openArtist: openArtistSheet,
-    openOption: openOptionSheet,
-    openAddToPlaylist: openAddToPlaylistSheet,
-    openGenre: openGenreSheet,
-    closeSheet: closeContextSheet,
-  };
-}

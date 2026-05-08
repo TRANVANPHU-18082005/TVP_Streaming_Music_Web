@@ -17,6 +17,9 @@ import {
   RefreshCcw,
   Music2,
   AlertCircle,
+  FileText,
+  Video,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -425,6 +428,23 @@ export const TrackTableRow = memo(
               >
                 {track.title}
               </p>
+              <div className="mt-1 flex flex-wrap gap-2 items-center">
+                {!track.isPublic && (
+                  <Badge className="text-[10px] font-semibold px-2 py-1 rounded-full bg-muted/80 text-muted-foreground">
+                    Private
+                  </Badge>
+                )}
+                {track.isExplicit && (
+                  <Badge className="text-[10px] font-semibold px-2 py-1 rounded-full bg-destructive/10 text-destructive">
+                    Explicit
+                  </Badge>
+                )}
+                {track.lyricType && track.lyricType !== "none" && (
+                  <Badge className="text-[10px] font-semibold px-2 py-1 rounded-full bg-primary/10 text-primary">
+                    {track.lyricType}
+                  </Badge>
+                )}
+              </div>
 
               {/* Artist — visible only on mobile (hidden sm+) */}
               <Link
@@ -495,88 +515,138 @@ export const TrackTableRow = memo(
 
         {/* ── Col 8: Actions ── */}
         <TableCell className="pr-3 py-2.5 text-right">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="Track options"
-                className={cn(
-                  "size-7 rounded-md opacity-0 group-hover/row:opacity-100",
-                  "focus-visible:opacity-100 transition-all duration-150",
-                  "hover:bg-muted text-muted-foreground hover:text-foreground",
-                )}
+          <div className="flex items-center justify-end gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleEdit}
+                    aria-label="Edit track"
+                    className="size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all"
+                  >
+                    <Edit className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  Edit track
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {(track.status === "failed" ||
+              track.status === "pending" ||
+              track.status === "processing") && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleFullRetry}
+                      disabled={isRetrying}
+                      aria-label="Retry processing"
+                      className={cn(
+                        "size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all",
+                        isRetrying && "cursor-wait",
+                      )}
+                    >
+                      <RefreshCcw
+                        className={cn("size-3.5", isRetrying && "animate-spin")}
+                      />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Retry processing
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Track options"
+                  className={cn(
+                    "size-7 rounded-md opacity-0 group-hover/row:opacity-100",
+                    "focus-visible:opacity-100 transition-all duration-150",
+                    "hover:bg-muted text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={4}
+                className="w-44 rounded-xl shadow-elevated border-border/50 bg-popover/95 backdrop-blur-md"
               >
-                <MoreHorizontal className="size-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={4}
-              className="w-44 rounded-xl shadow-elevated border-border/50 bg-popover/95 backdrop-blur-md"
-            >
-              <DropdownMenuItem
-                onClick={handleEdit}
-                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
-              >
-                <Edit className="size-3.5 opacity-70" />
-                Edit track
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleFullRetry}
-                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
-              >
-                <Edit className="size-3.5 opacity-70" />
-                Full retry
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleTranscodeRetry}
-                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
-              >
-                <Edit className="size-3.5 opacity-70" />
-                Transcode
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleLyricRetry}
-                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
-              >
-                <Edit className="size-3.5 opacity-70" />
-                lyrics
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleKaraokeRetry}
-                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
-              >
-                <Edit className="size-3.5 opacity-70" />
-                Karaoke
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleMoodRetry}
-                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
-              >
-                <Edit className="size-3.5 opacity-70" />
-                Mood
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleCopyId}
-                className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
-              >
-                <Copy className="size-3.5 opacity-70" />
-                Copy ID
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-border/40" />
-              <DropdownMenuItem
-                onClick={handleDelete}
-                className={cn(
-                  "gap-2 text-sm cursor-pointer rounded-lg",
-                  "text-destructive focus:text-destructive focus:bg-destructive/10",
-                )}
-              >
-                <Trash2 className="size-3.5" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem
+                  onClick={handleEdit}
+                  className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+                >
+                  <Edit className="size-3.5 opacity-70" />
+                  Edit track
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleFullRetry}
+                  className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+                >
+                  <RefreshCcw className="size-3.5 opacity-70" />
+                  Retry Full
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleTranscodeRetry}
+                  className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+                >
+                  <RefreshCcw className="size-3.5 opacity-70" />
+                  Retry Transcode
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleLyricRetry}
+                  className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+                >
+                  <FileText className="size-3.5 opacity-70" />
+                  Retry Lyrics
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleKaraokeRetry}
+                  className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+                >
+                  <Video className="size-3.5 opacity-70" />
+                  Retry Karaoke
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleMoodRetry}
+                  className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+                >
+                  <Sparkles className="size-3.5 opacity-70" />
+                  Retry Mood
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleCopyId}
+                  className="gap-2 text-sm cursor-pointer rounded-lg focus:bg-muted"
+                >
+                  <Copy className="size-3.5 opacity-70" />
+                  Copy ID
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border/40" />
+                <DropdownMenuItem
+                  onClick={handleDelete}
+                  className={cn(
+                    "gap-2 text-sm cursor-pointer rounded-lg",
+                    "text-destructive focus:text-destructive focus:bg-destructive/10",
+                  )}
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </TableCell>
       </TableRow>
     );

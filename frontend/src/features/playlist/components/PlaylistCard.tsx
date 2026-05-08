@@ -10,9 +10,8 @@ import {
   FolderKanban,
   Play,
   ListMusic,
+  ArrowUpLeftSquare,
 } from "lucide-react";
-
-import type { Playlist } from "@/features/playlist/types";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -26,23 +25,29 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EditPlaylistTracksModal } from "@/features/playlist/components/EditPlaylistTracksModal";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback"; // Dùng chung component ảnh xịn
+import { IPlaylist } from "../types";
+import { cn } from "@/lib/utils";
+import ConfirmationModal from "@/components/ui/ConfirmationModal";
 
 interface PlaylistCardProps {
-  playlist: Playlist;
+  playlist: IPlaylist;
+  isMutating: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }
 
 const PlaylistCard: React.FC<PlaylistCardProps> = ({
   playlist,
+  isMutating,
   onEdit,
   onDelete,
 }) => {
+  console.log(playlist);
   const navigate = useNavigate();
   const [editTrackPlaylist, setEditTrackPlaylist] = useState(false);
-
+  const [deleteTrackPlaylist, setDeleteTrackPlaylist] = useState(false);
   const handleNavigate = () => {
-    navigate(`/playlists/${playlist.slug || playlist._id}`);
+    navigate(`/playlists/${playlist._id}`);
   };
 
   // Helper ngăn sự kiện click lan ra ngoài thẻ cha
@@ -154,10 +159,15 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem
-                  onClick={(e) => handleAction(e, onDelete)}
-                  className="font-medium text-destructive focus:text-destructive cursor-pointer focus:bg-destructive/10"
+                  onClick={(e) => handleAction(e, () => setDeleteTrackPlaylist(true))}
+                  className={cn(
+                    "font-medium  focus:text-destructive cursor-pointer focus:bg-destructive/10",
+                    playlist.isDeleted ? "text-green-500" : "text-red-500",
+                  )}
+                  disabled={isMutating}
                 >
-                  <Trash2 className="mr-2 size-4" /> Delete Playlist
+                  {playlist.isDeleted ? " Khôi phục" : "Xóa"}
+                  {playlist.isDeleted ? <ArrowUpLeftSquare className="mr-2 size-4" /> : <Trash2 className="mr-2 size-4" />}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -185,6 +195,28 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
         isOpen={editTrackPlaylist}
         onClose={() => setEditTrackPlaylist(false)}
         playlistId={playlist._id}
+      />
+      {/* Delete Confirmation */}
+      <ConfirmationModal
+        isOpen={!!deleteTrackPlaylist}
+        onCancel={() => setDeleteTrackPlaylist(false)}
+        onConfirm={onDelete}
+        title={playlist.isDeleted ? "Khôi phục playlist" : "Xóa playlist?"}
+        variant={playlist.isDeleted ? "info" : "destructive"}
+        isLoading={isMutating}
+        countdownSeconds={3}
+        description={
+          <div className="space-y-4">
+            <p className="text-sm text-foreground/80">
+              Bạn có chắc chắn muốn {playlist.isDeleted ? "Khôi phục" : "xóa"} {<strong className="text-foreground text-base">
+                {playlist.title}
+              </strong>}
+              ?
+            </p>
+          </div>
+        }
+        confirmLabel={playlist.isDeleted ? "Khôi phục" : "Xóa"}
+        isDestructive
       />
     </>
   );

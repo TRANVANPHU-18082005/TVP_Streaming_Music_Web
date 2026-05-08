@@ -7,9 +7,12 @@ import Pagination from "@/utils/pagination";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import PlaylistFilter from "@/features/playlist/components/PlaylistFilter";
 import { usePlaylistParams } from "@/features/playlist/hooks/usePlaylistParams";
-import { usePlaylistsQuery } from "@/features/playlist/hooks/usePlaylistsQuery";
 
-import { Playlistpageskeleton, useSyncInteractions } from "@/features";
+import {
+  Playlistpageskeleton,
+  usePlaylistsByUserQuery,
+  useSyncInteractions,
+} from "@/features";
 import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
@@ -130,9 +133,10 @@ const PlaylistPage: React.FC = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = usePlaylistParams(DEFAULT_GRID_META.pageSize);
+  } = usePlaylistParams();
 
-  const { data, isLoading, isError, refetch } = usePlaylistsQuery(filterParams);
+  const { data, isLoading, isError, refetch } =
+    usePlaylistsByUserQuery(filterParams);
 
   const playlists = useMemo(() => data?.playlists ?? [], [data?.playlists]);
   const meta = useMemo(

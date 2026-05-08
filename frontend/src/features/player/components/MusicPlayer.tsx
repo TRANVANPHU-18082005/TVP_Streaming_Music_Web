@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { useSelector } from "react-redux";
 import { AnimatePresence } from "framer-motion";
 import {
@@ -10,7 +10,9 @@ import { useKeyboardControls } from "@/features/player/hooks/useKeyboardControls
 import { useCrossTabSync } from "@/features/player/hooks/useCrossTabSync";
 import { useTrackMetadataResolver } from "../hooks/useTrackMetadataResolver";
 import { MiniPlayer } from "./MiniPlayer";
-import { FullPlayer } from "./FullPlayer";
+const FullPlayerLazy = lazy(() =>
+  import("./FullPlayer").then((m) => ({ default: m.FullPlayer ?? m.default })),
+);
 import SleepTimerProvider from "@/features/player/sleepTimer/SleepTimerProvider";
 import { useTrackListeners } from "../hooks/useTrackListeners";
 
@@ -105,17 +107,26 @@ export function MusicPlayer() {
       */}
         <AnimatePresence>
           {isExpanded && (
-            <FullPlayer
-              listenCount={listenCount}
-              isPlaying={isPlaying}
-              key="full-player"
-              track={currentTrack}
-              currentTime={currentTime}
-              duration={duration}
-              onSeek={seek}
-              getCurrentTime={getCurrentTime}
-              onCollapse={() => setIsExpanded(false)}
-            />
+            <Suspense
+              fallback={
+                <div
+                  role="status"
+                  aria-label="Loading player"
+                  className="fixed inset-0 z-[60] flex items-center justify-center bg-background"
+                />
+              }
+            >
+              <FullPlayerLazy
+                listenCount={listenCount}
+                isPlaying={isPlaying}
+                key="full-player"
+                track={currentTrack}
+                duration={duration}
+                onSeek={seek}
+                getCurrentTime={getCurrentTime}
+                onCollapse={() => setIsExpanded(false)}
+              />
+            </Suspense>
           )}
         </AnimatePresence>
       </>

@@ -12,12 +12,12 @@ import GallerySection from "./GallerySection";
 
 // Logic Hook Mới
 import { useArtistForm } from "@/features/artist/hooks/useArtistForm";
-import type { Artist } from "@/features/artist/types";
+import { IArtist } from "@/features";
 
 interface ArtistModalProps {
   isOpen: boolean;
   onClose: () => void;
-  artistToEdit?: Artist | null;
+  artistToEdit?: IArtist | null;
   // Hook mới yêu cầu onSubmit nhận FormData
   onSubmit: (data: FormData) => Promise<void>;
   isPending: boolean;
@@ -48,31 +48,43 @@ const ArtistModal: React.FC<ArtistModalProps> = ({
           onSubmit,
         },
   );
-  // Lock scroll body khi modal mở
+  // Scroll lock + scrollbar compensation + Escape handling
+  const isBusy = isPending || isFormSubmitting;
+
   useEffect(() => {
-    if (isOpen) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "unset";
-    return () => {
-      document.body.style.overflow = "unset";
+    if (!isOpen) return;
+    const scrollbarWidth =
+      window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    document.body.style.paddingRight = `${scrollbarWidth}px`;
+
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isBusy) onClose();
     };
-  }, [isOpen]);
+    document.addEventListener("keydown", handler);
+
+    return () => {
+      document.body.style.overflow = "";
+      document.body.style.paddingRight = "";
+      document.removeEventListener("keydown", handler);
+    };
+  }, [isOpen, isBusy, onClose]);
 
   if (!isOpen) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
       {/* Backdrop: Tối hơn (black/80) để tăng độ tương phản với Modal */}
-      <div
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" />
 
       {/* Modal Container */}
       <div className="relative z-[101] w-full max-w-4xl max-h-[95vh] bg-background border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-white/10">
         {/* HEADER Cố định */}
         <ModalHeader
           title={artistToEdit ? "Edit Artist Profile" : "Create New Artist"}
-          onClose={onClose}
+          onClose={() => {
+            if (!isBusy) onClose();
+          }}
         />
 
         {/* BODY Có thể cuộn - Nền xám nhẹ để làm nổi bật các Card nội dung */}

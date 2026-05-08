@@ -1,33 +1,35 @@
 import api from "@/lib/axios";
-import type {
-  AlbumDetailResponse,
-  AlbumFilterParams,
-  CreateAlbumInput,
-  IAlbum,
-  UpdateAlbumInput,
-} from "@/features/album/types";
+import type { IAlbum, IAlbumDetail } from "@/features/album/types";
 import type { ApiResponse, PagedResponse } from "@/types";
-import { ITrack } from "@/features";
+import { AlbumAdminFilterParams, AlbumFilterParams, ITrack } from "@/features";
 
 const albumApi = {
-  // Lấy list
-  getAlbums: async (params?: AlbumFilterParams) => {
+  // 1 Lấy danh sách với filter & pagination bởi User
+  getAlbumsByUser: async (params?: AlbumFilterParams) => {
     const response = await api.get<ApiResponse<PagedResponse<IAlbum>>>(
       "/albums",
       { params },
     );
     return response.data;
   },
+  // 2 Lấy danh sách với filter & pagination bởi Admin
+  getAlbumsByAdmin: async (params?: AlbumAdminFilterParams) => {
+    const response = await api.get<ApiResponse<PagedResponse<IAlbum>>>(
+      "/albums/admin",
+      { params },
+    );
+    return response.data;
+  },
 
-  // Lấy chi tiết
-  getDetail: async (slugOrId: string) => {
-    const response = await api.get<ApiResponse<AlbumDetailResponse>>(
+  // 3 Lấy chi tiết album bởi slug hoặc id (Public)
+  getAlbumDetail: async (slugOrId: string) => {
+    const response = await api.get<ApiResponse<IAlbumDetail>>(
       `/albums/${slugOrId}`,
     );
     return response.data;
   },
 
-  // Lấy danh sách bài hát trong Album
+  // 4 Lấy danh sách bài hát trong Album
   getAlbumTracks: async (
     idOrSlug: string,
     params?: { page?: number; limit?: number },
@@ -39,8 +41,8 @@ const albumApi = {
     return response.data;
   },
 
-  // Tạo
-  create: async (data: CreateAlbumInput) => {
+  // 5. Tạo mới album (Admin - Multipart/form-data)
+  create: async (data: FormData) => {
     const response = await api.post("/albums", data, {
       headers: {
         "Content-Type": "multipart/form-data",
@@ -49,8 +51,8 @@ const albumApi = {
     return response.data;
   },
 
-  // Cập nhật
-  update: async (id: string, data: UpdateAlbumInput) => {
+  // 6. Cập nhật album (Admin - Multipart/form-data nếu có coverImage mới)
+  update: async (id: string, data: FormData) => {
     const isFormData = data instanceof FormData;
     const response = await api.patch(`/albums/${id}`, data, {
       headers: {
@@ -60,9 +62,16 @@ const albumApi = {
     return response.data;
   },
 
-  // Xóa
+  // 7. Xóa album (Admin)
   delete: async (id: string) => {
     const response = await api.delete(`/albums/${id}`);
+    return response.data;
+  },
+  // 8. Toggle public status (Admin - Bật/Tắt nhanh)
+  togglePublicStatus: async (id: string, isPublic: boolean) => {
+    const response = await api.patch(`/albums/${id}/toggle-public`, {
+      isPublic,
+    });
     return response.data;
   },
 };

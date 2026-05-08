@@ -155,8 +155,8 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
           />
 
           <Geographies geography={GEO_URL}>
-            {({ geographies }) =>
-              geographies.map((geo) => {
+            {(args: any) =>
+              (args.geographies as any[]).map((geo: any) => {
                 const geoIdentifier =
                   geo.id || geo.properties?.ISO_A3 || geo.properties?.iso_a3;
                 const isHovered = hoveredGeo === geo.id;
@@ -169,7 +169,9 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
                     fill={isHovered ? colors.hover : getFill(geoIdentifier)}
                     stroke={colors.stroke}
                     strokeWidth={isHovered ? 0.8 : 0.4}
-                    onMouseEnter={(e) => handleMouseEnter(geo, e)}
+                    onMouseEnter={(e: React.MouseEvent<SVGPathElement>) =>
+                      handleMouseEnter(geo, e)
+                    }
                     onMouseMove={handleMouseMove}
                     onMouseLeave={handleMouseLeave}
                     style={{

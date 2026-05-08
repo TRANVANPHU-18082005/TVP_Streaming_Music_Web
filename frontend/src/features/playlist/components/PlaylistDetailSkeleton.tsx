@@ -1,38 +1,3 @@
-"use client";
-
-/**
- * @file PlaylistDetailSkeleton.tsx — Full-page + embedded skeleton for PlaylistDetailPage
- *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- *
- * ARCHITECTURE
- *   PlaylistDetailSkeleton          — smart wrapper, accepts variant prop
- *   ├── PageVariantSkeleton         — full-page layout (position:fixed bg)
- *   │   ├── HeroBgSkeleton          — gradient backdrop + grain overlay
- *   │   ├── BackNavSkeleton         — chevron + "Quay lại" label
- *   │   ├── HeroSkeleton            — cover + title + meta + badges
- *   │   │   ├── CoverSkeleton       — 200–290px square, rounded-2xl
- *   │   │   └── HeroInfoSkeleton    — type badge + title + desc + meta row
- *   │   ├── ActionBarSkeleton       — play btn + shuffle + heart + more
- *   │   └── TrackListSkeleton       — N track rows (icon + title + meta + duration)
- *   └── EmbeddedVariantSkeleton     — compact layout, scrollable panel
- *       ├── EmbeddedHeaderSkeleton  — small cover + compact info
- *       ├── ActionBarSkeleton       — reused
- *       └── TrackListSkeleton       — reused, fewer rows
- *
- * DIMENSIONS — all mirror PlaylistDetailPage rendered sizes exactly → zero CLS.
- *
- * index.css TOKENS USED
- *   .skeleton            §15  shimmer animation
- *   .skeleton-text       §15  h-3.5 pill radius
- *   .skeleton-cover      §15  radius-xl
- *   .skeleton-btn        §15  h-9 radius-lg
- *   .glass-frosted       § 6  T2 glassmorphism
- *   .shadow-raised       § 7  standard elevation
- *   .card-base           §20  bg-card + border + rounded-xl
- *   .scrollbar-thin      § 5  thin scrollbar
- */
-
 import React, { memo } from "react";
 import { ChevronLeft, ListMusic } from "lucide-react";
 import { cn } from "@/lib/utils";

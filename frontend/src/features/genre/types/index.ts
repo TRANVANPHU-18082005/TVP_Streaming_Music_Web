@@ -7,60 +7,23 @@ export interface IGenre {
   name: string;
   slug: string;
   description?: string;
-
-  // Visuals & Hierarchy
-  image?: string;
-  color?: string; // Hex (#1db954)
-  gradient?: string; // CSS Gradient string
-  parentId?: IGenre | string | null; // Có thể là object (Populated) hoặc ID
-
-  // Curation & Status
-  priority: number; // Càng cao càng ưu tiên lên đầu
+  parentId?: string | null | { _id: string; name: string; slug?: string }; // Có thể là ID hoặc object phụ (nếu API trả về populated)
+  image: string;
+  color: string;
+  gradient: string;
+  priority: number;
   isTrending: boolean;
-  isActive: boolean;
-  trackIds: string[];
-  // Stats (Denormalized)
   trackCount: number;
-  albumCount: number;
-  artistCount: number;
-
-  createdAt: string;
-  updatedAt: string;
+  playCount: number;
+  isActive: boolean;
+  isDeleted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
+export interface IGenreDetail extends IGenre {
+  artistCount?: number;
+  totalTracksCount: number;
 
-// Input dành cho Form (Giống PlaylistFormInput)
-export interface GenreFormInput {
-  name: string;
-  description?: string;
-  color?: string;
-  gradient?: string;
-  parentId?: string | null;
-  priority?: number;
-  isTrending?: boolean;
-  isActive?: boolean;
-  // image: Sử dụng any vì có thể là File (upload) hoặc string (URL cũ)
-  image?: any;
-}
-
-export type CreateGenreInput = GenreFormInput;
-
-export interface UpdateGenreInput extends Partial<GenreFormInput> {
-  _id: string;
-}
-
-// Filter chuẩn hóa giống PlaylistFilterParams
-export interface GenreFilterParams {
-  page?: number;
-  limit?: number | "all";
-  status?: GenreStatus;
-  keyword?: string;
-  isTrending?: boolean;
-  parentId?: string | "root";
-  sort?: GenreSort;
-}
-
-// Response cho Virtual Scroll (Đồng bộ với PlaylistDetailResponse)
-export interface GenreDetailResponse extends IGenre {
   subGenres: IGenre[]; // Danh sách con để hiện tab/chip
   breadcrumbs: Array<{ _id: string; name: string; slug: string }>; // Đường dẫn phân cấp
   trackIds: string[]; // Mảng ID bài hát để Frontend chạy Virtualizer

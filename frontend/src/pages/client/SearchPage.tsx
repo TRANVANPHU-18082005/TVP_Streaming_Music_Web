@@ -5,13 +5,13 @@ import React, {
   useCallback,
   memo,
   useRef,
+  lazy,
+  Suspense,
+  useTransition,
 } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Play,
-  Pause,
-  MoreHorizontal,
   TrendingUp,
   Search as SearchIcon,
   Music2,
@@ -21,19 +21,16 @@ import {
   Disc3,
   ListMusic,
   History,
-  ChevronRight,
   Flame,
   Clock,
   ArrowUpRight,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { Input } from "@/components/ui/input";
-import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
-import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
-import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
+
 import {
   useSearch,
   useSearchSuggestions,
@@ -41,12 +38,11 @@ import {
 } from "@/features/search/hooks/useSearch";
 import { cn } from "@/lib/utils";
 import { SearchSkeleton } from "@/features/search/components/SearchSkeleton";
-import { formatDuration, toCDN } from "@/utils/track-helper";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
-import { SearchTrack, SuggestItem, useSyncInteractions } from "@/features";
+import { ITrack, SuggestItem, useSyncInteractions } from "@/features";
 import { handleError } from "@/utils/handleError";
-import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
+import MusicResult from "@/components/ui/Result";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -72,6 +68,7 @@ const SEARCH_TABS = [
   { id: "artist", label: "Nghệ sĩ", Icon: Mic2 },
   { id: "album", label: "Đĩa nhạc", Icon: Disc3 },
   { id: "playlist", label: "Danh sách phát", Icon: ListMusic },
+  { id: "genre", label: "Thể loại", Icon: Tag },
 ] as const;
 
 type SearchTab = (typeof SEARCH_TABS)[number]["id"];
@@ -82,20 +79,10 @@ type SearchTab = (typeof SEARCH_TABS)[number]["id"];
 const SPRING_FAST = { type: "spring", stiffness: 500, damping: 32 } as const;
 const SPRING_MEDIUM = { type: "spring", stiffness: 300, damping: 28 } as const;
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 12 },
-  visible: (i = 0) => ({
-    opacity: 1,
-    y: 0,
-    transition: { ...SPRING_MEDIUM, delay: i * 0.045 },
-  }),
-  exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
-};
+// Animation variants for track/result animations were moved to the
+// lazy-loaded `SearchResults` component to keep the initial bundle small.
 
-const staggerContainer = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.04 } },
-};
+const SearchResults = lazy(() => import("./SearchResults"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -232,362 +219,15 @@ const EmptyState = memo(({ query, tab }: { query: string; tab: SearchTab }) => {
     artist: `Không tìm thấy nghệ sĩ "${query}"`,
     album: `Không tìm thấy đĩa nhạc "${query}"`,
     playlist: `Không có playlist nào cho "${query}"`,
+    genre: `Không tìm thấy thể loại "${query}"`,
   };
   return (
-    <motion.div
-      key="empty"
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={SPRING_MEDIUM}
-      className="flex flex-col items-center justify-center py-28 gap-5 text-center"
-    >
-      <div className="relative">
-        <div className="size-24 rounded-full dark:bg-white/[0.04] bg-black/[0.04] border-2 border-dashed dark:border-white/10 border-black/10 flex items-center justify-center">
-          <SearchIcon className="size-9 dark:text-white/20 text-gray-400" />
-        </div>
-        <motion.div
-          className="absolute inset-0 rounded-full dark:border-white/6 border-black/6 border"
-          animate={{ scale: [1, 1.3, 1], opacity: [0.6, 0, 0.6] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-        />
-      </div>
-      <div className="space-y-1.5 max-w-xs">
-        <p className="text-lg font-black dark:text-white/85 text-gray-800 tracking-tight">
-          {msgs[tab]}
-        </p>
-        <p className="text-sm dark:text-white/35 text-gray-500">
-          Thử từ khóa khác hoặc kiểm tra chính tả
-        </p>
-      </div>
-    </motion.div>
+    <MusicResult title={msgs[tab]} description={"Thử từ khóa khác hoặc kiểm tra chính tả"} variant="empty-search" />
   );
 });
 EmptyState.displayName = "EmptyState";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TRACK ROW
-// ─────────────────────────────────────────────────────────────────────────────
-// Trong file SearchPage.tsx hoặc file riêng của TrackRow Search
-const TrackRow = memo(
-  ({
-    track,
-    index,
-    isCurrentPlaying,
-    isActive,
-    isLoadingThis,
-    onPlay,
-    onArtistClick,
-    onMore,
-    highlightHtml,
-  }: {
-    track: SearchTrack;
-    index: number;
-    isCurrentPlaying: boolean;
-    isActive: boolean;
-    isLoadingThis: boolean;
-    onPlay: (e: React.MouseEvent) => void;
-    onArtistClick: (e: React.MouseEvent) => void;
-    onMore: (e: React.MouseEvent) => void;
-    highlightHtml?: string;
-  }) => (
-    <motion.div
-      custom={index}
-      variants={fadeUp}
-      className={cn(
-        "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer",
-        "transition-colors duration-150",
-        isActive
-          ? "bg-[hsl(var(--primary)/0.07)] hover:bg-[hsl(var(--primary)/0.1)]"
-          : "",
-        isCurrentPlaying
-          ? "dark:bg-primary/10 bg-primary/8 shadow-sm"
-          : "dark:hover:bg-white/[0.05] hover:bg-black/[0.04]",
-      )}
-      onClick={onPlay}
-    >
-      {/* Thanh nhấn mạnh bên trái khi Active */}
-      {isCurrentPlaying && (
-        <motion.div
-          layoutId="search-track-accent"
-          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-primary rounded-r-full"
-          transition={SPRING_FAST}
-        />
-      )}
-
-      {/* Index / Sóng nhạc Equalizer */}
-      <div className="w-6 shrink-0 flex justify-center items-center">
-        {isCurrentPlaying ? (
-          <div className="flex items-end gap-[2px] h-3">
-            {/* Sóng nhạc mini */}
-            {[0, 1, 2].map((i) => (
-              <motion.span
-                key={i}
-                className="w-[2.5px] bg-primary rounded-full origin-bottom"
-                animate={{ scaleY: [0.3, 1, 0.4, 0.9, 0.25, 1] }}
-                transition={{
-                  duration: 0.8 + i * 0.1,
-                  repeat: Infinity,
-                  repeatType: "mirror",
-                  ease: "easeInOut",
-                  delay: i * 0.1,
-                }}
-                style={{ height: 12 }}
-              />
-            ))}
-          </div>
-        ) : (
-          <span
-            className={cn(
-              "text-xs font-mono dark:text-white/28 text-gray-400 group-hover:opacity-0 transition-opacity",
-              isActive
-                ? "text-[hsl(var(--primary))]"
-                : "text-[hsl(var(--muted-foreground))]",
-            )}
-          >
-            {index + 1}
-          </span>
-        )}
-      </div>
-
-      {/* Ảnh bìa + Overlay Play */}
-      <div className="relative size-11 shrink-0 rounded-lg overflow-hidden dark:bg-white/8 bg-black/6 shadow-md">
-        <ImageWithFallback
-          src={toCDN(track.coverImage) || track.coverImage}
-          alt={track.title}
-          className={cn(
-            "size-full object-cover transition-transform duration-500 group-hover:scale-110",
-            isCurrentPlaying && "blur-[1px] opacity-80",
-          )}
-        />
-        <motion.div
-          className="absolute inset-0 flex items-center justify-center dark:bg-black/40 bg-black/30 backdrop-blur-[1px]"
-          initial={{ opacity: 0 }}
-          whileHover={{ opacity: 1 }}
-          animate={{
-            opacity:
-              isLoadingThis || (isCurrentPlaying && !isLoadingThis) ? 1 : 0,
-          }}
-        >
-          <AnimatePresence mode="wait">
-            {isLoadingThis ? (
-              <Loader2 className="size-4 text-white animate-spin" />
-            ) : isCurrentPlaying ? (
-              <Pause className="size-4 text-white fill-white" />
-            ) : (
-              <Play className="size-4 text-white fill-white ml-0.5" />
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </div>
-
-      {/* Thông tin bài hát + Highlight */}
-      <div className="flex-1 min-w-0">
-        <p
-          className={cn(
-            "text-[13.5px] font-bold truncate leading-tight transition-colors",
-            isActive
-              ? "text-primary"
-              : "dark:text-white/90 text-gray-900 group-hover:text-primary",
-          )}
-          // FIX: Hiển thị bôi đậm từ khóa từ Backend
-          dangerouslySetInnerHTML={{ __html: highlightHtml || track.title }}
-        />
-        <p
-          className="text-[12px] dark:text-white/40 text-gray-500 truncate mt-1 hover:underline w-fit transition-colors hover:dark:text-white/70 hover:text-gray-700 cursor-pointer"
-          onClick={onArtistClick}
-        >
-          {track.artist?.name ?? "Nghệ sĩ ẩn danh"}
-        </p>
-      </div>
-      <TrackLikeButton id={track._id} />
-
-      {/* Album (Ẩn trên mobile) */}
-      <p className="hidden md:block text-[12px] dark:text-white/30 text-gray-400 truncate max-w-[140px] shrink-0 px-4">
-        {track.album?.title || "Single"}
-      </p>
-
-      {/* Duration + Nút More */}
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="hidden sm:block text-[11px] font-mono dark:text-white/30 text-gray-400 tabular-nums">
-          {formatDuration(track.duration ?? 0)}
-        </span>
-        <button
-          onClick={onMore}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full dark:hover:bg-white/10 hover:bg-black/5 text-gray-400 hover:text-primary"
-        >
-          <MoreHorizontal className="size-4" />
-        </button>
-      </div>
-    </motion.div>
-  ),
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TOP RESULT CARD
-// ─────────────────────────────────────────────────────────────────────────────
-const TopResultCard = memo(
-  ({
-    item,
-    isCurrentPlaying,
-    isLoadingThis,
-    onNavigate,
-    onPlay,
-  }: {
-    item: any;
-    isCurrentPlaying: boolean;
-    isLoadingThis: boolean;
-    onNavigate: () => void;
-    onPlay: (e: React.MouseEvent) => void;
-  }) => {
-    const isArtist = item.type === "artist";
-    return (
-      <motion.div
-        variants={fadeUp}
-        custom={0}
-        className="h-full flex flex-col gap-3.5"
-      >
-        <h2 className="text-[11px] font-black uppercase tracking-[0.2em] dark:text-white/45 text-gray-500">
-          Kết quả hàng đầu
-        </h2>
-        <motion.div
-          onClick={onNavigate}
-          whileHover={{ scale: 1.012 }}
-          transition={SPRING_MEDIUM}
-          className={cn(
-            "group relative flex-1 flex flex-col justify-end p-6 rounded-2xl overflow-hidden cursor-pointer",
-            "dark:bg-white/[0.04] bg-black/[0.03]",
-            "border dark:border-white/[0.06] border-black/[0.06]",
-            "dark:hover:border-primary/30 hover:border-primary/25",
-            "transition-colors duration-300 min-h-[220px]",
-            "shadow-sm hover:shadow-lg",
-          )}
-        >
-          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none bg-gradient-to-br from-primary/10 via-transparent to-transparent" />
-
-          <div
-            className={cn(
-              "absolute top-6 left-6 shadow-xl transition-transform duration-500 group-hover:scale-[1.04]",
-              isArtist
-                ? "size-24 rounded-full border-2 dark:border-white/10 border-black/10"
-                : "size-24 rounded-xl",
-              "overflow-hidden",
-            )}
-          >
-            <ImageWithFallback
-              src={isArtist ? item.avatar : item.coverImage}
-              alt={item.name ?? item.title}
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          <div className="relative z-10 mt-28 flex flex-col gap-2">
-            <h3 className="text-2xl font-black tracking-tight dark:text-white text-gray-900 line-clamp-2 group-hover:text-primary transition-colors">
-              {item.name ?? item.title}
-            </h3>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-full dark:bg-white/8 bg-black/6 dark:text-white/55 text-gray-600">
-                {isArtist ? "Nghệ sĩ" : "Bài hát"}
-              </span>
-              {!isArtist && item.artist?.name && (
-                <span className="text-sm dark:text-white/45 text-gray-500 truncate">
-                  {item.artist.name}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {!isArtist && (
-            <motion.button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPlay(e);
-              }}
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.92 }}
-              transition={SPRING_FAST}
-              disabled={isLoadingThis}
-              className={cn(
-                "absolute bottom-5 right-5 z-10",
-                "flex items-center justify-center size-13 rounded-full",
-                "bg-primary text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
-                "group-hover:opacity-100 translate-y-2 group-hover:translate-y-0",
-                "transition-all duration-250",
-                isCurrentPlaying && "opacity-100 translate-y-0",
-              )}
-            >
-              <AnimatePresence mode="wait" initial={false}>
-                {isLoadingThis ? (
-                  <motion.span
-                    key="l"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <Loader2 className="size-5 animate-spin" />
-                  </motion.span>
-                ) : isCurrentPlaying ? (
-                  <motion.span
-                    key="pa"
-                    initial={{ scale: 0.6, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.6, opacity: 0 }}
-                    transition={SPRING_FAST}
-                  >
-                    <Pause className="size-5 fill-current" />
-                  </motion.span>
-                ) : (
-                  <motion.span
-                    key="pl"
-                    initial={{ scale: 0.6, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.6, opacity: 0 }}
-                    transition={SPRING_FAST}
-                  >
-                    <Play className="size-5 fill-current ml-0.5" />
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </motion.button>
-          )}
-        </motion.div>
-      </motion.div>
-    );
-  },
-);
-TopResultCard.displayName = "TopResultCard";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION HEADER
-// ─────────────────────────────────────────────────────────────────────────────
-const SectionHeader = memo(
-  ({
-    title,
-    showMore,
-    onMore,
-  }: {
-    title: string;
-    showMore?: boolean;
-    onMore?: () => void;
-  }) => (
-    <div className="flex items-center justify-between mb-4">
-      <h2 className="text-[11px] font-black uppercase tracking-[0.2em] dark:text-white/45 text-gray-500">
-        {title}
-      </h2>
-      {showMore && (
-        <motion.button
-          onClick={onMore}
-          whileHover={{ x: 2 }}
-          transition={SPRING_FAST}
-          className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.12em] dark:text-white/40 text-gray-500 hover:text-primary transition-colors"
-        >
-          Xem tất cả <ChevronRight className="size-3.5" />
-        </motion.button>
-      )}
-    </div>
-  ),
-);
-SectionHeader.displayName = "SectionHeader";
+// Track / TopResult / SectionHeader moved to `SearchResults.tsx` (lazy-loaded)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRENDING TAG SKELETON
@@ -626,6 +266,7 @@ export default function SearchPage() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [isPending, startTransition] = useTransition();
 
   // Sync input với URL
   useEffect(() => {
@@ -641,7 +282,7 @@ export default function SearchPage() {
   // Full search — debounce 400ms (trong hook)
   const { data, isLoading, isError } = useSearch(query);
   // Tại SearchPage.tsx
-
+  console.log("data search", data);
   // Bước 1: Gom IDs (Dùng useMemo để tránh tính toán lại mỗi lần render)
   const trackIds = useMemo(() => data?.tracks.map((t) => t._id) || [], [data]);
   const albumIds = useMemo(() => data?.albums.map((a) => a._id) || [], [data]);
@@ -749,10 +390,12 @@ export default function SearchPage() {
       setSuggestionIndex(-1);
       // Hiện suggestion khi gõ ≥2 ký tự
       setShowSuggestions(val.trim().length >= 2);
-      if (val.trim()) setSearchParams({ q: val });
-      else setSearchParams({});
+      startTransition(() => {
+        if (val.trim()) setSearchParams({ q: val });
+        else setSearchParams({});
+      });
     },
-    [setSearchParams],
+    [setSearchParams, startTransition],
   );
 
   const handleKeyDown = useCallback(
@@ -787,7 +430,7 @@ export default function SearchPage() {
       }
       if (e.key === "Escape") {
         setLocalInput("");
-        setSearchParams({});
+        startTransition(() => setSearchParams({}));
         setShowSuggestions(false);
       }
     },
@@ -798,13 +441,14 @@ export default function SearchPage() {
       showSuggestions,
       suggestions,
       suggestionIndex,
+      startTransition,
     ],
   );
 
   const handleSuggestionSelect = useCallback(
     (item: { label: string; slug: string; type: string }) => {
       setLocalInput(item.label);
-      setSearchParams({ q: item.label });
+      startTransition(() => setSearchParams({ q: item.label }));
       saveToHistory(item.label);
       setShowSuggestions(false);
       setSuggestionIndex(-1);
@@ -813,12 +457,12 @@ export default function SearchPage() {
         navigate(`/artists/${item.slug}`);
       }
     },
-    [setSearchParams, saveToHistory, navigate],
+    [setSearchParams, saveToHistory, navigate, startTransition],
   );
 
   const handleTagClick = useCallback(
     (term: string) => {
-      setSearchParams({ q: term });
+      startTransition(() => setSearchParams({ q: term }));
       saveToHistory(term);
       setShowSuggestions(false);
       inputRef.current?.focus();
@@ -828,7 +472,7 @@ export default function SearchPage() {
 
   const clearSearch = useCallback(() => {
     setLocalInput("");
-    setSearchParams({});
+    startTransition(() => setSearchParams({}));
     setActiveTab("all");
     setShowSuggestions(false);
     setSuggestionIndex(-1);
@@ -849,8 +493,13 @@ export default function SearchPage() {
 
   // ── PLAY TRACK ────────────────────────────────────────────────────────────
   // Inside SearchPage component
+  // Normalize data shape (API trả {status, data: {...}})
+  const searchResult = useMemo(() => {
+    if (!data) return null;
+    return data ?? [];
+  }, [data]);
   const handlePlayTrack = useCallback(
-    async (e: React.MouseEvent, track: SearchTrack) => {
+    async (e: React.MouseEvent, track: ITrack) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -867,17 +516,22 @@ export default function SearchPage() {
       setLoadingId(track._id);
       try {
         // Lấy toàn bộ danh sách track đang hiển thị ở Tab hiện tại để làm Queue
-        const tracksInQueue = data?.tracks || [];
-        const trackIds = tracksInQueue.map((t) => t._id);
-        const currentIndex = tracksInQueue.findIndex(
-          (t) => t._id === track._id,
-        );
+        let tracksInQueue = searchResult?.tracks || [];
+        let trackIds = tracksInQueue.map((t: ITrack) => t._id);
+        let currentIndex = trackIds.indexOf(track._id);
+
+        // Nếu bài hát không nằm trong danh sách tracks (ví dụ Top Result), chèn nó lên đầu
+        if (currentIndex === -1) {
+          tracksInQueue = [track, ...tracksInQueue];
+          trackIds = [track._id, ...trackIds];
+          currentIndex = 0;
+        }
 
         dispatch(
           setQueue({
             trackIds,
-            initialMetadata: tracksInQueue, // Backend search v4 đã trả đủ metadata cơ bản
-            startIndex: currentIndex !== -1 ? currentIndex : 0,
+            initialMetadata: tracksInQueue, // Chèn data trả từ search.service.ts
+            startIndex: currentIndex,
             source: {
               id: `search-${query}`,
               type: "search",
@@ -885,14 +539,13 @@ export default function SearchPage() {
             },
           }),
         );
-        dispatch(setIsPlaying(true));
       } catch (err) {
         handleError(err, "Không thể phát bài hát này");
       } finally {
         setLoadingId(null);
       }
     },
-    [currentTrackId, isGlobalPlaying, query, data, dispatch, saveToHistory],
+    [currentTrackId, isGlobalPlaying, query, searchResult, dispatch, saveToHistory],
   );
 
   // ── isNoResults ───────────────────────────────────────────────────────────
@@ -905,20 +558,18 @@ export default function SearchPage() {
         !d.tracks?.length &&
         !d.artists?.length &&
         !d.albums?.length &&
-        !d.playlists?.length,
+        !d.playlists?.length &&
+        !d.genres?.length,
       track: !d.tracks?.length,
       artist: !d.artists?.length,
       album: !d.albums?.length,
       playlist: !d.playlists?.length,
+      genre: !d.genres?.length,
     };
     return checks[activeTab];
   }, [data, isLoading, query, activeTab]);
 
-  // Normalize data shape (API trả {status, data: {...}})
-  const searchResult = useMemo(() => {
-    if (!data) return null;
-    return data ?? [];
-  }, [data]);
+
 
   // ── TAB DIRECTION ─────────────────────────────────────────────────────────
   const tabOrder = SEARCH_TABS.map((t) => t.id);
@@ -1104,7 +755,7 @@ export default function SearchPage() {
                         <span>{term}</span>
                         <button
                           onClick={(e) => removeHistoryItem(e, term)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 dark:hover:text-white hover:text-gray-900"
+                          className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 dark:hover:text-white hover:text-gray-900"
                         >
                           <X className="size-3" />
                         </button>
@@ -1220,175 +871,29 @@ export default function SearchPage() {
             />
           )}
 
-          {/* STATE 5: RESULTS */}
+          {/* STATE 5: RESULTS - lazy-loaded component to reduce initial bundle */}
           {query && !isLoading && !isError && !isNoResults && searchResult && (
-            <motion.div
-              key={`results-${activeTab}`}
-              custom={tabDir}
-              initial={{ opacity: 0, x: tabDir * 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: tabDir * -20 }}
-              transition={SPRING_MEDIUM}
-              className="space-y-10 mt-2"
-            >
-              {/* ── TOP RESULT + TRACKS ── */}
-              {(activeTab === "all" || activeTab === "track") && (
-                <div
-                  className={cn(
-                    "grid gap-6 lg:gap-8",
-                    activeTab === "all" && searchResult?.topResult
-                      ? "grid-cols-1 lg:grid-cols-[320px_1fr] xl:grid-cols-[360px_1fr]"
-                      : "grid-cols-1",
-                  )}
-                >
-                  {activeTab === "all" && searchResult?.topResult && (
-                    <TopResultCard
-                      item={searchResult.topResult}
-                      isCurrentPlaying={
-                        isGlobalPlaying &&
-                        currentTrackId === searchResult.topResult._id
-                      }
-                      isLoadingThis={loadingId === searchResult.topResult._id}
-                      onNavigate={() =>
-                        handleResultClick(
-                          searchResult?.topResult?.type === "artist"
-                            ? `/artists/${searchResult.topResult.slug ?? searchResult.topResult._id}`
-                            : ``,
-                        )
-                      }
-                      onPlay={(e) =>
-                        handlePlayTrack(e, searchResult?.topResult)
-                      }
-                    />
-                  )}
-
-                  {searchResult?.tracks?.length > 0 && (
-                    <div className="flex flex-col gap-1">
-                      <SectionHeader
-                        title="Bài hát"
-                        showMore={
-                          activeTab === "all" && searchResult.tracks.length > 4
-                        }
-                        onMore={() => switchTab("track")}
-                      />
-                      <motion.div
-                        variants={staggerContainer}
-                        initial="hidden"
-                        animate="visible"
-                        className={cn(
-                          "flex flex-col",
-                          activeTab === "track" &&
-                            "md:grid md:grid-cols-2 md:gap-x-4",
-                        )}
-                      >
-                        {(activeTab === "all"
-                          ? searchResult.tracks.slice(0, 5)
-                          : searchResult.tracks
-                        ).map((track: any, i: number) => (
-                          <TrackRow
-                            key={track._id}
-                            track={track}
-                            index={i}
-                            isCurrentPlaying={
-                              isGlobalPlaying && currentTrackId === track._id
-                            }
-                            isActive={currentTrackId === track._id}
-                            isLoadingThis={loadingId === track._id}
-                            highlightHtml={track.highlightHtml}
-                            onPlay={(e) => handlePlayTrack(e, track)}
-                            onArtistClick={(e) => {
-                              e.stopPropagation();
-                              handleResultClick(
-                                `/artists/${track.artist?.slug}`,
-                              );
-                            }}
-                            onMore={(e) => e.stopPropagation()}
-                          />
-                        ))}
-                      </motion.div>
-                    </div>
-                  )}
+            <Suspense
+              fallback={
+                <div className="mt-6">
+                  <SearchSkeleton />
                 </div>
-              )}
-
-              {/* ── ARTISTS ── */}
-              {(activeTab === "all" || activeTab === "artist") &&
-                searchResult?.artists?.length > 0 && (
-                  <div>
-                    <SectionHeader
-                      title="Nghệ sĩ"
-                      showMore={
-                        activeTab === "all" && searchResult.artists.length > 6
-                      }
-                      onMore={() => switchTab("artist")}
-                    />
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                      {(activeTab === "all"
-                        ? searchResult.artists.slice(0, 6)
-                        : searchResult.artists
-                      ).map((artist: any) => (
-                        <div
-                          key={artist._id}
-                          onClick={() => saveToHistory(query)}
-                        >
-                          <PublicArtistCard artist={artist} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              {/* ── ALBUMS ── */}
-              {(activeTab === "all" || activeTab === "album") &&
-                searchResult?.albums?.length > 0 && (
-                  <div>
-                    <SectionHeader
-                      title="Đĩa nhạc"
-                      showMore={
-                        activeTab === "all" && searchResult.albums.length > 5
-                      }
-                      onMore={() => switchTab("album")}
-                    />
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
-                      {(activeTab === "all"
-                        ? searchResult.albums.slice(0, 5)
-                        : searchResult.albums
-                      ).map((album: any) => (
-                        <div
-                          key={album._id}
-                          onClick={() => saveToHistory(query)}
-                        >
-                          <PublicAlbumCard album={album} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              {/* ── PLAYLISTS ── */}
-              {(activeTab === "all" || activeTab === "playlist") &&
-                searchResult?.playlists?.length > 0 && (
-                  <div>
-                    <SectionHeader
-                      title="Danh sách phát"
-                      showMore={
-                        activeTab === "all" && searchResult.playlists.length > 5
-                      }
-                      onMore={() => switchTab("playlist")}
-                    />
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
-                      {(activeTab === "all"
-                        ? searchResult.playlists.slice(0, 5)
-                        : searchResult.playlists
-                      ).map((pl: any) => (
-                        <div key={pl._id} onClick={() => saveToHistory(query)}>
-                          <PublicPlaylistCard playlist={pl} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-            </motion.div>
+              }
+            >
+              <SearchResults
+                searchResult={searchResult}
+                activeTab={activeTab}
+                tabDir={tabDir}
+                isGlobalPlaying={isGlobalPlaying}
+                currentTrackId={currentTrackId}
+                loadingId={loadingId}
+                handlePlayTrack={handlePlayTrack}
+                handleResultClick={handleResultClick}
+                switchTab={switchTab}
+                saveToHistory={saveToHistory}
+                query={query}
+              />
+            </Suspense>
           )}
         </AnimatePresence>
       </div>

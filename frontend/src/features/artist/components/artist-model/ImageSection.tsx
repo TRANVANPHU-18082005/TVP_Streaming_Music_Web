@@ -1,32 +1,62 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { type UseFormReturn } from "react-hook-form";
 import { Camera, ImageIcon, Trash2, User, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
-import type { ArtistFormValues } from "@/features/artist/schemas/artist.schema";
-import { Artist } from "@/features/artist/types";
 import { cn } from "@/lib/utils";
+import { ArtistFormValues } from "../../schemas/artist.schema";
 
 interface ImageSectionProps {
   form: UseFormReturn<ArtistFormValues>;
-  initialData?: Artist | null; // Cập nhật kiểu cho chuẩn
+  initialData?: ArtistFormValues | null; // Cập nhật kiểu cho chuẩn
 }
 
 const ImageSection: React.FC<ImageSectionProps> = ({ form, initialData }) => {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(
-    initialData?.avatar || null,
+    typeof initialData?.avatar === "string" ? initialData.avatar : null,
   );
   const [coverPreview, setCoverPreview] = useState<string | null>(
-    initialData?.coverImage || null,
+    typeof initialData?.coverImage === "string" ? initialData.coverImage : null,
   );
 
-  // 🔥 FIX 1: Lấy errors ra để hiển thị
+  // Lấy errors + watch để cập nhật preview khi form thay đổi
   const {
     formState: { errors },
+    watch,
   } = form;
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+  const avatarValue = watch("avatar");
+  const coverValue = watch("coverImage");
+
+  // Sync previews with form values (supports default string URLs and File objects)
+  useEffect(() => {
+    if (avatarValue instanceof File) {
+      const url = URL.createObjectURL(avatarValue);
+      setAvatarPreview(url);
+      return () => URL.revokeObjectURL(url);
+    } else if (typeof avatarValue === "string" && avatarValue.length > 0) {
+      setAvatarPreview(avatarValue);
+    } else {
+      setAvatarPreview(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarValue]);
+
+  useEffect(() => {
+    if (coverValue instanceof File) {
+      const url = URL.createObjectURL(coverValue);
+      setCoverPreview(url);
+      return () => URL.revokeObjectURL(url);
+    } else if (typeof coverValue === "string" && coverValue.length > 0) {
+      setCoverPreview(coverValue);
+    } else {
+      setCoverPreview(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverValue]);
 
   const handleFile = (
     e: React.ChangeEvent<HTMLInputElement>,

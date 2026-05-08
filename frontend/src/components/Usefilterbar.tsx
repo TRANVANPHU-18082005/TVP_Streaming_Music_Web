@@ -71,7 +71,7 @@ export const SEARCH_INPUT = cn(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DragScrollHandlers {
-  ref: RefObject<HTMLDivElement>;
+  ref: RefObject<HTMLDivElement | null>;
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
   onPointerUp: (e: React.PointerEvent) => void;
@@ -79,7 +79,7 @@ export interface DragScrollHandlers {
 }
 
 export function useDragScroll(): DragScrollHandlers {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
   const active = useRef(false);
   const didDrag = useRef(false);
   const startX = useRef(0);
@@ -142,7 +142,7 @@ export function useDragScroll(): DragScrollHandlers {
 export function ScrollFades({
   containerRef,
 }: {
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
 }) {
   const [left, setLeft] = useState(false);
   const [right, setRight] = useState(true);

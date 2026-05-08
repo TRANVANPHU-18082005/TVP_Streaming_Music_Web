@@ -106,7 +106,7 @@ interface YearGridProps {
   disabled: boolean;
   maxHeight: number;
   onSelect: (year: number) => void;
-  scrollRef: React.RefObject<HTMLDivElement>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
 }
 
 const YearGrid = memo(
@@ -228,8 +228,8 @@ export const YearPicker: React.FC<YearPickerProps> = ({
   disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const years = useMemo(
     () => Array.from({ length: maxYear - minYear + 1 }, (_, i) => maxYear - i),

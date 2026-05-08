@@ -2,32 +2,35 @@
 import { useMemo, useCallback, useEffect } from "react";
 import { useQueryParams } from "@/hooks/useQueryParams";
 import {
-  genreParamsSchema,
-  type GenreFilterParams,
+  GenreAdminFilterParams,
+  genreAdminParamsSchema,
 } from "../schemas/genre.schema";
+import { APP_CONFIG } from "@/config/constants";
 
-const DEFAULT_PARAMS: GenreFilterParams = {
+const DEFAULT_PARAMS: GenreAdminFilterParams = {
   page: 1,
-  limit: 20,
-  keyword: undefined,
-  sort: "name",
+  limit: APP_CONFIG.GRID_LIMIT,
+  keyword: "",
+  sort: "popular",
   parentId: undefined,
   isTrending: undefined,
-  status: undefined,
+  isActive: undefined,
+  isDeleted: undefined,
 };
 
-export const useGenreParams = (initialLimit = 20) => {
+export const useGenreParams = () => {
   // 1. Lấy dữ liệu thô từ URL
-  const { params: rawParams, setParams } = useQueryParams({
-    ...DEFAULT_PARAMS,
-    limit: initialLimit,
-  });
+
+  const { params: rawParams, setParams } =
+    useQueryParams<GenreAdminFilterParams>({
+      ...DEFAULT_PARAMS,
+    });
 
   // 2. Màng lọc Zod: Đảm bảo dữ liệu sạch và đúng kiểu dữ liệu
   const filterParams = useMemo(() => {
-    return genreParamsSchema.parse(rawParams);
+    return genreAdminParamsSchema.parse(rawParams);
   }, [rawParams]);
-
+  console.log(DEFAULT_PARAMS, rawParams, filterParams);
   // 3. ĐỒNG BỘ URL (Self-healing): Sửa lại URL nếu user nhập sai format
   useEffect(() => {
     const isDirty = JSON.stringify(rawParams) !== JSON.stringify(filterParams);
@@ -54,9 +57,9 @@ export const useGenreParams = (initialLimit = 20) => {
   );
 
   const handleFilterChange = useCallback(
-    <K extends keyof GenreFilterParams>(
+    <K extends keyof GenreAdminFilterParams>(
       key: K,
-      value: GenreFilterParams[K] | null | undefined,
+      value: GenreAdminFilterParams[K] | null | undefined,
     ) => {
       const cleanValue = value === "" ? undefined : value;
       setParams({ [key]: cleanValue, page: 1 });
@@ -65,8 +68,8 @@ export const useGenreParams = (initialLimit = 20) => {
   );
 
   const clearFilters = useCallback(() => {
-    setParams({ ...DEFAULT_PARAMS, limit: initialLimit });
-  }, [setParams, initialLimit]);
+    setParams({ ...DEFAULT_PARAMS });
+  }, [setParams]);
 
   return {
     filterParams,

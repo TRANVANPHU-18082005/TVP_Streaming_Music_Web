@@ -38,6 +38,32 @@ const PLAYER_BG_CSS = `
       animation: none !important;
     }
   }
+
+  /* Theme-aware player background tokens */
+  .fp-bg-ctx {
+    --fpbg-overlay-top: hsl(var(--background) / 0.65);
+    --fpbg-overlay-mid: hsl(var(--background) / 0.2);
+    --fpbg-overlay-bot: hsl(var(--background) / 0.92);
+    --fpbg-overlay-side: hsl(var(--background) / 0.35);
+    --fpbg-vignette: hsl(var(--background) / 0.85);
+    --fpbg-grain-fill: hsl(var(--foreground));
+    --fpbg-artwork-opacity: 0.22;
+    --fpbg-artwork-focus-opacity: 0.12;
+    --fpbg-artwork-filter: blur(52px) saturate(1.1) brightness(1.05);
+    --fpbg-artwork-focus-filter: blur(80px) saturate(0.55) brightness(0.85);
+  }
+  .dark .fp-bg-ctx {
+    --fpbg-overlay-top: rgba(0,0,0,0.48);
+    --fpbg-overlay-mid: rgba(0,0,0,0.08);
+    --fpbg-overlay-bot: rgba(0,0,0,0.88);
+    --fpbg-overlay-side: rgba(0,0,0,0.28);
+    --fpbg-vignette: rgba(0,0,0,0.78);
+    --fpbg-grain-fill: white;
+    --fpbg-artwork-opacity: 0.26;
+    --fpbg-artwork-focus-opacity: 0.16;
+    --fpbg-artwork-filter: blur(52px) saturate(1.1) brightness(0.9);
+    --fpbg-artwork-focus-filter: blur(80px) saturate(0.55) brightness(0.6);
+  }
 `;
 
 export const PlayerBackground = memo(
@@ -50,9 +76,9 @@ export const PlayerBackground = memo(
       <>
         <style>{PLAYER_BG_CSS}</style>
 
-        {/* ─── ABSOLUTE BACKGROUND STACK ─────────────────────────── */}
+        {/* ─── ABSOLUTE BACKGROUND STACK ───────────────────────────── */}
         <div
-          className="absolute inset-0 -z-10 overflow-hidden pointer-events-none"
+          className="fp-bg-ctx absolute inset-0 -z-10 overflow-hidden pointer-events-none"
           aria-hidden="true"
         >
           {/* ── L1: BLURRED ARTWORK ── */}
@@ -63,33 +89,33 @@ export const PlayerBackground = memo(
               style={{
                 backgroundImage: `url(${coverImage})`,
                 filter: focusMode
-                  ? "blur(80px) saturate(0.55) brightness(0.6)"
-                  : "blur(52px) saturate(1.1) brightness(0.9)",
+                  ? "var(--fpbg-artwork-focus-filter)"
+                  : "var(--fpbg-artwork-filter)",
                 transform: "scale(1.12)",
                 willChange: "transform, filter",
               }}
               initial={{ opacity: 0 }}
-              animate={{ opacity: focusMode ? 0.16 : 0.26 }}
+              animate={{ opacity: focusMode ? "var(--fpbg-artwork-focus-opacity, 0.16)" : "var(--fpbg-artwork-opacity, 0.26)" }}
               transition={{ duration: 1.4, ease: "easeInOut" }}
             />
           )}
 
-          {/* ── L2: GRADIENT OVERLAY ── */}
+          {/* ── L2: GRADIENT OVERLAY (theme-aware) ── */}
           <div
             className="absolute inset-0"
             style={{
               background: `
               linear-gradient(to bottom,
-                rgba(0,0,0,0.48) 0%,
-                rgba(0,0,0,0.08) 28%,
-                rgba(0,0,0,0.08) 52%,
-                rgba(0,0,0,0.88) 100%
+                var(--fpbg-overlay-top) 0%,
+                var(--fpbg-overlay-mid) 28%,
+                var(--fpbg-overlay-mid) 52%,
+                var(--fpbg-overlay-bot) 100%
               ),
               linear-gradient(to right,
-                rgba(0,0,0,0.28) 0%,
+                var(--fpbg-overlay-side) 0%,
                 transparent 30%,
                 transparent 70%,
-                rgba(0,0,0,0.28) 100%
+                var(--fpbg-overlay-side) 100%
               )
             `,
             }}
@@ -181,7 +207,7 @@ export const PlayerBackground = memo(
               width="100%"
               height="100%"
               filter="url(#fp-grain-filter)"
-              fill="white"
+              fill="var(--fpbg-grain-fill, white)"
             />
           </svg>
 
@@ -190,7 +216,7 @@ export const PlayerBackground = memo(
             className="absolute inset-0"
             style={{
               background:
-                "radial-gradient(ellipse 50% 55% at 50% 48%, transparent 30%, rgba(0,0,0,0.78) 100%)",
+                "radial-gradient(ellipse 50% 55% at 50% 48%, transparent 30%, var(--fpbg-vignette) 100%)",
             }}
             animate={{ opacity: focusMode ? 1 : 0 }}
             transition={{ duration: 0.6, ease: "easeInOut" }}

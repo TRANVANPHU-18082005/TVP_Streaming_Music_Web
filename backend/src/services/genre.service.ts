@@ -9,7 +9,8 @@ import ApiError from "../utils/ApiError";
 import { deleteFileFromCloud } from "../utils/cloudinary";
 import {
   CreateGenreInput,
-  GenreFilterInput,
+  GenreAdminFilterInput,
+  GenreUserFilterInput,
   UpdateGenreInput,
 } from "../validations/genre.validation";
 import { IUser } from "../models/User";
@@ -20,6 +21,9 @@ import {
 } from "../utils/cacheHelper";
 import { cacheRedis } from "../config/redis";
 import escapeStringRegexp from "escape-string-regexp";
+import themeColorService from "./themeColor.service";
+import { is } from "zod/v4/locales";
+import { APP_CONFIG } from "../config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -27,11 +31,6 @@ import escapeStringRegexp from "escape-string-regexp";
 
 /** Giới hạn độ sâu của cây genre để chống tràn bộ nhớ */
 const MAX_HIERARCHY_DEPTH = 10;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// INTERNAL HELPER
-// ─────────────────────────────────────────────────────────────────────────────
-
 async function syncGenreStats(genreId: string): Promise<void> {
   try {
     await Genre.calculateStats(genreId);
@@ -43,20 +42,24 @@ async function syncGenreStats(genreId: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 class GenreService {
   // ── 1. CREATE GENRE ────────────────────────────────────────────────────────
-
   async createGenre(data: CreateGenreInput, file?: Express.Multer.File) {
+    // Nếu FE không gửi color mà có ảnh, thử trích xuất màu chủ đạo để tạo gradient đẹp hơn
+    let color = data.color || "#121212";
+    const imageUrl = file?.path ?? "";
+    if (!data.color && imageUrl) {
+      try {
+        color = await themeColorService.extractThemeColor(imageUrl);
+      } catch (err) {
+        console.error("[GenreService] Color extraction failed:", err);
+      }
+    }
+    const gradient = `linear-gradient(135deg, ${color} 0%, #121212 100%)`;
     const session = await mongoose.startSession();
     session.startTransaction();
-    const imageUrl = file?.path ?? "";
 
     try {
       // 1. Kiểm tra tồn tại trong transaction
-      const existing = await Genre.findOne({
-        name: { $regex: new RegExp(`^${data.name}$`, "i") },
-      })
-        .session(session)
-        .lean();
-
+      const existing = await Genre.exists({ name: data.name }).session(session);
       if (existing)
         throw new ApiError(
           httpStatus.BAD_REQUEST,
@@ -80,10 +83,18 @@ class GenreService {
         [
           {
             ...data,
+            color,
+            gradient,
             image: imageUrl,
             isActive: true,
             trackCount: 0,
-            parentId: data.parentId ? new Types.ObjectId(data.parentId) : null,
+            playCount: 0,
+            parentId:
+              data.parentId === "root"
+                ? null
+                : data.parentId
+                  ? new Types.ObjectId(data.parentId)
+                  : null,
           },
         ],
         { session },
@@ -113,17 +124,28 @@ class GenreService {
       await session.endSession();
     }
   }
-  // ── 2. UPDATE GENRE ────────────────────────────────────────────────────────
 
+  // ── 2. UPDATE GENRE ────────────────────────────────────────────────────────
   async updateGenre(
     id: string,
     data: UpdateGenreInput,
     file?: Express.Multer.File,
   ) {
+    // 1. Xử lý ảnh và màu sắc trước khi mở Transaction
+    let themeColorData: { color?: string; gradient?: string } = {};
+    if (file && !data.color) {
+      try {
+        const color = await themeColorService.extractThemeColor(file.path);
+        themeColorData.color = color;
+        themeColorData.gradient = `linear-gradient(135deg, ${color} 0%, #121212 100%)`;
+      } catch (err) {
+        console.error("[UpdateGenre] Color extraction failed:", err);
+      }
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
     let oldImage = "";
-    let isImageUpdated = false;
 
     try {
       const genre = await Genre.findById(id).session(session);
@@ -134,10 +156,9 @@ class GenreService {
 
       // ── Tên + Slug ────────────────────────────────────────────────────────
       if (data.name && data.name !== genre.name) {
-        const duplicate = await Genre.exists({
-          name: { $regex: new RegExp(`^${data.name}$`, "i") },
-          _id: { $ne: id },
-        }).session(session);
+        const duplicate = await Genre.exists({ name: data.name }).session(
+          session,
+        );
 
         if (duplicate)
           throw new ApiError(
@@ -151,7 +172,11 @@ class GenreService {
 
       // ── Parent + Circular check ───────────────────────────────────────────
       if (data.parentId !== undefined) {
-        if (!data.parentId) {
+        if (
+          data.parentId === null ||
+          data.parentId === "" ||
+          data.parentId === "root"
+        ) {
           genre.parentId = null;
         } else {
           if (data.parentId.toString() === id)
@@ -189,39 +214,27 @@ class GenreService {
       if (data.priority !== undefined) genre.priority = data.priority;
       if (data.isTrending !== undefined) genre.isTrending = data.isTrending;
 
-      // BUG FIX: isActive phải được set TRƯỚC save() để nằm trong cùng một transaction write
-      const needsCascade =
-        data.isActive !== undefined && data.isActive !== genre.isActive;
-      if (data.isActive !== undefined) genre.isActive = data.isActive;
-
       // ── Image ─────────────────────────────────────────────────────────────
       if (file) {
         genre.image = file.path;
-        isImageUpdated = true;
+        if (themeColorData.color) {
+          genre.color = themeColorData.color;
+          genre.gradient = themeColorData.gradient!;
+        }
       } else {
-        // NÂNG CẤP C: color thay đổi → middleware tự regenerate gradient
-        // Service chỉ gán color và gradient nếu được gửi tường minh
-        if (data.color !== undefined) genre.color = data.color;
-        // Gán gradient nếu Admin muốn override thủ công, ngược lại middleware lo
-        if (data.gradient !== undefined) genre.gradient = data.gradient;
+        if (data.color) genre.color = data.color;
+        if (data.gradient) genre.gradient = data.gradient;
       }
 
       await genre.save({ session }); // pre("save"): slug + gradient nếu cần
 
-      // Cascade deactivate sub-genres
-      if (needsCascade && data.isActive === false) {
-        await Genre.updateMany(
-          { parentId: genre._id },
-          { isActive: false },
-        ).session(session);
-      }
-
       await session.commitTransaction();
 
-      // BONUS: Cache invalidation + Cloudinary cleanup — fire-and-forget
+      // 7. Cleanup (Chỉ chạy một lần trong Promise.allSettled)
       Promise.allSettled([
         invalidateGenreCache(id),
-        isImageUpdated && oldImage && !oldImage.includes("default")
+        syncGenreStats(id),
+        file && oldImage && !oldImage.includes("default")
           ? deleteFileFromCloud(oldImage, "image")
           : Promise.resolve(),
       ]).catch(console.error);
@@ -229,7 +242,8 @@ class GenreService {
       return genre;
     } catch (error) {
       await session.abortTransaction();
-      if (file) deleteFileFromCloud(file.path, "image").catch(console.error);
+      if (file)
+        await deleteFileFromCloud(file.path, "image").catch(console.error);
       throw error;
     } finally {
       await session.endSession();
@@ -239,65 +253,78 @@ class GenreService {
   // ── 3. DELETE GENRE ────────────────────────────────────────────────────────
 
   async deleteGenre(id: string) {
-    const genre = await Genre.findById(id);
-    if (!genre)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy thể loại");
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    // 1. Kiểm tra sự phụ thuộc chặt chẽ
-    const [tracksUsing, albumsUsing, subGenres] = await Promise.all([
-      Track.exists({ genres: id }),
-      Album.exists({ genres: id }),
-      Genre.exists({ parentId: id }),
-    ]);
+    try {
+      const genre = await Genre.findById(id).session(session).lean();
+      if (!genre) {
+        throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy thể loại");
+      }
+      // 1. Lấy thông tin trước khi xóa
 
-    if (tracksUsing || albumsUsing || subGenres) {
-      const reasons: string[] = [];
-      if (tracksUsing) reasons.push("Bài hát");
-      if (albumsUsing) reasons.push("Album");
-      if (subGenres) reasons.push("Thể loại con");
+      // 2. Kiểm tra sự phụ thuộc chặt chẽ (Giữ nguyên vì rất tốt)
+      const [tracksUsing, albumsUsing, subGenres] = await Promise.all([
+        Track.exists({ genres: id }).session(session),
+        Album.exists({ genres: id }).session(session),
+        Genre.exists({ parentId: id }).session(session),
+      ]);
 
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `Không thể xóa vì đang chứa các dữ liệu liên quan: ${reasons.join(", ")}.`,
-      );
+      if (tracksUsing || albumsUsing || subGenres) {
+        const reasons = [];
+        if (tracksUsing) reasons.push("Bài hát");
+        if (albumsUsing) reasons.push("Album");
+        if (subGenres) reasons.push("Thể loại con");
+
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Không thể xóa vì đang chứa các dữ liệu liên quan: ${reasons.join(", ")}.`,
+        );
+      }
+
+      const imageToDelete = genre.image;
+
+      // 3. Thực hiện xóa thông qua Model (Thay vì Document instance đã lean)
+      await Genre.updateOne({ _id: id }, { isDeleted: true }).session(session);
+
+      await session.commitTransaction();
+
+      // 4. Hậu kỳ (Async)
+      Promise.allSettled([
+        imageToDelete && !imageToDelete.includes("default")
+          ? deleteFileFromCloud(imageToDelete, "image")
+          : Promise.resolve(),
+        invalidateGenreCache(id),
+      ]).catch(console.error);
+
+      return { message: "Xóa thể loại thành công", _id: id };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
     }
-
-    const imageToDelete = genre.image;
-
-    // 2. Thực hiện xóa
-    await genre.deleteOne();
-
-    // 3. Post-delete: Cleanup + Cache
-    // Dùng Promise.allSettled để đảm bảo cleanup không bao giờ làm crash API
-    Promise.allSettled([
-      imageToDelete && !imageToDelete.includes("default")
-        ? deleteFileFromCloud(imageToDelete, "image")
-        : Promise.resolve(),
-      invalidateGenreCache(id),
-    ]).catch(console.error);
-
-    return { message: "Xóa thể loại thành công", _id: id };
   }
-
   // ── 4. TOGGLE STATUS (truly atomic) ───────────────────────────────────────
 
   async toggleStatus(id: string) {
-    const genre = await Genre.findById(id).select("isActive").lean();
-    if (!genre)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy thể loại");
-
-    // Atomic flip
     const updated = await Genre.findByIdAndUpdate(
       id,
       [{ $set: { isActive: { $not: "$isActive" } } }],
       { new: true, select: "_id isActive" },
     ).lean();
 
-    // Cascade: nếu vừa deactivate → tắt luôn sub-genres
-    if (!updated!.isActive) {
-      await Genre.updateMany({ parentId: id }, { isActive: false });
+    if (!updated) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy thể loại");
     }
 
+    if (updated.isActive === false) {
+      Genre.updateMany({ parentId: id }, { isActive: false }).catch(
+        console.error,
+      );
+    }
+
+    // 3. Xử lý Cache
     invalidateGenreCache(id).catch(console.error);
 
     return updated;
@@ -305,9 +332,8 @@ class GenreService {
 
   // ── 5. GET ALL GENRES ─────────────────────────────────────────────────────
 
-  async getAllGenres(queryInput: GenreFilterInput, currentUser?: IUser) {
-    const userRole = currentUser?.role ?? "guest";
-    const isAdmin = userRole === "admin";
+  async getGenresByUser(queryInput: GenreUserFilterInput, currentUser?: IUser) {
+    const userRole = currentUser?.role ? "user" : "guest";
 
     const cleanFilter = Object.fromEntries(
       Object.entries(queryInput).filter(([, v]) => v !== undefined && v !== ""),
@@ -319,21 +345,17 @@ class GenreService {
 
     const {
       page = 1,
-      limit = 20,
+      limit = APP_CONFIG.GRID_LIMIT,
       keyword,
-      status,
       sort,
       parentId,
       isTrending,
     } = queryInput;
 
-    const filterQuery: Record<string, any> = {};
-
-    if (!isAdmin) {
-      filterQuery.isActive = true;
-    } else if (status !== undefined) {
-      filterQuery.isActive = status === "active";
-    }
+    const filterQuery: Record<string, any> = {
+      isDeleted: false,
+      isActive: true,
+    };
 
     if (isTrending !== undefined) filterQuery.isTrending = isTrending;
 
@@ -352,24 +374,19 @@ class GenreService {
       priority: { priority: -1, trackCount: -1, _id: 1 },
       popular: { playCount: -1, priority: -1, _id: 1 },
       newest: { createdAt: -1, _id: 1 },
-      name: { name: 1, _id: 1 },
       oldest: { createdAt: 1, _id: 1 },
+      name: { name: 1, _id: 1 },
     };
 
     const sortOption = SORT_MAP[sort ?? "priority"] ?? SORT_MAP.priority;
 
     const query = Genre.find(filterQuery)
-      .populate("parentId", "name slug")
-      .select(
-        "name slug image color gradient priority trackCount isTrending isActive parentId",
-      )
+      .select("name slug image trackCount isTrending")
       .sort(sortOption)
       .lean();
 
-    if (limit !== "all") {
-      const skip = (Number(page) - 1) * Number(limit);
-      query.skip(skip).limit(Number(limit));
-    }
+    const skip = (Number(page) - 1) * Number(limit);
+    query.skip(skip).limit(Number(limit));
 
     const [genres, total] = await Promise.all([
       query.exec(),
@@ -379,12 +396,11 @@ class GenreService {
     const result = {
       data: genres,
       meta: {
-        totalItems: total,
+        totalItems: Number(total),
         page: Number(page),
-        pageSize: limit === "all" ? total : Number(limit),
-        totalPages: limit === "all" ? 1 : Math.ceil(total / Number(limit)),
-        hasNextPage:
-          limit === "all" ? false : Number(page) * Number(limit) < total,
+        pageSize: Number(limit),
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: Number(page) * Number(limit) < Number(total),
       },
     };
 
@@ -396,53 +412,131 @@ class GenreService {
     return result;
   }
 
-  // ── 6. GET GENRE TREE ─────────────────────────────────────────────────────
+  // ── 5.1 GET GENRES BY ADMIN ─────────────────────────────────────────────────────
+  async getGenresByAdmin(
+    queryInput: GenreAdminFilterInput,
+    currentUser?: IUser,
+  ) {
+    const userRole = currentUser?.role ?? "guest";
+    const isAdmin = userRole === "admin";
+    if (!isAdmin) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "Chỉ admin mới có quyền truy cập danh sách thể loại đầy đủ",
+      );
+    }
+    const {
+      page = 1,
+      limit = APP_CONFIG.GRID_LIMIT,
+      keyword,
+      isActive,
+      isDeleted,
+      sort,
+      parentId,
+      isTrending,
+    } = queryInput;
 
+    const filterQuery: Record<string, any> = {};
+    if (isActive !== undefined) filterQuery.isActive = isActive;
+    if (isDeleted !== undefined) filterQuery.isDeleted = isDeleted;
+    if (isTrending !== undefined) filterQuery.isTrending = isTrending;
+    if (parentId === "root") {
+      filterQuery.parentId = null;
+    } else if (parentId) {
+      filterQuery.parentId = parentId;
+    }
+    if (keyword) {
+      const safe = escapeStringRegexp(keyword.substring(0, 100));
+      filterQuery.name = { $regex: `^${safe}`, $options: "i" };
+    }
+
+    const SORT_MAP: Record<string, any> = {
+      priority: { priority: -1, trackCount: -1, _id: 1 },
+      popular: { playCount: -1, priority: -1, _id: 1 },
+      newest: { createdAt: -1, _id: 1 },
+      oldest: { createdAt: 1, _id: 1 },
+      name: { name: 1, _id: 1 },
+    };
+
+    const sortOption = SORT_MAP[sort ?? "priority"] ?? SORT_MAP.priority;
+
+    const query = Genre.find(filterQuery)
+      .populate("parentId", "name slug")
+      .sort(sortOption)
+      .lean();
+
+    const skip = (Number(page) - 1) * Number(limit);
+    query.skip(skip).limit(Number(limit));
+
+    const [genres, total] = await Promise.all([
+      query.exec(),
+      Genre.countDocuments(filterQuery),
+    ]);
+
+    const result = {
+      data: genres,
+      meta: {
+        totalItems: Number(total),
+        page: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: Number(page) * Number(limit) < Number(total),
+      },
+    };
+
+    return result;
+  }
+
+  // ── 6. GET GENRE TREE ─────────────────────────────────────────────────────
   async getGenreTree() {
     return Genre.find()
-      .select("_id name slug parentId color image priority isActive")
+      .select(
+        "_id name slug parentId color image priority isTrending trackCount playCount",
+      )
       .sort({ priority: -1, name: 1 })
       .lean();
   }
 
   // ── 7. GET GENRE DETAIL ────────────────────────────────────────────────────
-
-  async getGenreBySlug(slug: string, userRole: string = "guest") {
-    // 1. Build Cache Key (phụ thuộc vào slug và role)
+  async getGenreDetail(slug: string, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
     const cacheKey = buildCacheKey(`genre:detail:${slug}`, userRole, {});
 
-    // 2. Thử lấy từ Cache
     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
     if (cached) return JSON.parse(cached as string);
 
-    const genre = await Genre.findOne({ slug: slug, isActive: true })
-      .populate("parentId", "_id name slug image color")
+    // 1. Tìm Genre chính
+    const genre = await Genre.findOne({
+      slug: slug,
+      isActive: true,
+      isDeleted: false,
+    })
+      .populate("parentId", "_id name slug image color trackCount")
       .lean();
 
     if (!genre) {
-      throw new ApiError(
-        httpStatus.NOT_FOUND,
-        "Thể loại không tồn tại hoặc đã bị ẩn",
-      );
+      throw new ApiError(httpStatus.NOT_FOUND, "Thể loại không tồn tại");
     }
 
     const genreId = genre._id;
 
-    // 2. 🔥 QUERY PARALLEL: Lấy dữ liệu liên quan
+    // 2. QUERY PARALLEL (Tối ưu hóa Index)
     const [subGenres, breadcrumbs, allTrackIds] = await Promise.all([
-      // A. Lấy danh sách thể loại con (để hiện tab hoặc list gợi ý)
-      Genre.find({ parentId: genreId, isActive: true })
-        .select("_id name slug image trackCount priority color")
+      Genre.find({ parentId: genreId, isActive: true, isDeleted: false })
+        .select("_id name slug image color trackCount")
         .sort({ priority: -1, trackCount: -1 })
         .lean(),
 
-      // B. Xây dựng đường dẫn (Pop -> Dance Pop...)
       this.buildBreadcrumbs(genre),
 
-      // C. Lấy mảng ID của TOÀN BỘ bài hát thuộc thể loại này
-      // Sắp xếp theo độ phổ biến (playCount) hoặc mới nhất
-      Track.find({ genres: genreId, status: "ready", isPublic: true })
+      Track.find({
+        genres: genreId, // Đảm bảo trường 'genres' trong Track đã được đánh Index
+        status: "ready",
+        isPublic: true,
+        isDeleted: false,
+      })
         .sort({ playCount: -1, createdAt: -1 })
+        .limit(APP_CONFIG.TRACKS_LIMIT) // Ngưỡng an toàn để tránh Payload quá lớn
         .select("_id")
         .lean(),
     ]);
@@ -451,23 +545,23 @@ class GenreService {
       ...genre,
       subGenres,
       breadcrumbs,
-      // Trả về mảng ID cực nhẹ để FE làm Virtual Scroll
       trackIds: allTrackIds.map((t) => t._id),
+      totalTracksCount: allTrackIds.length, // Thêm thông tin tổng số lượng để FE hiển thị
     };
 
-    // 4. Lưu Cache (TTL 1 giờ)
-    await withCacheTimeout(() =>
+    // 3. Lưu Cache với cơ chế "Fire-and-forget" để không block client
+    withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
-    );
+    ).catch((err) => console.error("Redis Set Error:", err));
 
     return result;
   }
   // ── 8. GET GENRE TRACKS ───────────────────────────────────────────────────
 
-  async getGenreTracks(genreId: string, filter: any, userRole?: string) {
-    const { page = 1, limit = 20 } = filter;
-    const skip = (page - 1) * limit;
-    const isAdmin = userRole === "admin";
+  async getGenreTracks(genreId: string, filter: any, currentUser?: IUser) {
+    const { page = 1, limit = APP_CONFIG.VIRTUAL_SCROLL_LIMIT } = filter;
+    const skip = (Number(page) - 1) * Number(limit);
+    const userRole = currentUser?.role ? "user" : "guest";
 
     const cacheKey = buildCacheKey(
       `genre:tracks:${genreId}`,
@@ -478,10 +572,11 @@ class GenreService {
     if (cached) return JSON.parse(cached as string);
 
     const trackQuery: Record<string, any> = {
-      genres: genreId,
+      genres: genreId, // Đảm bảo trường 'genres' trong Track đã được đánh Index
       status: "ready",
+      isPublic: true,
+      isDeleted: false,
     };
-    if (!isAdmin) trackQuery.isPublic = true;
 
     const [tracks, total] = await Promise.all([
       Track.find(trackQuery)
@@ -509,11 +604,11 @@ class GenreService {
     const result = {
       data: tracks,
       meta: {
-        totalItems: total,
+        totalItems: Number(total),
         page: Number(page),
         pageSize: Number(limit),
-        totalPages: Math.ceil(total / limit),
-        hasNextPage: skip + limit < total,
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: skip + Number(limit) < Number(total),
       },
     };
 

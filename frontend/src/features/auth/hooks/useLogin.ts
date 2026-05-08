@@ -14,7 +14,7 @@ export const useLogin = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(loginSchema) as any,
     mode: "onBlur",
     defaultValues: { email: "", password: "", rememberMe: false },
   });

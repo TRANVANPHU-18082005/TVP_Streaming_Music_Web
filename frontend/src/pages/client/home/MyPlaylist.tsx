@@ -8,7 +8,7 @@ import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCar
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useMyPlaylists } from "@/features/playlist/hooks/usePlaylistsQuery";
 
-import { IMyPlaylist, IPlaylist, useSyncInteractions } from "@/features";
+import { IPlaylist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
@@ -143,7 +143,7 @@ SkeletonGrid.displayName = "SkeletonGrid";
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST GRID — desktop whileInView stagger
 // ─────────────────────────────────────────────────────────────────────────────
-const PlaylistGrid = memo(({ playlists }: { playlists: IMyPlaylist[] }) => (
+const PlaylistGrid = memo(({ playlists }: { playlists: IPlaylist[] }) => (
   <motion.div
     variants={containerVariants}
     initial="hidden"
@@ -165,7 +165,7 @@ PlaylistGrid.displayName = "PlaylistGrid";
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST SCROLL — mobile snap-x horizontal strip
 // ─────────────────────────────────────────────────────────────────────────────
-const PlaylistScroll = memo(({ playlists }: { playlists: IMyPlaylist[] }) => (
+const PlaylistScroll = memo(({ playlists }: { playlists: IPlaylist[] }) => (
   <div
     className="lg:hidden scroll-overflow-mask -mx-4 px-4"
     role="list"
@@ -199,7 +199,10 @@ PlaylistScroll.displayName = "PlaylistScroll";
 // ─────────────────────────────────────────────────────────────────────────────
 export function MyPlaylist() {
   const { data: playlists, isLoading, isError, refetch } = useMyPlaylists();
-
+  console.log(
+    "🚀 ~ file: MyPlaylist.tsx:144 ~ MyPlaylist ~ playlists:",
+    playlists,
+  );
   const playlistIds = useMemo(
     () => playlists?.map((p) => p._id) ?? [],
     [playlists],

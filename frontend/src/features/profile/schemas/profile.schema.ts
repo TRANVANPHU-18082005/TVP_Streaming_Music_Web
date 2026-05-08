@@ -12,7 +12,7 @@ const ACCEPTED_IMAGE_TYPES = [
 export const profileSchema = z.object({
   // 1. THÔNG TIN CƠ BẢN
   name: z
-    .string({ required_error: "Vui lòng nhập tên hiển thị" })
+    .string()
     .trim()
     .min(2, "Tên phải có ít nhất 2 ký tự")
     .max(50, "Tên không được vượt quá 50 ký tự"),

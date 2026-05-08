@@ -1,168 +1,169 @@
+import {
+  hexColorSchema,
+  imageFileSchema,
+  optionalObjectIdSchema,
+  optionalString,
+  socialLinkSchema,
+  emptyToUndefined,
+} from "@/utils/base-validate";
 import { z } from "zod";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. CONSTANTS & TYPES
-// ─────────────────────────────────────────────────────────────────────────────
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ACCEPTED_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-] as const;
+import { APP_CONFIG } from "@/config/constants";
 
 export const ARTIST_SORT_OPTIONS = [
+  "popular",
   "newest",
   "oldest",
   "name",
-  "popular",
+  "monthlyListeners",
 ] as const;
+export const ARTIST_SORT_TYPES = {
+  popular: "Phổ biến",
+  newest: "Mới nhất",
+  oldest: "Cũ nhất",
+  name: "A – Z",
+  monthlyListeners: "Người nghe hàng tháng",
+} as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. REUSABLE PRIMITIVES
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Chuỗi optional: trim, biến "" thành undefined để DB sạch */
-const optionalString = (maxLen: number, maxMsg: string) =>
-  z
-    .string()
-    .trim()
-    .max(maxLen, maxMsg)
-    .optional()
-    .nullable()
-    .transform((val) => (val === "" ? undefined : val) ?? undefined);
-
-/** Link MXH chuẩn hóa */
-const socialLinkSchema = z
-  .string()
-  .trim()
-  .url("Định dạng link không hợp lệ")
-  .or(z.literal(""))
-  .optional()
-  .nullable()
-  .transform((val) => (val === "" ? undefined : val) ?? undefined);
-
-/** Validate File ảnh đơn */
-const imageFileSchema = z
-  .instanceof(File)
-  .refine((f) => f.size <= MAX_FILE_SIZE, "Kích thước ảnh tối đa 5MB")
-  .refine(
-    (f) => ACCEPTED_IMAGE_TYPES.includes(f.type as any),
-    "Chỉ nhận định dạng .jpg, .jpeg, .png, .webp",
-  );
-
-/** Item trong Gallery: Có thể là File mới hoặc URL cũ */
-const galleryItemSchema = z.union([
-  imageFileSchema,
-  z.string().url("Link ảnh gallery không hợp lệ"),
-]);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. SHARED BASE SCHEMA
+// SHARED BASE SCHEMA — mirror backend createArtistSchema
 // ─────────────────────────────────────────────────────────────────────────────
 const artistBaseSchema = z.object({
+  // ── 1. THÔNG TIN CHÍNH ────────────────────────────────────────────────────
   name: z
-    .string({ required_error: "Vui lòng nhập tên nghệ sĩ" })
+    .string()
     .trim()
-    .min(2, "Tên nghệ sĩ tối thiểu 2 ký tự")
+    .min(1, "Tên nghệ sĩ không được để trống")
     .max(100, "Tên nghệ sĩ tối đa 100 ký tự"),
 
+  bio: optionalString(200, "Tiểu sử tối đa 200 ký tự"),
+
+  nationality: z.string().trim().max(10).optional().catch("VN"),
+
   aliases: z
-    .array(z.string().trim().min(1).max(50))
-    .max(10, "Tối đa 10 tên gọi khác")
+    .array(
+      z
+        .string()
+        .trim()
+        .min(1, "Tên gọi khác không được để trống")
+        .max(50, "Tên gọi khác tối đa 50 ký tự"),
+    )
+    .max(10, "Chỉ được nhập tối đa 10 tên gọi khác")
     .default([]),
 
-  nationality: z
-    .string()
-    .trim()
-    .min(1, "Vui lòng chọn quốc tịch")
-    .default("VN"),
+  // ── 2. GIAO DIỆN ──────────────────────────────────────────────────────────
+  themeColor: hexColorSchema.default("#1db954"),
 
-  userId: optionalString(50, "UserId không hợp lệ"),
-
-  bio: optionalString(3000, "Tiểu sử tối đa 3000 ký tự"),
-
-  themeColor: z
-    .string()
-    .trim()
-    .regex(/^#([0-9A-F]{3}){1,2}$/i, "Mã màu Hex không hợp lệ")
-    .default("#ffffff"),
+  // ── 3. LIÊN KẾT ───────────────────────────────────────────────────────────
+  userId: optionalObjectIdSchema,
 
   isVerified: z.boolean().default(false),
-  isActive: z.boolean().default(true),
 
-  socialLinks: z
-    .object({
-      facebook: socialLinkSchema,
-      instagram: socialLinkSchema,
-      twitter: socialLinkSchema,
-      website: socialLinkSchema,
-      spotify: socialLinkSchema,
-      youtube: socialLinkSchema,
-    })
-    .optional()
-    .default({}),
+  // ── 4. SOCIAL LINKS (flat fields, match backend) ──────────────────────────
+  facebook: socialLinkSchema,
+  instagram: socialLinkSchema,
+  twitter: socialLinkSchema,
+  website: socialLinkSchema,
+  spotify: socialLinkSchema,
+  youtube: socialLinkSchema,
 
-  // Gallery ảnh nghệ sĩ
-  images: z
-    .array(galleryItemSchema)
-    .max(10, "Tối đa 10 ảnh Gallery")
-    .default([]),
+  // ── 5. GALLERY IMAGES (optional, frontend UI only) ───────────────────────
+  images: z.array(z.union([imageFileSchema, z.string().url()])).default([]),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. CREATE / EDIT SCHEMAS
+// CREATE SCHEMA — avatar/coverImage optional
 // ─────────────────────────────────────────────────────────────────────────────
-
 export const artistCreateSchema = artistBaseSchema.extend({
   avatar: imageFileSchema.optional(),
   coverImage: imageFileSchema.optional(),
 });
 
-export const artistEditSchema = artistBaseSchema.extend({
-  avatar: z
-    .union([
-      z.string().url("Link avatar không hợp lệ"),
-      imageFileSchema,
-      z.null(),
-    ])
-    .optional(),
-  coverImage: z
-    .union([
-      z.string().url("Link cover không hợp lệ"),
-      imageFileSchema,
-      z.null(),
-    ])
-    .optional(),
-});
+// ─────────────────────────────────────────────────────────────────────────────
+// EDIT SCHEMA — avatar/coverImage can be URL (existing) or File (new) or null
+// ─────────────────────────────────────────────────────────────────────────────
+export const artistEditSchema = artistBaseSchema
+  .extend({
+    avatar: z
+      .union([
+        z.string().url("Đường dẫn avatar không hợp lệ"),
+        imageFileSchema,
+        z.null(),
+      ])
+      .optional(),
+    coverImage: z
+      .union([
+        z.string().url("Đường dẫn cover không hợp lệ"),
+        imageFileSchema,
+        z.null(),
+      ])
+      .optional(),
+  })
+  .partial()
+  .refine((body) => Object.values(body).some((v) => v !== undefined), {
+    message: "Phải có ít nhất một trường để cập nhật",
+  });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. PARAMS SCHEMA (Dùng cho trang danh sách nghệ sĩ)
+// FILTER PARAMS SCHEMA — match backend getArtistsByUserSchema & getArtistsByAdminSchema
 // ─────────────────────────────────────────────────────────────────────────────
 export const artistParamsSchema = z.object({
   page: z.coerce.number().int().min(1).catch(1),
-  limit: z.coerce.number().int().min(1).max(100).catch(12),
-  keyword: z.string().trim().optional().catch(undefined),
-  sort: z.enum(ARTIST_SORT_OPTIONS).catch("newest"),
-  isVerified: z
+
+  limit: z.coerce.number().int().min(1).max(100).catch(APP_CONFIG.GRID_LIMIT),
+
+  keyword: z
+    .preprocess(emptyToUndefined, z.string().trim().min(1).max(100).optional())
+    .catch(undefined),
+
+  nationality: z
     .preprocess(
-      (val) => (val === "true" ? true : val === "false" ? false : undefined),
-      z.boolean().optional(),
+      (val) => (val === "" ? undefined : val),
+      z.string().trim().max(50).optional(),
     )
     .catch(undefined),
-  nationality: z.string().trim().optional().catch(undefined),
-  genreId: z.string().trim().optional().catch(undefined),
+
+  sort: z.enum(ARTIST_SORT_OPTIONS).catch("popular"),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN FILTER PARAMS — extend user params with isActive & isVerified
+// ─────────────────────────────────────────────────────────────────────────────
+export const artistAdminParamsSchema = artistParamsSchema.extend({
   isActive: z
     .preprocess(
       (val) => (val === "true" ? true : val === "false" ? false : undefined),
       z.boolean().optional(),
     )
     .catch(undefined),
-});
 
+  isVerified: z
+    .preprocess(
+      (val) => (val === "true" ? true : val === "false" ? false : undefined),
+      z.boolean().optional(),
+    )
+    .catch(undefined),
+  isDeleted: z
+    .preprocess(
+      (val) => (val === "true" ? true : val === "false" ? false : undefined),
+      z.boolean().optional(),
+    )
+    .catch(undefined),
+});
+export const artistTracksParamsSchema = artistParamsSchema.omit({
+  keyword: true,
+  sort: true,
+  nationality: true,
+});
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. TYPES
+// TYPE EXPORTS — match backend types
 // ─────────────────────────────────────────────────────────────────────────────
 export type ArtistCreateFormValues = z.infer<typeof artistCreateSchema>;
 export type ArtistEditFormValues = z.infer<typeof artistEditSchema>;
-export type ArtistFilterParams = z.infer<typeof artistParamsSchema>;
+export type ArtistFormValues = ArtistCreateFormValues | ArtistEditFormValues;
+export type ArtistFilterParams = Partial<z.infer<typeof artistParamsSchema>>;
+export type ArtistAdminFilterParams = Partial<
+  z.infer<typeof artistAdminParamsSchema>
+>;
+export type ArtistTracksFilterParams = Partial<
+  z.infer<typeof artistTracksParamsSchema>
+>;

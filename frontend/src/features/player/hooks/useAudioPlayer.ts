@@ -18,6 +18,7 @@ import { useSocket } from "@/hooks/useSocket";
 import { RootState } from "@/store/store";
 import { env } from "@/config/env";
 import { toCDN } from "@/utils/track-helper";
+import { ITrack } from "@/features";
 
 // ---------------------------------------------------------------------------
 // Constants & pure helpers
@@ -108,7 +109,6 @@ export const useAudioPlayer = () => {
     hasCountedView.current = null;
   }, [currentTrack?._id]);
 
-  // console.log(user);
   const handleRecordView = useCallback(
     (trackId: string): void => {
       if (hasCountedView.current === trackId) return;
@@ -179,8 +179,16 @@ export const useAudioPlayer = () => {
     const audio = audioRef.current;
     const rawSrc = currentTrack.hlsUrl || currentTrack.trackUrl;
     const src = toCDN(rawSrc) || rawSrc;
-    console.log(toCDN(src));
-    console.log(src);
+
+    // Guard: some tracks may not have a playable URL yet. Avoid calling
+    // string methods on undefined which causes runtime crash (endsWith).
+    if (!src) {
+      // Nothing to play — ensure UI isn't stuck in loading/playing state.
+      dispatch(setLoadingState("idle"));
+      dispatch(setIsPlaying(false));
+      return;
+    }
+
     // Dọn HLS instance của bài trước
     if (hlsRef.current) {
       hlsRef.current.detachMedia();
@@ -269,6 +277,18 @@ export const useAudioPlayer = () => {
 
     const rawSrc = nextTrackPreload.hlsUrl || nextTrackPreload.trackUrl;
     const src = toCDN(rawSrc) || rawSrc;
+
+    // Guard against missing src for preload as well.
+    if (!src) {
+      if (preloadHlsRef.current) {
+        preloadHlsRef.current.destroy();
+        preloadHlsRef.current = null;
+      }
+      if (preloadAudioRef.current) {
+        preloadAudioRef.current.src = "";
+      }
+      return;
+    }
 
     if (!preloadAudioRef.current) {
       preloadAudioRef.current = new Audio();
@@ -439,8 +459,8 @@ export const useAudioPlayer = () => {
       if (autoplayEnabled && currentTrack._id) {
         try {
           const resp = await trackApi.getSimilarTracks(currentTrack._id, 10);
-          const recs = resp?.tracks ?? [];
-          const ids = recs.map((t) => t._id).filter(Boolean);
+          const recs = resp?.data?.tracks ?? [];
+          const ids = recs.map((t: ITrack) => t._id).filter(Boolean);
           if (ids.length > 0) {
             // Append recommended IDs and immediately advance to the next track
             dispatch(appendQueueIds(ids));

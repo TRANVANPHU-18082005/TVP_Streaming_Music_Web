@@ -1,8 +1,4 @@
-import {
-  useMutation,
-  useQueryClient,
-  type MutateOptions,
-} from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import albumApi from "../api/albumApi";
 import { albumKeys } from "../utils/albumKeys";
@@ -57,43 +53,31 @@ export const useAlbumMutations = () => {
 
   // ==========================================
   // 4. TOGGLE VISIBILITY (JSON)
-  // ==========================================
   const toggleMutation = useMutation({
-    // 🔥 Uncomment và fix type
     mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
-      albumApi.update(id, { isPublic }), // Gửi JSON thường (Partial Update)
-    onSuccess: () => {
-      toast.success("Đã thay đổi trạng thái");
+      albumApi.togglePublicStatus(id, isPublic),
+    onSuccess: (_, variables) => {
+      toast.success(
+        variables.isPublic
+          ? "Album đã được công khai"
+          : "Album đã được ẩn khỏi công chúng",
+      );
       queryClient.invalidateQueries({ queryKey: albumKeys.lists() });
+      queryClient.invalidateQueries({
+        queryKey: albumKeys.detail(variables.id),
+      });
     },
-    onError: (err) => handleError(err, "Lỗi thay đổi trạng thái"),
+    onError: (err) => handleError(err, "Lỗi cập nhật trạng thái"),
   });
 
   return {
-    // --- Wrappers (Type Safe) ---
-
-    // 1. Create Wrapper
-    createAlbum: (
-      data: FormData, // ✅ Type chuẩn
-      options?: MutateOptions<any, unknown, FormData>,
-    ) => createMutation.mutate(data, options),
-
     createAlbumAsync: createMutation.mutateAsync,
 
     // 2. Update Wrapper
-    updateAlbum: (
-      id: string,
-      data: FormData, // ✅ Type chuẩn (sửa từ UpdateAlbumInput -> FormData)
-      options?: MutateOptions<any, unknown, { id: string; data: FormData }>,
-    ) => updateMutation.mutate({ id, data }, options),
-
-    // ✅ Fix type async
-    updateAlbumAsync: (id: string, data: FormData) =>
-      updateMutation.mutateAsync({ id, data }),
+    updateAlbumAsync: updateMutation.mutateAsync,
 
     // 3. Delete Wrapper
-    deleteAlbum: (id: string, options?: MutateOptions<any, unknown, string>) =>
-      deleteMutation.mutate(id, options),
+    deleteAlbum: deleteMutation.mutate,
 
     // 4. Toggle Wrapper
     toggleVisibility: (id: string, isPublic: boolean) =>

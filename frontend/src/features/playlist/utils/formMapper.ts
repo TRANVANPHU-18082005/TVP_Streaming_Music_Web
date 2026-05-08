@@ -1,7 +1,7 @@
-import { Playlist } from "../types";
-import { PlaylistFormValues } from "../schemas/playlist.schema";
+import { PlaylistEditFormValues } from "../schemas/playlist.schema";
+import { IPlaylist } from "../types";
 
-export const PLAYLIST_DEFAULT_VALUES: PlaylistFormValues = {
+export const PLAYLIST_DEFAULT_VALUES: PlaylistEditFormValues = {
   title: "",
   description: "",
   visibility: "public",
@@ -11,13 +11,27 @@ export const PLAYLIST_DEFAULT_VALUES: PlaylistFormValues = {
   tags: [],
   collaborators: [],
   coverImage: null,
+  publishAt: undefined,
+  userId: undefined,
 };
 
 export const mapEntityToForm = (
-  playlist?: Playlist | null,
-): PlaylistFormValues => {
+  playlist?: IPlaylist | null,
+): PlaylistEditFormValues => {
   if (!playlist) return PLAYLIST_DEFAULT_VALUES;
-
+  // Convert ISO datetime to input[type="datetime-local"] string (YYYY-MM-DDTHH:mm)
+  const isoToLocalDateTime = (iso?: string | null) => {
+    if (!iso) return undefined;
+    try {
+      const d = new Date(iso);
+      // Create a local datetime string without timezone offset
+      const tzOffsetMs = d.getTimezoneOffset() * 60000;
+      const local = new Date(d.getTime() - tzOffsetMs);
+      return local.toISOString().slice(0, 16);
+    } catch {
+      return undefined;
+    }
+  };
   return {
     title: playlist.title,
     description: playlist.description || "",
@@ -32,5 +46,11 @@ export const mapEntityToForm = (
       playlist.collaborators?.map((u: any) =>
         typeof u === "object" ? u._id : u,
       ) || [],
+    publishAt: isoToLocalDateTime((playlist as any).publishAt),
+    userId:
+      playlist.user &&
+      (typeof playlist.user === "string"
+        ? playlist.user
+        : (playlist.user as any)?._id),
   };
 };

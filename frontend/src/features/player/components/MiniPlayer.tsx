@@ -426,7 +426,7 @@ const VinylArtwork = memo(
           className="absolute inset-0 rounded-full pointer-events-none"
           style={{
             background:
-              "linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 55%)",
+              "linear-gradient(135deg, hsl(var(--foreground) / 0.18) 0%, transparent 55%)",
           }}
           aria-hidden="true"
         />

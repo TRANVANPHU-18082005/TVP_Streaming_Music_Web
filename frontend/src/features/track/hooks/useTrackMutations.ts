@@ -3,7 +3,10 @@ import { toast } from "sonner";
 import trackApi from "../api/trackApi";
 import { trackKeys } from "../utils/trackKeys";
 import { handleError } from "@/utils/handleError";
-import { BulkTrackFormValues } from "../schemas/track.schema";
+import {
+  BulkTrackFormValues,
+  TrackChangeStatusFormValues,
+} from "../schemas/track.schema";
 
 export const useTrackMutations = () => {
   const queryClient = useQueryClient();
@@ -14,7 +17,7 @@ export const useTrackMutations = () => {
 
   // 1. CREATE: Upload file nhạc mới [cite: 1]
   const createMutation = useMutation({
-    mutationFn: (data: FormData) => trackApi.upload(data),
+    mutationFn: (data: FormData) => trackApi.create(data),
     onSuccess: () => {
       toast.success("Upload bài hát thành công! Hệ thống đang xử lý...");
       invalidateList();
@@ -106,6 +109,51 @@ export const useTrackMutations = () => {
     onError: (err) => handleError(err, "Lỗi cập nhật hàng loạt"),
   });
 
+  // 6. DELETE MULTIPLE TRACKS
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id) => trackApi.delete(id)));
+    },
+    onSuccess: (_, ids) => {
+      toast.success(`Đã xóa ${ids.length} bài hát`);
+      invalidateList();
+    },
+    onError: (err) => handleError(err, "Lỗi xóa hàng loạt"),
+  });
+
+  // 7. CHANGE STATUS: Admin cập nhật trạng thái xử lý bài hát
+  const changeStatusMutation = useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: TrackChangeStatusFormValues;
+    }) => trackApi.changeStatus(id, data),
+    onSuccess: () => {
+      toast.success("Đã cập nhật trạng thái bài hát");
+      invalidateList();
+    },
+    onError: (err) => handleError(err, "Lỗi cập nhật trạng thái"),
+  });
+
+  const bulkChangeStatusMutation = useMutation({
+    mutationFn: async ({
+      ids,
+      data,
+    }: {
+      ids: string[];
+      data: TrackChangeStatusFormValues;
+    }) => {
+      await Promise.all(ids.map((id) => trackApi.changeStatus(id, data)));
+    },
+    onSuccess: (_, vars) => {
+      toast.success(`Đã cập nhật trạng thái cho ${vars.ids.length} bài hát`);
+      invalidateList();
+    },
+    onError: (err) => handleError(err, "Lỗi cập nhật trạng thái hàng loạt"),
+  });
+
   // BULK RETRY MUTATIONS (Admin)
   const bulkRetryTranscodeMutation = useMutation({
     mutationFn: (ids: string[]) => trackApi.bulkRetryTranscode(ids),
@@ -157,14 +205,51 @@ export const useTrackMutations = () => {
     createTrackAsync: createMutation.mutateAsync,
     updateTrackAsync: (id: string, data: FormData) =>
       updateMutation.mutateAsync({ id, data }),
-    deleteTrack: (id: string) => deleteMutation.mutate(id),
+    deleteTrackAsync: (id: string) => deleteMutation.mutateAsync(id),
+    deleteTrack: (
+      id: string,
+      options?: Parameters<typeof deleteMutation.mutate>[1],
+    ) => deleteMutation.mutate(id, options),
+
+    bulkDeleteTracks: (
+      ids: string[],
+      options?: Parameters<typeof bulkDeleteMutation.mutate>[1],
+    ) => bulkDeleteMutation.mutate(ids, options),
+
+    // Change status
+    changeTrackStatus: (
+      id: string,
+      data: TrackChangeStatusFormValues,
+      options?: Parameters<typeof changeStatusMutation.mutate>[1],
+    ) => changeStatusMutation.mutate({ id, data }, options),
+
+    bulkChangeTrackStatus: (
+      ids: string[],
+      data: TrackChangeStatusFormValues,
+      options?: Parameters<typeof bulkChangeStatusMutation.mutate>[1],
+    ) => bulkChangeStatusMutation.mutate({ ids, data }, options),
 
     // Các lệnh Retry đa năng
-    retryFull: (id: string) => retryFullMutation.mutate(id),
-    retryTranscode: (id: string) => retryTranscodeMutation.mutate(id),
-    retryLyrics: (id: string) => retryLyricsMutation.mutate(id),
-    retryKaraoke: (id: string) => retryKaraokeMutation.mutate(id),
-    retryMood: (id: string) => retryMoodMutation.mutate(id),
+    retryFull: (
+      id: string,
+      options?: Parameters<typeof retryFullMutation.mutate>[1],
+    ) => retryFullMutation.mutate(id, options),
+    retryTranscode: (
+      id: string,
+      options?: Parameters<typeof retryTranscodeMutation.mutate>[1],
+    ) => retryTranscodeMutation.mutate(id, options),
+    retryLyrics: (
+      id: string,
+      options?: Parameters<typeof retryLyricsMutation.mutate>[1],
+    ) => retryLyricsMutation.mutate(id, options),
+    retryKaraoke: (
+      id: string,
+      options?: Parameters<typeof retryKaraokeMutation.mutate>[1],
+    ) => retryKaraokeMutation.mutate(id, options),
+    retryMood: (
+      id: string,
+      options?: Parameters<typeof retryMoodMutation.mutate>[1],
+    ) => retryMoodMutation.mutate(id, options),
 
     bulkUpdateTrack: bulkUpdateMutation.mutate,
 
@@ -201,6 +286,8 @@ export const useTrackMutations = () => {
       retryKaraokeMutation.isPending ||
       retryMoodMutation.isPending ||
       bulkUpdateMutation.isPending ||
+      bulkDeleteMutation.isPending ||
+      bulkChangeStatusMutation.isPending ||
       bulkRetryTranscodeMutation.isPending ||
       bulkRetryLyricsMutation.isPending ||
       bulkRetryKaraokeMutation.isPending ||

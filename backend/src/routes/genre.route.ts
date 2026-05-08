@@ -4,17 +4,19 @@ import {
   authorize,
   optionalAuth,
 } from "../middlewares/auth.middleware";
-import validate from "../middlewares/validate"; // Middleware Validation
+import validate from "../middlewares/validate";
 import * as genreController from "../controllers/genre.controller";
 import {
   createGenreSchema,
-  getGenresSchema,
+  getGenresByUserSchema,
   updateGenreSchema,
+  getGenreDetailSchema,
+  getGenreTracksSchema,
+  getGenresByAdminSchema,
+  toggleGenreStatusSchema,
+  deleteGenreSchema,
 } from "../validations/genre.validation";
 import { uploadImages } from "../config/upload";
-
-// Import Schema Validation (Giả sử bạn đã tạo file này tương tự các module khác)
-// Nội dung schema nên check: name (bắt buộc), color (hex code), description...
 
 const router = express.Router();
 
@@ -22,18 +24,38 @@ const router = express.Router();
 // 🟢 PUBLIC ROUTES
 // ==========================================
 
-// Lấy danh sách (Validate query params như page, limit...)
+// 1. GET /api/genres (Lấy danh sách thể loại cho người dùng)
 router.get(
   "/",
   optionalAuth,
-  validate(getGenresSchema),
-  genreController.getGenres,
+  validate(getGenresByUserSchema),
+  genreController.getGenresByUser,
 );
-// GET /api/genres/:slug
+// 1. GET /api/genres (Lấy danh sách thể loại cho Admin)
+router.get(
+  "/admin",
+  protect,
+  authorize("admin"),
+  validate(getGenresByAdminSchema),
+  genreController.getGenresByAdmin,
+);
+// 2. GET /api/genres/tree (Lấy cây thể loại - Dành cho cả User & Admin)
 router.get("/tree", genreController.getTree);
-router.get("/:id", optionalAuth, genreController.getGenreDetail);
-// (Get Album Tracks) api/albums/:id/tracks?page=?&limit=?
-router.get("/:id/tracks", optionalAuth, genreController.getGenreTracks);
+// 3. GET /api/genres/:id/tracks (Lấy danh sách bài hát theo thể loại)
+router.get(
+  "/:id/tracks",
+  optionalAuth,
+  validate(getGenreTracksSchema),
+  genreController.getGenreTracks,
+);
+
+// 4. GET /api/genres/:id (Lấy chi tiết thể loại)
+router.get(
+  "/:slug",
+  optionalAuth,
+  validate(getGenreDetailSchema),
+  genreController.getGenreDetail,
+);
 
 // ==========================================
 // 🔴 ADMIN ONLY ROUTES
@@ -41,8 +63,7 @@ router.get("/:id/tracks", optionalAuth, genreController.getGenreTracks);
 router.use(protect);
 router.use(authorize("admin")); // Chặn toàn bộ bên dưới chỉ cho Admin
 
-// Create Genre
-// Lưu ý thứ tự: Upload ảnh trước -> Rồi mới Validate Body
+// 2. POST /api/genres (Tạo thể loại mới)
 router.post(
   "/",
   uploadImages.single("image"),
@@ -50,18 +71,21 @@ router.post(
   genreController.createGenre,
 );
 
-// Toggle Status (Active/Inactive)
-router.patch("/:id/toggle", genreController.toggleGenreStatus);
+// 3. PATCH /api/genres/:id/toggle (Bật/Tắt hiển thị thể loại)
+router.patch(
+  "/:id/toggle",
+  validate(toggleGenreStatusSchema),
+  genreController.toggleGenreStatus,
+);
 
-// Update & Delete
-router
-  .route("/:id")
-  .patch(
-    // Đổi PUT -> PATCH cho đúng chuẩn update 1 phần
-    uploadImages.single("image"),
-    validate(updateGenreSchema),
-    genreController.updateGenre,
-  )
-  .delete(genreController.deleteGenre);
+// 4. PATCH /api/genres/:id (Cập nhật thể loại)
+router.patch(
+  "/:id",
+  uploadImages.single("image"),
+  validate(updateGenreSchema),
+  genreController.updateGenre,
+);
+// 5. DELETE /api/genres/:id (Xóa thể loại)
+router.delete("/:id", validate(deleteGenreSchema), genreController.deleteGenre);
 
 export default router;

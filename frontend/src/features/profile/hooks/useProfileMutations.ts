@@ -8,7 +8,7 @@ export const useProfileMutations = () => {
   const queryClient = useQueryClient();
 
   const updateProfileMutation = useMutation({
-    mutationFn: (data: FormData) => profileApi.update(data),
+    mutationFn: (data: FormData) => profileApi.updateProfile(data),
     onSuccess: (res) => {
       toast.success("Cập nhật hồ sơ thành công");
 

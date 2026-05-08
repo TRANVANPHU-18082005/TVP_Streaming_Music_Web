@@ -1,6 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import { generateUniqueSlug } from "../utils/slug";
-import themeColorService from "../services/themeColor.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & INTERFACES
@@ -32,6 +31,7 @@ export interface IArtist extends Document {
   monthlyListeners: number;
   isVerified: boolean;
   isActive: boolean;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,7 +65,7 @@ const ArtistSchema = new Schema<IArtist>(
     },
     aliases: [{ type: String, trim: true, lowercase: true }],
     nationality: { type: String, default: "VN", uppercase: true, trim: true },
-    bio: { type: String, default: "", maxlength: 2000 },
+    bio: { type: String, default: "", maxlength: 200 },
     avatar: { type: String, default: "" },
     coverImage: { type: String, default: "" },
     images: [{ type: String }],
@@ -86,6 +86,7 @@ const ArtistSchema = new Schema<IArtist>(
     monthlyListeners: { type: Number, default: 0, min: 0 },
     isVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,
@@ -130,19 +131,6 @@ ArtistSchema.pre("save", async function () {
       artist.name,
       artist.isNew ? undefined : artist._id,
     );
-  }
-
-  // 2. Tự động trích xuất màu chủ đạo để làm giao diện profile cá nhân hóa
-  if (artist.isModified("avatar") && artist.avatar) {
-    if (!artist.isModified("themeColor")) {
-      try {
-        artist.themeColor = await themeColorService.extractThemeColor(
-          artist.avatar,
-        );
-      } catch {
-        artist.themeColor = "#ffffff";
-      }
-    }
   }
 });
 

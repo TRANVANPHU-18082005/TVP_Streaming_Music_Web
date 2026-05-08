@@ -1,16 +1,19 @@
-import { ITrack } from "@/features";
-import type {
-  IMyPlaylist,
-  IPlaylist,
-  PlaylistDetailResponse,
+import {
+  ITrack,
+  PlaylistAdminFilterParams,
   PlaylistFilterParams,
-} from "@/features/playlist/types";
+} from "@/features";
+import type { IPlaylist, IPlaylistDetail } from "@/features/playlist/types";
 import api from "@/lib/axios";
 import { type ApiResponse, type PagedResponse } from "@/types";
 
 const playlistApi = {
-  // Lấy list
-  getPlaylists: async (params?: PlaylistFilterParams) => {
+  // ==========================================
+  // 🟢 PUBLIC & GLOBAL ROUTES
+  // ==========================================
+
+  // Lấy danh sách Playlist công khai (Có phân trang/filter)
+  getPlaylistsByUser: async (params?: PlaylistFilterParams) => {
     const response = await api.get<ApiResponse<PagedResponse<IPlaylist>>>(
       "/playlists",
       { params },
@@ -18,26 +21,15 @@ const playlistApi = {
     return response.data;
   },
 
-  // Lấy danh sách Playlist của User đang đăng nhập
-  getMyPlaylists: async (params?: PlaylistFilterParams) => {
-    const response = await api.get<ApiResponse<IMyPlaylist[]>>(
-      "/playlists/me",
-      {
-        params,
-      },
+  // Lấy chi tiết 1 Playlist (ID hoặc Slug)
+  getDetail: async (slug: string) => {
+    const response = await api.get<ApiResponse<IPlaylistDetail>>(
+      `/playlists/${slug}`,
     );
     return response.data;
   },
 
-  // Lấy chi tiết 1 Playlist (Có thể gọi bằng ID hoặc Slug)
-  getDetail: async (slugOrId: string) => {
-    const response = await api.get<ApiResponse<PlaylistDetailResponse>>(
-      `/playlists/${slugOrId}`,
-    );
-    return response.data;
-  },
-
-  // Lấy danh sách bài hát trong Album
+  // Lấy danh sách bài hát trong Playlist (Pagination)
   getPlaylistTracks: async (
     slugOrId: string,
     params?: { page?: number; limit?: number },
@@ -49,70 +41,21 @@ const playlistApi = {
     return response.data;
   },
 
-  // Tạo
-  create: async (formData: FormData) => {
-    const response = await api.post<ApiResponse<IPlaylist>>(
-      "/playlists",
-      formData,
-      {
-        headers: { "Content-Type": "multipart/form-data" },
-      },
+  // ==========================================
+  // 👤 MY LIBRARY (USER SPECIFIC)
+  // ==========================================
+
+  // Lấy toàn bộ playlist của tôi (Cho Sidebar/Library)
+  getMyLibrary: async (params?: { page?: number; limit?: number }) => {
+    const response = await api.get<ApiResponse<PagedResponse<IPlaylist>>>(
+      "/playlists/me",
+      { params },
     );
+    // Type lúc này: response.data.data.data là IPlaylist[]
     return response.data;
   },
 
-  // Cập nhật
-  update: async (id: string, formData: FormData) => {
-    const response = await api.patch<ApiResponse<IPlaylist>>(
-      `/playlists/${id}`,
-      formData,
-      {
-        headers: { "Content-Type": "multipart/form-data" },
-      },
-    );
-    return response.data;
-  },
-
-  // Xóa Playlist (Backend đã bọc Transaction để dọn rác ảnh)
-  delete: async (id: string) => {
-    const response = await api.delete<ApiResponse<null>>(`/playlists/${id}`);
-    return response.data;
-  },
-
-  // Thêm bài hát vào danh sách (Backend dùng $push + $inc)
-  addTracks: async (playlistId: string, trackIds: string[]) => {
-    const response = await api.post<ApiResponse<IPlaylist>>(
-      `/playlists/${playlistId}/tracks`,
-      {
-        trackIds, // Array of ID bài hát muốn thêm
-      },
-    );
-    return response.data;
-  },
-
-  // Xóa bài hát khỏi danh sách (Backend dùng $pullAll + $inc)
-  removeTracks: async (playlistId: string, trackIds: string[]) => {
-    const response = await api.delete<ApiResponse<IPlaylist>>(
-      `/playlists/${playlistId}/tracks`,
-      {
-        data: { trackIds }, // Với Axios, method DELETE phải để body trong thuộc tính `data`
-      },
-    );
-    return response.data;
-  },
-
-  // Sắp xếp lại thứ tự bài hát (Backend dùng $set, yêu cầu gửi `newTrackIds`)
-  reorderTracks: async (playlistId: string, trackIds: string[]) => {
-    const response = await api.patch<ApiResponse<IPlaylist>>(
-      `/playlists/${playlistId}/tracks/reorder`,
-      {
-        newTrackIds: trackIds, // 🔥 Đổi thành newTrackIds để khớp chặt chẽ với logic Backend
-      },
-    );
-    return response.data;
-  },
-
-  // Tạo nhanh Playlist (Spotify Style)
+  // Tạo nhanh Playlist trống (Spotify Style)
   createQuickPlaylist: async (data?: {
     title?: string;
     visibility?: string;
@@ -124,38 +67,93 @@ const playlistApi = {
     return response.data;
   },
 
-  // User thêm nhạc (Có xử lý Smart Cover ở Backend)
-  userAddTracks: async (playlistId: string, trackIds: string[]) => {
-    const response = await api.post<ApiResponse<IPlaylist>>(
-      `/playlists/me/${playlistId}/tracks`,
+  // Sửa nhanh Playlist (Chỉ đổi Title/Visibility - không gửi file)
+  quickEditMyPlaylist: async (
+    id: string,
+    data: { title?: string; visibility?: string },
+  ) => {
+    const response = await api.put<ApiResponse<IPlaylist>>(
+      `/playlists/me/${id}`,
+      data,
+    );
+    return response.data;
+  },
+
+  // Chuyển trạng thái riêng tư/công khai nhanh
+  toggleMyPlaylistVisibility: async (id: string) => {
+    const response = await api.patch<ApiResponse<{ visibility: string }>>(
+      `/playlists/${id}/toggle-visibility`, // Khớp với router.patch("/:id/toggle-visibility")
+    );
+    return response.data;
+  },
+
+  // ==========================================
+  // 🛠 TRACK MANAGEMENT (IN PLAYLIST)
+  // ==========================================
+
+  // Thêm bài hát (Hỗ trợ Batch)
+  addTracks: async (playlistId: string, trackIds: string[]) => {
+    const response = await api.post<ApiResponse<{ addedCount: number }>>(
+      `/playlists/${playlistId}/tracks`,
       { trackIds },
     );
     return response.data;
   },
 
-  //  User xóa nhạc (Bulk Remove + Refresh Smart Cover)
-  userRemoveTracks: async (playlistId: string, trackIds: string[]) => {
-    const response = await api.delete<ApiResponse<IPlaylist>>(
-      `/playlists/me/${playlistId}/tracks`,
-      { data: { trackIds } }, // Axios DELETE body
+  // Xóa bài hát (Hỗ trợ Batch)
+  removeTracks: async (playlistId: string, trackIds: string[]) => {
+    const response = await api.delete<ApiResponse<{ removedCount: number }>>(
+      `/playlists/${playlistId}/tracks`,
+      { data: { trackIds } }, // Axios DELETE body must be in 'data'
     );
     return response.data;
   },
 
-  //  Chuyển trạng thái riêng tư/công khai nhanh
-  toggleMyPlaylistVisibility: async (id: string) => {
-    const response = await api.patch<ApiResponse<{ visibility: string }>>(
-      `/playlists/me/${id}/toggle-visibility`,
+  // Sắp xếp lại thứ tự bài hát
+  reorderTracks: async (playlistId: string, trackIds: string[]) => {
+    const response = await api.put<ApiResponse<null>>(
+      `/playlists/${playlistId}/tracks`, // Khớp với router.put("/:id/tracks")
+      { trackIds }, // Backend nhận trackIds để $set
     );
     return response.data;
   },
 
-  // Lấy danh sách Playlist của chính tôi (Dùng cho Sidebar)
-  getMyLibrary: async (params?: PlaylistFilterParams) => {
+  // ==========================================
+  // 👑 ADMIN & ADVANCED MANAGEMENT
+  // ==========================================
+
+  // Lấy danh sách Playlist cho Admin (Filter chuyên sâu)
+  getPlaylistsByAdmin: async (params?: PlaylistAdminFilterParams) => {
     const response = await api.get<ApiResponse<PagedResponse<IPlaylist>>>(
-      "/playlists/me/all",
+      "/playlists/admin",
       { params },
     );
+    return response.data;
+  },
+
+  // Tạo Playlist Hệ thống (Có file)
+  create: async (formData: FormData) => {
+    const response = await api.post<ApiResponse<IPlaylist>>(
+      "/playlists",
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return response.data;
+  },
+
+  // Cập nhật Playlist (Có file)
+  update: async (id: string, formData: FormData) => {
+    const response = await api.patch<ApiResponse<IPlaylist>>(
+      `/playlists/${id}`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return response.data;
+  },
+
+  // Xóa Playlist (Soft Delete ở Backend)
+  delete: async (id: string) => {
+    const response = await api.delete<ApiResponse<null>>(`/playlists/${id}`);
     return response.data;
   },
 };

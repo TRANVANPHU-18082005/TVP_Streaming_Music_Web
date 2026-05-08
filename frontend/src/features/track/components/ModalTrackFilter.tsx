@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import {
   Search,
   XCircle,
@@ -20,11 +20,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import FilterDropdown from "@/components/ui/FilterDropdown";
-import { ArtistSelector } from "@/features/artist/components/ArtistSelector";
-import { GenreSelector } from "@/features/genre/components/GenreSelector";
+
 import { TrackFilterParams } from "@/features/track/types";
 import { Button } from "@/components/ui/button";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+const ArtistSelector = lazy(() =>
+  import("@/features/artist/components/ArtistSelector").then((m) => ({
+    default: m.ArtistSelector,
+  })),
+);
 
+const AlbumSelector = lazy(() =>
+  import("@/features/album/components/AlbumSelector").then((m) => ({
+    default: m.AlbumSelector,
+  })),
+);
+
+const GenreSelector = lazy(() =>
+  import("@/features/genre/components/GenreSelector").then((m) => ({
+    default: m.GenreSelector,
+  })),
+);
 interface ModalTrackFilterProps {
   params: TrackFilterParams;
   onChange: React.Dispatch<React.SetStateAction<TrackFilterParams>>;
@@ -33,8 +49,10 @@ interface ModalTrackFilterProps {
 
 const SORT_OPTIONS = [
   { label: "Mới nhất", value: "newest" },
-  { label: "Phổ biến", value: "popular" },
-  { label: "Tên (A-Z)", value: "name" },
+  { label: "Cũ nhất", value: "oldest" },
+  { label: "Phổ biến nhất", value: "popular" },
+  { label: "Tên (A–Z)", value: "name" },
+  { label: "Xu hướng", value: "trending" },
 ] as const;
 
 export const ModalTrackFilter: React.FC<ModalTrackFilterProps> = ({
@@ -182,11 +200,45 @@ export const ModalTrackFilter: React.FC<ModalTrackFilterProps> = ({
           )}
         >
           <div className="p-2.5 bg-background rounded-2xl">
-            <ArtistSelector
-              singleSelect
-              value={params.artistId ? [params.artistId] : []}
-              onChange={(ids) => updateFilter("artistId", ids[0])}
-            />
+            <Suspense fallback={<WaveformLoader />}>
+              <ArtistSelector
+                singleSelect
+                value={params.artistId ? [params.artistId] : []}
+                onChange={(ids) => updateFilter("artistId", ids[0])}
+              />
+            </Suspense>
+          </div>
+        </FilterDropdown>
+        {/* C. Album */}
+        <FilterDropdown
+          isActive={!!params.albumId}
+          onClear={() => updateFilter("albumId", undefined)}
+          label={
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <Mic2
+                className={cn(
+                  "size-3.5",
+                  params.albumId ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+              <span>{params.albumId ? "Đã chọn album" : "Album"}</span>
+            </div>
+          }
+          contentClassName="w-[320px] rounded-2xl shadow-xl border-border/50"
+          className={cn(
+            "h-9 sm:h-10 rounded-[10px] px-3 sm:px-4 text-[12px] sm:text-[13px] transition-all duration-200 shrink-0 border shadow-sm",
+            params.albumId
+              ? "bg-primary/10 border-primary/30 text-primary font-bold hover:bg-primary/15"
+              : "bg-card border-border/50 text-foreground/80 font-medium hover:bg-muted/50 hover:text-foreground",
+          )}
+        >
+          <div className="p-2.5 bg-background rounded-2xl">
+            <Suspense fallback={<WaveformLoader />}>
+              <AlbumSelector
+                value={params.albumId || ""}
+                onChange={(val) => updateFilter("albumId", val)}
+              />
+            </Suspense>
           </div>
         </FilterDropdown>
 
@@ -214,13 +266,15 @@ export const ModalTrackFilter: React.FC<ModalTrackFilterProps> = ({
           )}
         >
           <div className="p-2 bg-background rounded-2xl">
-            <GenreSelector
-              variant="filter"
-              singleSelect={true}
-              value={params.genreId}
-              onChange={(val) => updateFilter("genreId", val)}
-              placeholder="Tìm thể loại (Pop, Ballad...)"
-            />
+            <Suspense fallback={<WaveformLoader />}>
+              <GenreSelector
+                variant="filter"
+                singleSelect={true}
+                value={params.genreId}
+                onChange={(val) => updateFilter("genreId", val)}
+                placeholder="Tìm thể loại (Pop, Ballad...)"
+              />
+            </Suspense>
           </div>
         </FilterDropdown>
 

@@ -1,6 +1,6 @@
 // src/features/profile/types/index.ts
-import { Album } from "@/features/album/types";
-import { Playlist } from "@/features/playlist/types";
+
+import { IAlbum, IPlaylist } from "@/features";
 import { ITrack } from "@/features/track/types"; // Đảm bảo đúng path
 
 export interface AnalyticsData {
@@ -23,8 +23,8 @@ export interface recentlyPlayedData {
 
 export interface UserLibrary {
   tracks: ITrack[];
-  albums: Album[];
-  playlists: Playlist[];
+  albums: IAlbum[];
+  playlists: IPlaylist[];
 }
 export interface ProfileDashboard {
   analytics: AnalyticsData[];

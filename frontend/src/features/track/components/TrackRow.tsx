@@ -1,13 +1,9 @@
 import React, { memo, useCallback, useRef } from "react";
-import { Play, Pause } from "lucide-react";
 import { TableCell, TableRow } from "@/components/ui/table";
-
 import { cn } from "@/lib/utils";
 import { formatDuration, toCDN } from "@/utils/track-helper";
 import { Link } from "react-router-dom";
 import { ITrack } from "@/features/track/types";
-import { useAppSelector } from "@/store/hooks";
-import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { TrackTitleMarquee } from "@/features/player/components/TrackTitleMarquee";
 import { WaveformBars } from "@/components/MusicVisualizer";
@@ -26,7 +22,23 @@ export interface TrackRowProps {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PlayCell
+// Custom areEqual — only re-render when these props actually change
+// Avoids re-renders from parent state that don't affect this row
+// ─────────────────────────────────────────────────────────────────────────────
+
+function trackRowAreEqual(prev: TrackRowProps, next: TrackRowProps): boolean {
+  return (
+    prev.track._id === next.track._id &&
+    prev.index === next.index &&
+    prev.isActive === next.isActive &&
+    prev.isPlaying === next.isPlaying &&
+    prev.onPlay === next.onPlay &&
+    prev.animationDelay === next.animationDelay
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PlayCell — number ↔ waveform toggle
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PlayCellProps {
@@ -66,18 +78,16 @@ const PlayCell = memo(
         aria-label={
           showBars ? `Tạm dừng bài ${index + 1}` : `Phát bài ${index + 1}`
         }
-        className="relative flex size-full items-center justify-center cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] rounded"
+        className="relative flex size-full items-center justify-center cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         onClick={handleClick}
         onKeyDown={handleKeyDown}
       >
-        {/* Layer 1: Track number */}
+        {/* Track number */}
         <span
           className={cn(
-            "absolute text-[13px] font-medium tabular-nums leading-none",
+            "absolute text-[12px] font-medium tabular-nums leading-none",
             "transition-[opacity,transform] duration-200 ease-out",
-            isActive
-              ? "text-[hsl(var(--primary))]"
-              : "text-[hsl(var(--muted-foreground))]",
+            isActive ? "text-primary" : "text-muted-foreground/60",
             showBars
               ? "opacity-0 scale-75"
               : "opacity-100 scale-100 group-hover:opacity-0 group-hover:scale-75",
@@ -86,7 +96,7 @@ const PlayCell = memo(
           {index + 1}
         </span>
 
-        {/* Layer 2: EQ bars */}
+        {/* Waveform bars */}
         <span
           className={cn(
             "absolute flex items-center justify-center",
@@ -96,30 +106,7 @@ const PlayCell = memo(
               : "opacity-0 scale-75 pointer-events-none",
           )}
         >
-          <WaveformBars active={showBars} />
-        </span>
-
-        {/* Layer 3: Play/Pause icon on hover */}
-        <span
-          className={cn(
-            "absolute flex items-center justify-center",
-            "transition-[opacity,transform] duration-200 ease-out",
-            "opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100",
-          )}
-        >
-          {isActive && isPlaying ? (
-            <Pause
-              className="size-[15px]"
-              style={{ color: "hsl(var(--foreground))" }}
-              strokeWidth={2.5}
-            />
-          ) : (
-            <Play
-              className="size-[15px] translate-x-px"
-              style={{ color: "hsl(var(--foreground))" }}
-              strokeWidth={2.5}
-            />
-          )}
+          <WaveformBars active={showBars} color="primary" />
         </span>
       </div>
     );
@@ -128,35 +115,34 @@ const PlayCell = memo(
 PlayCell.displayName = "PlayCell";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CoverArt
+// CoverArt — lazy loaded, ring on active
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface CoverArtProps {
   src: string;
   alt: string;
   isActive: boolean;
-  isPlaying: boolean;
-  onPlay: (e: React.MouseEvent) => void;
+  onClick: (e: React.MouseEvent) => void;
 }
 
-const CoverArt = memo(({ src, alt, isActive, onPlay }: CoverArtProps) => (
+const CoverArt = memo(({ src, alt, isActive, onClick }: CoverArtProps) => (
   <div
     role="button"
     tabIndex={-1}
     aria-hidden="true"
-    className="relative size-10 shrink-0 overflow-hidden rounded cursor-pointer select-none"
+    className="relative size-10 shrink-0 overflow-hidden rounded-md cursor-pointer select-none"
     style={{
       transition: "box-shadow 0.2s ease",
       boxShadow: isActive
-        ? "0 0 0 1.5px hsl(var(--primary)/0.8), 0 0 16px hsl(var(--primary)/0.2)"
+        ? "0 0 0 1.5px hsl(var(--primary) / 0.7), 0 0 12px hsl(var(--primary) / 0.15)"
         : "none",
     }}
-    onClick={onPlay}
+    onClick={onClick}
   >
     <img
       src={src}
       alt={alt}
-      className="size-full object-cover transition-transform duration-[450ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.08]"
+      className="size-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.08]"
       loading="lazy"
       decoding="async"
     />
@@ -178,11 +164,6 @@ export const TrackRow = memo(
     animationDelay = 0,
   }: TrackRowProps) => {
     const rowRef = useRef<HTMLTableRowElement>(null);
-    const isLiked = useAppSelector(
-      (state) => !!state.interaction.likedTracks[track._id],
-    );
-    // FIX 2: console.log removed
-
     const handleRowClick = useCallback(
       (e: React.MouseEvent<HTMLTableRowElement>) => {
         const target = e.target as HTMLElement;
@@ -208,12 +189,12 @@ export const TrackRow = memo(
         onClick={handleRowClick}
         className={cn(
           "group relative h-14 cursor-pointer select-none",
-          "border-b border-[hsl(var(--border)/0.06)] last:border-b-0",
-          "transition-[background-color,box-shadow] duration-150 ease-out",
-          "hover:bg-[hsl(var(--muted)/0.4)]",
+          "border-b border-border/[0.05] last:border-b-0",
+          "transition-colors duration-100 ease-out",
+          // Active state: subtle primary tint
           isActive
-            ? "bg-[hsl(var(--primary)/0.07)] hover:bg-[hsl(var(--primary)/0.1)]"
-            : "",
+            ? "bg-primary/[0.06] hover:bg-primary/[0.09]"
+            : "hover:bg-muted/30",
         )}
         style={{ animationDelay: `${animationDelay}ms` }}
         aria-current={isActive ? "true" : undefined}
@@ -237,8 +218,7 @@ export const TrackRow = memo(
               src={toCDN(track.coverImage) || track.coverImage}
               alt={track.title}
               isActive={isActive}
-              isPlaying={isPlaying}
-              onPlay={handlePlayClick}
+              onClick={handlePlayClick}
             />
             <div className="min-w-0 flex-1">
               {isActive ? (
@@ -250,70 +230,77 @@ export const TrackRow = memo(
                   artistClassName="text-xs"
                 />
               ) : (
-                <p
-                  title={track.title}
-                  className="truncate text-track-title text-sm font-medium leading-snug mb-0.5 transition-colors duration-150 text-[hsl(var(--foreground))]"
-                >
-                  {track.title}
-                </p>
+                <>
+                  <p
+                    title={track.title}
+                    className={cn(
+                      "truncate text-sm font-medium leading-snug mb-0.5",
+                      "text-foreground/90 transition-colors duration-100",
+                      "group-hover:text-foreground",
+                    )}
+                  >
+                    {track.title}
+                  </p>
+                  <div className="min-w-0 truncate">
+                    <ArtistDisplay
+                      mainArtist={track.artist}
+                      featuringArtists={track.featuringArtists}
+                      className={cn(
+                        "text-xs text-muted-foreground/55 truncate",
+                        "hover:text-foreground/70 hover:underline underline-offset-2",
+                        "transition-colors duration-100",
+                      )}
+                    />
+                  </div>
+                </>
               )}
-              <div className="min-w-0 truncate text-xs">
-                {!isActive && (
-                  <ArtistDisplay
-                    mainArtist={track.artist}
-                    featuringArtists={track.featuringArtists}
-                    className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
-                  />
-                )}
-              </div>
             </div>
           </div>
         </TableCell>
 
         {/* COL 3 — Album (hidden < md) */}
         <TableCell className="hidden md:table-cell py-0 pr-4">
-          <p className="text-sm text-[hsl(var(--muted-foreground))] truncate max-w-[180px]">
-            {track.album?.slug ? (
-              <Link
-                to={`/albums/${track.album.slug}`}
-                title={track.album.title}
-                className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {track.album.title}
-              </Link>
-            ) : (
-              <span className="italic opacity-50">Single</span>
-            )}
-          </p>
+          {track.album?.slug ? (
+            <Link
+              to={`/albums/${track.album.slug}`}
+              title={track.album.title}
+              className={cn(
+                "block truncate max-w-[180px]",
+                "text-xs text-muted-foreground/50 truncate",
+                "hover:text-foreground/70 hover:underline underline-offset-2",
+                "transition-colors duration-100",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {track.album.title}
+            </Link>
+          ) : (
+            <span className="text-xs text-muted-foreground/30 italic">
+              Single
+            </span>
+          )}
         </TableCell>
-        <TableCell className="table-cell py-0 pr-4">
+
+        {/* COL 4 — Like button */}
+        {/* <TableCell className="py-0 pr-4">
           <span
             className={cn(
-              // Layout: fixed size prevents cell width changes during Framer scale
-              "relative flex items-center justify-center",
-              "w-8 h-8 shrink-0",
-              // Containment: clips all Framer animations to this box
-              "overflow-hidden isolate",
-              // Visibility
-              "transition-[opacity] duration-150",
+              "relative flex items-center justify-center w-8 h-8 shrink-0",
+              "overflow-hidden isolate transition-opacity duration-150",
               isLiked
                 ? "opacity-100 pointer-events-auto"
-                : "pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+                : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto",
             )}
-            // FIX: contain layout+paint via inline style (not a Tailwind class)
-            // `contain: paint` is the critical property — clips filter:blur() overflow
             style={{ contain: "layout paint" }}
           >
             <TrackLikeButton id={track._id} />
           </span>
-        </TableCell>
+        </TableCell> */}
 
-        {/* COL 4 — Actions + Duration */}
+        {/* COL 5 — Duration */}
         <TableCell className="py-0 pr-3" data-no-row-click="">
-          <div className="flex items-center justify-center gap-0.5">
-            {/* Duration */}
-            <span className="min-w-[38px] text-duration text-right text-xs tabular-nums text-[hsl(var(--muted-foreground))] px-2">
+          <div className="flex items-center justify-end">
+            <span className="text-xs tabular-nums text-muted-foreground/45 font-medium px-1">
               {formatDuration(track.duration)}
             </span>
           </div>
@@ -321,6 +308,7 @@ export const TrackRow = memo(
       </TableRow>
     );
   },
+  trackRowAreEqual,
 );
 
 TrackRow.displayName = "TrackRow";

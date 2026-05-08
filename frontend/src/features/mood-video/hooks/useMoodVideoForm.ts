@@ -5,12 +5,12 @@ import {
   moodVideoSchema,
   type MoodVideoFormValues,
 } from "../schemas/moodVideo.schema";
-import type { MoodVideo } from "../types";
 import { mapMoodVideoToForm } from "../utils/formMapper";
 import { buildMoodVideoPayload } from "../utils/payloadBuilder";
+import { IMoodVideo } from "../types";
 
 interface UseMoodVideoFormProps {
-  videoToEdit?: MoodVideo | null;
+  videoToEdit?: IMoodVideo | null;
   onSubmit: (formData: FormData) => Promise<void>;
 }
 
@@ -23,7 +23,7 @@ export const useMoodVideoForm = ({
   }, [videoToEdit]);
 
   const form = useForm<MoodVideoFormValues>({
-    resolver: zodResolver(moodVideoSchema),
+    resolver: zodResolver(moodVideoSchema) as any,
     defaultValues,
     mode: "onSubmit",
   });
@@ -45,7 +45,11 @@ export const useMoodVideoForm = ({
       return;
     }
     console.log(values);
-    const payload = buildMoodVideoPayload(values, dirtyFields, isEditMode);
+    const payload = buildMoodVideoPayload(
+      values,
+      dirtyFields as any,
+      isEditMode,
+    );
     console.log("Check File before submit:", values.video instanceof File);
     console.log("FormData Video Check:", payload.get("video"));
     await onSubmit(payload);

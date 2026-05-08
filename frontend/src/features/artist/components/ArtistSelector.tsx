@@ -14,8 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { getInitialsTextAvartar } from "@/utils/genTextAvartar";
 import { Label } from "@/components/ui/label";
-import { useArtistsQuery } from "@/features/artist/hooks/useArtistsQuery";
-import { IArtist } from "@/features";
+import { IArtist, useArtistsByUserQuery } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,7 +201,7 @@ export const ArtistSelector: React.FC<ArtistSelectorProps> = ({
   const debouncedSearch = useDebounce(inputValue, 350);
 
   // B. Server-side search: keyword passed to query
-  const { data, isLoading } = useArtistsQuery({
+  const { data, isLoading } = useArtistsByUserQuery({
     limit: APP_CONFIG.SELECTOR_LIMIT,
     keyword: debouncedSearch || undefined,
   });

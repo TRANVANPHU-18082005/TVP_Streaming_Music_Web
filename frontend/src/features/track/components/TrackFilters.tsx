@@ -1,44 +1,13 @@
 "use client";
 
-/**
- * @file TrackFilters.tsx — Track catalog search + filter bar (v4.0 — Soundwave Premium)
- *
- * REDESIGN vs original:
- * ─ Full Soundwave token integration: .glass-frosted/.card-base, .shadow-brand,
- *   .badge-*, .btn-danger, .text-overline, .menu-item, .shadow-raised
- * ─ Light/Dark: all hardcoded emerald/blue/yellow/red/indigo/orange/emerald-500
- *   Tailwind color literals → hsl(var(--wave-*)) / hsl(var(--success)) /
- *   hsl(var(--warning)) / hsl(var(--error)) / hsl(var(--info)) CSS tokens
- * ─ SearchInput: ambient focus glow ring (brand-500 → wave-2 gradient)
- * ─ FilterToggleButton: extracted memo with gradient-brand counter badge
- * ─ ActiveFilterTag: colored icon-bubble per filter (wave-spectrum system)
- * ─ ActiveTagsBar: divider-glow accent line + Sparkles eyebrow icon
- * ─ STATUS_OPTIONS: colored status dots use CSS token references
- * ─ Card wrapper: border shifts to primary/20 + shadow-brand + gradient-wave
- *   top accent line when activeFiltersCount > 0
- * ─ FilterLabel: iconColor prop → wave-spectrum per filter section
- *
- * BUG FIXES FROM ORIGINAL:
- * ─ handleClearSearch now calls onSearch("") immediately (bypasses debounce)
- *   Original comment said debounce would handle it, but this causes a 400ms
- *   visible delay on clear — bypassing is the correct UX behavior
- * ─ URL→input sync guard: localSearch excluded from deps to prevent loop
- * ─ overflowVisible: replaced setTimeout hack with CSS transitionend listener
- *   (setTimeout at 300ms is fragile — if user closes panel before 300ms,
- *   overflow leaks. transitionend is precise and event-driven)
- * ─ removeFilter: now sends null not undefined (undefined serializes as
- *   the string "undefined" in some URL param implementations)
- * ─ activeFiltersCount: granular deps [status, artistId, albumId, genreId]
- *   instead of full `params` object — avoids count recalc on sort/keyword change
- * ─ All callbacks wrapped in useCallback — stable refs for child memos
- */
-
 import React, {
   useState,
   useEffect,
   useMemo,
   useCallback,
   useRef,
+  lazy,
+  Suspense,
   memo,
 } from "react";
 import {
@@ -48,26 +17,22 @@ import {
   Disc,
   Tag,
   LayoutGrid,
-  ListFilter,
   SlidersHorizontal,
   ChevronDown,
   Trash2,
-  Sparkles,
+  BookOpen,
+  ArrowUpDown,
+  Eye,
   CheckCircle2,
   Loader,
   Clock3,
   AlertTriangle,
+  FileText,
+  Video,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { TrackFilterParams } from "@/features/track/types";
-import { useDebounce } from "@/hooks/useDebounce";
-
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
-import FilterDropdown from "@/components/ui/FilterDropdown";
-import { ArtistSelector } from "@/features/artist/components/ArtistSelector";
-import { AlbumSelector } from "@/features/album/components/AlbumSelector";
-import { GenreSelector } from "@/features/genre/components/GenreSelector";
 import {
   Select,
   SelectContent,
@@ -75,12 +40,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useDebounce } from "@/hooks/useDebounce";
+import FilterDropdown from "@/components/ui/FilterDropdown";
+import { useAppSelector } from "@/store/hooks";
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { TrackFilterParams } from "../schemas/track.schema";
+import { APP_CONFIG } from "@/config/constants";
+import { MoodVideoPicker } from "@/features/mood-video/components/MoodVideoPicker";
+
+const ArtistSelector = lazy(() =>
+  import("@/features/artist/components/ArtistSelector").then((m) => ({
+    default: m.ArtistSelector,
+  })),
+);
+
+const AlbumSelector = lazy(() =>
+  import("@/features/album/components/AlbumSelector").then((m) => ({
+    default: m.AlbumSelector,
+  })),
+);
+
+const GenreSelector = lazy(() =>
+  import("@/features/genre/components/GenreSelector").then((m) => ({
+    default: m.GenreSelector,
+  })),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 interface TrackFiltersProps {
   params: TrackFilterParams;
+  isAdmin?: boolean;
   onSearch: (keyword: string) => void;
   onFilterChange: (
     key: keyof TrackFilterParams,
@@ -92,21 +83,55 @@ interface TrackFiltersProps {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS — module-scoped, zero allocation per render
-// Status dot colors use CSS token references — dark-mode adaptive
+// CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 const SORT_OPTIONS = [
   { label: "Mới nhất", value: "newest" },
   { label: "Cũ nhất", value: "oldest" },
-  { label: "Phổ biến", value: "popular" },
+  { label: "Phổ biến nhất", value: "popular" },
   { label: "Tên (A–Z)", value: "name" },
+  { label: "Xu hướng", value: "trending" },
 ] as const;
+
+const LIMIT_OPTIONS = [
+  {
+    label: `${APP_CONFIG.PAGINATION_LIMIT}`,
+    value: APP_CONFIG.PAGINATION_LIMIT,
+  },
+  {
+    label: `${APP_CONFIG.PAGINATION_LIMIT * 2}`,
+    value: APP_CONFIG.PAGINATION_LIMIT * 2,
+  },
+  {
+    label: `${APP_CONFIG.PAGINATION_LIMIT * 3}`,
+    value: APP_CONFIG.PAGINATION_LIMIT * 3,
+  },
+] as const;
+
+const EXPAND_PANEL_ID = "track-filter-panel";
+
+// Tag meta — mỗi filter key có màu + icon riêng
+const TAG_DEFS = {
+  status: {
+    label: "Trạng thái",
+    icon: CheckCircle2,
+    color: "hsl(var(--info))",
+  },
+  artistId: { label: "Nghệ sĩ", icon: Mic2, color: "hsl(var(--wave-1))" },
+  albumId: { label: "Album", icon: Disc, color: "hsl(var(--wave-4))" },
+  genreId: { label: "Thể loại", icon: Tag, color: "hsl(var(--wave-2))" },
+  isPublic: { label: "Công khai", icon: Eye, color: "#378ADD" },
+  isDeleted: { label: "Đã xóa", icon: Trash2, color: "#E24B4A" },
+  moodVideoId: { label: "Video cảm xúc", icon: Video, color: "#8B4513" },
+  lyricType: { label: "Lời nhạc", icon: FileText, color: "#D85A30" },
+  limit: { label: "Limit", icon: LayoutGrid, color: "#7F77DD" },
+  page: { label: "Trang", icon: BookOpen, color: "#BA7517" },
+} as const;
 
 interface StatusOption {
   value: string;
   label: string;
   iconColor: string;
-  bgClass: string;
   icon: React.ElementType;
 }
 
@@ -115,244 +140,148 @@ const STATUS_OPTIONS: StatusOption[] = [
     value: "ready",
     label: "Đã xử lý",
     iconColor: "hsl(var(--success))",
-    bgClass: "bg-success/10",
     icon: CheckCircle2,
   },
   {
     value: "processing",
     label: "Đang xử lý",
     iconColor: "hsl(var(--info))",
-    bgClass: "bg-info/10",
     icon: Loader,
   },
   {
     value: "pending",
     label: "Chờ xử lý",
     iconColor: "hsl(var(--warning))",
-    bgClass: "bg-warning/10",
     icon: Clock3,
   },
   {
     value: "failed",
     label: "Lỗi",
     iconColor: "hsl(var(--error))",
-    bgClass: "bg-error/10",
     icon: AlertTriangle,
   },
 ];
 
-/** Filter tag definitions — wave-spectrum icon system */
-interface TagDef {
-  key: keyof TrackFilterParams;
-  label: string;
-  icon: React.ElementType;
-  iconColor: string;
-  bgClass: string;
-  getDisplayValue: (params: TrackFilterParams) => string | null;
+const LYRIC_TYPES = [
+  { value: "none", label: "Không có" },
+  { value: "plain", label: "Lời thường" },
+  { value: "synced", label: "Lời đồng bộ" },
+  { value: "karaoke", label: "Karaoke" },
+] as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEGMENTED CONTROL
+// ─────────────────────────────────────────────────────────────────────────────
+interface SegmentedProps<T extends string | number> {
+  options: readonly { label: string; value: T }[];
+  value: T | undefined;
+  onChange: (val: T) => void;
 }
 
-const TAG_DEFS: TagDef[] = [
-  {
-    key: "status",
-    label: "Trạng thái",
-    icon: LayoutGrid,
-    iconColor: "hsl(var(--info))",
-    bgClass: "bg-info/10",
-    getDisplayValue: (p) => {
-      if (!p.status) return null;
-      return (
-        STATUS_OPTIONS.find((o) => o.value === p.status)?.label ?? p.status
-      );
-    },
-  },
-  {
-    key: "artistId",
-    label: "Nghệ sĩ",
-    icon: Mic2,
-    iconColor: "hsl(var(--wave-1))",
-    bgClass: "bg-brand-100/60",
-    getDisplayValue: (p) => (p.artistId ? "Đã chọn" : null),
-  },
-  {
-    key: "albumId",
-    label: "Album",
-    icon: Disc,
-    iconColor: "hsl(var(--wave-4))",
-    bgClass: "bg-warning/10",
-    getDisplayValue: (p) => (p.albumId ? "Đã chọn" : null),
-  },
-  {
-    key: "genreId",
-    label: "Thể loại",
-    icon: Tag,
-    iconColor: "hsl(var(--wave-2))",
-    bgClass: "bg-pink-500/10",
-    getDisplayValue: (p) => (p.genreId ? "Đã chọn" : null),
-  },
-];
-
-const EXPAND_PANEL_ID = "track-filter-panel";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SEARCH INPUT — ambient focus glow + brand icon state
-// ─────────────────────────────────────────────────────────────────────────────
-const SearchInput = memo(
-  ({
-    value,
-    onChange,
-    onClear,
-  }: {
-    value: string;
-    onChange: (val: string) => void;
-    onClear: () => void;
-  }) => (
-    <div className="relative w-full group">
-      {/* Ambient glow on focus */}
-      <div
-        className={cn(
-          "absolute -inset-px rounded-xl pointer-events-none",
-          "bg-gradient-to-r from-brand-500/20 via-wave-1/15 to-wave-2/20",
-          "opacity-0 group-focus-within:opacity-100",
-          "transition-opacity duration-300 blur-sm",
-        )}
-        aria-hidden="true"
-      />
-
-      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-        <Search
-          className={cn(
-            "size-4 transition-colors duration-200",
-            value
-              ? "text-primary"
-              : "text-muted-foreground/50 group-focus-within:text-primary/70",
-          )}
-          aria-hidden="true"
-        />
-      </div>
-
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Tìm bài hát, ISRC, lời nhạc…"
-        autoComplete="off"
-        spellCheck={false}
-        aria-label="Tìm kiếm bài hát"
-        className={cn(
-          "h-11 pl-10 pr-10 text-sm",
-          "bg-background/60 dark:bg-surface-1/60",
-          "border-border/70 hover:border-border-strong",
-          "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
-          "rounded-xl backdrop-blur-sm",
-          "placeholder:text-muted-foreground/40",
-          "transition-all duration-200",
-        )}
-      />
-
-      {value && (
+const Segmented = memo(function Segmented<T extends string | number>({
+  options,
+  value,
+  onChange,
+}: SegmentedProps<T>) {
+  return (
+    <div
+      role="group"
+      className="flex gap-0.5 p-0.5 rounded-lg bg-muted/40 border border-border/50"
+    >
+      {options.map((opt) => (
         <button
+          key={String(opt.value)}
           type="button"
-          onClick={onClear}
-          aria-label="Xóa tìm kiếm"
+          onClick={() => onChange(opt.value)}
           className={cn(
-            "absolute right-3 top-1/2 -translate-y-1/2 z-10",
-            "p-1 rounded-full",
-            "text-muted-foreground/60 hover:text-foreground hover:bg-muted/70",
-            "transition-all duration-150",
+            "flex-1 h-8 px-3 rounded-md text-xs font-medium transition-all duration-150",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            value === opt.value
+              ? "bg-background text-foreground shadow-raised border border-border/60"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
           )}
         >
-          <X className="size-3.5" aria-hidden="true" />
+          {opt.label}
         </button>
-      )}
+      ))}
+    </div>
+  );
+}) as unknown as <T extends string | number>(
+  p: SegmentedProps<T>,
+) => React.ReactElement;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIELD WRAPPER — label + control
+// ─────────────────────────────────────────────────────────────────────────────
+const FilterField = memo(
+  ({
+    icon: Icon,
+    label,
+    iconColor,
+    children,
+    adminOnly,
+  }: {
+    icon: React.ElementType;
+    label: string;
+    iconColor?: string;
+    children: React.ReactNode;
+    adminOnly?: boolean;
+  }) => (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5">
+        <Icon
+          className="size-3 shrink-0"
+          style={iconColor ? { color: iconColor } : undefined}
+          aria-hidden="true"
+        />
+        <span className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
+          {label}
+        </span>
+        {adminOnly && (
+          <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-info/10 text-info border border-info/20">
+            ADMIN
+          </span>
+        )}
+      </div>
+      {children}
     </div>
   ),
 );
-SearchInput.displayName = "SearchInput";
+FilterField.displayName = "FilterField";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FILTER LABEL — .text-overline token + wave-spectrum icon color
+// ACTIVE FILTER TAG
 // ─────────────────────────────────────────────────────────────────────────────
-const FilterLabel = memo(
-  ({
-    icon: Icon,
-    text,
-    iconColor,
-  }: {
-    icon: React.ElementType;
-    text: string;
-    iconColor?: string;
-  }) => (
-    <label className="text-overline text-muted-foreground/60 flex items-center gap-1.5 ml-0.5 mb-1.5">
-      <Icon
-        className="size-3 shrink-0"
-        style={iconColor ? { color: iconColor } : undefined}
-        aria-hidden="true"
-      />
-      {text}
-    </label>
-  ),
-);
-FilterLabel.displayName = "FilterLabel";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ACTIVE FILTER TAG — isolated memo, colored icon-bubble pill
-// ─────────────────────────────────────────────────────────────────────────────
-interface ActiveFilterTagProps {
-  label: string;
-  displayValue: string;
-  icon: React.ElementType;
-  iconColor: string;
-  bgClass: string;
-  onRemove: () => void;
-}
-
 const ActiveFilterTag = memo(
   ({
     label,
-    displayValue,
+    value,
+    color,
     icon: Icon,
-    iconColor,
-    bgClass,
     onRemove,
-  }: ActiveFilterTagProps) => (
-    <div
-      className={cn(
-        "inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full",
-        "border border-border/60 bg-card/60 backdrop-blur-sm",
-        "shadow-raised hover:shadow-elevated",
-        "cursor-default transition-all duration-150",
-        "animate-fade-in",
-      )}
-    >
+  }: {
+    label: string;
+    value: string;
+    color: string;
+    icon: React.ElementType;
+    onRemove: () => void;
+  }) => (
+    <div className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full border border-border/60 bg-card/70 backdrop-blur-sm animate-fade-in">
       <span
-        className={cn(
-          "flex items-center justify-center size-4 rounded-full shrink-0",
-          bgClass,
-        )}
+        className="flex items-center justify-center size-4 rounded-full shrink-0"
+        style={{ background: `${color}18` }}
       >
-        <Icon
-          className="size-2.5"
-          style={{ color: iconColor }}
-          aria-hidden="true"
-        />
+        <Icon className="size-2.5" style={{ color }} aria-hidden="true" />
       </span>
-      <span className="text-[10px] text-muted-foreground font-medium">
-        {label}:
-      </span>
-      <span className="text-[10px] font-semibold text-foreground capitalize">
-        {displayValue}
+      <span className="text-[10px] text-muted-foreground">{label}:</span>
+      <span className="text-[10px] font-semibold text-foreground max-w-[100px] truncate capitalize">
+        {value}
       </span>
       <button
         type="button"
         onClick={onRemove}
-        aria-label={`Xóa bộ lọc ${label}`}
-        className={cn(
-          "ml-0.5 p-0.5 rounded-full shrink-0",
-          "text-muted-foreground/50",
-          "hover:text-destructive hover:bg-destructive/10",
-          "transition-colors duration-150",
-          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40",
-        )}
+        aria-label={`Xóa filter ${label}`}
+        className="ml-0.5 p-0.5 rounded-full text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40"
       >
         <X className="size-2.5" aria-hidden="true" />
       </button>
@@ -362,165 +291,21 @@ const ActiveFilterTag = memo(
 ActiveFilterTag.displayName = "ActiveFilterTag";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTIVE TAGS BAR — divider-glow accent + Sparkles eyebrow
+// SELECTOR FALLBACK
 // ─────────────────────────────────────────────────────────────────────────────
-const ActiveTagsBar = memo(
-  ({
-    params,
-    activeCount,
-    onRemoveFilter,
-    onReset,
-  }: {
-    params: TrackFilterParams;
-    activeCount: number;
-    onRemoveFilter: (key: keyof TrackFilterParams) => void;
-    onReset: () => void;
-  }) => {
-    if (activeCount === 0) return null;
-
-    return (
-      <div
-        className={cn(
-          "relative px-4 py-3",
-          "border-t border-border/50 bg-muted/10 backdrop-blur-sm",
-          "flex flex-wrap items-center gap-2",
-          "animate-fade-down",
-          "rounded-b-2xl",
-        )}
-      >
-        {/* Divider-glow accent */}
-        <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Sparkles className="size-3 text-primary/60" aria-hidden="true" />
-          <span className="text-overline text-muted-foreground/50">
-            Đang lọc:
-          </span>
-        </div>
-
-        {TAG_DEFS.map((def) => {
-          const displayValue = def.getDisplayValue(params);
-          if (!displayValue) return null;
-
-          // Override icon for status — show contextual status icon
-          let icon = def.icon;
-          let iconColor = def.iconColor;
-          let bgClass = def.bgClass;
-
-          if (def.key === "status" && params.status) {
-            const statusOpt = STATUS_OPTIONS.find(
-              (o) => o.value === params.status,
-            );
-            if (statusOpt) {
-              icon = statusOpt.icon;
-              iconColor = statusOpt.iconColor;
-              bgClass = statusOpt.bgClass;
-            }
-          }
-
-          return (
-            <ActiveFilterTag
-              key={String(def.key)}
-              label={def.label}
-              displayValue={displayValue}
-              icon={icon}
-              iconColor={iconColor}
-              bgClass={bgClass}
-              onRemove={() => onRemoveFilter(def.key)}
-            />
-          );
-        })}
-
-        <button
-          type="button"
-          onClick={onReset}
-          aria-label="Xóa tất cả bộ lọc"
-          className="btn-danger btn-sm ml-auto h-7 px-3 gap-1.5 text-[11px]"
-        >
-          <Trash2 className="size-3" aria-hidden="true" />
-          Xóa bộ lọc
-        </button>
-      </div>
-    );
-  },
+const SelectorFallback = () => (
+  <div className="p-3">
+    <WaveformLoader />
+  </div>
 );
-ActiveTagsBar.displayName = "ActiveTagsBar";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FILTER TOGGLE BUTTON — gradient-brand counter, shadow-brand active
-// ─────────────────────────────────────────────────────────────────────────────
-const FilterToggleButton = memo(
-  ({
-    isExpanded,
-    activeCount,
-    onClick,
-    panelId,
-  }: {
-    isExpanded: boolean;
-    activeCount: number;
-    onClick: () => void;
-    panelId: string;
-  }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-expanded={isExpanded}
-      aria-controls={panelId}
-      className={cn(
-        "h-11 px-4 gap-2",
-        "inline-flex items-center justify-between shrink-0",
-        "rounded-xl border text-sm font-medium",
-        "transition-all duration-200",
-        "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
-        isExpanded
-          ? [
-              "border-primary/40 bg-primary/10 text-primary",
-              "hover:bg-primary/15 shadow-brand",
-            ]
-          : [
-              "border-border/70 bg-background/60 dark:bg-surface-1/60 text-foreground",
-              "hover:bg-accent/50 hover:border-border-strong shadow-raised backdrop-blur-sm",
-            ],
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="hidden sm:block">Filters</span>
-      </div>
-
-      <div className="flex items-center gap-1.5 ml-1">
-        {activeCount > 0 && (
-          <span
-            className={cn(
-              "flex h-5 min-w-5 px-1 items-center justify-center",
-              "rounded-full text-[10px] font-black text-white",
-              "gradient-brand shadow-glow-xs",
-            )}
-            aria-label={`${activeCount} bộ lọc đang hoạt động`}
-          >
-            {activeCount}
-          </span>
-        )}
-        <ChevronDown
-          className={cn(
-            "size-3.5 text-muted-foreground/60",
-            "transition-transform duration-200",
-            isExpanded && "rotate-180",
-          )}
-          aria-hidden="true"
-        />
-      </div>
-    </button>
-  ),
-);
-FilterToggleButton.displayName = "FilterToggleButton";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TRACK FILTERS — main component
+// TRACK FILTERS — MAIN
 // ─────────────────────────────────────────────────────────────────────────────
 export const TrackFilters = memo<TrackFiltersProps>(
   ({
     params,
+    isAdmin = false,
     onSearch,
     onFilterChange,
     onReset,
@@ -529,40 +314,35 @@ export const TrackFilters = memo<TrackFiltersProps>(
   }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [panelOverflow, setPanelOverflow] = useState(false);
+    const { user } = useAppSelector((s) => s.auth);
+    const showAdminFields = isAdmin && user?.role === "admin";
 
-    // ── Search debounce ─────────────────────────────────────────────────────
+    // ── Search debounce ──────────────────────────────────────────────────────
     const [localSearch, setLocalSearch] = useState(params.keyword || "");
     const debouncedSearch = useDebounce(localSearch, 400);
+    const isClearingRef = useRef(false);
 
-    // One-way sync: URL → input only (localSearch excluded from deps to prevent loop)
+    // One-way sync: URL → input
     useEffect(() => {
       if ((params.keyword || "") === localSearch) return;
       setLocalSearch(params.keyword || "");
     }, [params.keyword]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Flush debounced value to parent
     useEffect(() => {
-      if (debouncedSearch !== (params.keyword || "")) {
-        onSearch(debouncedSearch);
+      if (isClearingRef.current) {
+        isClearingRef.current = false;
+        return;
       }
+      if (debouncedSearch !== (params.keyword || "")) onSearch(debouncedSearch);
     }, [debouncedSearch, params.keyword, onSearch]);
 
-    /**
-     * BUG FIX: Original relied on debounce to clear search after 400ms.
-     * This causes visible 400ms delay on X button press — jarring UX.
-     * Bypassing debounce on explicit user clear is the correct behavior.
-     */
     const handleClearSearch = useCallback(() => {
+      isClearingRef.current = true;
       setLocalSearch("");
       onSearch("");
     }, [onSearch]);
 
-    // ── Panel expand — transitionend-based overflow (replaces setTimeout hack) ──
-    /**
-     * BUG FIX: Original used setTimeout(300ms) to enable overflow after animation.
-     * If user closes panel before 300ms, overflow leaks. transitionend is
-     * event-driven and fires precisely when the CSS transition completes.
-     */
+    // ── Panel expand — grid-template-rows transition ─────────────────────────
     const gridRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -570,9 +350,8 @@ export const TrackFilters = memo<TrackFiltersProps>(
       if (!el) return;
       if (isExpanded) {
         const onEnd = (e: TransitionEvent) => {
-          if (e.target === el && e.propertyName === "grid-template-rows") {
+          if (e.target === el && e.propertyName === "grid-template-rows")
             setPanelOverflow(true);
-          }
         };
         el.addEventListener("transitionend", onEnd);
         return () => el.removeEventListener("transitionend", onEnd);
@@ -581,141 +360,323 @@ export const TrackFilters = memo<TrackFiltersProps>(
       }
     }, [isExpanded]);
 
-    // ── Active count — granular deps (sort/keyword changes are no-ops) ────────
-    const activeFiltersCount = useMemo(() => {
+    const toggleExpanded = useCallback(() => setIsExpanded((v) => !v), []);
+
+    // ── Active count ─────────────────────────────────────────────────────────
+    const activeCount = useMemo(() => {
       let n = 0;
       if (params.status) n++;
       if (params.artistId) n++;
       if (params.albumId) n++;
       if (params.genreId) n++;
+      if (params.lyricType) n++;
+      if (params.isPublic !== undefined) n++;
+      if (params.isDeleted !== undefined) n++;
+      if (params.moodVideoId !== undefined) n++;
+      if (params.limit && params.limit !== APP_CONFIG.PAGINATION_LIMIT) n++;
+      if (params.page && params.page > 1) n++;
       return n;
-    }, [params.status, params.artistId, params.albumId, params.genreId]);
+    }, [params]);
 
-    /**
-     * BUG FIX: sends null not undefined.
-     * undefined serializes as the string "undefined" in some URL param
-     * implementations. null is the explicit "remove this filter" sentinel.
-     */
+    // ── Stable handlers ──────────────────────────────────────────────────────
     const removeFilter = useCallback(
       (key: keyof TrackFilterParams) => onFilterChange(key, null),
       [onFilterChange],
     );
 
-    const toggleExpanded = useCallback(() => setIsExpanded((v) => !v), []);
+    const handleSortChange = useCallback(
+      (val: string) => onFilterChange("sort", val as TrackFilterParams["sort"]),
+      [onFilterChange],
+    );
+
+    const handleStatusChange = useCallback(
+      (val: string) =>
+        onFilterChange(
+          "status",
+          val === "all" ? null : (val as TrackFilterParams["status"]),
+        ),
+      [onFilterChange],
+    );
+
+    const handleArtistChange = useCallback(
+      (ids: string[]) => onFilterChange("artistId", ids[0] ?? null),
+      [onFilterChange],
+    );
+
+    const handleAlbumChange = useCallback(
+      (id: string) => onFilterChange("albumId", id || null),
+      [onFilterChange],
+    );
+
+    const handleGenreChange = useCallback(
+      (val: string | null | undefined) =>
+        onFilterChange("genreId", val ?? null),
+      [onFilterChange],
+    );
+    const handleMoodVideoChange = useCallback(
+      (val: string | null | undefined) =>
+        onFilterChange("moodVideoId", val ?? null),
+      [onFilterChange],
+    );
+
+    const handleLyricTypeChange = useCallback(
+      (val: string) =>
+        onFilterChange(
+          "lyricType",
+          val === "all" ? null : (val as TrackFilterParams["lyricType"]),
+        ),
+      [onFilterChange],
+    );
+
+    const handleIsPublicChange = useCallback(
+      (val: string) =>
+        onFilterChange("isPublic", val === "" ? null : val === "true"),
+      [onFilterChange],
+    );
+
+    const handleIsDeletedChange = useCallback(
+      (val: string) =>
+        onFilterChange("isDeleted", val === "" ? null : val === "true"),
+      [onFilterChange],
+    );
+
+    const handleLimitChange = useCallback(
+      (val: number) => onFilterChange("limit", val),
+      [onFilterChange],
+    );
+
+    const handlePageChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const v = Math.max(1, parseInt(e.target.value, 10) || 1);
+        onFilterChange("page", v);
+      },
+      [onFilterChange],
+    );
+
+    // ── Active tags build ────────────────────────────────────────────────────
+    const activeTags = useMemo(() => {
+      const tags: { key: keyof TrackFilterParams; displayValue: string }[] = [];
+
+      if (params.status) {
+        const opt = STATUS_OPTIONS.find((o) => o.value === params.status);
+        tags.push({ key: "status", displayValue: opt?.label ?? params.status });
+      }
+      if (params.artistId) {
+        tags.push({ key: "artistId", displayValue: "Đã chọn" });
+      }
+      if (params.albumId) {
+        tags.push({ key: "albumId", displayValue: "Đã chọn" });
+      }
+      if (params.genreId) {
+        tags.push({ key: "genreId", displayValue: "Đã chọn" });
+      }
+      if (params.lyricType) {
+        const lt = LYRIC_TYPES.find((l) => l.value === params.lyricType);
+        tags.push({
+          key: "lyricType",
+          displayValue: lt?.label ?? params.lyricType,
+        });
+      }
+      if (params.isPublic !== undefined) {
+        tags.push({
+          key: "isPublic",
+          displayValue: params.isPublic ? "Công khai" : "Riêng tư",
+        });
+      }
+      if (params.isDeleted !== undefined) {
+        tags.push({
+          key: "isDeleted",
+          displayValue: params.isDeleted ? "Đã xóa" : "Chưa xóa",
+        });
+      }
+      if (params.moodVideoId) {
+        tags.push({ key: "moodVideoId", displayValue: "Đã chọn" });
+      }
+      if (params.limit && params.limit !== APP_CONFIG.PAGINATION_LIMIT) {
+        tags.push({ key: "limit", displayValue: `${params.limit} / trang` });
+      }
+      if (params.page && params.page > 1) {
+        tags.push({ key: "page", displayValue: `Trang ${params.page}` });
+      }
+      return tags;
+    }, [params]);
+
+    // ── Segmented option sets ────────────────────────────────────────────────
+    const boolAllOptions = [
+      { label: "Tất cả", value: "" },
+      { label: "Có", value: "true" },
+      { label: "Không", value: "false" },
+    ] as const;
 
     return (
-      <div className={cn("w-full mb-8", className)}>
+      <div className={cn("w-full", className)}>
         <div
           className={cn(
-            "relative overflow-hidden",
-            "rounded-2xl border border-border/60",
-            "bg-card/50 dark:bg-surface-1/50 backdrop-blur-md",
-            "transition-shadow duration-300 hover:shadow-elevated",
-            activeFiltersCount > 0 && "border-primary/20 shadow-brand",
+            "relative overflow-hidden rounded-2xl",
+            "bg-card/50 dark:bg-surface-1/20 backdrop-blur-md",
+            "border transition-all duration-300",
+            activeCount > 0
+              ? "border-primary/30 shadow-brand"
+              : "border-border/50 hover:border-border hover:shadow-elevated",
           )}
         >
-          {/* Top accent line when filters active */}
-          {activeFiltersCount > 0 && (
-            <div className="absolute inset-x-0 top-0 h-px gradient-wave opacity-60" />
-          )}
-
-          {/* ── TOP ROW ── */}
-          <div className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          {/* ── TOP ROW ─────────────────────────────────────────────────── */}
+          <div className="flex items-center gap-2.5 p-3">
             {/* Search */}
-            <div className="flex-1 min-w-0">
-              <SearchInput
+            <div className="relative flex-1 min-w-0 group">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                <Search
+                  className={cn(
+                    "size-3.5 transition-colors duration-200",
+                    localSearch
+                      ? "text-primary"
+                      : "text-muted-foreground/40 group-focus-within:text-primary/60",
+                  )}
+                  aria-hidden="true"
+                />
+              </div>
+              <Input
                 value={localSearch}
-                onChange={setLocalSearch}
-                onClear={handleClearSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
+                placeholder="Tìm bài hát, ISRC, lời nhạc…"
+                aria-label="Search tracks"
+                autoComplete="off"
+                spellCheck={false}
+                className={cn(
+                  "h-10 pl-9 pr-9 text-sm rounded-xl",
+                  "bg-background/60 border-border/60",
+                  "hover:border-border focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20",
+                  "transition-all duration-200",
+                )}
               />
+              {localSearch && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  aria-label="Clear search"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-all"
+                >
+                  <X className="size-3" aria-hidden="true" />
+                </button>
+              )}
             </div>
 
-            {/* Sort + Toggle */}
-            <div className="flex items-center gap-2.5 shrink-0">
-              <Select
-                value={(params.sort || "newest").toLowerCase()}
-                onValueChange={(val) => onFilterChange("sort", val)}
-              >
-                <SelectTrigger
-                  className={cn(
-                    "h-11 w-[148px]",
-                    "bg-background/60 dark:bg-surface-1/60 backdrop-blur-sm",
-                    "border-border/70 hover:border-border-strong",
-                    "rounded-xl text-sm shadow-raised transition-all duration-150",
-                  )}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <ListFilter
-                      className="size-3.5 text-muted-foreground/50 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <span className="text-overline text-muted-foreground/50 hidden md:block">
-                      Sắp xếp:
-                    </span>
-                    <SelectValue />
-                  </div>
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {SORT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Separator
+              orientation="vertical"
+              className="h-5 opacity-50 hidden sm:block"
+            />
 
-              <Separator
-                orientation="vertical"
-                className="h-6 hidden sm:block opacity-50"
+            {/* Sort */}
+            <Select
+              value={params.sort || "newest"}
+              onValueChange={handleSortChange}
+            >
+              <SelectTrigger
+                className={cn(
+                  "h-10 w-auto min-w-[46px] sm:min-w-[160px] rounded-xl",
+                  "bg-background/60 border-border/60 text-sm",
+                  "hover:border-border transition-all",
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown
+                    className="size-3.5 text-muted-foreground/50 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="hidden sm:block">
+                    <SelectValue />
+                  </span>
+                </div>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {SORT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Separator
+              orientation="vertical"
+              className="h-5 opacity-50 hidden sm:block"
+            />
+
+            {/* Filter toggle */}
+            <button
+              type="button"
+              onClick={toggleExpanded}
+              aria-expanded={isExpanded}
+              aria-controls={EXPAND_PANEL_ID}
+              className={cn(
+                "h-10 px-3.5 gap-2 inline-flex items-center rounded-xl border text-sm font-medium shrink-0",
+                "transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                isExpanded
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border/60 bg-background/60 text-foreground hover:bg-accent/40 hover:border-border",
+              )}
+            >
+              <SlidersHorizontal
+                className="size-3.5 shrink-0"
                 aria-hidden="true"
               />
-
-              <FilterToggleButton
-                isExpanded={isExpanded}
-                activeCount={activeFiltersCount}
-                onClick={toggleExpanded}
-                panelId={EXPAND_PANEL_ID}
+              <span className="hidden sm:block">Bộ lọc</span>
+              {activeCount > 0 && (
+                <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full text-[10px] font-black text-white bg-primary shadow-glow-xs">
+                  {activeCount}
+                </span>
+              )}
+              <ChevronDown
+                className={cn(
+                  "size-3.5 text-muted-foreground/50 transition-transform duration-200",
+                  isExpanded && "rotate-180",
+                )}
+                aria-hidden="true"
               />
-            </div>
+            </button>
           </div>
 
-          {/* ── EXPANDABLE FILTER PANEL ── */}
+          {/* ── EXPANDABLE PANEL ─────────────────────────────────────────── */}
           <div
             ref={gridRef}
             id={EXPAND_PANEL_ID}
             role="region"
-            aria-label="Tùy chọn lọc bài hát"
+            aria-label="Track filter options"
             className={cn(
               "grid transition-[grid-template-rows] duration-300 ease-in-out",
               "border-t border-transparent",
               isExpanded
-                ? "grid-rows-[1fr] border-border/50"
+                ? "grid-rows-[1fr] border-border/40"
                 : "grid-rows-[0fr]",
             )}
           >
             <div
               className={cn(
-                "bg-muted/10",
+                "bg-muted/5",
                 panelOverflow ? "overflow-visible" : "overflow-hidden",
               )}
             >
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Status */}
+              <div
+                className={cn(
+                  "p-4 grid gap-4",
+                  showAdminFields
+                    ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                    : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+                )}
+              >
+                {/* ── 1. status (user + admin, unless hideStatus) */}
                 {!hideStatus && (
-                  <div className="space-y-0">
-                    <FilterLabel
-                      icon={LayoutGrid}
-                      text="Trạng thái"
-                      iconColor="hsl(var(--info))"
-                    />
+                  <FilterField
+                    icon={CheckCircle2}
+                    label="Trạng thái"
+                    iconColor="hsl(var(--info))"
+                  >
                     <Select
                       value={params.status || "all"}
-                      onValueChange={(val) =>
-                        onFilterChange("status", val === "all" ? null : val)
-                      }
+                      onValueChange={handleStatusChange}
                     >
-                      <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue placeholder="Tất cả trạng thái" />
+                      <SelectTrigger className="h-9 w-full bg-background/80 text-sm rounded-lg border-border/60 focus:ring-1 focus:ring-primary/30">
+                        <SelectValue placeholder="Tất cả" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Tất cả trạng thái</SelectItem>
@@ -733,123 +694,276 @@ export const TrackFilters = memo<TrackFiltersProps>(
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </FilterField>
                 )}
 
-                {/* Artist */}
-                <div className="space-y-0">
-                  <FilterLabel
-                    icon={Mic2}
-                    text="Nghệ sĩ"
-                    iconColor="hsl(var(--wave-1))"
-                  />
+                {/* ── 2. artistId (user + admin) */}
+                <FilterField
+                  icon={Mic2}
+                  label="Nghệ sĩ"
+                  iconColor="hsl(var(--wave-1))"
+                >
                   <FilterDropdown
                     isActive={!!params.artistId}
                     onClear={() => onFilterChange("artistId", null)}
                     label={
-                      <span className="truncate">
+                      <span className="truncate text-sm font-normal">
                         {params.artistId ? "Nghệ sĩ đã chọn" : "Tìm nghệ sĩ"}
                       </span>
                     }
-                    contentClassName="w-[300px]"
+                    contentClassName="w-[300px] max-w-[90vw]"
                     className={cn(
-                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
-                      "justify-start shadow-raised rounded-lg border-border/70",
-                      "focus:ring-1 focus:ring-primary/30",
-                      params.artistId && "border-brand-300/50 text-foreground",
+                      "w-full h-9 text-sm font-normal px-3 justify-start rounded-lg border-border/60",
+                      "bg-background/80 shadow-raised transition-all",
+                      "hover:border-border focus:ring-1 focus:ring-primary/30",
+                      params.artistId && "border-brand-300/50",
                     )}
                   >
                     <div className="p-1">
-                      <ArtistSelector
-                        singleSelect
-                        value={params.artistId ? [params.artistId] : []}
-                        onChange={(ids) =>
-                          onFilterChange("artistId", ids[0] ?? null)
-                        }
-                      />
+                      <Suspense fallback={<SelectorFallback />}>
+                        <ArtistSelector
+                          singleSelect
+                          value={params.artistId ? [params.artistId] : []}
+                          onChange={handleArtistChange}
+                        />
+                      </Suspense>
                     </div>
                   </FilterDropdown>
-                </div>
+                </FilterField>
 
-                {/* Album */}
-                <div className="space-y-0">
-                  <FilterLabel
-                    icon={Disc}
-                    text="Album"
-                    iconColor="hsl(var(--wave-4))"
-                  />
+                {/* ── 3. albumId (user + admin) */}
+                <FilterField
+                  icon={Disc}
+                  label="Album"
+                  iconColor="hsl(var(--wave-4))"
+                >
                   <FilterDropdown
                     isActive={!!params.albumId}
                     onClear={() => onFilterChange("albumId", null)}
                     label={
-                      <span className="truncate">
-                        {params.albumId ? "Album đã chọn" : "Tìm Album"}
+                      <span className="truncate text-sm font-normal">
+                        {params.albumId ? "Album đã chọn" : "Tìm album"}
                       </span>
                     }
-                    contentClassName="w-[300px]"
+                    contentClassName="w-[300px] max-w-[90vw]"
                     className={cn(
-                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
-                      "justify-start shadow-raised rounded-lg border-border/70",
-                      "focus:ring-1 focus:ring-primary/30",
-                      params.albumId && "border-warning/40 text-foreground",
+                      "w-full h-9 text-sm font-normal px-3 justify-start rounded-lg border-border/60",
+                      "bg-background/80 shadow-raised transition-all",
+                      "hover:border-border focus:ring-1 focus:ring-primary/30",
+                      params.albumId && "border-warning/40",
                     )}
                   >
                     <div className="p-1">
-                      <AlbumSelector
-                        value={params.albumId || ""}
-                        onChange={(id) => onFilterChange("albumId", id || null)}
-                      />
+                      <Suspense fallback={<SelectorFallback />}>
+                        <AlbumSelector
+                          value={params.albumId || ""}
+                          onChange={handleAlbumChange}
+                        />
+                      </Suspense>
                     </div>
                   </FilterDropdown>
-                </div>
+                </FilterField>
 
-                {/* Genre */}
-                <div className="space-y-0">
-                  <FilterLabel
-                    icon={Tag}
-                    text="Thể loại"
-                    iconColor="hsl(var(--wave-2))"
-                  />
+                {/* ── 4. genreId (user + admin) */}
+                <FilterField
+                  icon={Tag}
+                  label="Thể loại"
+                  iconColor="hsl(var(--wave-2))"
+                >
                   <FilterDropdown
                     isActive={!!params.genreId}
                     onClear={() => onFilterChange("genreId", null)}
                     label={
-                      <span className="truncate">
+                      <span className="truncate text-sm font-normal">
                         {params.genreId ? "Thể loại đã chọn" : "Tìm thể loại"}
                       </span>
                     }
-                    contentClassName="w-[300px]"
+                    contentClassName="w-[280px] max-w-[90vw]"
                     className={cn(
-                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
-                      "justify-start shadow-raised rounded-lg border-border/70",
-                      "focus:ring-1 focus:ring-primary/30",
-                      params.genreId && "border-pink-500/40 text-foreground",
+                      "w-full h-9 text-sm font-normal px-3 justify-start rounded-lg border-border/60",
+                      "bg-background/80 shadow-raised transition-all",
+                      "hover:border-border focus:ring-1 focus:ring-primary/30",
+                      params.genreId && "border-pink-500/40",
                     )}
                   >
                     <div className="p-1">
-                      <GenreSelector
-                        variant="filter"
-                        singleSelect
-                        value={params.genreId}
-                        onChange={(val) => onFilterChange("genreId", val)}
-                        placeholder="Tìm kiếm thể loại…"
-                      />
+                      <Suspense fallback={<SelectorFallback />}>
+                        <GenreSelector
+                          variant="filter"
+                          singleSelect
+                          value={params.genreId}
+                          onChange={handleGenreChange}
+                          placeholder="Tìm kiếm thể loại…"
+                        />
+                      </Suspense>
                     </div>
                   </FilterDropdown>
-                </div>
+                </FilterField>
+                {/* ── 8. moodVideoId (user + admin) */}
+                <FilterField
+                  icon={Tag}
+                  label="Mood Video"
+                  iconColor="hsl(var(--wave-2))"
+                >
+                  <div className="p-1">
+                    <Suspense fallback={<SelectorFallback />}>
+                      <MoodVideoPicker
+                        value={params.moodVideoId || ""}
+                        onChange={handleMoodVideoChange}
+                        variant="filter"
+                        placeholder="Lọc theo video..."
+                      />
+                    </Suspense>
+                  </div>
+                </FilterField>
+
+                {/* ── 5. lyricType (user + admin) */}
+                <FilterField
+                  icon={FileText}
+                  label="Lời nhạc"
+                  iconColor="#D85A30"
+                >
+                  <Select
+                    value={params.lyricType || "all"}
+                    onValueChange={handleLyricTypeChange}
+                  >
+                    <SelectTrigger className="h-9 w-full bg-background/80 text-sm rounded-lg border-border/60 focus:ring-1 focus:ring-primary/30">
+                      <SelectValue placeholder="Tất cả" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả</SelectItem>
+                      {LYRIC_TYPES.map((lt) => (
+                        <SelectItem key={lt.value} value={lt.value}>
+                          {lt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FilterField>
+
+                {/* ── 6. limit */}
+                <FilterField icon={LayoutGrid} label="Kết quả / trang">
+                  <Segmented
+                    options={LIMIT_OPTIONS}
+                    value={params.limit ?? (APP_CONFIG.VIRTUALIZER_LIMIT || 50)}
+                    onChange={handleLimitChange}
+                  />
+                </FilterField>
+
+                {/* ── 7. page */}
+                <FilterField icon={BookOpen} label="Trang">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={params.page ?? 1}
+                      onChange={handlePageChange}
+                      aria-label="Page number"
+                      className={cn(
+                        "w-20 h-9 px-3 text-sm text-center rounded-lg",
+                        "border border-border/60 bg-background/80",
+                        "focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20",
+                        "transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                      )}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      / trang
+                    </span>
+                  </div>
+                </FilterField>
+
+                {/* ── 8. isPublic — admin only */}
+                {showAdminFields && (
+                  <FilterField
+                    icon={Eye}
+                    label="Công khai"
+                    iconColor="#378ADD"
+                    adminOnly
+                  >
+                    <Segmented
+                      options={boolAllOptions}
+                      value={
+                        params.isPublic === undefined
+                          ? ""
+                          : String(params.isPublic)
+                      }
+                      onChange={handleIsPublicChange}
+                    />
+                  </FilterField>
+                )}
+
+                {/* ── 9. isDeleted — admin only */}
+                {showAdminFields && (
+                  <FilterField
+                    icon={Trash2}
+                    label="isDeleted"
+                    iconColor="#E24B4A"
+                    adminOnly
+                  >
+                    <Segmented
+                      options={boolAllOptions}
+                      value={
+                        params.isDeleted === undefined
+                          ? ""
+                          : String(params.isDeleted)
+                      }
+                      onChange={handleIsDeletedChange}
+                    />
+                  </FilterField>
+                )}
               </div>
             </div>
           </div>
 
-          {/* ── ACTIVE TAGS BAR ── */}
-          <div className="relative">
-            <ActiveTagsBar
-              params={params}
-              activeCount={activeFiltersCount}
-              onRemoveFilter={removeFilter}
-              onReset={onReset}
-            />
-          </div>
+          {/* ── ACTIVE TAGS BAR ─────────────────────────────────────────── */}
+          {activeCount > 0 && (
+            <div className="relative flex flex-wrap items-center gap-2 px-4 py-2.5 border-t border-border/40 bg-muted/5 backdrop-blur-sm">
+              <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+
+              <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider shrink-0">
+                Đang lọc:
+              </span>
+
+              {activeTags.map(({ key, displayValue }) => {
+                const def = TAG_DEFS[key as keyof typeof TAG_DEFS];
+                if (!def) return null;
+
+                // Override status icon to contextual icon
+                let icon: React.ElementType = def.icon;
+                let color: string = def.color;
+                if (key === "status" && params.status) {
+                  const opt = STATUS_OPTIONS.find(
+                    (o) => o.value === params.status,
+                  );
+                  if (opt) {
+                    icon = opt.icon;
+                    color = opt.iconColor;
+                  }
+                }
+
+                return (
+                  <ActiveFilterTag
+                    key={key}
+                    label={def.label}
+                    value={displayValue}
+                    color={color}
+                    icon={icon}
+                    onRemove={() => removeFilter(key)}
+                  />
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={onReset}
+                aria-label="Clear all filters"
+                className="ml-auto h-7 px-3 gap-1.5 inline-flex items-center text-[11px] font-medium rounded-full border border-border/50 text-muted-foreground hover:text-destructive hover:border-destructive/30 hover:bg-destructive/5 transition-all"
+              >
+                <Trash2 className="size-3" aria-hidden="true" />
+                Xóa bộ lọc
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

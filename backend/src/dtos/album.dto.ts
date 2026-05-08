@@ -1,14 +1,14 @@
 import { z } from "zod";
 import {
   createAlbumSchema,
+  getAlbumsByUserSchema,
   updateAlbumSchema,
-  getAlbumsSchema,
 } from "../validations/album.validation";
 
 // Input DTOs
 export type CreateAlbumDTO = z.infer<typeof createAlbumSchema>["body"];
 export type UpdateAlbumDTO = z.infer<typeof updateAlbumSchema>["body"];
-export type AlbumFilterDTO = z.infer<typeof getAlbumsSchema>["query"];
+export type AlbumFilterDTO = z.infer<typeof getAlbumsByUserSchema>["query"];
 
 // Response DTO
 export interface AlbumResponseDTO {

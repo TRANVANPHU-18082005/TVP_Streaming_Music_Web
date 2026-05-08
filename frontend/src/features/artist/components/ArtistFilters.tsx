@@ -1,9 +1,13 @@
+"use client";
+
 import React, {
   useState,
   useEffect,
   useMemo,
   useCallback,
   useRef,
+  lazy,
+  Suspense,
   memo,
 } from "react";
 import {
@@ -17,14 +21,10 @@ import {
   Trash2,
   UserCheck,
   UserX,
-  ListFilter,
-  Sparkles,
+  ArrowUpDown,
+  User,
 } from "lucide-react";
-
-import { useDebounce } from "@/hooks/useDebounce";
 import { Input } from "@/components/ui/input";
-import FilterDropdown from "@/components/ui/FilterDropdown";
-import { NationalitySelector } from "@/components/ui/NationalitySelector";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -34,18 +34,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useDebounce } from "@/hooks/useDebounce";
+import FilterDropdown from "@/components/ui/FilterDropdown";
 import { useAppSelector } from "@/store/hooks";
-import { ArtistFilterParams } from "../schemas/artist.schema";
+import { ArtistAdminFilterParams } from "../schemas/artist.schema";
 
+const NationalitySelector = lazy(() =>
+  import("@/components/ui/NationalitySelector").then((m) => ({
+    default: m.NationalitySelector,
+  })),
+);
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArtistFiltersProps {
-  params: ArtistFilterParams;
+  params: ArtistAdminFilterParams;
+  isAdmin?: boolean;
   onSearch: (keyword: string) => void;
   onFilterChange: (
-    key: keyof ArtistFilterParams,
-    value: ArtistFilterParams[keyof ArtistFilterParams] | null,
+    key: keyof ArtistAdminFilterParams,
+    value: ArtistAdminFilterParams[keyof ArtistAdminFilterParams] | null,
   ) => void;
   onReset: () => void;
 }
@@ -54,399 +62,180 @@ interface ArtistFiltersProps {
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 const SORT_OPTIONS = [
-  { label: "Mới nhất", value: "newest" },
   { label: "Phổ biến", value: "popular" },
-  { label: "Người theo dõi", value: "followers" },
-  { label: "A – Z", value: "name" },
+  { label: "Mới nhất", value: "newest" },
+  { label: "Cũ nhất", value: "oldest" },
+  { label: "Tên (A–Z)", value: "name" },
+  { label: "Người nghe hàng tháng", value: "monthlyListeners" },
 ] as const;
 
 const EXPAND_PANEL_ID = "artist-filter-panel";
 
+// Tag meta — mỗi filter key có màu + icon riêng
+const TAG_DEFS = {
+  nationality: { label: "Quốc gia", icon: Globe, color: "#378ADD" },
+  isVerified: { label: "Xác minh", icon: ShieldCheck, color: "#1D9E75" },
+  isActive: { label: "Trạng thái", icon: UserCheck, color: "#1D9E75" },
+  isDeleted: { label: "Đã xóa", icon: Trash2, color: "#E24B4A" },
+} as const;
+
 // ─────────────────────────────────────────────────────────────────────────────
-// TAG DEFINITIONS — wave-color icon system (dark-mode adaptive CSS tokens)
-// bgClass drives the colored mini icon-bubble per chip
+// SEGMENTED CONTROL
 // ─────────────────────────────────────────────────────────────────────────────
-interface TagDef {
-  key: keyof ArtistFilterParams;
-  label: string;
-  iconColor: string;
-  bgClass: string;
-  getValue: (params: ArtistFilterParams) => string | null;
-  getIcon: (params: ArtistFilterParams) => React.ElementType;
+interface SegmentedProps<T extends string | number> {
+  options: readonly { label: string; value: T }[];
+  value: T;
+  onChange: (val: T) => void;
 }
 
-const ARTIST_TAG_DEFS: TagDef[] = [
-  {
-    key: "nationality",
-    label: "Quốc gia",
-    iconColor: "hsl(var(--info))",
-    bgClass: "bg-info/10",
-    getValue: (p) => p.nationality ?? null,
-    getIcon: () => Globe,
-  },
-
-  {
-    key: "isVerified",
-    label: "Xác minh",
-    iconColor: "hsl(var(--success))",
-    bgClass: "bg-success/10",
-    getValue: (p) => (p.isVerified !== undefined ? "Chỉ đã xác minh" : null),
-    getIcon: () => ShieldCheck,
-  },
-  {
-    key: "isActive",
-    label: "Trạng thái",
-    iconColor: "hsl(var(--success))",
-    bgClass: "bg-success/10",
-    getValue: (p) =>
-      p.isActive !== undefined ? (p.isActive ? "Hoạt động" : "Bị khóa") : null,
-    getIcon: (p) => (p.isActive ? UserCheck : UserX),
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SEARCH INPUT — premium with animated focus glow ring
-// ─────────────────────────────────────────────────────────────────────────────
-const SearchInput = memo(
-  ({
-    value,
-    onChange,
-    onClear,
-  }: {
-    value: string;
-    onChange: (val: string) => void;
-    onClear: () => void;
-  }) => (
-    <div className="relative w-full group">
-      {/* Ambient glow on focus */}
-      <div
-        className={cn(
-          "absolute -inset-px rounded-xl pointer-events-none",
-          "bg-gradient-to-r from-brand-500/20 via-wave-1/15 to-wave-2/20",
-          "opacity-0 group-focus-within:opacity-100",
-          "transition-opacity duration-300 blur-sm",
-        )}
-        aria-hidden="true"
-      />
-
-      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-        <Search
-          className={cn(
-            "size-4 transition-colors duration-200",
-            value
-              ? "text-primary"
-              : "text-muted-foreground/50 group-focus-within:text-primary/70",
-          )}
-          aria-hidden="true"
-        />
-      </div>
-
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Tìm kiếm nghệ sĩ"
-        aria-label="Tìm kiếm nghệ sĩ"
-        className={cn(
-          "h-11 pl-10 pr-10 text-sm",
-          "bg-background/60 dark:bg-surface-1/60",
-          "border-border/70 hover:border-border-strong",
-          "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
-          "rounded-xl backdrop-blur-sm",
-          "placeholder:text-muted-foreground",
-          "transition-all duration-200",
-        )}
-      />
-
-      {value && (
+const Segmented = memo(function Segmented<T extends string | number>({
+  options,
+  value,
+  onChange,
+}: SegmentedProps<T>) {
+  return (
+    <div
+      role="group"
+      className="flex gap-0.5 p-0.5 rounded-lg bg-muted/40 border border-border/50"
+    >
+      {options.map((opt) => (
         <button
+          key={String(opt.value)}
           type="button"
-          onClick={onClear}
-          aria-label="Clear search"
+          onClick={() => onChange(opt.value)}
           className={cn(
-            "absolute right-3 top-1/2 -translate-y-1/2 z-10",
-            "p-1 rounded-full",
-            "text-muted-foreground/60 hover:text-foreground hover:bg-muted/70",
-            "transition-all duration-150",
+            "flex-1 h-8 px-3 rounded-md text-xs font-medium transition-all duration-150",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            value === opt.value
+              ? "bg-background text-foreground shadow-raised border border-border/60"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
           )}
         >
-          <X className="size-3.5" aria-hidden="true" />
+          {opt.label}
         </button>
-      )}
+      ))}
+    </div>
+  );
+}) as unknown as <T extends string | number>(
+  p: SegmentedProps<T>,
+) => React.ReactElement;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIELD WRAPPER — label + control
+// ─────────────────────────────────────────────────────────────────────────────
+const FilterField = memo(
+  ({
+    icon: Icon,
+    label,
+    iconColor,
+    children,
+    adminOnly,
+  }: {
+    icon: React.ElementType;
+    label: string;
+    iconColor?: string;
+    children: React.ReactNode;
+    adminOnly?: boolean;
+  }) => (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5">
+        <Icon
+          className="size-3 shrink-0"
+          style={iconColor ? { color: iconColor } : undefined}
+          aria-hidden="true"
+        />
+        <span className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
+          {label}
+        </span>
+        {adminOnly && (
+          <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-info/10 text-info border border-info/20">
+            ADMIN
+          </span>
+        )}
+      </div>
+      {children}
     </div>
   ),
 );
-SearchInput.displayName = "SearchInput";
+FilterField.displayName = "FilterField";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FILTER LABEL — .text-overline token + wave-spectrum icon colors
+// ACTIVE FILTER TAG
 // ─────────────────────────────────────────────────────────────────────────────
-const FilterLabel = memo(
-  ({
-    icon: Icon,
-    text,
-    iconColor,
-    htmlFor,
-  }: {
-    icon: React.ElementType;
-    text: string;
-    iconColor?: string;
-    htmlFor?: string;
-  }) => (
-    <label
-      htmlFor={htmlFor}
-      className="text-overline text-muted-foreground/60 flex items-center gap-1.5 ml-0.5 mb-1.5"
-    >
-      <Icon
-        className="size-3 shrink-0"
-        style={iconColor ? { color: iconColor } : undefined}
-        aria-hidden="true"
-      />
-      {text}
-    </label>
-  ),
-);
-FilterLabel.displayName = "FilterLabel";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ACTIVE FILTER TAG — isolated memo, colored icon-bubble pill
-// Each chip only re-renders when its own data changes (not siblings).
-// ─────────────────────────────────────────────────────────────────────────────
-interface ActiveFilterTagProps {
-  def: TagDef;
-  params: ArtistFilterParams;
-  onRemove: (key: keyof ArtistFilterParams) => void;
-}
-
 const ActiveFilterTag = memo(
-  ({ def, params, onRemove }: ActiveFilterTagProps) => {
-    const displayValue = def.getValue(params);
-    if (!displayValue) return null;
-
-    const Icon = def.getIcon(params);
-    const iconColor =
-      def.key === "isActive" && params.isActive === false
-        ? "hsl(var(--error))"
-        : def.iconColor;
-    const bgClass =
-      def.key === "isActive" && params.isActive === false
-        ? "bg-error/10"
-        : def.bgClass;
-
-    return (
-      <div
-        className={cn(
-          "inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full",
-          "border border-border/60 bg-card/60 backdrop-blur-sm",
-          "shadow-raised hover:shadow-elevated",
-          "cursor-default transition-all duration-150",
-          "animate-fade-in",
-        )}
+  ({
+    label,
+    value,
+    color,
+    icon: Icon,
+    onRemove,
+  }: {
+    label: string;
+    value: string;
+    color: string;
+    icon: React.ElementType;
+    onRemove: () => void;
+  }) => (
+    <div className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full border border-border/60 bg-card/70 backdrop-blur-sm animate-fade-in">
+      <span
+        className="flex items-center justify-center size-4 rounded-full shrink-0"
+        style={{ background: `${color}18` }}
       >
-        <span
-          className={cn(
-            "flex items-center justify-center size-4 rounded-full shrink-0",
-            bgClass,
-          )}
-        >
-          <Icon
-            className="size-2.5"
-            style={{ color: iconColor }}
-            aria-hidden="true"
-          />
-        </span>
-        <span className="text-[10px] text-muted-foreground font-medium">
-          {def.label}:
-        </span>
-        <span className="text-[10px] font-semibold text-foreground capitalize">
-          {displayValue}
-        </span>
-        <button
-          type="button"
-          onClick={() => onRemove(def.key)}
-          aria-label={`Remove ${def.label} filter`}
-          className={cn(
-            "ml-0.5 p-0.5 rounded-full shrink-0",
-            "text-muted-foreground/50",
-            "hover:text-destructive hover:bg-destructive/10",
-            "transition-colors duration-150",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40",
-          )}
-        >
-          <X className="size-2.5" aria-hidden="true" />
-        </button>
-      </div>
-    );
-  },
+        <Icon className="size-2.5" style={{ color }} aria-hidden="true" />
+      </span>
+      <span className="text-[10px] text-muted-foreground">{label}:</span>
+      <span className="text-[10px] font-semibold text-foreground max-w-[100px] truncate capitalize">
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Xóa filter ${label}`}
+        className="ml-0.5 p-0.5 rounded-full text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40"
+      >
+        <X className="size-2.5" aria-hidden="true" />
+      </button>
+    </div>
+  ),
 );
 ActiveFilterTag.displayName = "ActiveFilterTag";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTIVE TAGS BAR — frosted strip with gradient-wave top accent
-// ─────────────────────────────────────────────────────────────────────────────
-const ActiveTagsBar = memo(
-  ({
-    params,
-    activeCount,
-    onRemoveFilter,
-    onReset,
-  }: {
-    params: ArtistFilterParams;
-    activeCount: number;
-    onRemoveFilter: (key: keyof ArtistFilterParams) => void;
-    onReset: () => void;
-  }) => {
-    if (activeCount === 0) return null;
-
-    return (
-      <div
-        className={cn(
-          "relative px-4 py-3",
-          "border-t border-border/50 bg-muted/10 backdrop-blur-sm",
-          "flex flex-wrap items-center gap-2",
-          "animate-fade-down",
-        )}
-      >
-        <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Sparkles className="size-3 text-primary/60" aria-hidden="true" />
-          <span className="text-overline text-muted-foreground/50">
-            Bộ lọc:
-          </span>
-        </div>
-
-        {ARTIST_TAG_DEFS.map((def) => (
-          <ActiveFilterTag
-            key={String(def.key)}
-            def={def}
-            params={params}
-            onRemove={onRemoveFilter}
-          />
-        ))}
-
-        <button
-          type="button"
-          onClick={onReset}
-          aria-label="Clear all filters"
-          className="btn-danger btn-sm ml-auto h-7 px-3 gap-1.5 text-[11px]"
-        >
-          <Trash2 className="size-3" aria-hidden="true" />
-          Xóa tất cả
-        </button>
-      </div>
-    );
-  },
-);
-ActiveTagsBar.displayName = "ActiveTagsBar";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FILTER TOGGLE BUTTON — extracted memo, gradient-brand counter badge
-// ─────────────────────────────────────────────────────────────────────────────
-const FilterToggleButton = memo(
-  ({
-    isExpanded,
-    activeCount,
-    onClick,
-    panelId,
-  }: {
-    isExpanded: boolean;
-    activeCount: number;
-    onClick: () => void;
-    panelId: string;
-  }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-expanded={isExpanded}
-      aria-controls={panelId}
-      className={cn(
-        "h-11 px-4 gap-2",
-        "inline-flex items-center justify-between shrink-0",
-        "rounded-xl border text-sm font-medium",
-        "transition-all duration-200",
-        "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
-        isExpanded
-          ? [
-              "border-primary/40 bg-primary/10 text-primary",
-              "hover:bg-primary/15 shadow-brand",
-            ]
-          : [
-              "border-border/70 bg-background/60 dark:bg-surface-1/60 text-foreground",
-              "hover:bg-accent/50 hover:border-border-strong shadow-raised backdrop-blur-sm",
-            ],
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <SlidersHorizontal className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="hidden sm:block">Bộ lọc</span>
-      </div>
-
-      <div className="flex items-center gap-1.5 ml-1">
-        {activeCount > 0 && (
-          <span
-            className={cn(
-              "flex h-5 min-w-5 px-1 items-center justify-center",
-              "rounded-full text-[10px] font-black text-white",
-              "orb-float--brand shadow-glow-xs",
-            )}
-            aria-label={`${activeCount} active filters`}
-          >
-            {activeCount}
-          </span>
-        )}
-        <ChevronDown
-          className={cn(
-            "size-3.5 text-muted-foreground/60",
-            "transition-transform duration-200",
-            isExpanded && "rotate-180",
-          )}
-          aria-hidden="true"
-        />
-      </div>
-    </button>
-  ),
-);
-FilterToggleButton.displayName = "FilterToggleButton";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ARTIST FILTERS — main orchestrator
+// ARTIST FILTERS — MAIN
 // ─────────────────────────────────────────────────────────────────────────────
 export const ArtistFilters = memo<ArtistFiltersProps>(
-  ({ params, onSearch, onFilterChange, onReset }) => {
+  ({ params, isAdmin = false, onSearch, onFilterChange, onReset }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [panelOverflow, setPanelOverflow] = useState(false);
     const { user } = useAppSelector((s) => s.auth);
+    const showAdminFields = isAdmin && user?.role === "admin";
 
-    // ── Search debounce ─────────────────────────────────────────────────────
+    // ── Search debounce ──────────────────────────────────────────────────────
     const [localSearch, setLocalSearch] = useState(params.keyword || "");
     const debouncedSearch = useDebounce(localSearch, 400);
     const isClearingRef = useRef(false);
-    // FIX 6: one-way sync URL → input only
+
+    // One-way sync: URL → input
     useEffect(() => {
       if ((params.keyword || "") === localSearch) return;
       setLocalSearch(params.keyword || "");
     }, [params.keyword]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
-      // Nếu đang trong quá trình Clear, bỏ qua hiệu ứng Debounce này
       if (isClearingRef.current) {
         isClearingRef.current = false;
         return;
       }
-
-      if (debouncedSearch !== (params.keyword || "")) {
-        onSearch(debouncedSearch);
-      }
+      if (debouncedSearch !== (params.keyword || "")) onSearch(debouncedSearch);
     }, [debouncedSearch, params.keyword, onSearch]);
-    // FIX 5: immediate clear bypasses debounce
+
     const handleClearSearch = useCallback(() => {
       isClearingRef.current = true;
       setLocalSearch("");
       onSearch("");
     }, [onSearch]);
 
-    // ── Panel expand — FIX 1+2 preserved ────────────────────────────────────
+    // ── Panel expand — grid-template-rows transition ─────────────────────────
     const gridRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -454,9 +243,8 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
       if (!el) return;
       if (isExpanded) {
         const onEnd = (e: TransitionEvent) => {
-          if (e.target === el && e.propertyName === "grid-template-rows") {
+          if (e.target === el && e.propertyName === "grid-template-rows")
             setPanelOverflow(true);
-          }
         };
         el.addEventListener("transitionend", onEnd);
         return () => el.removeEventListener("transitionend", onEnd);
@@ -465,226 +253,393 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
       }
     }, [isExpanded]);
 
-    // ── Active count — granular deps ─────────────────────────────────────────
-    const activeFiltersCount = useMemo(() => {
+    const toggleExpanded = useCallback(() => setIsExpanded((v) => !v), []);
+
+    // ── Đếm active filters ───────────────────────────────────────────────────
+    const activeCount = useMemo(() => {
       let n = 0;
       if (params.nationality) n++;
       if (params.isVerified !== undefined) n++;
       if (params.isActive !== undefined) n++;
+      if (params.isDeleted !== undefined) n++;
       return n;
-    }, [params.nationality, params.isVerified, params.isActive]);
+    }, [
+      params.nationality,
+      params.isVerified,
+      params.isActive,
+      params.isDeleted,
+    ]);
 
-    // FIX 4: null sentinel
+    // ── Stable handlers ──────────────────────────────────────────────────────
     const removeFilter = useCallback(
-      (key: keyof ArtistFilterParams) => onFilterChange(key, null),
+      (key: keyof ArtistAdminFilterParams) => onFilterChange(key, null),
       [onFilterChange],
     );
 
-    const toggleExpanded = useCallback(() => setIsExpanded((v) => !v), []);
+    const handleSortChange = useCallback(
+      (val: string) => onFilterChange("sort", val),
+      [onFilterChange],
+    );
+
+    const handleNationalityChange = useCallback(
+      (val: string) => onFilterChange("nationality", val || null),
+      [onFilterChange],
+    );
+
+    const handleIsActiveChange = useCallback(
+      (val: string) =>
+        onFilterChange("isActive", val === "" ? null : val === "true"),
+      [onFilterChange],
+    );
+
+    const handleIsVerifiedChange = useCallback(
+      (val: string) =>
+        onFilterChange("isVerified", val === "" ? null : val === "true"),
+      [onFilterChange],
+    );
+    const handleIsDeletedChange = useCallback(
+      (val: string) =>
+        onFilterChange("isDeleted", val === "" ? null : val === "true"),
+      [onFilterChange],
+    );
+
+    // ── Active tags build ────────────────────────────────────────────────────
+    const activeTags = useMemo(() => {
+      const tags: {
+        key: keyof ArtistAdminFilterParams;
+        displayValue: string;
+        iconOverride?: React.ElementType;
+        colorOverride?: string;
+      }[] = [];
+
+      if (params.nationality) {
+        tags.push({ key: "nationality", displayValue: params.nationality });
+      }
+      if (params.isVerified !== undefined) {
+        tags.push({
+          key: "isVerified",
+          displayValue: "Chỉ đã xác minh",
+        });
+      }
+      if (params.isActive !== undefined) {
+        tags.push({
+          key: "isActive",
+          displayValue: params.isActive ? "Hoạt động" : "Bị khóa",
+          iconOverride: params.isActive ? UserCheck : UserX,
+          colorOverride: params.isActive ? "#1D9E75" : "#E24B4A",
+        });
+      }
+      if (params.isDeleted !== undefined) {
+        tags.push({
+          key: "isDeleted",
+          displayValue: params.isDeleted ? "Đã xóa" : "Chưa xóa",
+          iconOverride: params.isDeleted ? Trash2 : User,
+          colorOverride: params.isDeleted ? "#E24B4A" : "#1D9E75",
+        });
+      }
+      return tags;
+    }, [params]);
+
+    // ── Segmented option sets ────────────────────────────────────────────────
+    const verifiedOptions = [
+      { label: "Tất cả", value: "" },
+      { label: "Đã xác minh", value: "true" },
+      { label: "Chưa xác minh", value: "false" },
+    ] as const;
+    const deletedOptions = [
+      { label: "Tất cả", value: "" },
+      { label: "Đã xóa", value: "true" },
+      { label: "Chưa xóa", value: "false" },
+    ] as const;
+    const activeOptions = [
+      { label: "Tất cả", value: "" },
+      { label: "Hoạt động", value: "true" },
+      { label: "Bị khóa", value: "false" },
+    ] as const;
 
     return (
       <div className="w-full">
         <div
           className={cn(
-            "relative overflow-hidden",
-            "rounded-2xl border border-border/60",
-            "bg-card/50 dark:bg-surface-1/2 backdrop-blur-md",
-            "transition-shadow duration-300 hover:shadow-elevated",
-            activeFiltersCount > 0 && "border-primary/20 shadow-brand",
+            "relative overflow-hidden rounded-2xl",
+            "bg-card/50 dark:bg-surface-1/20 backdrop-blur-md",
+            "border transition-all duration-300",
+            activeCount > 0
+              ? "border-primary/30 shadow-brand"
+              : "border-border/50 hover:border-border hover:shadow-elevated",
           )}
         >
-          {/* ── TOP ROW ── */}
-          <div className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-            <div className="flex-1 min-w-0">
-              <SearchInput
+          {/* ── TOP ROW ─────────────────────────────────────────────────── */}
+          <div className="flex items-center gap-2.5 p-3">
+            {/* Search */}
+            <div className="relative flex-1 min-w-0 group">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                <Search
+                  className={cn(
+                    "size-3.5 transition-colors duration-200",
+                    localSearch
+                      ? "text-primary"
+                      : "text-muted-foreground/40 group-focus-within:text-primary/60",
+                  )}
+                  aria-hidden="true"
+                />
+              </div>
+              <Input
                 value={localSearch}
-                onChange={setLocalSearch}
-                onClear={handleClearSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
+                placeholder="Tìm kiếm nghệ sĩ…"
+                aria-label="Search artists"
+                className={cn(
+                  "h-10 pl-9 pr-9 text-sm rounded-xl",
+                  "bg-background/60 border-border/60",
+                  "hover:border-border focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20",
+                  "transition-all duration-200",
+                )}
               />
+              {localSearch && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  aria-label="Clear search"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-all"
+                >
+                  <X className="size-3" aria-hidden="true" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0">
-              {/* Sort — FIX 7: toLowerCase() */}
-              <Select
-                value={(params.sort || "newest").toLowerCase()}
-                onValueChange={(val) => onFilterChange("sort", val)}
-              >
-                <SelectTrigger
-                  className={cn(
-                    "h-11 w-[148px]",
-                    "bg-background/60 dark:bg-surface-1/60 backdrop-blur-sm",
-                    "border-border/70 hover:border-border-strong",
-                    "rounded-xl text-sm shadow-raised transition-all duration-150",
-                  )}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <ListFilter
-                      className="size-3.5 text-muted-foreground/50 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <span className="text-overline text-muted-foreground/50 hidden md:block">
-                      Sắp xếp:
-                    </span>
-                    <SelectValue />
-                  </div>
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {SORT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Separator
+              orientation="vertical"
+              className="h-5 opacity-50 hidden sm:block"
+            />
 
-              <Separator
-                orientation="vertical"
-                className="h-6 hidden sm:block opacity-50"
+            {/* Sort */}
+            <Select
+              value={(params.sort || "popular").toLowerCase()}
+              onValueChange={handleSortChange}
+            >
+              <SelectTrigger
+                className={cn(
+                  "h-10 w-auto min-w-[46px] sm:min-w-[160px] rounded-xl",
+                  "bg-background/60 border-border/60 text-sm",
+                  "hover:border-border transition-all",
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown
+                    className="size-3.5 text-muted-foreground/50 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="hidden sm:block">
+                    <SelectValue />
+                  </span>
+                </div>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {SORT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Separator
+              orientation="vertical"
+              className="h-5 opacity-50 hidden sm:block"
+            />
+
+            {/* Filter toggle */}
+            <button
+              type="button"
+              onClick={toggleExpanded}
+              aria-expanded={isExpanded}
+              aria-controls={EXPAND_PANEL_ID}
+              className={cn(
+                "h-10 px-3.5 gap-2 inline-flex items-center rounded-xl border text-sm font-medium shrink-0",
+                "transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                isExpanded
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border/60 bg-background/60 text-foreground hover:bg-accent/40 hover:border-border",
+              )}
+            >
+              <SlidersHorizontal
+                className="size-3.5 shrink-0"
                 aria-hidden="true"
               />
-
-              <FilterToggleButton
-                isExpanded={isExpanded}
-                activeCount={activeFiltersCount}
-                onClick={toggleExpanded}
-                panelId={EXPAND_PANEL_ID}
+              <span className="hidden sm:block">Bộ lọc</span>
+              {activeCount > 0 && (
+                <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full text-[10px] font-black text-white bg-primary shadow-glow-xs">
+                  {activeCount}
+                </span>
+              )}
+              <ChevronDown
+                className={cn(
+                  "size-3.5 text-muted-foreground/50 transition-transform duration-200",
+                  isExpanded && "rotate-180",
+                )}
+                aria-hidden="true"
               />
-            </div>
+            </button>
           </div>
 
-          {/* ── EXPANDABLE PANEL — FIX 2: gridRef on outer wrapper ── */}
+          {/* ── EXPANDABLE PANEL ─────────────────────────────────────────── */}
           <div
             ref={gridRef}
             id={EXPAND_PANEL_ID}
             role="region"
             aria-label="Artist filter options"
             className={cn(
-              "grid transition-[grid-template-rows] duration-300 ease-in-out relative",
+              "grid transition-[grid-template-rows] duration-300 ease-in-out",
               "border-t border-transparent",
               isExpanded
-                ? "grid-rows-[1fr] border-border/50"
+                ? "grid-rows-[1fr] border-border/40"
                 : "grid-rows-[0fr]",
             )}
           >
-            <div className="divider-glow absolute top-0 left-4 right-4 h-px" />
-            {/* FIX 1: overflow toggled only after transitionend on outer el */}
             <div
               className={cn(
-                "bg-muted/10",
+                "bg-muted/5",
                 panelOverflow ? "overflow-visible" : "overflow-hidden",
               )}
             >
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Nationality — FIX 10: onClear → null */}
-                <div className="space-y-0">
-                  <FilterLabel
-                    icon={Globe}
-                    text="Quốc gia"
-                    iconColor="hsl(var(--info))"
-                  />
+              <div
+                className={cn(
+                  "p-4 grid gap-4",
+                  showAdminFields
+                    ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                    : "grid-cols-1 sm:grid-cols-2",
+                )}
+              >
+                {/* ── 1. Quốc gia */}
+                <FilterField icon={Globe} label="Quốc gia" iconColor="#378ADD">
                   <FilterDropdown
                     isActive={!!params.nationality}
                     onClear={() => onFilterChange("nationality", null)}
                     label={
-                      <span className="truncate">
+                      <span className="truncate text-sm font-normal">
                         {params.nationality ?? "Tất cả quốc gia"}
                       </span>
                     }
-                    contentClassName="w-[280px]"
+                    contentClassName="w-[280px] max-w-[90vw]"
                     className={cn(
-                      "w-full bg-background/80 h-9 text-sm font-normal px-3",
-                      "justify-start shadow-raised rounded-lg border-border/70",
-                      "focus:ring-1 focus:ring-primary/30",
-                      params.nationality && "border-info/40 text-foreground",
+                      "w-full h-9 text-sm font-normal px-3 justify-start rounded-lg border-border/60",
+                      "bg-background/80 shadow-raised transition-all",
+                      "hover:border-border focus:ring-1 focus:ring-primary/30",
+                      params.nationality && "border-info/40",
                     )}
                   >
                     <div className="p-1">
-                      <NationalitySelector
-                        value={params.nationality}
-                        onChange={(val) => onFilterChange("nationality", val)}
-                        clearable
-                      />
+                      <Suspense fallback={<div className="p-3">Đang tải…</div>}>
+                        <NationalitySelector
+                          value={params.nationality}
+                          onChange={handleNationalityChange}
+                          clearable
+                        />
+                      </Suspense>
                     </div>
                   </FilterDropdown>
-                </div>
+                </FilterField>
 
-                {/* Status — admin only. FIX 11: "all" → null */}
-                {user?.role === "admin" && (
-                  <div className="space-y-0">
-                    <FilterLabel
-                      icon={LayoutGrid}
-                      text="Trạng thái"
-                      iconColor="hsl(var(--wave-1))"
-                    />
-                    <Select
-                      value={
-                        params.isActive === undefined
-                          ? "all"
-                          : String(params.isActive)
-                      }
-                      onValueChange={(val) =>
-                        onFilterChange(
-                          "isActive",
-                          val === "all" ? null : val === "true",
-                        )
-                      }
-                    >
-                      <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue placeholder="Tất cả trạng thái" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                        <SelectItem value="true">Hoạt động</SelectItem>
-                        <SelectItem value="false">Bị khóa</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Verification — admin only. FIX 11 */}
-                {user?.role === "admin" && (
-                  <div className="space-y-0">
-                    <FilterLabel
-                      icon={ShieldCheck}
-                      text="Xác minh"
-                      iconColor="hsl(var(--success))"
-                    />
-                    <Select
+                {/* ── 2. Xác minh — admin only */}
+                {showAdminFields && (
+                  <FilterField
+                    icon={ShieldCheck}
+                    label="Xác minh"
+                    iconColor="#1D9E75"
+                    adminOnly
+                  >
+                    <Segmented
+                      options={verifiedOptions}
                       value={
                         params.isVerified === undefined
-                          ? "all"
+                          ? ""
                           : String(params.isVerified)
                       }
-                      onValueChange={(val) =>
-                        onFilterChange(
-                          "isVerified",
-                          val === "all" ? null : val === "true",
-                        )
+                      onChange={handleIsVerifiedChange}
+                    />
+                  </FilterField>
+                )}
+
+                {/* ── 3. Trạng thái — admin only */}
+                {showAdminFields && (
+                  <FilterField
+                    icon={LayoutGrid}
+                    label="Trạng thái"
+                    iconColor="#D85A30"
+                    adminOnly
+                  >
+                    <Segmented
+                      options={activeOptions}
+                      value={
+                        params.isActive === undefined
+                          ? ""
+                          : String(params.isActive)
                       }
-                    >
-                      <SelectTrigger className="w-full bg-background/80 h-9 text-sm shadow-raised rounded-lg border-border/70 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue placeholder="Tất cả hồ sơ" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tất cả hồ sơ</SelectItem>
-                        <SelectItem value="true">Chỉ đã xác minh</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      onChange={handleIsActiveChange}
+                    />
+                  </FilterField>
+                )}
+                {/* ── 4. Đã xóa — admin only */}
+                {showAdminFields && (
+                  <FilterField
+                    icon={LayoutGrid}
+                    label="Đã xóa"
+                    iconColor="#D85A30"
+                    adminOnly
+                  >
+                    <Segmented
+                      options={deletedOptions}
+                      value={
+                        params.isDeleted === undefined
+                          ? ""
+                          : String(params.isDeleted)
+                      }
+                      onChange={handleIsDeletedChange}
+                    />
+                  </FilterField>
                 )}
               </div>
             </div>
           </div>
 
-          {/* ── ACTIVE TAGS BAR ── */}
-          <div className="relative">
-            <ActiveTagsBar
-              params={params}
-              activeCount={activeFiltersCount}
-              onRemoveFilter={removeFilter}
-              onReset={onReset}
-            />
-          </div>
+          {/* ── ACTIVE TAGS BAR ─────────────────────────────────────────── */}
+          {activeCount > 0 && (
+            <div className="relative flex flex-wrap items-center gap-2 px-4 py-2.5 border-t border-border/40 bg-muted/5 backdrop-blur-sm">
+              <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+
+              <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider shrink-0">
+                Đang lọc:
+              </span>
+
+              {activeTags.map(
+                ({ key, displayValue, iconOverride, colorOverride }) => {
+                  const def = TAG_DEFS[key as keyof typeof TAG_DEFS];
+                  if (!def) return null;
+                  return (
+                    <ActiveFilterTag
+                      key={key}
+                      label={def.label}
+                      value={displayValue}
+                      color={colorOverride ?? def.color}
+                      icon={iconOverride ?? def.icon}
+                      onRemove={() => removeFilter(key)}
+                    />
+                  );
+                },
+              )}
+
+              <button
+                type="button"
+                onClick={onReset}
+                aria-label="Clear all filters"
+                className="ml-auto h-7 px-3 gap-1.5 inline-flex items-center text-[11px] font-medium rounded-full border border-border/50 text-muted-foreground hover:text-destructive hover:border-destructive/30 hover:bg-destructive/5 transition-all"
+              >
+                <Trash2 className="size-3" aria-hidden="true" />
+                Xóa bộ lọc
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

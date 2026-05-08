@@ -5,16 +5,42 @@ import {
 } from "@tanstack/react-query";
 import albumApi from "../api/albumApi";
 import { albumKeys } from "../utils/albumKeys";
-import type { AlbumFilterParams, IAlbum } from "../types";
+import type { IAlbum } from "../types";
 import { APP_CONFIG } from "@/config/constants";
+import {
+  AlbumAdminFilterParams,
+  AlbumFilterParams,
+} from "../schemas/album.schema";
 
 // ==========================================
 // 1. PUBLIC LISTS (Trang Albums, Search)
 // ==========================================
-export const useAlbumsQuery = (params: AlbumFilterParams) => {
+export const useAlbumsByUserQuery = (params: AlbumFilterParams) => {
   return useQuery({
     queryKey: albumKeys.list(params),
-    queryFn: () => albumApi.getAlbums({ ...params }),
+    queryFn: () => albumApi.getAlbumsByUser({ ...params }),
+
+    // Giữ data cũ trên màn hình trong lúc fetch data trang mới -> Tránh Layout Shift
+    placeholderData: keepPreviousData,
+
+    // Cache 2 phút (List có thể thay đổi thứ tự/số lượng)
+    staleTime: 2 * 60 * 1000,
+
+    // Bóc tách data ngay tại Hook, Component gọi ra là xài được luôn
+    select: (response) => ({
+      albums: response.data.data as IAlbum[],
+      meta: response.data.meta,
+      isEmpty: response.data.data.length === 0,
+    }),
+  });
+};
+// ==========================================
+// 1. PUBLIC LISTS (Trang Albums, Search)
+// ==========================================
+export const useAlbumsByAdminQuery = (params: AlbumAdminFilterParams) => {
+  return useQuery({
+    queryKey: albumKeys.list(params),
+    queryFn: () => albumApi.getAlbumsByAdmin({ ...params }),
 
     // Giữ data cũ trên màn hình trong lúc fetch data trang mới -> Tránh Layout Shift
     placeholderData: keepPreviousData,
@@ -35,11 +61,11 @@ export const useAlbumsQuery = (params: AlbumFilterParams) => {
 // ==========================================
 export const useNewReleases = (limit = 10) => {
   // Fix cứng params để đảm bảo queryKey luôn match chuẩn xác
-  const params: AlbumFilterParams = { limit, sort: "newest", isPublic: true };
+  const params: AlbumFilterParams = { limit, sort: "newest" };
 
   return useQuery({
     queryKey: albumKeys.list(params),
-    queryFn: () => albumApi.getAlbums(params),
+    queryFn: () => albumApi.getAlbumsByUser(params),
     staleTime: 5 * 60 * 1000, // Cache 5 phút
     select: (response) => response.data.data as IAlbum[],
   });
@@ -48,11 +74,14 @@ export const useNewReleases = (limit = 10) => {
 // 3. FEATURE ALBUMS
 // ==========================================
 export const useFeatureAlbums = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
-  const params: AlbumFilterParams = { limit: Number(limit), sort: "popular", isPublic: true };
+  const params: AlbumFilterParams = {
+    limit: Number(limit),
+    sort: "popular",
+  };
 
   return useQuery({
     queryKey: albumKeys.list(params),
-    queryFn: () => albumApi.getAlbums(params),
+    queryFn: () => albumApi.getAlbumsByUser(params),
     staleTime: 10 * 60 * 1000, // Cache 10 phút (Popular ít biến động hơn)
     select: (response) => response.data.data as IAlbum[],
   });
@@ -63,7 +92,7 @@ export const useFeatureAlbums = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
 export const useAlbumDetail = (slugOrId: string) => {
   return useQuery({
     queryKey: albumKeys.detail(slugOrId),
-    queryFn: () => albumApi.getDetail(slugOrId),
+    queryFn: () => albumApi.getAlbumDetail(slugOrId),
 
     // Chỉ chạy query nếu slugOrId tồn tại (tránh lỗi gọi API rỗng)
     enabled: !!slugOrId,
@@ -117,20 +146,18 @@ export const useAlbumTracksInfinite = (
  * Hook lấy Album liên quan (Ví dụ: Cùng Thể loại)
  * Dùng để hiển thị ở mục "Có thể bạn cũng thích" cuối trang Detail.
  */
-export const useRelatedAlbums = (currentAlbumId: string, genreId?: string) => {
+export const useRelatedAlbums = (currentAlbumId: string) => {
   const params: AlbumFilterParams = {
     limit: 6, // Fetch dư ra 1 cái để phòng trường hợp bị trùng với currentAlbumId
-    genreId,
-    isPublic: true,
   };
 
   return useQuery({
     // Sử dụng currentAlbumId trong key ảo để buộc query cache riêng cho từng trang detail
-    queryKey: ["albums", "related", currentAlbumId, genreId],
+    queryKey: ["albums", "related", currentAlbumId],
 
-    queryFn: () => albumApi.getAlbums(params),
+    queryFn: () => albumApi.getAlbumsByUser(params),
 
-    enabled: !!currentAlbumId && !!genreId, // Buộc phải có đủ ID và Genre
+    enabled: !!currentAlbumId, // Buộc phải có đủ ID
     staleTime: 15 * 60 * 1000, // Cache 15 phút
 
     // Select: Lọc bỏ chính bài đang xem ở Client-side (Trường hợp Backend không hỗ trợ query exclude)

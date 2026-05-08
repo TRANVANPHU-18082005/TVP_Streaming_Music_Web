@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-
-/* ── Helpers ── */
-function formatCount(n: number | null | undefined): string | null {
-  if (n == null || isNaN(n) || n < 0) return null;
-  if (n === 0) return null;
-  if (n < 100) return String(n);
-  if (n < 1_000) return "99+";
-  if (n < 1_000_000) return Math.round(n / 100) / 10 + "k";
-  return Math.round(n / 100_000) / 10 + "M+";
-}
+import { formatCount } from "@/utils/track-helper";
 
 /* ── Props ── */
 interface EyeViewBadgeProps {

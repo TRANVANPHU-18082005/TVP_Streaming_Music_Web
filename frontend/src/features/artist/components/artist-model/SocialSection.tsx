@@ -82,32 +82,24 @@ const SocialSection: React.FC<SocialSectionProps> = ({ form }) => {
                 {field.icon}
               </div>
 
-              {/* Input Field */}
+              {/* Input Field — flat field names (facebook, instagram, etc.) */}
               <Input
-                {...register(`socialLinks.${field.name}` as any)}
+                {...register(field.name as keyof ArtistFormValues)}
                 placeholder={field.placeholder}
                 className={cn(
                   "pl-10 h-10 text-sm bg-background border-input shadow-sm transition-all",
                   "focus-visible:ring-2 focus-visible:ring-primary/20",
                   "placeholder:text-muted-foreground/60",
-                  errors.socialLinks?.[
-                    field.name as keyof typeof errors.socialLinks
-                  ] &&
+                  errors[field.name as keyof ArtistFormValues] &&
                     "border-destructive focus-visible:ring-destructive/20 bg-destructive/5",
                 )}
               />
             </div>
 
             {/* Error Message */}
-            {errors.socialLinks?.[
-              field.name as keyof typeof errors.socialLinks
-            ] && (
+            {errors[field.name as keyof ArtistFormValues] && (
               <p className="text-[11px] font-bold text-destructive ml-1 animate-in slide-in-from-left-1">
-                {
-                  errors.socialLinks[
-                    field.name as keyof typeof errors.socialLinks
-                  ]?.message
-                }
+                {(errors[field.name as keyof ArtistFormValues] as any)?.message}
               </p>
             )}
           </div>

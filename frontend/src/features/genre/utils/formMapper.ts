@@ -1,32 +1,37 @@
-import { Genre } from "../types";
-import { GenreFormValues } from "../schemas/genre.schema";
+// utils/formMapper.ts
+import {
+  GenreCreateFormValues,
+  GenreEditFormValues,
+} from "../schemas/genre.schema";
+import { IGenre } from "../types";
 
-export const GENRE_DEFAULT_VALUES: GenreFormValues = {
+export type GenreFormValues = GenreCreateFormValues | GenreEditFormValues;
+
+export const GENRE_DEFAULT_VALUES: GenreCreateFormValues = {
   name: "",
   description: "",
-  color: "#000000",
+  color: "#1db954", // match schema default
   gradient: "",
-  parentId: null,
+  parentId: undefined,
+  image: undefined,
   priority: 0,
   isTrending: false,
-  image: null,
 };
 
-export const mapEntityToForm = (genre?: Genre | null): GenreFormValues => {
+export const mapEntityToForm = (genre?: IGenre | null): GenreFormValues => {
   if (!genre) return GENRE_DEFAULT_VALUES;
 
   return {
     name: genre.name,
-    description: genre.description || "",
-    color: genre.color || "#000000",
-    gradient: genre.gradient || "",
-    // Xử lý parentId (nếu API trả về object populated -> lấy _id)
+    description: genre.description ?? "",
+    color: genre.color ?? "#1db954",
+    gradient: genre.gradient ?? "",
+    image: genre.image ?? undefined,
     parentId:
       typeof genre.parentId === "object"
-        ? genre.parentId?._id
-        : genre.parentId || null,
-    priority: genre.priority || 0,
-    isTrending: genre.isTrending || false,
-    image: genre.image || null,
+        ? (genre.parentId?._id ?? "root")
+        : (genre.parentId ?? "root"),
+    priority: genre.priority ?? 0,
+    isTrending: genre.isTrending ?? false,
   };
 };

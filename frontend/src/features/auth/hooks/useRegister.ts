@@ -35,7 +35,7 @@ export const useRegister = () => {
 
   // 1. Setup Form
   const form = useForm<RegisterInput>({
-    resolver: zodResolver(registerSchema),
+    resolver: zodResolver(registerSchema) as any,
     mode: "onBlur", // Validate khi rời ô input
     defaultValues: {
       fullName: "", // Thay fullName bằng username nếu schema của bạn là username

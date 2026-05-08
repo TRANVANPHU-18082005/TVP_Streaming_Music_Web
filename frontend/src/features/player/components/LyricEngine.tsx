@@ -1,60 +1,3 @@
-/**
- * LyricsView.tsx — Production v3.0 — Zero-Jank Edition
- * ─────────────────────────────────────────────────────────────────────────────
- * PERF AUDIT v2 → v3:
- *
- * PERF-1  useRafTime gọi setRafMs() mỗi frame (60fps) → toàn bộ React tree
- *         re-render 60 lần/giây. Đây là bottleneck #1.
- *         Fix: LOẠI BỎ state hoàn toàn. rafMs chỉ sống trong ref.
- *              KWord, SyncedLine, KLine đọc qua imperative DOM mutation.
- *              React không re-render khi time cập nhật.
- *
- * PERF-2  KWord dùng useMemo + useEffect mỗi frame cho progress
- *         → 2 hook calls/word/frame với queue 50+ words = ~200 wasted ops.
- *         Fix: KWord đọc rafMsRef trực tiếp qua DOM imperatively,
- *              không có state/effect. Dùng CSS custom property.
- *
- * PERF-3  bsearch chạy qua useMemo ở mỗi component (SyncedLyricsView,
- *         KaraokeView) → double work khi rafMs "thay đổi" state.
- *         Fix: bsearch chạy trong rAF loop một lần, kết quả lưu ref,
- *              chỉ setState khi index thực sự thay đổi.
- *
- * PERF-4  scrollIntoView() trong useEffect của mỗi line → scroll
- *         trigger từ nhiều components cùng lúc khi currentIndex đổi.
- *         Fix: scroll chỉ được gọi từ container, không từ line item.
- *
- * PERF-5  LyricsStyles inject CSS qua useEffect → CSS parse trên main
- *         thread sau paint đầu tiên (FOUC risk).
- *         Fix: inject synchronously (không qua effect) + guard idempotent.
- *
- * PERF-6  calcFontSize() tạo string mới mỗi render.
- *         Fix: memo-ize bằng Map cache.
- *
- * PERF-7  displayLines, sanitized, normSynced rebuild khi parent re-render
- *         dù data không đổi.
- *         Fix: stable memo + deep compare reference guard.
- *
- * PERF-8  KLine/SyncedLine nhận rafMs qua prop → tất cả words re-render
- *         khi rafMs state thay đổi.
- *         Fix: rafMs không còn là state. Lines nhận ref, tự đọc qua
- *              useImperativeUpdate hook (useEffect cleanup pattern).
- *
- * ARCH:   Two-tier render model:
- *         - Tier 1 (React): chỉ update khi currentIndex thay đổi (~1-3s/lần)
- *         - Tier 2 (DOM): rAF loop mutate clip-path, --kv-fill trực tiếp
- *
- * UI/UX IMPROVEMENTS:
- * - Smooth scroll với spring easing thay vì abrupt "smooth"
- * - Karaoke fill gradient cải thiện — warm→cool thay vì flat blue
- * - Beat pulse precision: không dùng classList add/remove hack
- *   mà dùng CSS animation-play-state control
- * - Countdown dots dùng CSS transition thay vì React re-render
- * - Focus ring rõ hơn cho accessibility
- * - Synced line hover state không conflict với current state
- */
-
-"use client";
-
 import {
   useRef,
   useEffect,
@@ -152,14 +95,14 @@ const LYRICS_CSS = `
   transition: opacity 1.2s ease;
 }
 
-.lv-plain {
-  color: rgba(255,255,255,0.75);
+ .lv-plain {
+  color: hsl(var(--foreground) / 0.75);
   font-size: 1rem;
   line-height: 1.9;
   white-space: pre-wrap;
   padding: 1.5rem 1.75rem;
   user-select: text;
-}
+ }
 
 /* ── synced lines ── */
 .sv-line {
@@ -181,10 +124,10 @@ const LYRICS_CSS = `
   outline-offset: 4px;
   border-radius: 4px;
 }
-.sv-line--current { transform: scale(1.05);  opacity: 1;    color: #fff; text-shadow: 0 0 28px var(--lv-accent-glow, rgba(79,172,254,.35)); }
-.sv-line--near1   { transform: scale(1.00);  opacity: .52;  color: rgba(255,255,255,.52); }
-.sv-line--near2   { transform: scale(.98);   opacity: .26;  color: rgba(255,255,255,.26); }
-.sv-line--far     { transform: scale(.96);   opacity: .1;   color: rgba(255,255,255,.1); }
+.sv-line--current { transform: scale(1.05);  opacity: 1;    color: var(--color-primary); text-shadow: 0 0 28px var(--lv-accent-glow, hsl(var(--wave-2) / 0.35)); }
+.sv-line--near1   { transform: scale(1.00);  opacity: .52;  color: hsl(var(--foreground) / 0.52); }
+.sv-line--near2   { transform: scale(.98);   opacity: .26;  color: hsl(var(--foreground) / 0.26); }
+.sv-line--far     { transform: scale(.96);   opacity: .1;   color: hsl(var(--foreground) / 0.1); }
 .sv-line--hidden  { transform: scale(.94);   opacity: 0;    pointer-events: none; }
 @media (hover: hover) {
   .sv-line:not(.sv-line--current):not(.sv-line--hidden):hover {
@@ -206,7 +149,7 @@ const LYRICS_CSS = `
 }
 .kv-word__base {
   display: block;
-  color: rgba(255,255,255,.18);
+  color: hsl(var(--foreground) / .18);
   white-space: pre;
   user-select: none;
   transition: color .18s ease, text-shadow .18s ease;
@@ -221,9 +164,9 @@ const LYRICS_CSS = `
   /* Gradient: accentColor (via --lv-accent) → white. Falls back to amber-blue if var not set. */
   background: linear-gradient(
     90deg,
-    var(--lv-accent, #ffe066) 0%,
-    rgba(255,255,255,0.92) 55%,
-    #ffffff 100%
+    var(--lv-accent, var(--color-accent)) 0%,
+    hsl(var(--foreground) / 0.92) 55%,
+    var(--color-foreground) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -233,7 +176,7 @@ const LYRICS_CSS = `
   will-change: clip-path;
 }
 .kv-word--active .kv-word__base {
-  color: rgba(255,255,255,.5);
+  color: hsl(var(--foreground) / .5);
   text-shadow: 0 0 20px var(--lv-accent-glow, rgba(79,172,254,.4));
 }
 .kv-word--backing .kv-word__base { opacity: .4; font-style: italic; }
@@ -241,7 +184,7 @@ const LYRICS_CSS = `
 
 /* degraded: hide per-word fill, highlight whole line */
 .kv-degraded .kv-word__fill { display: none; }
-.kv-degraded .kv-line--current .kv-word__base { color: #fff; }
+.kv-degraded .kv-line--current .kv-word__base { color: var(--color-foreground); }
 
 /* ── karaoke line ── */
 .kv-line {
@@ -299,11 +242,11 @@ const LYRICS_CSS = `
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: rgba(255,255,255,.2);
+  background: hsl(var(--foreground) / .2);
   transition: transform .28s ease, background .28s ease, opacity .28s ease;
 }
 /* data-lit driven by rAF -> no React state */
-.lv-dot[data-lit="1"] { transform: scale(2.2); background: var(--lv-accent, #4facfe); opacity: 1; box-shadow: 0 0 8px var(--lv-accent, #4facfe); }
+.lv-dot[data-lit="1"] { transform: scale(2.2); background: var(--lv-accent, var(--color-wave-2)); opacity: 1; box-shadow: 0 0 8px var(--lv-accent, var(--color-wave-2)); }
 `;
 
 // Inject CSS synchronously — runs once at module evaluation on client
@@ -590,7 +533,12 @@ const LyricsEmpty = memo(({ loading }: { loading: boolean }) => (
             key={i}
             className="w-1 rounded-full bg-white/35"
             animate={{ scaleY: [h, 1, h] }}
-            transition={{ duration: 0.85, repeat: Infinity, delay: i * 0.1, ease: "easeInOut" }}
+            transition={{
+              duration: 0.85,
+              repeat: Infinity,
+              delay: i * 0.1,
+              ease: "easeInOut",
+            }}
             style={{ height: "100%", transformOrigin: "bottom" }}
           />
         ))}
@@ -598,15 +546,27 @@ const LyricsEmpty = memo(({ loading }: { loading: boolean }) => (
     ) : (
       <div className="flex flex-col items-center gap-3">
         <div className="size-14 rounded-3xl bg-white/[0.04] border border-white/[0.07] flex items-center justify-center">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/20">
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-foreground/20"
+          >
             <path d="M9 18V5l12-2v13" />
             <circle cx="6" cy="18" r="3" />
             <circle cx="18" cy="16" r="3" />
           </svg>
         </div>
         <div className="text-center space-y-1">
-          <p className="text-white/30 text-[13px] font-semibold">Chưa có lời bài hát</p>
-          <p className="text-white/18 text-[11px]">Hãy tận hưởng giai điệu</p>
+          <p className="text-foreground text-[13px] font-semibold">
+            Chưa có lời bài hát
+          </p>
+          <p className="text-foreground text-[11px]">Hãy tận hưởng giai điệu</p>
         </div>
       </div>
     )}
@@ -1022,7 +982,7 @@ const KLine = memo(
             style={{
               fontSize: "1.35rem",
               letterSpacing: "0.5em",
-              color: "rgba(255,255,255,.24)",
+              color: "hsl(var(--foreground) / .24)",
             }}
           >
             {line.text}
@@ -1050,7 +1010,9 @@ const KLine = memo(
               lineHeight: 1.25,
               fontWeight: 900,
               letterSpacing: "-0.02em",
-              color: isCurrent ? "#ffffff" : "rgba(255,255,255,.18)",
+              color: isCurrent
+                ? "var(--color-foreground)"
+                : "hsl(var(--foreground) / .18)",
               transition: "color 0.3s ease",
             }}
           >

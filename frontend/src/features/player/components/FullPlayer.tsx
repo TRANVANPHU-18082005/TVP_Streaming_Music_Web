@@ -84,6 +84,26 @@ const PLAYER_CSS = `
   .fp-stagger > *:nth-child(5) { animation: fp-stagger-up 240ms ease both 160ms; }
   .custom-scrollbar::-webkit-scrollbar { display: none; }
   .custom-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+
+  /* ── FullPlayer theme-aware tokens ── */
+  .fp-surface {
+    --fp-fg: hsl(var(--foreground));
+    --fp-fg-muted: hsl(var(--muted-foreground));
+    --fp-fg-subtle: hsl(var(--muted-foreground) / 0.5);
+    --fp-fg-faint: hsl(var(--muted-foreground) / 0.3);
+    --fp-border: hsl(var(--border) / 0.7);
+    --fp-hover-bg: hsl(var(--muted) / 0.15);
+    --fp-active-bg: hsl(var(--primary) / 0.12);
+  }
+  .dark .fp-surface {
+    --fp-fg: hsl(0 0% 100%);
+    --fp-fg-muted: hsl(0 0% 100% / 0.7);
+    --fp-fg-subtle: hsl(0 0% 100% / 0.5);
+    --fp-fg-faint: hsl(0 0% 100% / 0.3);
+    --fp-border: hsl(0 0% 100% / 0.06);
+    --fp-hover-bg: hsl(0 0% 100% / 0.08);
+    --fp-active-bg: hsl(var(--primary) / 0.12);
+  }
 `;
 
 if (
@@ -320,7 +340,7 @@ const VinylDisk = memo(
       <div
         className={cn(
           "relative aspect-square w-full max-w-[200px] lg:max-w-[300px]",
-          "rounded-full overflow-hidden border-[5px] border-[#191919] shadow-brand",
+          "rounded-full overflow-hidden border-[5px] border-border shadow-brand",
           isPlaying ? "animate-vinyl-slow" : "pause-animation",
         )}
         style={{ willChange: "transform" }}
@@ -336,14 +356,17 @@ const VinylDisk = memo(
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.07) 0%, transparent 55%), radial-gradient(circle at 70% 75%, rgba(0,0,0,0.3) 0%, transparent 50%)",
+              "radial-gradient(circle at 30% 25%, hsl(var(--foreground) / 0.07) 0%, transparent 55%), radial-gradient(circle at 70% 75%, hsl(var(--foreground) / 0.2) 0%, transparent 50%)",
           }}
         />
         {[18, 32, 44].map((pct) => (
           <div
             key={pct}
-            className="absolute rounded-full border border-white/[0.035]"
-            style={{ inset: `${pct}%` }}
+            className="absolute rounded-full"
+            style={{
+              inset: `${pct}%`,
+              border: "1px solid var(--fp-border, hsl(0 0% 100% / 0.035))",
+            }}
           />
         ))}
       </div>
@@ -377,8 +400,9 @@ const PlayButton = memo(
     const dim = size === "lg" ? 76 : 64;
     const iconSize = size === "lg" ? 38 : 32;
     const sharedCls = cn(
-      "control-btn relative flex items-center justify-center rounded-full bg-white text-background shadow-lg",
-      "shadow-[0_8px_36px_rgba(255,255,255,0.18)] disabled:opacity-40 disabled:pointer-events-none",
+      "control-btn relative flex items-center justify-center rounded-full shadow-lg",
+      "bg-foreground text-background",
+      "shadow-[0_8px_36px_hsl(var(--foreground)/0.18)] disabled:opacity-40 disabled:pointer-events-none",
     );
     const content = isLoading ? (
       <Loader2
@@ -443,7 +467,7 @@ const PlayButton = memo(
         <AnimatePresence>
           {isPlaying && (
             <motion.span
-              className="absolute inset-0 rounded-full ring-2 ring-white/20 pointer-events-none"
+              className="absolute inset-0 rounded-full ring-2 ring-foreground/20 pointer-events-none"
               initial={RING_INITIAL}
               animate={RING_ANIMATE}
               exit={RING_EXIT}
@@ -484,7 +508,9 @@ const SideButton = memo(
   }: SideButtonProps) => {
     const baseCls = cn(
       "absolute inset-0 flex items-center justify-center rounded-full transition-colors disabled:opacity-25 disabled:pointer-events-none",
-      active ? "text-[hsl(var(--primary))]" : "text-white/50 hover:text-white",
+      active
+        ? "text-[hsl(var(--primary))]"
+        : "text-[var(--fp-fg-subtle,hsl(var(--muted-foreground)/0.5))] hover:text-[var(--fp-fg,hsl(var(--foreground)))]",
     );
     if (phase < 1) return null;
     return (
@@ -504,7 +530,7 @@ const SideButton = memo(
         <AnimatePresence>
           {active && (
             <motion.span
-              className="absolute bottom-0.5 left-1/2 -translate-x-1/2 size-1 rounded-full bg-[hsl(var(--primary))]"
+              className="absolute bottom-0.5 left-1/2 -translate-x-1/2 size-1 rounded-full bg-primary"
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0, opacity: 0 }}
@@ -529,7 +555,7 @@ interface SkipBtnProps {
 const SkipBtn = memo(
   ({ onClick, disabled, label, phase, children }: SkipBtnProps) => {
     const baseCls =
-      "text-white/80 hover:text-white p-1 disabled:opacity-25 disabled:pointer-events-none";
+      "text-[var(--fp-fg-muted,hsl(var(--foreground)/0.8))] hover:text-[var(--fp-fg,hsl(var(--foreground)))] p-1 disabled:opacity-25 disabled:pointer-events-none";
     if (phase < 1)
       return (
         <button
@@ -804,7 +830,9 @@ const Toolbar = memo(
     return (
       <div
         className="fp-stagger flex items-center justify-between pt-3"
-        style={{ borderTop: "1px solid hsl(var(--border) / 0.12)" }}
+        style={{
+          borderTop: "1px solid var(--fp-border, hsl(var(--border) / 0.12))",
+        }}
         role="toolbar"
         aria-label="Player tools"
       >
@@ -827,8 +855,8 @@ const Toolbar = memo(
               "p-2 rounded-xl transition-colors",
               "disabled:opacity-30 disabled:cursor-not-allowed",
               active
-                ? "text-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.12)] shadow-[0_0_12px_hsl(var(--brand-glow)/0.2)]"
-                : "text-white/40 hover:text-white/75 hover:bg-white/[0.06]",
+                ? "text-primary bg-primary/12 shadow-[0_0_12px_hsl(var(--brand-glow)/0.2)]"
+                : "text-[var(--fp-fg-faint)] hover:text-[var(--fp-fg-muted)] hover:bg-[var(--fp-hover-bg)]",
             )}
           >
             {icon}
@@ -847,7 +875,7 @@ Toolbar.displayName = "Toolbar";
 interface ViewHeaderProps {
   currentView: PlayerView;
   phase: number;
-  handleMoreOptions: (track: ITrack) => void;
+  handleMoreOptions: (e: React.MouseEvent) => void;
   setView: Dispatch<SetStateAction<PlayerView>>;
   setSwipeDir: Dispatch<SetStateAction<number>>;
   onCollapse: () => void;
@@ -864,13 +892,7 @@ const ViewHeader = memo(
     setSwipeDir,
     onCollapse,
   }: ViewHeaderProps) => {
-    const handleMore = useCallback(
-      (e: React.MouseEvent) => {
-        e.stopPropagation();
-        handleMoreOptions(track);
-      },
-      [track, handleMoreOptions],
-    );
+
     const handleViewChange = useCallback(
       (v: PlayerView) => {
         setSwipeDir(VIEWS.indexOf(v) > VIEWS.indexOf(currentView) ? -1 : 1);
@@ -884,7 +906,7 @@ const ViewHeader = memo(
       <header className="flex items-center justify-between px-4 h-16 shrink-0 bg-transparent">
         <button
           onClick={onCollapse}
-          className="flex items-center justify-center size-10 rounded-full text-white/70 hover:text-white hover:bg-white/[0.08] active:scale-90 transition-all"
+          className="flex items-center justify-center size-10 rounded-full text-[var(--fp-fg-muted)] hover:text-[var(--fp-fg)] hover:bg-[var(--fp-hover-bg)] active:scale-90 transition-all"
           aria-label="Close player"
         >
           <ChevronDown className="size-7" strokeWidth={2} />
@@ -899,7 +921,7 @@ const ViewHeader = memo(
                 animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                 exit={{ opacity: 0, y: 4, filter: "blur(4px)" }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="text-[7px] font-bold uppercase tracking-[0.22em] text-white/30"
+                className="text-[7px] font-bold uppercase tracking-[0.22em] text-(--fp-fg-muted) truncate"
                 aria-live="polite"
               >
                 {currentView === "artwork"
@@ -910,7 +932,7 @@ const ViewHeader = memo(
               </motion.span>
             </AnimatePresence>
           ) : (
-            <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/30">
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-(--fp-fg-muted) truncate">
               {VIEW_LABEL[currentView]}
             </span>
           )}
@@ -953,16 +975,16 @@ const ViewHeader = memo(
                   opacity: currentView === v ? 1 : 0.28,
                 }}
                 transition={SP.pill}
-                className="h-[3px] rounded-full bg-white cursor-pointer"
+                className="h-[3px] rounded-full bg-foreground cursor-pointer"
               />
             ))}
           </div>
         </div>
 
         <button
-          className="flex items-center justify-center size-10 rounded-full text-white/70 hover:text-white hover:bg-white/[0.08] active:scale-90 transition-all"
+          className="flex items-center justify-center size-10 rounded-full text-[var(--fp-fg-muted)] hover:text-[var(--fp-fg)] hover:bg-[var(--fp-hover-bg)] active:scale-90 transition-all"
           aria-label="More options"
-          onClick={handleMore}
+          onClick={handleMoreOptions}
         >
           <MoreHorizontal className="size-6" strokeWidth={2} />
         </button>
@@ -1140,7 +1162,7 @@ const TrackInfoRow = memo(
   }) => (
     <div className="flex items-center gap-3">
       {size === "sm" && (
-        <div className="size-10 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10">
+        <div className="size-10 rounded-xl overflow-hidden shrink-0 ring-1 ring-border">
           <ImageWithFallback
             src={toCDN(track.coverImage)}
             alt=""
@@ -1184,7 +1206,6 @@ TrackInfoRow.displayName = "TrackInfoRow";
 
 export interface FullPlayerProps {
   track: ITrack;
-  currentTime: number;
   listenCount: number;
   duration: number;
   onSeek: (time: number) => void;
@@ -1193,9 +1214,8 @@ export interface FullPlayerProps {
   isPlaying: boolean;
 }
 
-export const FullPlayer = ({
+const FullPlayerComponent = ({
   track,
-  currentTime,
   duration,
   listenCount,
   onSeek,
@@ -1203,7 +1223,6 @@ export const FullPlayer = ({
   getCurrentTime,
   isPlaying,
 }: FullPlayerProps) => {
-  console.log(toCDN(track.coverImage), track.coverImage);
   const [currentView, setCurrentView] = useState<PlayerView>("artwork");
   const [swipeDir, setSwipeDir] = useState(0);
   const [showQueue, setShowQueue] = useState(false);
@@ -1215,20 +1234,26 @@ export const FullPlayer = ({
   const phase = usePhase();
   useViewportHeight();
 
+  // LOCAL currentTime: poll via getCurrentTime() so parent time ticks
+  // don't force FullPlayer re-renders. Updates at ~4Hz when playing.
+  const [currentTime, setCurrentTime] = useState(getCurrentTime);
+  useEffect(() => {
+    if (!isPlaying) {
+      setCurrentTime(getCurrentTime());
+      return;
+    }
+    const id = setInterval(() => setCurrentTime(getCurrentTime()), 250);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, duration]);
+
   // ── Sheet delegation: use global sheet context (centralized rendering)
-  const { openOptionSheet, openAddToPlaylistSheet, closeContextSheet } =
+  const { openTrackSheet, closeContextSheet } =
     useContextSheet();
 
-  const openSheet = useCallback(
-    (type: "playlist" | "options", t: ITrack) => {
-      if (type === "options") openOptionSheet(t);
-      else if (type === "playlist") openAddToPlaylistSheet(undefined, [t]);
-    },
-    [openOptionSheet, openAddToPlaylistSheet],
-  );
   const handleMoreOptions = useCallback(
-    (t: ITrack) => openSheet("options", t),
-    [openSheet],
+    (t: ITrack) => openTrackSheet(t),
+    [openTrackSheet],
   );
   const closeSheet = useCallback(() => {
     closeContextSheet();
@@ -1253,23 +1278,19 @@ export const FullPlayer = ({
 
   useFocusTrap(showQueue, queueSheetRef as React.RefObject<HTMLElement>);
 
+  // PERF: merged Escape handlers — single listener instead of two
   useEffect(() => {
-    if (!showQueue) return;
     const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowQueue(false);
+      if (e.key !== "Escape") return;
+      if (showQueue) {
+        setShowQueue(false);
+        return;
+      }
+      closeSheet();
     };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
-  }, [showQueue]);
-
-  // Close sheets on Escape
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeSheet();
-    };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, [closeSheet]);
+  }, [showQueue, closeSheet]);
 
   const dragY = useMotionValue(0);
   const cardScale = useTransform(dragY, [0, 300], [1, 0.94]);
@@ -1298,7 +1319,7 @@ export const FullPlayer = ({
 
   return (
     <motion.div
-      className="fp-enter fixed inset-0 z-[60] flex flex-col h-dvh overflow-hidden select-none bg-[#0c0c0c] isolate"
+      className="fp-enter fp-surface fixed inset-0 z-[60] flex flex-col h-dvh overflow-hidden select-none bg-background isolate"
       style={{ scale: cardScale }}
       drag="y"
       dragConstraints={{ top: 0, bottom: 0 }}
@@ -1322,7 +1343,7 @@ export const FullPlayer = ({
         isPlaying={isPlaying}
       />
       <motion.div
-        className="absolute inset-0 bg-black pointer-events-none z-0"
+        className="absolute inset-0 bg-overlay pointer-events-none z-0"
         style={{ opacity: rimOpacity }}
         aria-hidden="true"
       />
@@ -1337,7 +1358,13 @@ export const FullPlayer = ({
           {(currentView !== "mood" || !track.moodVideo) && !showQueue && (
             <ViewHeader
               track={track}
-              handleMoreOptions={handleMoreOptions}
+              handleMoreOptions={
+                (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleMoreOptions(track);
+                }
+              }
               currentView={currentView}
               phase={phase}
               setView={setCurrentView}
@@ -1400,9 +1427,12 @@ export const FullPlayer = ({
         </div>
 
         {/* ── RIGHT PANEL (desktop) ── */}
-        <div className="hidden lg:flex flex-col lg:w-[50%] xl:w-[45%] border-l border-white/[0.05] overflow-hidden relative">
+        <div
+          className="hidden lg:flex flex-col lg:w-[50%] xl:w-[45%] border-l overflow-hidden relative"
+          style={{ borderColor: "var(--fp-border)" }}
+        >
           <AnimatePresence mode="wait" initial={false}>
-            /* Controls view */
+            {/* Controls view */}
             <motion.div
               key="controls"
               initial={{ opacity: 0, x: -24 }}
@@ -1419,16 +1449,11 @@ export const FullPlayer = ({
                     speed={38}
                     pauseMs={1600}
                   />
-                  <motion.p
-                    key={track.artist?.name}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.07, ...SP.gentle }}
-                    className="text-sm mt-1.5"
-                    style={{ color: "hsl(var(--muted-foreground) / 0.7)" }}
-                  >
-                    {track.artist?.name}
-                  </motion.p>
+                  <ArtistDisplay
+                    mainArtist={track.artist}
+                    featuringArtists={track.featuringArtists}
+                    className="text-[11px] flex gap-1 items-center text-(--fp-fg-muted) mt-1 text-2xl"
+                  />
                 </div>
                 {phase >= 1 ? (
                   <div className="flex justify-center gap-2">
@@ -1483,5 +1508,17 @@ export const FullPlayer = ({
     </motion.div>
   );
 };
+
+export const FullPlayer = memo(
+  FullPlayerComponent,
+  (prev: FullPlayerProps, next: FullPlayerProps) =>
+    prev.track._id === next.track._id &&
+    prev.listenCount === next.listenCount &&
+    prev.duration === next.duration &&
+    prev.isPlaying === next.isPlaying &&
+    prev.onSeek === next.onSeek &&
+    prev.getCurrentTime === next.getCurrentTime &&
+    prev.onCollapse === next.onCollapse,
+);
 
 export default FullPlayer;

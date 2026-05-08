@@ -154,7 +154,7 @@ export const VerificationManager = () => {
               <TableRow>
                 <TableCell colSpan={5} className="h-64 text-center">
                   <MusicResult
-                    status="empty"
+                    variant="empty"
                     title="No requests found"
                     description="There are no verification requests matching your filter."
                   />

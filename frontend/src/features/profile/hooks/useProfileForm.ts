@@ -7,7 +7,7 @@ export const useProfileForm = (onSubmit: (data: FormData) => Promise<void>) => {
   const { user } = useAppSelector((state) => state.auth);
 
   const form = useForm({
-    resolver: zodResolver(profileSchema),
+    resolver: zodResolver(profileSchema) as any,
     defaultValues: {
       name: user?.fullName || "",
       bio: user?.bio || "",
@@ -21,8 +21,9 @@ export const useProfileForm = (onSubmit: (data: FormData) => Promise<void>) => {
     if (values.bio) formData.append("bio", values.bio);
 
     // Nếu avatar là File (user vừa chọn ảnh mới)
-    if (values.avatar instanceof File) {
-      formData.append("avatar", values.avatar);
+    const avatar = values.avatar as unknown;
+    if (avatar instanceof File) {
+      formData.append("avatar", avatar);
     }
 
     await onSubmit(formData);

@@ -1,36 +1,45 @@
 import api from "@/lib/axios";
 import type { ApiResponse, PagedResponse } from "@/types";
-import type {
-  IArtist,
-  ArtistFilterParams,
-  ArtistDetailResponse,
-} from "../types";
+import type { IArtist, IArtistDetail } from "../types";
 import { ITrack } from "@/features/track/types";
+import {
+  ArtistAdminFilterParams,
+  ArtistFilterParams,
+} from "../schemas/artist.schema";
 
 const artistApi = {
-  // --- 1. PUBLIC METHODS (Client View) ---
-
-  /** Lấy danh sách nghệ sĩ (Listing) */
-  getArtists: async (params: ArtistFilterParams) => {
+  // 1. PUBLIC METHODS (Client & Artist Portal)
+  getArtistsByUser: async (params: ArtistFilterParams) => {
     const response = await api.get<ApiResponse<PagedResponse<IArtist>>>(
       "/artists",
       {
         params,
       },
     );
-    console.log(response);
+
+    return response.data;
+  },
+  // 2. PUBLIC METHODS (Client & Artist Portal)
+  getArtistsByAdmin: async (params: ArtistAdminFilterParams) => {
+    const response = await api.get<ApiResponse<PagedResponse<IArtist>>>(
+      "/artists/admin",
+      {
+        params,
+      },
+    );
+
     return response.data;
   },
 
-  /** Lấy chi tiết nghệ sĩ (Metadata + trackIds cho Virtual Scroll) */
-  getDetail: async (slugOrId: string) => {
-    const response = await api.get<ApiResponse<ArtistDetailResponse>>(
-      `/artists/${slugOrId}`,
+  // 3. PUBLIC METHODS (Client) - Chi tiết nghệ sĩ + Danh sách bài hát (Virtual Scroll)
+  getArtistDetail: async (slug: string) => {
+    const response = await api.get<ApiResponse<IArtistDetail>>(
+      `/artists/${slug}`,
     );
     return response.data;
   },
 
-  /** Tải danh sách bài hát của nghệ sĩ (Phân trang cho Virtual Scroll) */
+  // 4. PUBLIC METHODS (Client) - Lấy danh sách bài hát của nghệ sĩ (dùng cho Virtual Scroll)
   getArtistTracks: async (
     artistId: string,
     params?: { page?: number; limit?: number },
@@ -41,19 +50,8 @@ const artistApi = {
     );
     return response.data;
   },
-
-  /** Follow/Unfollow (Backend tự động xử lý followersCount) */
-  toggleFollow: async (id: string) => {
-    const response = await api.post<ApiResponse<{ isFollowed: boolean }>>(
-      `/artists/${id}/follow`,
-    );
-    return response.data;
-  },
-
-  // --- 2. ADMIN METHODS (Management) ---
-
-  /** Tạo mới nghệ sĩ (Dùng FormData cho Avatar/Cover/Gallery) */
-  adminCreate: async (formData: FormData) => {
+  // 5. ADMIN METHODS (Admin Portal) - CRUD nghệ sĩ
+  create: async (formData: FormData) => {
     const response = await api.post<ApiResponse<IArtist>>(
       "/artists",
       formData,
@@ -64,8 +62,8 @@ const artistApi = {
     return response.data;
   },
 
-  /** Cập nhật nghệ sĩ (Dùng FormData cho ảnh và thông tin) */
-  adminUpdate: async (id: string, formData: FormData) => {
+  //6. ADMIN METHODS (Admin Portal) - Cập nhật nghệ sĩ (Bio, Social, Images)
+  update: async (id: string, formData: FormData) => {
     const response = await api.patch<ApiResponse<IArtist>>(
       `/artists/${id}`,
       formData,
@@ -76,15 +74,15 @@ const artistApi = {
     return response.data;
   },
 
-  /** Ẩn/Hiện nghệ sĩ khỏi hệ thống */
-  adminToggleStatus: async (id: string) => {
+  //7. ADMIN METHODS (Admin Portal) - Ẩn/Hiện nghệ sĩ khỏi hệ thống
+  toggleStatus: async (id: string) => {
     const response = await api.patch<ApiResponse<IArtist>>(
-      `/artists/${id}/toggle-active`,
+      `/artists/${id}/toggle`,
     );
     return response.data;
   },
 
-  /** Cấp/Thu hồi tick xanh xác minh */
+  //8. ADMIN METHODS (Admin Portal) - Cấp/Thu hồi tick xanh xác minh
   adminVerify: async (id: string) => {
     const response = await api.patch<ApiResponse<IArtist>>(
       `/artists/${id}/verify`,
@@ -92,21 +90,19 @@ const artistApi = {
     return response.data;
   },
 
-  /** Xóa nghệ sĩ (Dọn dẹp tài nguyên ảnh ở Cloudinary/S3) */
-  adminDelete: async (id: string) => {
+  //9. ADMIN METHODS (Admin Portal) - Xóa nghệ sĩ (Dọn dẹp tài nguyên ảnh ở Cloudinary/S3)
+  delete: async (id: string) => {
     const response = await api.delete<ApiResponse<null>>(`/artists/${id}`);
     return response.data;
   },
 
-  // --- 3. ARTIST SELF METHODS (Portal) ---
-
-  /** Lấy thông tin cá nhân (Artist Dashboard) */
+  // 10. ARTIST METHODS (Artist Portal) - Lấy thông tin profile của chính mình
   getMyProfile: async () => {
     const response = await api.get<ApiResponse<IArtist>>("/artists/me/profile");
     return response.data;
   },
 
-  /** Nghệ sĩ tự cập nhật Profile (Bio, Social, Images) */
+  // 11. ARTIST METHODS (Artist Portal) - Cập nhật thông tin profile của chính mình
   updateMyProfile: async (formData: FormData) => {
     const response = await api.patch<ApiResponse<IArtist>>(
       "/artists/me/profile",
@@ -115,14 +111,6 @@ const artistApi = {
         headers: { "Content-Type": "multipart/form-data" },
       },
     );
-    return response.data;
-  },
-
-  /** Lấy thống kê hiệu suất (Lượt nghe, Follow theo mốc thời gian) */
-  getDashboardStats: async (range: "7d" | "30d" | "all" = "30d") => {
-    const response = await api.get<ApiResponse<any>>("/artists/me/stats", {
-      params: { range },
-    });
     return response.data;
   },
 };

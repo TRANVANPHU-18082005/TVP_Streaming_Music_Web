@@ -71,8 +71,8 @@ type VisibilityId = (typeof VISIBILITY_OPTIONS)[number]["id"];
 interface UserPlaylistModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: { title?: string; visibility?: string }) => Promise<void>;
-  isPending: boolean;
+  onSubmit?: (data: { title?: string; visibility?: string }) => Promise<void>;
+  isPending?: boolean;
 }
 
 interface FormValues {
@@ -266,7 +266,7 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
 
     const onInternalSubmit = useCallback(
       async (data: FormValues) => {
-        await onSubmit({
+        await onSubmit?.({
           title: data.title || undefined,
           visibility: data.visibility,
         });

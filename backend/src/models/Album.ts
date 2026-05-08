@@ -2,7 +2,6 @@
 
 import mongoose, { Schema, Document, Model } from "mongoose";
 import { generateUniqueSlug } from "../utils/slug";
-import themeColorService from "../services/themeColor.service";
 
 export interface IAlbum extends Document {
   title: string;
@@ -21,6 +20,7 @@ export interface IAlbum extends Document {
   likeCount: number; // Số lượng yêu thích
   fileSize: number;
   isPublic: boolean;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +69,7 @@ const AlbumSchema = new Schema<IAlbum>(
 
     fileSize: { type: Number, default: 0 },
     isPublic: { type: Boolean, default: false, index: true },
+    isDeleted: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,
@@ -97,18 +98,6 @@ AlbumSchema.pre("save", async function () {
       album.title,
       album.isNew ? undefined : album._id,
     );
-  }
-
-  if (album.isModified("coverImage") && album.coverImage) {
-    if (!album.isModified("themeColor")) {
-      try {
-        album.themeColor = await themeColorService.extractThemeColor(
-          album.coverImage,
-        );
-      } catch {
-        album.themeColor = "#1db954";
-      }
-    }
   }
 
   if (album.isModified("releaseDate") || album.isNew) {
@@ -141,30 +130,41 @@ AlbumSchema.virtual("tracks", {
 AlbumSchema.statics.calculateStats = async function (
   albumId: string,
 ): Promise<void> {
-  // Import Track lazily để tránh circular dependency
   const Track = mongoose.model("Track");
+  const Like = mongoose.model("Like"); // Import model Like
 
-  const [result] = await Track.aggregate([
-    {
-      $match: {
-        album: new mongoose.Types.ObjectId(albumId),
-        isDeleted: false,
-        status: "ready",
-        isPublic: true,
+  const [trackStats, likeCount] = await Promise.all([
+    // 1. Tính toán từ Track (Duration, TotalTracks)
+    Track.aggregate([
+      {
+        $match: {
+          album: new mongoose.Types.ObjectId(albumId),
+          isDeleted: false,
+          status: "ready",
+          isPublic: true,
+        },
       },
-    },
-    {
-      $group: {
-        _id: null,
-        totalTracks: { $sum: 1 },
-        totalDuration: { $sum: { $ifNull: ["$duration", 0] } },
+      {
+        $group: {
+          _id: null,
+          totalTracks: { $sum: 1 },
+          totalDuration: { $sum: { $ifNull: ["$duration", 0] } },
+        },
       },
-    },
+    ]),
+    // 2. Đếm trực tiếp số Like của Album này
+    Like.countDocuments({
+      targetId: new mongoose.Types.ObjectId(albumId),
+      targetType: "album",
+    }),
   ]);
 
+  const result = trackStats[0] || { totalTracks: 0, totalDuration: 0 };
+
   await (this as Model<IAlbum>).findByIdAndUpdate(albumId, {
-    totalTracks: result?.totalTracks ?? 0,
-    totalDuration: result?.totalDuration ?? 0,
+    totalTracks: result.totalTracks,
+    totalDuration: result.totalDuration,
+    likeCount: likeCount, // Cập nhật số like thực tế
   });
 };
 

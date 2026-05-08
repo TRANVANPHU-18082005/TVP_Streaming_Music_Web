@@ -1,7 +1,7 @@
 import { useRef, useCallback } from "react";
 
 export function useLongPress(callback: () => void, delay = 500) {
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const start = useCallback(
     (e: React.TouchEvent | React.MouseEvent) => {
@@ -14,7 +14,9 @@ export function useLongPress(callback: () => void, delay = 500) {
   );
 
   const cancel = useCallback(() => {
-    clearTimeout(timerRef.current);
+    if (timerRef.current !== undefined) {
+      clearTimeout(timerRef.current);
+    }
   }, []);
 
   return {

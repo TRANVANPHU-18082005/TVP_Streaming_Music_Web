@@ -31,8 +31,7 @@ export const useGenrePlayback = (
       collectionName: genre?.name,
       collectionType: "genre" as const,
       queryKey: genre?._id ? genreKeys.detail(genre._id) : [],
-      // slug cho getDetail (API yêu cầu slug), _id cho queryKey (cache key)
-      fetchFn: () => genreApi.getDetail(genre!.slug),
+      fetchFn: () => genreApi.getGenreDetail(genre!.slug),
     }),
     [genre?._id, genre?.name, genre?.slug],
   );

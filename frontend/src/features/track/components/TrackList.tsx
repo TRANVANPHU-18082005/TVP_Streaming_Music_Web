@@ -1,30 +1,13 @@
-/**
- * @file TrackList.tsx — Virtual + Infinite Scroll
- *
- * @architecture
- *   Hai chế độ scroll:
- *   ─ maxHeight="auto"  → window scroll (useWindowVirtualizer)
- *   ─ maxHeight={number} → fixed height container scroll (useVirtualizer)
- *
- *   Data flow:
- *   ─ allTrackIds  ← toàn bộ IDs từ album (biết ngay, không cần fetch hết)
- *   ─ tracks       ← data.allTracks (flat từ infinite pages, lazy loaded)
- *   ─ totalItems   ← album.totalTracks (cho header badge)
- *   ─ isLoading    ← chỉ true khi chưa có page 1
- *
- * @fixes (production hardening)
- *   1. setQueue sai signature → { trackIds: string[], initialMetadata, startIndex }
- *   2. currentTrack không tồn tại trong slice state → selectCurrentTrack selector
- *   3. handlePlayTrack closure stale tracks → allTrackIds prop + trackIds ref
- *   4. height trên <Table> conflict với virtual spacer rows → xóa, chỉ dùng spacer <tr>
- *   5. Skeleton tail index → dùng vRow.index trực tiếp cho animation delay liên tục
- *   6. Window scroll getScrollElement: null → useWindowVirtualizer
- *   7. onTrackPlay gọi trước dispatch → swap thứ tự, dispatch trước
- */
-
-import React, { memo, useCallback, useRef, useEffect, useMemo } from "react";
+import React, {
+  memo,
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+} from "react";
 import { useVirtualizer, useWindowVirtualizer } from "@tanstack/react-virtual";
-import { Clock, Disc3, AlertCircle, RefreshCw } from "lucide-react";
+import { Clock, AlertCircle, RotateCcw, Music2 } from "lucide-react";
 import { shallowEqual } from "react-redux";
 import {
   Table,
@@ -35,7 +18,10 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+
+// Eager import — no Suspense flicker while scrolling
 import { TrackRow } from "./TrackRow";
+
 import { setQueue, setIsPlaying } from "@/features/player/slice/playerSlice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { ITrack } from "@/features/track/types";
@@ -45,68 +31,38 @@ import { ITrack } from "@/features/track/types";
 // ─────────────────────────────────────────────────────────────
 
 export interface TrackListProps {
-  /** Flat array đã load — từ data.allTracks của useAlbumTracksInfinite */
   tracks: ITrack[];
-  /**
-   * @fix #1 #3 — Toàn bộ IDs của album/playlist (biết ngay từ album meta).
-   * Dùng để setQueue với đầy đủ trackIds ngay cả khi chưa load hết tracks.
-   * Nếu không truyền, fallback về tracks.map(t => t._id) (chỉ loaded tracks).
-   */
   allTrackIds?: string[];
-  /**
-   * Tổng số track thực — từ album.totalTracks hoặc data.totalItems.
-   * Dùng cho: header badge, progress bar.
-   */
-
   totalItems?: number;
-  /** true khi chưa có page đầu tiên */
   isLoading?: boolean;
-  /** Error từ query */
   error?: Error | null;
-  /** true khi đang fetch page tiếp theo */
   isFetchingNextPage?: boolean;
-  /** false = đã hết data */
   hasNextPage?: boolean;
-  /** Gọi fetchNextPage */
   onFetchNextPage?: () => void;
-  /** Gọi refetch */
   onRetry?: () => void;
-  /**
-   * Optional callback sau khi dispatch setQueue/setIsPlaying.
-   * Được gọi SAU dispatch (không trước) để tránh activeId stale.
-   */
   onTrackPlay?: (track: ITrack, index: number) => void;
   className?: string;
   showHeader?: boolean;
-  /** Số skeleton rows lúc initial load */
   skeletonCount?: number;
-  /**
-   * Chiều cao scroll container:
-   * - number  → fixed height px (embedded variant, useVirtualizer)
-   * - "auto"  → window scroll   (page variant, useWindowVirtualizer)
-   * Default: "auto"
-   */
   maxHeight?: number | "auto";
-  /** Overscan buffer rows ngoài viewport */
   overscan?: number;
   staggerAnimation?: boolean;
   moodColor: string;
 }
 
 // ─────────────────────────────────────────────────────────────
-// Constants
+// Constants — defined outside component, zero GC pressure
 // ─────────────────────────────────────────────────────────────
 
-const ROW_H = 56; // h-14 = 3.5rem = 56px — phải khớp TrackRow
-const SKELETON_BATCH = 3; // skeleton rows khi fetching next page
+const ROW_H = 56;
+const SKELETON_BATCH = 3;
 
 const COLGROUP = (
   <colgroup>
-    <col style={{ width: "3rem" }} />
+    <col style={{ width: "2rem" }} />
     <col />
     <col style={{ width: "200px" }} className="hidden md:table-column" />
-    <col style={{ width: "3rem" }} />
-    <col style={{ width: "5rem" }} />
+    <col style={{ width: "4rem" }} />
   </colgroup>
 );
 
@@ -115,69 +71,59 @@ const COLGROUP = (
 // ─────────────────────────────────────────────────────────────
 
 const TrackSkeleton = memo(({ index }: { index: number }) => {
-  const titleW = 52 + (index % 4) * 11;
-  const artistW = 32 + (index % 3) * 9;
-  const albumW = 38 + (index % 5) * 7;
-  const rowOpacity = Math.max(0.15, 1 - (index % 10) * 0.08);
-  const d = (extra = 0) => ({
-    animationDelay: `${(index % 10) * 60 + extra}ms`,
-  });
+  // Widths computed deterministically per index — no randomness, no hydration mismatch
+  const i10 = index % 10;
+  const titleW = 45 + (index % 4) * 12;
+  const artistW = 28 + (index % 3) * 10;
+  const albumW = 35 + (index % 5) * 8;
+  const opacity = Math.max(0.12, 1 - i10 * 0.08);
+  const d = (extra = 0) => ({ animationDelay: `${i10 * 55 + extra}ms` });
 
   return (
     <TableRow
       aria-hidden="true"
-      className="h-14 border-b border-border/[0.06] hover:bg-transparent last:border-b-0"
-      style={{ opacity: rowOpacity }}
+      className="h-14 border-b border-border/[0.05] hover:bg-transparent last:border-b-0"
+      style={{ opacity }}
     >
       <TableCell className="w-12 p-0">
         <div className="flex h-14 items-center justify-center">
-          <div className="skeleton size-3.5 rounded-sm" style={d()} />
+          <div className="skeleton size-3 rounded-sm" style={d()} />
         </div>
       </TableCell>
       <TableCell className="py-0 pl-1 pr-4">
         <div className="flex items-center gap-3">
-          <div className="skeleton size-10 shrink-0 rounded" style={d()} />
-          <div className="flex flex-col gap-2 flex-1">
+          <div className="skeleton size-10 shrink-0 rounded-md" style={d()} />
+          <div className="flex flex-col gap-1.5 flex-1">
             <div
-              className="skeleton skeleton-text"
-              style={{ width: `${titleW}%`, ...d(80) }}
+              className="skeleton h-[11px] rounded-sm"
+              style={{ width: `${titleW}%`, ...d(70) }}
             />
             <div
-              className="skeleton skeleton-text"
-              style={{
-                width: `${artistW}%`,
-                height: "0.625rem",
-                opacity: 0.7,
-                ...d(160),
-              }}
+              className="skeleton h-[9px] rounded-sm"
+              style={{ width: `${artistW}%`, opacity: 0.65, ...d(140) }}
             />
           </div>
         </div>
       </TableCell>
       <TableCell className="hidden md:table-cell py-0 pr-4">
         <div
-          className="skeleton skeleton-text"
-          style={{
-            width: `${albumW}%`,
-            height: "0.625rem",
-            opacity: 0.65,
-            ...d(240),
-          }}
+          className="skeleton h-[9px] rounded-sm"
+          style={{ width: `${albumW}%`, opacity: 0.5, ...d(200) }}
         />
       </TableCell>
       <TableCell className="py-0 pr-1">
         <div className="flex justify-center">
           <div
-            className="skeleton size-8 rounded-full"
-            style={{ opacity: 0.5, ...d(280) }}
+            className="skeleton size-7 rounded-full"
+            style={{ opacity: 0.4, ...d(240) }}
           />
         </div>
       </TableCell>
       <TableCell className="py-0 pr-3">
         <div className="flex justify-end">
           <div
-            className="skeleton skeleton-bar w-10"
-            style={{ opacity: 0.6, ...d(320) }}
+            className="skeleton h-[9px] w-9 rounded-sm"
+            style={{ opacity: 0.5, ...d(280) }}
           />
         </div>
       </TableCell>
@@ -187,45 +133,25 @@ const TrackSkeleton = memo(({ index }: { index: number }) => {
 TrackSkeleton.displayName = "TrackSkeleton";
 
 // ─────────────────────────────────────────────────────────────
-// EmptyState
+// EmptyState — refined, minimal
 // ─────────────────────────────────────────────────────────────
 
 const EmptyState = memo(() => (
   <TableRow className="hover:bg-transparent border-0">
     <TableCell colSpan={5} className="p-0 border-0">
-      <div className="flex flex-col items-center justify-center gap-8 py-20 sm:py-28 animate-fade-up">
-        <div className="relative flex items-center justify-center">
-          <div
-            className="absolute size-32 rounded-full orb-float--brand animate-glow-pulse pointer-events-none"
-            style={{ filter: "blur(36px)", opacity: 0.18 }}
+      <div className="flex flex-col items-center justify-center gap-5 py-20 sm:py-24 animate-fade-up">
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-muted/60 border border-border/40 shadow-sm">
+          <Music2
+            className="size-6 text-muted-foreground/40"
             aria-hidden="true"
           />
-          <div
-            className="absolute size-[76px] rounded-full animate-vinyl-slow pointer-events-none"
-            style={{
-              background:
-                "conic-gradient(from 0deg, transparent 72%, hsl(var(--primary)/0.32) 100%)",
-            }}
-            aria-hidden="true"
-          />
-          <div
-            className={cn(
-              "relative flex size-16 items-center justify-center rounded-full",
-              "bg-muted border border-border/60 shadow-inset-top",
-            )}
-          >
-            <Disc3
-              className="size-7 text-muted-foreground/50 animate-vinyl-slow"
-              aria-hidden="true"
-            />
-          </div>
         </div>
-        <div className="text-center space-y-1.5">
-          <p className="text-track-title text-[15px] text-foreground">
+        <div className="text-center space-y-1">
+          <p className="text-sm font-medium text-foreground/70">
             Danh sách trống
           </p>
-          <p className="text-track-meta max-w-[240px] mx-auto leading-relaxed">
-            Chưa có bài hát nào ở đây. Hãy thêm nhạc để bắt đầu.
+          <p className="text-xs text-muted-foreground/50 max-w-[200px] mx-auto leading-relaxed">
+            Chưa có bài hát nào. Hãy thêm nhạc để bắt đầu.
           </p>
         </div>
       </div>
@@ -235,26 +161,24 @@ const EmptyState = memo(() => (
 EmptyState.displayName = "EmptyState";
 
 // ─────────────────────────────────────────────────────────────
-// ErrorState
+// ErrorState — compact, actionable
 // ─────────────────────────────────────────────────────────────
 
 const ErrorState = memo(({ onRetry }: { onRetry?: () => void }) => (
   <TableRow className="hover:bg-transparent border-0">
     <TableCell colSpan={5} className="p-0 border-0">
       <div className="flex flex-col items-center justify-center gap-4 py-16 animate-fade-up">
-        <div
-          className={cn(
-            "flex size-14 items-center justify-center rounded-full",
-            "bg-destructive/10 border border-destructive/20",
-          )}
-        >
-          <AlertCircle className="size-6 text-destructive/70" />
+        <div className="flex size-12 items-center justify-center rounded-xl bg-destructive/8 border border-destructive/15">
+          <AlertCircle
+            className="size-5 text-destructive/60"
+            aria-hidden="true"
+          />
         </div>
-        <div className="text-center space-y-1">
-          <p className="text-[14px] font-medium text-foreground">
+        <div className="text-center space-y-0.5">
+          <p className="text-sm font-medium text-foreground/80">
             Không thể tải danh sách
           </p>
-          <p className="text-track-meta text-xs">
+          <p className="text-xs text-muted-foreground/50">
             Đã có lỗi xảy ra khi tải bài hát.
           </p>
         </div>
@@ -262,12 +186,13 @@ const ErrorState = memo(({ onRetry }: { onRetry?: () => void }) => (
           <button
             onClick={onRetry}
             className={cn(
-              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium",
-              "bg-muted hover:bg-muted/80 text-foreground border border-border/60",
-              "transition-colors duration-150",
+              "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg",
+              "text-xs font-medium text-foreground/70",
+              "bg-muted/80 hover:bg-muted border border-border/50",
+              "transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
-            <RefreshCw className="size-3.5" />
+            <RotateCcw className="size-3" />
             Thử lại
           </button>
         )}
@@ -278,7 +203,7 @@ const ErrorState = memo(({ onRetry }: { onRetry?: () => void }) => (
 ErrorState.displayName = "ErrorState";
 
 // ─────────────────────────────────────────────────────────────
-// ColumnHeaders
+// ColumnHeaders — sticky, blurred, refined
 // ─────────────────────────────────────────────────────────────
 
 const ColumnHeaders = memo(
@@ -288,62 +213,69 @@ const ColumnHeaders = memo(
   }: {
     totalItems?: number;
     loadedCount?: number;
-  }) => (
-    <TableHeader className="sticky top-0 z-10">
-      <TableRow
-        className="hover:bg-transparent border-border/25"
-        style={{
-          background: "transparent",
-          WebkitBackdropFilter: "var(--glass-blur-heavy)",
-          backdropFilter: "var(--glass-blur-heavy)",
-          borderBottom: "1px solid hsl(var(--border) / 0.25)",
-        }}
-      >
-        <TableHead className="w-12 p-0 h-10">
-          <div className="flex h-10 items-center justify-center">
-            <span className="text-label text-muted-foreground">#</span>
-          </div>
-        </TableHead>
-        <TableHead className="pl-1 pr-4 h-10">
-          <div className="flex items-center gap-2">
-            <span className="text-label text-muted-foreground">Bài hát</span>
-            {!!totalItems && totalItems > 0 && (
-              <span
-                className={cn(
-                  "inline-flex items-center px-1.5 py-0.5 rounded-full",
-                  "text-[10px] font-medium tabular-nums leading-none",
-                  "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary)/0.6)] border border-[hsl(var(--primary)/0.15)]",
-                )}
-              >
-                {loadedCount != null && loadedCount < totalItems
-                  ? `${loadedCount} / ${totalItems}`
-                  : totalItems}
+  }) => {
+    const showBadge = !!totalItems && totalItems > 0;
+    const isPartial = loadedCount != null && loadedCount < (totalItems ?? 0);
+
+    return (
+      <TableHeader>
+        <TableRow
+          className="hover:bg-transparent"
+          style={{
+            background: "transparent",
+            WebkitBackdropFilter: "blur(20px)",
+            backdropFilter: "blur(20px)",
+            borderBottom: "1px solid hsl(var(--border) / 0.18)",
+          }}
+        >
+          <TableHead className="w-12 p-0 h-9">
+            <div className="flex h-9 items-center justify-center">
+              <span className="text-[11px] font-medium text-muted-foreground/50 tabular-nums">
+                #
               </span>
-            )}
-          </div>
-        </TableHead>
-        <TableHead className="hidden md:table-cell pr-4 h-10">
-          <span className="text-label text-muted-foreground">Album</span>
-        </TableHead>
-        <TableHead className="table-cell pr-1 h-10">
-          <span className="text-label text-muted-foreground">Like</span>
-        </TableHead>
-        <TableHead className="pr-3 h-10">
-          <div className="flex items-center justify-center">
-            <Clock
-              className="size-3.5 text-muted-foreground"
-              aria-label="Thời lượng"
-            />
-          </div>
-        </TableHead>
-      </TableRow>
-    </TableHeader>
-  ),
+            </div>
+          </TableHead>
+          <TableHead className="pl-1 pr-4 h-9">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
+                Bài hát
+              </span>
+              {showBadge && (
+                <span
+                  className={cn(
+                    "inline-flex items-center px-1.5 py-0.5 rounded-full tabular-nums leading-none",
+                    "text-[10px] font-medium",
+                    "bg-primary/8 text-primary/50 border border-primary/12",
+                  )}
+                >
+                  {isPartial ? `${loadedCount} / ${totalItems}` : totalItems}
+                </span>
+              )}
+            </div>
+          </TableHead>
+          <TableHead className="hidden md:table-cell pr-4 h-9">
+            <span className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
+              Album
+            </span>
+          </TableHead>
+
+          <TableHead className="pr-3 h-9">
+            <div className="flex items-center justify-center">
+              <Clock
+                className="size-3 text-muted-foreground/50"
+                aria-label="Thời lượng"
+              />
+            </div>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+    );
+  },
 );
 ColumnHeaders.displayName = "ColumnHeaders";
 
 // ─────────────────────────────────────────────────────────────
-// ScrollProgressBar — chỉ fixed height mode
+// ScrollProgressBar — 1px, RAF-driven, imperative
 // ─────────────────────────────────────────────────────────────
 
 const ScrollProgressBar = memo(
@@ -354,54 +286,46 @@ const ScrollProgressBar = memo(
   }) => {
     const fillRef = useRef<HTMLDivElement>(null);
     const rafRef = useRef(0);
-    const visibleRef = useRef(false);
-    const barRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
       const container = containerRef.current;
       if (!container) return;
 
-      const handleScroll = () => {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = requestAnimationFrame(() => {
-          const max = container.scrollHeight - container.clientHeight;
-          if (max <= 0) {
-            if (visibleRef.current && barRef.current) {
-              barRef.current.style.opacity = "0";
-              visibleRef.current = false;
-            }
-            return;
-          }
-          const pct = Math.min(1, container.scrollTop / max);
-          if (fillRef.current) fillRef.current.style.width = `${pct * 100}%`;
-          if (!visibleRef.current && pct > 0 && barRef.current) {
-            barRef.current.style.opacity = "1";
-            visibleRef.current = true;
-          } else if (pct === 0 && visibleRef.current && barRef.current) {
-            barRef.current.style.opacity = "0";
-            visibleRef.current = false;
-          }
-        });
+      const update = () => {
+        const max = container.scrollHeight - container.clientHeight;
+        if (!fillRef.current) return;
+        if (max <= 0) {
+          fillRef.current.style.transform = "scaleX(0)";
+          return;
+        }
+        const pct = Math.min(1, container.scrollTop / max);
+        fillRef.current.style.transform = `scaleX(${pct})`;
       };
 
-      container.addEventListener("scroll", handleScroll, { passive: true });
+      const onScroll = () => {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(update);
+      };
+
+      container.addEventListener("scroll", onScroll, { passive: true });
       return () => {
         cancelAnimationFrame(rafRef.current);
-        container.removeEventListener("scroll", handleScroll);
+        container.removeEventListener("scroll", onScroll);
       };
     }, [containerRef]);
 
     return (
       <div
-        ref={barRef}
-        className="absolute top-[50px] left-0 right-0 h-[2px] z-20 overflow-hidden rounded-t-2xl transition-opacity duration-150"
-        style={{ opacity: 0 }}
+        className="absolute top-[39px] inset-x-0 h-px z-20 overflow-hidden"
         aria-hidden="true"
       >
         <div
           ref={fillRef}
-          className="h-full bg-linear-to-r from-primary/60 via-primary to-primary/60"
-          style={{ width: "0%" }}
+          className="h-full origin-left bg-linear-to-r from-primary/40 via-primary/70 to-primary/40"
+          style={{
+            transform: "scaleX(0)",
+            transition: "transform 80ms linear",
+          }}
         />
       </div>
     );
@@ -410,7 +334,7 @@ const ScrollProgressBar = memo(
 ScrollProgressBar.displayName = "ScrollProgressBar";
 
 // ─────────────────────────────────────────────────────────────
-// VirtualTableBody — tách ra để dùng virtualItems từ cả 2 virtualizer
+// VirtualTableBody — custom areEqual to skip unnecessary renders
 // ─────────────────────────────────────────────────────────────
 
 interface VirtualTableBodyProps {
@@ -423,6 +347,21 @@ interface VirtualTableBodyProps {
   isPlaying: boolean;
   staggerAnimation: boolean;
   onPlay: (track: ITrack, index: number) => void;
+}
+
+function virtualBodyAreEqual(
+  prev: VirtualTableBodyProps,
+  next: VirtualTableBodyProps,
+) {
+  // Re-render only when virtual window, data, or player state changes
+  if (prev.virtualItems !== next.virtualItems) return false;
+  if (prev.totalVirtualH !== next.totalVirtualH) return false;
+  if (prev.tracks !== next.tracks) return false;
+  if (prev.activeId !== next.activeId) return false;
+  if (prev.isPlaying !== next.isPlaying) return false;
+  if (prev.staggerAnimation !== next.staggerAnimation) return false;
+  if (prev.onPlay !== next.onPlay) return false;
+  return true;
 }
 
 const VirtualTableBody = memo(
@@ -442,18 +381,12 @@ const VirtualTableBody = memo(
 
     return (
       <TableBody style={{ display: "table-row-group" }}>
-        {/* Top spacer */}
-        {topH > 0 && <tr aria-hidden="true" style={{ height: `${topH}px` }} />}
+        {topH > 0 && <tr aria-hidden="true" style={{ height: topH }} />}
 
         {virtualItems.map((vRow) => {
           const track = tracks[vRow.index];
 
           if (!track) {
-            /**
-             * @fix #5 — dùng vRow.index thay vì (vRow.index - tracks.length)
-             * để animation delay tiếp tục liên tục từ bài cuối đã load.
-             * TrackSkeleton tự mod index % 10 để tránh delay quá lớn.
-             */
             return (
               <TrackSkeleton key={`sk-tail-${vRow.index}`} index={vRow.index} />
             );
@@ -468,19 +401,45 @@ const VirtualTableBody = memo(
               isPlaying={isPlaying}
               onPlay={() => onPlay(track, vRow.index)}
               animationDelay={
-                staggerAnimation ? Math.min(vRow.index * 28, 280) : 0
+                staggerAnimation ? Math.min(vRow.index * 24, 240) : 0
               }
             />
           );
         })}
 
-        {/* Bottom spacer */}
-        {botH > 0 && <tr aria-hidden="true" style={{ height: `${botH}px` }} />}
+        {botH > 0 && <tr aria-hidden="true" style={{ height: botH }} />}
       </TableBody>
     );
   },
+  virtualBodyAreEqual,
 );
 VirtualTableBody.displayName = "VirtualTableBody";
+
+// ─────────────────────────────────────────────────────────────
+// FetchingIndicator — separated for clean rendering
+// ─────────────────────────────────────────────────────────────
+
+const FetchingIndicator = memo(() => (
+  <div className="flex items-center justify-center gap-2 py-3 animate-fade-up">
+    <div className="flex gap-[3px] items-end h-3">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="w-[3px] rounded-full bg-primary/40 animate-bounce"
+          style={{
+            height: `${8 + i * 2}px`,
+            animationDelay: `${i * 100}ms`,
+            animationDuration: "0.8s",
+          }}
+        />
+      ))}
+    </div>
+    <span className="text-[11px] text-muted-foreground/50 font-medium">
+      Đang tải thêm
+    </span>
+  </div>
+));
+FetchingIndicator.displayName = "FetchingIndicator";
 
 // ─────────────────────────────────────────────────────────────
 // TrackList — main export
@@ -508,11 +467,6 @@ export const TrackList = memo(
   }: TrackListProps) => {
     const dispatch = useAppDispatch();
 
-    /**
-     * @fix #2 — selectCurrentTrack (memoized selector) thay vì s.player.currentTrack
-     * playerSlice ID-First không có field currentTrack — chỉ có currentTrackId + cache.
-     * selectCurrentTrack = createSelector(currentTrackId, cache) → ITrack | null
-     */
     const { currentTrackId, isPlaying } = useAppSelector(
       (s) => ({
         currentTrackId: s.player.currentTrackId,
@@ -522,34 +476,34 @@ export const TrackList = memo(
     );
 
     const activeId = currentTrackId;
-
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const sentinelRef = useRef<HTMLDivElement>(null);
+    const scrollMarginRef = useRef(0);
 
     const isFixedHeight = maxHeight !== "auto";
     const isEmpty = !isLoading && !error && tracks.length === 0;
-
-    // Skeleton tail khi isFetchingNextPage
     const skeletonRows = isFetchingNextPage ? SKELETON_BATCH : 0;
     const virtualCount = tracks.length + skeletonRows;
 
-    /**
-     * @fix #3 — trackIds ref để handlePlayTrack không cần tracks/allTrackIds trong closure.
-     * allTrackIds (toàn bộ album IDs) stable hơn tracks (grow với mỗi page).
-     * Ref luôn trỏ tới giá trị mới nhất mà không làm callback invalidate.
-     */
+    // Stable refs — prevent callback recreation when data grows
     const trackIdsRef = useRef<string[]>([]);
     useEffect(() => {
       trackIdsRef.current = allTrackIds ?? tracks.map((t) => t._id);
     }, [allTrackIds, tracks]);
 
-    // tracks ref — cho initialMetadata trong setQueue
     const tracksRef = useRef<ITrack[]>(tracks);
     useEffect(() => {
       tracksRef.current = tracks;
     }, [tracks]);
 
-    // ── Virtualizer — fixed height mode ───────────────────────
+    // Capture scrollMargin once after mount (stable, not stale)
+    useLayoutEffect(() => {
+      if (!isFixedHeight) {
+        scrollMarginRef.current = scrollContainerRef.current?.offsetTop ?? 0;
+      }
+    }, [isFixedHeight]);
+
+    // ── Virtualizer ────────────────────────────────────────────
     const fixedVirtualizer = useVirtualizer({
       count: isFixedHeight ? virtualCount : 0,
       getScrollElement: () =>
@@ -559,16 +513,11 @@ export const TrackList = memo(
       enabled: isFixedHeight,
     });
 
-    /**
-     * @fix #6 — useWindowVirtualizer thay vì getScrollElement: null
-     * useVirtualizer với null scroll element không observe window scroll events.
-     * useWindowVirtualizer được thiết kế đúng cho window scroll.
-     */
     const windowVirtualizer = useWindowVirtualizer({
       count: !isFixedHeight ? virtualCount : 0,
       estimateSize: () => ROW_H,
       overscan,
-      scrollMargin: scrollContainerRef.current?.offsetTop ?? 0,
+      scrollMargin: scrollMarginRef.current,
       enabled: !isFixedHeight,
     });
 
@@ -576,29 +525,29 @@ export const TrackList = memo(
     const virtualItems = virtualizer.getVirtualItems();
     const totalVirtualH = virtualizer.getTotalSize();
 
-    // ── Intersection Observer sentinel ─────────────────────────
+    // ── Sentinel (IntersectionObserver) ────────────────────────
+    const onFetchNextPageRef = useRef(onFetchNextPage);
+    useEffect(() => {
+      onFetchNextPageRef.current = onFetchNextPage;
+    }, [onFetchNextPage]);
+
     useEffect(() => {
       const sentinel = sentinelRef.current;
       if (!sentinel || !hasNextPage || isFetchingNextPage) return;
 
       const root = isFixedHeight ? scrollContainerRef.current : null;
       const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries[0]?.isIntersecting) onFetchNextPage?.();
+        ([entry]) => {
+          if (entry?.isIntersecting) onFetchNextPageRef.current?.();
         },
         { root, rootMargin: "300px", threshold: 0 },
       );
 
       observer.observe(sentinel);
       return () => observer.disconnect();
-    }, [hasNextPage, isFetchingNextPage, isFixedHeight, onFetchNextPage]);
+    }, [hasNextPage, isFetchingNextPage, isFixedHeight]);
+
     // ── Play handler ───────────────────────────────────────────
-    /**
-     * @fix #1 — setQueue signature: { trackIds, initialMetadata, startIndex }
-     * @fix #3 — trackIdsRef / tracksRef để không invalidate callback saat tracks grow
-     * @fix #7 — dispatch trước, onTrackPlay callback sau
-     *           (onTrackPlay trước có thể dispatch action → activeId stale trong closure)
-     */
     const handlePlayTrack = useCallback(
       (track: ITrack, index: number) => {
         if (activeId === track._id) {
@@ -614,44 +563,32 @@ export const TrackList = memo(
                 id: track._id,
                 type: "single",
                 title: track.title,
-                // Tự động thêm chữ 's' vào sourceType để match với route (ví dụ: /albums/, /playlists/)
-                url: ``,
+                url: "",
               },
             }),
           );
         }
-        // @fix #7 — callback sau dispatch, không trước
         onTrackPlay?.(track, index);
       },
-      // trackIdsRef, tracksRef không masuk deps — stable refs
       [dispatch, activeId, isPlaying, onTrackPlay],
     );
 
-    // ── Skeleton array (initial load) ──────────────────────────
+    // ── Memoized values ────────────────────────────────────────
     const skeletons = useMemo(
       () => Array.from({ length: skeletonCount }, (_, i) => i),
       [skeletonCount],
     );
 
-    // ── Container style ────────────────────────────────────────
-    const scrollStyle: React.CSSProperties = isFixedHeight
-      ? { maxHeight: `${maxHeight}px`, overflowY: "auto", overflowX: "hidden" }
-      : { overflowX: "hidden" };
-
-    // ── Shared header table (sticky, luar scroll container) ────
-    const headerTable = showHeader && (
-      <div className="px-4 pt-4 shrink-0">
-        <Table
-          className="w-full border-collapse"
-          style={{ tableLayout: "fixed" }}
-        >
-          {COLGROUP}
-          <ColumnHeaders
-            totalItems={totalItems || tracks.length}
-            loadedCount={tracks.length}
-          />
-        </Table>
-      </div>
+    const scrollStyle = useMemo<React.CSSProperties>(
+      () =>
+        isFixedHeight
+          ? {
+            maxHeight: `${maxHeight}px`,
+            overflowY: "auto",
+            overflowX: "hidden",
+          }
+          : { overflowX: "hidden" },
+      [isFixedHeight, maxHeight],
     );
 
     // ─────────────────────────────────────────────────────────────
@@ -662,35 +599,46 @@ export const TrackList = memo(
       <div
         className={cn(
           "relative rounded-2xl flex flex-col",
-          "border border-border/50 dark:border-primary/15",
-          "shadow-brand-dynamic", // Class mới tạo ở trên
+          "border border-border/40 dark:border-white/[0.07]",
+          "shadow-brand-dynamic",
           "animate-fade-up animation-fill-both",
         )}
         style={
           {
             animationDelay: "80ms",
-            // Nếu không có moodColor thì fallback về màu primary mặc định
             "--local-shadow-color": moodColor || "var(--primary)",
           } as React.CSSProperties
         }
       >
-        {/* Progress bar — fixed height only, imperative rAF */}
         {isFixedHeight && (
           <ScrollProgressBar containerRef={scrollContainerRef} />
         )}
 
-        {/* Sticky header — ngoài scroll container */}
-        {headerTable}
+        {/* ── Sticky header (outside scroll container) ──────── */}
+        {showHeader && (
+          <div className="px-2 pt-2 shrink-0">
+            <Table
+              className="w-full border-collapse"
+              style={{ tableLayout: "fixed" }}
+            >
+              {COLGROUP}
+              <ColumnHeaders
+                totalItems={totalItems || tracks.length}
+                loadedCount={tracks.length}
+              />
+            </Table>
+          </div>
+        )}
 
-        {/* ── Scroll container ───────────────────────────────── */}
+        {/* ── Scroll container ──────────────────────────────── */}
         <div
           ref={scrollContainerRef}
           role="region"
           aria-label="Danh sách bài hát"
-          className={cn("px-4 pb-4 flex-1", className)}
+          className={cn("px-2 pb-2 flex-1", className)}
           style={scrollStyle}
         >
-          {/* CASE 1 — Initial loading */}
+          {/* CASE 1 — Initial skeleton */}
           {isLoading && (
             <Table
               className="w-full border-collapse"
@@ -735,12 +683,8 @@ export const TrackList = memo(
           {!isLoading && !error && tracks.length > 0 && (
             <>
               {/**
-               * @fix #4 — KHÔNG set height trên <Table>
-               * Trước đây: height={estimatedTotalHeight} trên Table conflict với
-               * spacer <tr> bên trong → double-counting, scrollbar sai.
-               * Đúng: chỉ dùng spacer <tr> top/bottom trong VirtualTableBody.
-               * totalVirtualH từ virtualizer.getTotalSize() đã bao gồm
-               * estimated height của toàn bộ rows (kể cả chưa load).
+               * @fix #4 — NO height on <Table>
+               * Only spacer <tr> rows drive scroll height — avoids double-counting.
                */}
               <Table
                 className="w-full border-collapse"
@@ -758,37 +702,15 @@ export const TrackList = memo(
                 />
               </Table>
 
-              {/* Sentinel: trigger fetchNextPage */}
+              {/* Infinite scroll sentinel */}
               <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
 
               {/* Bottom status */}
-              <div className="flex items-center justify-center min-h-[40px]">
-                {isFetchingNextPage && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground/60 animate-fade-up">
-                    <svg
-                      className="size-3.5 animate-spin text-primary/50"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                    <span className="text-label">Đang tải thêm...</span>
-                  </div>
-                )}
+              <div className="flex items-center justify-center min-h-[44px]">
+                {isFetchingNextPage && <FetchingIndicator />}
+
                 {!hasNextPage && !isFetchingNextPage && tracks.length > 0 && (
-                  <p className="text-[11px] text-muted-foreground/35 text-label tabular-nums">
+                  <p className="text-[11px] text-muted-foreground/30 tabular-nums font-medium">
                     {tracks.length}
                     {totalItems > 0 && tracks.length < totalItems
                       ? ` / ${totalItems}`

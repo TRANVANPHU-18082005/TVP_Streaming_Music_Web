@@ -1,30 +1,30 @@
-import { Artist } from "../types";
-import { ArtistFormValues } from "../schemas/artist.schema";
+import { IArtist } from "@/features";
+import { ArtistEditFormValues } from "../schemas/artist.schema";
 
-export const ARTIST_DEFAULT_VALUES: ArtistFormValues = {
+export const ARTIST_DEFAULT_VALUES: ArtistEditFormValues = {
   name: "",
   aliases: [],
   nationality: "VN",
-  genreIds: [],
-  userId: "",
-  bio: "",
+  userId: undefined,
+  bio: undefined,
   themeColor: "#ffffff",
   isVerified: false,
-  isActive: true,
-  socialLinks: {
-    facebook: "",
-    instagram: "",
-    twitter: "",
-    website: "",
-    spotify: "",
-    youtube: "",
-  },
-  avatar: null,
-  coverImage: null,
+  // ── FLAT SOCIAL LINKS (match schema) ──
+  facebook: undefined,
+  instagram: undefined,
+  twitter: undefined,
+  website: undefined,
+  spotify: undefined,
+  youtube: undefined,
+  // ── MEDIA ──
+  avatar: undefined,
+  coverImage: undefined,
   images: [],
 };
 
-export const mapEntityToForm = (artist?: Artist | null): ArtistFormValues => {
+export const mapEntityToForm = (
+  artist?: IArtist | null,
+): ArtistEditFormValues => {
   if (!artist) return ARTIST_DEFAULT_VALUES;
 
   return {
@@ -33,25 +33,20 @@ export const mapEntityToForm = (artist?: Artist | null): ArtistFormValues => {
     aliases: artist.aliases || [],
     nationality: artist.nationality || "VN",
     // Nếu API trả về object user -> lấy _id
-    userId:
-      typeof artist.user === "object" ? artist.user?._id : artist.user || "",
-    // Nếu API trả về object genre -> lấy _id
-    genreIds:
-      artist.genres?.map((g: any) => (typeof g === "object" ? g._id : g)) || [],
-    bio: artist.bio || "",
+    userId: typeof artist.user === "object" ? artist.user?._id : artist.user,
+    bio: artist.bio,
     themeColor: artist.themeColor || "#ffffff",
-    isVerified: artist.isVerified,
-    isActive: artist.isActive,
-    socialLinks: {
-      facebook: artist.socialLinks?.facebook || "",
-      instagram: artist.socialLinks?.instagram || "",
-      twitter: artist.socialLinks?.twitter || "",
-      website: artist.socialLinks?.website || "",
-      spotify: artist.socialLinks?.spotify || "",
-      youtube: artist.socialLinks?.youtube || "",
-    },
-    avatar: artist.avatar || null,
-    coverImage: artist.coverImage || null,
+    isVerified: artist.isVerified || false,
+    // ── FLAT SOCIAL LINKS (match schema) ──
+    facebook: artist.socialLinks?.facebook,
+    instagram: artist.socialLinks?.instagram,
+    twitter: artist.socialLinks?.twitter,
+    website: artist.socialLinks?.website,
+    spotify: artist.socialLinks?.spotify,
+    youtube: artist.socialLinks?.youtube,
+    // ── MEDIA ──
+    avatar: artist.avatar || undefined,
+    coverImage: artist.coverImage || undefined,
     images: artist.images || [],
   };
 };

@@ -31,6 +31,10 @@ import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import { toCDN } from "@/utils/track-helper";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { selectPlayer, setIsPlaying, setQueue } from "..";
+import { handleError } from "@/utils/handleError";
+import { APP_CONFIG } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPRING PRESETS — module scope, no alloc per render
@@ -95,12 +99,12 @@ function formatDate(d: string | Date | undefined): string {
 
 const TrackRowSkeleton = memo(() => (
   <div className="flex items-center gap-3 p-2">
-    <div className="w-10 h-10 rounded-lg bg-white/[0.06] shrink-0 animate-pulse" />
+    <div className="w-10 h-10 rounded-lg bg-[var(--fp-border)] shrink-0 animate-pulse" />
     <div className="flex-1 space-y-2">
-      <div className="h-3 w-3/5 bg-white/[0.06] rounded animate-pulse" />
-      <div className="h-2.5 w-2/5 bg-white/[0.04] rounded animate-pulse" />
+      <div className="h-3 w-3/5 bg-[var(--fp-border)] rounded animate-pulse" />
+      <div className="h-2.5 w-2/5 bg-[var(--fp-border)] rounded animate-pulse" />
     </div>
-    <div className="h-6 w-6 bg-white/[0.04] rounded animate-pulse" />
+    <div className="h-6 w-6 bg-[var(--fp-border)] rounded animate-pulse" />
   </div>
 ));
 TrackRowSkeleton.displayName = "TrackRowSkeleton";
@@ -131,6 +135,7 @@ const TrackRow = memo(
     const handleAdd = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
+
         onAddToPlaylist(item);
       },
       [item, onAddToPlaylist],
@@ -138,6 +143,8 @@ const TrackRow = memo(
     const handlePlay = useCallback(() => onPlay?.(item), [item, onPlay]);
     const handleKey = useCallback(
       (e: React.KeyboardEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (e.key === "Enter") onPlay?.(item);
       },
       [item, onPlay],
@@ -152,31 +159,28 @@ const TrackRow = memo(
       <motion.div
         variants={prefersReduced ? {} : STAGGER_ITEM}
         layout="position"
-        className="group relative flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-white/[0.06] active:bg-white/[0.09] transition-colors duration-150 cursor-pointer"
-        onClick={handlePlay}
+        className="group relative flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-[var(--fp-hover-bg)] active:bg-[var(--fp-active-bg)] transition-colors duration-150 cursor-pointer"
         role="button"
         tabIndex={0}
         onKeyDown={handleKey}
         aria-label={`Phát ${item.title} — ${artistName}`}
       >
         {/* Cover — PERF-1: CSS overlay, no Framer motion.div */}
-        <div className="relative shrink-0 w-10 h-10">
+        <div className="relative shrink-0 w-10 h-10" onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          handlePlay();
+        }}>
           <ImageWithFallback
             src={toCDN(item.coverImage) || item.coverImage}
             alt={item.title}
-            className="w-10 h-10 rounded-lg object-cover ring-1 ring-white/10"
+            className="w-10 h-10 rounded-lg object-cover ring-1 ring-[var(--fp-border)]"
           />
-          <div
-            className="absolute inset-0 rounded-lg bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
-            aria-hidden="true"
-          >
-            <Play className="w-4 h-4 text-white fill-white" />
-          </div>
         </div>
 
         {/* Text */}
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-white/90 truncate leading-snug">
+          <p className="text-[13px] font-semibold text-[var(--fp-fg)] truncate leading-snug">
             {item.title}
           </p>
           <ArtistDisplay
@@ -196,7 +200,7 @@ const TrackRow = memo(
             transition={SP.snappy}
             onClick={handleAdd}
             aria-label="Thêm vào playlist"
-            className="p-1.5 rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.08] transition-colors"
+            className="p-1.5 rounded-lg text-[var(--fp-fg-subtle)] hover:text-[var(--fp-fg)] hover:bg-[var(--fp-hover-bg)] transition-colors"
           >
             <ListPlus className="w-4 h-4" />
           </motion.button>
@@ -205,7 +209,7 @@ const TrackRow = memo(
             transition={SP.snappy}
             onClick={handleMore}
             aria-label="Tùy chọn khác"
-            className="p-1.5 rounded-lg text-white/40 hover:text-white/80 hover:bg-white/[0.08] transition-colors"
+            className="p-1.5 rounded-lg text-[var(--fp-fg-subtle)] hover:text-[var(--fp-fg)] hover:bg-[var(--fp-hover-bg)] transition-colors"
           >
             <MoreHorizontal className="w-4 h-4" />
           </motion.button>
@@ -232,7 +236,7 @@ const SectionLabel = memo(
   }) => (
     <div className="flex items-center gap-2 mb-2.5">
       <Icon className="w-3.5 h-3.5 text-[hsl(var(--primary))]" />
-      <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+      <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--fp-fg-subtle)]">
         {label}
       </h4>
       {count != null && (
@@ -282,7 +286,7 @@ const TrackInfoSection = memo(({ track }: { track: ITrack }) => {
       <SectionLabel icon={Music2} label="Thông tin" />
       {/* Compact cover + title header */}
       <div className="flex items-center gap-3 px-1 py-2 mb-1">
-        <div className="size-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10 shadow-lg">
+        <div className="size-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-[var(--fp-border)] shadow-lg">
           <ImageWithFallback
             src={toCDN(track.coverImage) || track.coverImage}
             alt=""
@@ -307,11 +311,13 @@ const TrackInfoSection = memo(({ track }: { track: ITrack }) => {
         {rows.map(({ icon: Icon, label, value }) => (
           <div
             key={label}
-            className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-white/[0.04] transition-colors"
+            className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-[var(--fp-hover-bg)] transition-colors"
           >
-            <Icon className="w-3.5 h-3.5 text-white/25 shrink-0" />
-            <dt className="text-[11px] text-white/30 w-20 shrink-0">{label}</dt>
-            <dd className="text-[12px] text-white/75 font-medium truncate">
+            <Icon className="w-3.5 h-3.5 text-[var(--fp-fg-subtle)] shrink-0" />
+            <dt className="text-[11px] text-[var(--fp-fg-subtle)] w-20 shrink-0">
+              {label}
+            </dt>
+            <dd className="text-[12px] text-[var(--fp-fg-muted)] font-medium truncate">
               {value}
             </dd>
           </div>
@@ -334,27 +340,23 @@ interface TrackSectionProps {
 
 const RecommendedSection = memo(
   ({ excludeTrackId, onPlay }: TrackSectionProps) => {
-    const { openOptionSheet, openAddToPlaylistSheet } = useContextSheet();
+    const { openTrackSheet, openAddToPlaylistSheet } = useContextSheet();
 
     const {
       data: tracks,
       isLoading,
       error,
       isFetching,
-    } = useRecommendedTracks(5, excludeTrackId);
+    } = useRecommendedTracks(APP_CONFIG.SELECTOR_LIMIT, excludeTrackId);
     const openSheet = useCallback(
-      (type: "playlist" | "options", t: ITrack) => {
-        if (type === "options") openOptionSheet(t);
+      (type: "playlist" | "track", t: ITrack) => {
+        if (type === "track") openTrackSheet(t);
         else if (type === "playlist") openAddToPlaylistSheet(undefined, [t]);
       },
-      [openOptionSheet, openAddToPlaylistSheet],
+      [openTrackSheet, openAddToPlaylistSheet],
     );
-    // const closeSheet = useCallback(() => {
-    //   closeContextSheet();
-    // }, [closeContextSheet]);
-    // PERF-2: no anchor param
     const handleMoreOptions = useCallback(
-      (t: ITrack) => openSheet("options", t),
+      (t: ITrack) => openSheet("track", t),
       [openSheet],
     );
     const handleAddToPlaylist = useCallback(
@@ -383,7 +385,7 @@ const RecommendedSection = memo(
               animate="show"
               className="space-y-0.5"
             >
-              {tracks?.map((item, idx) => (
+              {tracks?.map((item: ITrack, idx: number) => (
                 <TrackRow
                   key={item._id}
                   item={item}
@@ -412,15 +414,16 @@ RecommendedSection.displayName = "RecommendedSection";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SimilarSection = memo(({ trackId, onPlay }: TrackSectionProps) => {
-  const { openOptionSheet, openAddToPlaylistSheet } = useContextSheet();
+  const { openTrackSheet, openAddToPlaylistSheet } = useContextSheet();
 
-  const { data: tracks, isLoading, error } = useSimilarTracks(trackId!, 5);
+  const { data: tracks, isLoading, error } = useSimilarTracks(trackId!, APP_CONFIG.SELECTOR_LIMIT);
+
   const openSheet = useCallback(
     (type: "playlist" | "options", t: ITrack) => {
-      if (type === "options") openOptionSheet(t);
+      if (type === "options") openTrackSheet(t);
       else if (type === "playlist") openAddToPlaylistSheet(undefined, [t]);
     },
-    [openOptionSheet, openAddToPlaylistSheet],
+    [openTrackSheet, openAddToPlaylistSheet],
   );
   const handleMoreOptions = useCallback(
     (t: ITrack) => openSheet("options", t),
@@ -450,7 +453,7 @@ const SimilarSection = memo(({ trackId, onPlay }: TrackSectionProps) => {
             animate="show"
             className="space-y-0.5"
           >
-            {tracks?.map((item, idx) => (
+            {tracks?.map((item: ITrack, idx: number) => (
               <TrackRow
                 key={item._id}
                 item={item}
@@ -473,15 +476,15 @@ SimilarSection.displayName = "SimilarSection";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ActionBar = memo(({ track }: { track: ITrack }) => {
-  const { openOptionSheet, openAddToPlaylistSheet } = useContextSheet();
+  const { openTrackSheet, openAddToPlaylistSheet } = useContextSheet();
   const [shared, setShared] = useState(false);
 
   const openSheet = useCallback(
-    (type: "playlist" | "options", t: ITrack) => {
-      if (type === "options") openOptionSheet(t);
+    (type: "playlist" | "track", t: ITrack) => {
+      if (type === "track") openTrackSheet(t);
       else if (type === "playlist") openAddToPlaylistSheet(undefined, [t]);
     },
-    [openOptionSheet, openAddToPlaylistSheet],
+    [openTrackSheet, openAddToPlaylistSheet],
   );
 
   const handleAddToPlaylist = useCallback(
@@ -513,14 +516,14 @@ const ActionBar = memo(({ track }: { track: ITrack }) => {
         whileTap={{ scale: 0.96 }}
         transition={SP.snappy}
         onClick={handleAddToPlaylist}
-        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/[0.07] hover:bg-white/[0.11] text-[13px] font-semibold text-white/75 hover:text-white transition-colors border border-white/[0.06]"
+        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--fp-border)] hover:bg-[var(--fp-hover-bg)] text-[13px] font-semibold text-[var(--fp-fg-muted)] hover:text-[var(--fp-fg)] transition-colors border border-[var(--fp-border)]"
       >
         <ListPlus className="w-4 h-4" />
         Thêm vào playlist
       </motion.button>
 
       {/* Like button — uses real Redux store via TrackLikeButton */}
-      <div className="flex items-center justify-center px-3 rounded-xl bg-white/[0.07] border border-white/[0.06] hover:bg-white/[0.11] transition-colors">
+      <div className="flex items-center justify-center px-3 rounded-xl bg-[var(--fp-border)] border border-[var(--fp-border)] hover:bg-[var(--fp-hover-bg)] transition-colors">
         <TrackLikeButton id={track._id} />
       </div>
 
@@ -534,7 +537,7 @@ const ActionBar = memo(({ track }: { track: ITrack }) => {
           "px-3.5 rounded-xl border transition-all duration-200",
           shared
             ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-            : "bg-white/[0.07] border-white/[0.06] text-white/50 hover:text-white/80 hover:bg-white/[0.11]",
+            : "bg-[var(--fp-border)] border-[var(--fp-border)] text-[var(--fp-fg-subtle)] hover:text-[var(--fp-fg)] hover:bg-[var(--fp-hover-bg)]",
         )}
       >
         <AnimatePresence mode="wait" initial={false}>
@@ -566,14 +569,42 @@ ActionBar.displayName = "ActionBar";
 interface TrackDetailPanelProps {
   track: ITrack;
   direction: number;
-  onPlayTrack?: (track: ITrack) => void;
+
 }
 
 export const TrackDetailPanel = memo(
-  ({ track, direction, onPlayTrack }: TrackDetailPanelProps) => {
-    const handlePlay = useCallback(
-      (t: ITrack) => onPlayTrack?.(t),
-      [onPlayTrack],
+  ({ track, direction }: TrackDetailPanelProps) => {
+    const dispatch = useAppDispatch();
+    const { currentTrackId, isPlaying: isGlobalPlaying } =
+      useAppSelector(selectPlayer);
+
+    const handlePlayTrack = useCallback(
+      async (track: ITrack) => {
+        // 1. Nếu bài này đang phát rồi -> Toggle Play/Pause
+        if (currentTrackId === track._id) {
+          dispatch(setIsPlaying(!isGlobalPlaying));
+          return;
+        }
+        try {
+          dispatch(
+            setQueue({
+              trackIds: [track._id],
+              initialMetadata: [track], // Chèn data trả từ search.service.ts
+              startIndex: 0,
+              isShuffling: false,
+              source: {
+                id: track._id,
+                type: "single",
+                title: track.title,
+                url: "",
+              },
+            }),
+          );
+        } catch (err) {
+          handleError(err, "Không thể phát bài hát này");
+        }
+      },
+      [currentTrackId, isGlobalPlaying],
     );
 
     return (
@@ -599,7 +630,7 @@ export const TrackDetailPanel = memo(
 
             <motion.div
               variants={STAGGER_ITEM}
-              className="h-px bg-white/[0.06] mx-1"
+              className="h-px bg-[var(--fp-border)] mx-1"
             />
 
             {/* Action bar — uses context for sheets */}
@@ -607,17 +638,17 @@ export const TrackDetailPanel = memo(
 
             <motion.div
               variants={STAGGER_ITEM}
-              className="h-px bg-white/[0.06] mx-1"
+              className="h-px bg-[var(--fp-border)] mx-1"
             />
 
             {/* Recommended — uses context for sheets */}
             <RecommendedSection
               excludeTrackId={track._id}
-              onPlay={handlePlay}
+              onPlay={handlePlayTrack}
             />
 
             {/* Similar — uses context for sheets */}
-            <SimilarSection trackId={track._id} onPlay={handlePlay} />
+            <SimilarSection trackId={track._id} onPlay={handlePlayTrack} />
 
             <div className="h-4" aria-hidden />
           </motion.div>

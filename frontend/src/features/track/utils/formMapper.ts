@@ -1,7 +1,7 @@
 import { ITrack } from "@/features/track/types";
-import { type TrackFormValues } from "../schemas/track.schema";
+import { TrackEditFormValues } from "../schemas/track.schema";
 
-export const TRACK_DEFAULT_VALUES: TrackFormValues = {
+export const TRACK_DEFAULT_VALUES: TrackEditFormValues = {
   title: "",
   description: "",
   artistId: "",
@@ -25,7 +25,7 @@ export const TRACK_DEFAULT_VALUES: TrackFormValues = {
   coverImage: null,
 };
 
-export const mapTrackToForm = (track?: ITrack | null): TrackFormValues => {
+export const mapTrackToForm = (track?: ITrack | null): TrackEditFormValues => {
   if (!track) return TRACK_DEFAULT_VALUES;
 
   // Helper trích xuất ID từ Object (nếu đã populate) hoặc lấy string

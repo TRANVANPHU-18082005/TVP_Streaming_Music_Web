@@ -17,12 +17,16 @@ import PlaylistModal from "@/features/playlist/components/PlaylistModal";
 
 // 🔥 Hooks mới (đã tách)
 import { usePlaylistParams } from "@/features/playlist/hooks/usePlaylistParams";
-import { usePlaylistsQuery } from "@/features/playlist/hooks/usePlaylistsQuery";
 import { usePlaylistMutations } from "@/features/playlist/hooks/usePlaylistMutations";
-import { IPlaylist, Playlistpageskeleton } from "@/features";
+import {
+  IPlaylist,
+  Playlistpageskeleton,
+  usePlaylistsByAdminQuery,
+} from "@/features";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 const PlaylistManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL Source of Truth) ---
@@ -32,10 +36,11 @@ const PlaylistManagementPage = () => {
     handleFilterChange, // Thay thế setFilterParams bằng handler chuẩn
     handlePageChange,
     clearFilters: handleReset, // Đổi tên cho đồng bộ UI
-  } = usePlaylistParams(APP_CONFIG.PAGINATION_LIMIT || 12);
+  } = usePlaylistParams();
 
   // --- 2. DATA FETCHING (Read) ---
-  const { data, isLoading, isError, refetch } = usePlaylistsQuery(filterParams);
+  const { data, isLoading, isError, refetch } =
+    usePlaylistsByAdminQuery(filterParams);
 
   // --- 3. MUTATIONS (Write) ---
   const {
@@ -48,9 +53,6 @@ const PlaylistManagementPage = () => {
   // --- 4. LOCAL UI STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [playlistToEdit, setPlaylistToEdit] = useState<IPlaylist | null>(null);
-  const [playlistToDelete, setPlaylistToDelete] = useState<IPlaylist | null>(
-    null,
-  );
 
   // --- HANDLERS ---
   const handleOpenCreate = () => {
@@ -63,13 +65,7 @@ const PlaylistManagementPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleConfirmDelete = () => {
-    if (playlistToDelete) {
-      deletePlaylist(playlistToDelete._id, {
-        onSuccess: () => setPlaylistToDelete(null),
-      });
-    }
-  };
+
 
   // 🔥 CORE LOGIC: Handle Form Submit (FormData)
   // Logic giống hệt AlbumManagementPage: Đơn giản, dễ hiểu
@@ -95,16 +91,16 @@ const PlaylistManagementPage = () => {
     page: 1,
     pageSize: 12,
   };
-  const skeletonCount = meta.pageSize || APP_CONFIG.PAGINATION_LIMIT;
+  const skeletonCount = meta.pageSize || APP_CONFIG.GRID_LIMIT;
   const hasResults = playlists.length > 0;
   const isFiltering = Boolean(filterParams.keyword);
 
   const onBack = useSmartBack();
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
   // ── Error state ─────────────────────────────────────────────────────────
   // Initial Load
   if (isLoading && !hasResults) {
-    return <Playlistpageskeleton cardCount={meta.pageSize || 18} />;
+    return <Playlistpageskeleton cardCount={meta.pageSize} />;
   }
   // Switching
   if (isLoading && hasResults) {
@@ -154,6 +150,7 @@ const PlaylistManagementPage = () => {
       */}
       <div className="bg-card rounded-2xl shadow-sm">
         <PlaylistFilter
+          isAdmin
           params={filterParams}
           onSearch={handleSearch}
           onFilterChange={handleFilterChange} // Sử dụng hàm generic
@@ -188,7 +185,8 @@ const PlaylistManagementPage = () => {
               key={playlist._id}
               playlist={playlist}
               onEdit={() => handleOpenEdit(playlist)}
-              onDelete={() => setPlaylistToDelete(playlist)}
+              isMutating={isMutating}
+              onDelete={() => deletePlaylist(playlist._id)}
             />
           ))}
         </div>
@@ -216,45 +214,6 @@ const PlaylistManagementPage = () => {
           isPending={isMutating} // Loading spinner cho nút Save
         />
       )}
-
-      {/* Delete Confirmation */}
-      <ConfirmationModal
-        isOpen={!!playlistToDelete}
-        onCancel={() => setPlaylistToDelete(null)}
-        onConfirm={handleConfirmDelete}
-        title="Delete Playlist?"
-        isLoading={isMutating}
-        description={
-          <div className="space-y-4">
-            <p className="text-sm text-foreground/80">
-              Are you sure you want to delete{" "}
-              <strong className="text-foreground text-base">
-                {playlistToDelete?.title}
-              </strong>
-              ?
-            </p>
-            {playlistToDelete?.isSystem ? (
-              <div className="text-xs font-medium text-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800/50 flex items-start gap-3">
-                <span className="text-lg leading-none">⚠️</span>
-                <p>
-                  This is a <strong>System Playlist</strong>. Deleting it will
-                  remove it from the homepage of all users.
-                </p>
-              </div>
-            ) : (
-              <div className="text-xs font-medium text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border flex items-start gap-3">
-                <span className="text-lg leading-none">ℹ️</span>
-                <p>
-                  This is a User Playlist. Typically, you only delete this if it
-                  violates platform policies.
-                </p>
-              </div>
-            )}
-          </div>
-        }
-        confirmLabel="Yes, Delete"
-        isDestructive
-      />
     </div>
   );
 };

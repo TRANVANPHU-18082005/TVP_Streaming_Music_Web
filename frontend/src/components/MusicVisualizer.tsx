@@ -5,7 +5,15 @@ import { cn } from "@/lib/utils";
 // 1. EQUALIZER BARS (Cột nhảy truyền thống)
 // ─────────────────────────────────────────────────────────────────────────────
 export const EqualizerBars = memo(
-  ({ active = true, bars = 8 }: { active?: boolean; bars?: number }) => (
+  ({
+    active = true,
+    bars = 8,
+    color = "primary",
+  }: {
+    active?: boolean;
+    bars?: number;
+    color: string;
+  }) => (
     <div
       aria-hidden="true"
       className={cn(
@@ -17,8 +25,8 @@ export const EqualizerBars = memo(
       {Array.from({ length: bars }).map((_, i) => (
         <span
           key={i}
-          className={cn("eq-bar w-[3px] bg-primary rounded-full sw-animate-eq")}
-          style={{ animationDelay: `${i * 0.12}s` }}
+          className={cn("eq-bar w-[3px] rounded-full sw-animate-eq")}
+          style={{ animationDelay: `${i * 0.12}s`, backgroundColor: color }}
         />
       ))}
     </div>
@@ -30,7 +38,15 @@ EqualizerBars.displayName = "EqualizerBars";
 // 2. WAVEFORM BARS (Sóng mảnh cho mini player/track row)
 // ─────────────────────────────────────────────────────────────────────────────
 export const WaveformBars = memo(
-  ({ active, bars = 5 }: { active: boolean; bars?: number }) => (
+  ({
+    color = "primary",
+    active,
+    bars = 5,
+  }: {
+    color: string;
+    active: boolean;
+    bars?: number;
+  }) => (
     <div
       aria-hidden="true"
       className={cn(
@@ -43,12 +59,13 @@ export const WaveformBars = memo(
         <span
           key={i}
           className={cn(
-            "w-[2px] bg-primary rounded-full",
+            "w-[2px] rounded-full",
             active ? "sw-animate-wave" : "h-[3px]",
           )}
           style={{
             animationDelay: `${i * 0.1}s`,
             height: active ? "100%" : "3px",
+            backgroundColor: active ? color : "var(--muted)",
           }}
         />
       ))}
@@ -61,7 +78,15 @@ WaveformBars.displayName = "WaveformBars";
 // 3. REAL WAVEFORM (Dải sóng rộng cho màn hình Now Playing)
 // ─────────────────────────────────────────────────────────────────────────────
 export const RealWaveform = memo(
-  ({ active = true, lines = 20 }: { active?: boolean; lines?: number }) => (
+  ({
+    active = true,
+    lines = 5,
+    color,
+  }: {
+    active?: boolean;
+    lines?: number;
+    color: string;
+  }) => (
     <div
       className={cn(
         "flex items-center gap-[3px] shrink-0 h-8",
@@ -72,14 +97,12 @@ export const RealWaveform = memo(
       {Array.from({ length: lines }).map((_, i) => (
         <span
           key={i}
-          className={cn(
-            "w-[3px] rounded-full bg-gradient-to-t from-primary to-wave-2",
-            active && "sw-animate-wave",
-          )}
+          className={cn("w-[3px] rounded-full", active && "sw-animate-wave")}
           style={{
             height: `${20 + Math.random() * 80}%`,
             animationDelay: `${i * 0.05}s`,
             animationDuration: "0.8s",
+            backgroundColor: active ? color : "var(--muted)",
           }}
         />
       ))}
@@ -92,7 +115,15 @@ RealWaveform.displayName = "RealWaveform";
 // 4. VU METER (Cột đo âm lượng cổ điển)
 // ─────────────────────────────────────────────────────────────────────────────
 export const VUMeter = memo(
-  ({ active = true, bars = 12 }: { active?: boolean; bars?: number }) => (
+  ({
+    active = true,
+    bars = 12,
+    color,
+  }: {
+    active?: boolean;
+    bars?: number;
+    color: string;
+  }) => (
     <div
       className={cn(
         "flex flex-col gap-[2px] w-4 h-20 justify-end items-center",
@@ -116,6 +147,7 @@ export const VUMeter = memo(
           style={{
             opacity: active ? (Math.random() > 0.3 ? 1 : 0.2) : 1,
             transitionDelay: `${(bars - i) * 50}ms`,
+            backgroundColor: active ? color : "var(--muted)",
           }}
         />
       ))}
@@ -132,10 +164,12 @@ export const VinylDisc = memo(
     active = true,
     size = 64,
     slow = false,
+    color,
   }: {
     active?: boolean;
     size?: number;
     slow?: boolean;
+    color: string;
   }) => (
     <div
       className={cn(
@@ -147,7 +181,7 @@ export const VinylDisc = memo(
             : "animate-[spin_3s_linear_infinite]"
           : "paused",
       )}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, backgroundColor: color }}
     >
       {/* Center Label */}
       <div className="absolute inset-[32%] rounded-full bg-primary/20 border border-white/10 flex items-center justify-center">
@@ -169,6 +203,7 @@ interface PremiumVisualizerProps {
   barCount?: number;
   colorVariant?: "brand" | "spectrum";
   className?: string;
+  color?: string; // Cho phép tùy chỉnh màu sắc trực tiếp
 }
 
 const PREM_SIZE_MAP = {
@@ -184,6 +219,7 @@ export const PremiumMusicVisualizer: FC<PremiumVisualizerProps> = memo(
     barCount = 14,
     colorVariant = "brand",
     className,
+    color = "hsl(var(--primary))",
   }) => {
     const { w, h, gap } = PREM_SIZE_MAP[size];
 
@@ -223,6 +259,7 @@ export const PremiumMusicVisualizer: FC<PremiumVisualizerProps> = memo(
                   : `hsl(var(--wave-${(i % 5) + 1}))`,
               animationDelay: `${i * 0.1}s`,
               transformOrigin: "center",
+              backgroundColor: active ? color : "var(--muted)",
             }}
           />
         ))}

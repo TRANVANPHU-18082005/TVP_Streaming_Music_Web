@@ -9,11 +9,11 @@ import React, {
 import { Search, Disc, Check, X, Loader2, Music } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
 import { IAlbum } from "../types";
 import { Button } from "@/components/ui/button";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { APP_CONFIG } from "@/config/constants";
+import { useAlbumsByUserQuery } from "../hooks/useAlbumsQuery";
 
 // ─── Debounce Hook ────────────────────────────────────────────────────────────
 function useDebounce<T>(value: T, delay: number): T {
@@ -113,9 +113,8 @@ export const AlbumSelector: React.FC<AlbumSelectorProps> = ({
   const debouncedFilter = useDebounce(inputValue, 350);
 
   // Server-side search: truyền keyword vào query thay vì filter client-side
-  const { data, isLoading } = useAlbumsQuery({
+  const { data, isLoading } = useAlbumsByUserQuery({
     limit: APP_CONFIG.SELECTOR_LIMIT,
-    isPublic: true,
     keyword: debouncedFilter || undefined,
   });
 

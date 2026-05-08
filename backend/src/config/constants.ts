@@ -1,0 +1,11 @@
+export const APP_CONFIG = {
+  SELECTOR_LIMIT: 7,
+  VIRTUAL_SCROLL_LIMIT: 20,
+  TRACKS_LIMIT: 500,
+  PAGINATION_LIMIT: 7,
+  HOME_PAGE_LIMIT: 7,
+  GRID_LIMIT: 6,
+  UPLOAD_MAX_SIZE: 50 * 1024 * 1024, // 50MB
+  API_TIMEOUT: 10000,
+  MAX_PAGES: 100, // Giới hạn max page để tránh ReDoS
+} as const;

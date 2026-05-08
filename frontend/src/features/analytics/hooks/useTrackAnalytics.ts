@@ -41,7 +41,7 @@ export const useTrackAnalytics = () => {
 
       socket.emit("client_heartbeat", {
         userId: finalUserId,
-        trackId: isPlaying ? trackId : "",
+        trackId: isPlaying ? (trackId ?? "") : "",
       });
     };
 

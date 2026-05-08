@@ -42,6 +42,8 @@ import {
 } from "../utils/cacheHelper";
 import recommendationService from "./recommendation.service";
 import { parseGenreIds } from "../utils/helper";
+import { is } from "zod/v4/locales";
+import { APP_CONFIG } from "../config/constants";
 
 type MulterS3File = Express.Multer.File & { location: string; key: string };
 
@@ -53,12 +55,18 @@ const SOFT_DELETE_GRACE_SECONDS = 30 * 24 * 60 * 60; // 30 ngày
 const DELETED_TRACKS_SET = "cleanup:deleted_tracks";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CLASS
+// CLASS: TrackService
+// Responsibilities:
+// - CRUD for Track documents
+// - Maintain counters (Artist, Genre, Album)
+// - Cache invalidation and background job orchestration (transcode/lyrics/mood)
+// - Safe transactional updates and non-blocking post-commit side-effects
 // ─────────────────────────────────────────────────────────────────────────────
 
 class TrackService {
   // ── PRIVATE HELPERS ────────────────────────────────────────────────────────
 
+  /** Extract B2 object key from a full URL (returns null if not matching bucket) */
   private getB2KeyFromUrl(url: string): string | null {
     const bucket = process.env.B2_BUCKET_NAME;
     if (!url || !bucket || !url.includes(bucket)) return null;
@@ -66,6 +74,7 @@ class TrackService {
     return parts.length > 1 ? parts[1] : null;
   }
 
+  /** Derive folder key used by B2 cleanup from a resource URL (e.g. tracks/slug) */
   private getTrackFolderKey(url: string): string | null {
     const fileKey = this.getB2KeyFromUrl(url);
     if (!fileKey) return null;
@@ -75,6 +84,11 @@ class TrackService {
 
   // ── 1. CREATE TRACK ────────────────────────────────────────────────────────
 
+  /**
+   * Create a new track and related counters inside a DB transaction.
+   * Post-commit tasks (non-blocking): counter increment, cache invalidation,
+   * enqueue processing job, optionally notify followers.
+   */
   async createTrack(
     currentUser: IUser,
     data: CreateTrackDTO,
@@ -170,6 +184,13 @@ class TrackService {
           { $inc: { totalTracks: 1 } },
           { session },
         ),
+        featuringArtists.length > 0
+          ? Artist.updateMany(
+              { _id: { $in: featuringArtists } },
+              { $inc: { totalTracks: 1 } }, // Hoặc totalFeats: 1 nếu bạn muốn tách biệt
+              { session },
+            )
+          : Promise.resolve(),
         data.genreIds?.length
           ? Genre.updateMany(
               { _id: { $in: data.genreIds } },
@@ -203,20 +224,38 @@ class TrackService {
       await session.endSession();
     }
   }
+  /** Non-blocking tasks after track creation: counters, cache, processing, notifications */
   private async handlePostTrackCreation(
     track: ITrack,
     audioFile: MulterS3File,
     artistName: string,
   ) {
-    await Promise.allSettled([
+    const tasks: Promise<any>[] = [
       CounterTrack.increment(audioFile.size, audioFile.mimetype),
       invalidateTrackCache(track._id.toString()),
       processNewTrack(track._id.toString(), track.trackUrl),
-      // Gọi thêm thông báo nếu cần
-    ]);
+    ];
+
+    // Push notification to followers only for public releases
+    // try {
+    //   if ((track as any).isPublic) {
+    //     tasks.push(this.pushNewTrackNotification(track, artistName));
+    //   }
+    // } catch (err) {
+    //   // Non-fatal — continue
+    //   console.warn("[PostTrack] push notification skipped:", err ?? err);
+    // }
+
+    await Promise.allSettled(tasks);
   }
   // ── 2. UPDATE TRACK ────────────────────────────────────────────────────────
 
+  /**
+   * Update track metadata and media replacements.
+   * - Writes within a DB transaction to keep counters consistent.
+   * - After commit: invalidate caches, enqueue re-processing if audio changed,
+   *   and perform non-blocking file cleanup.
+   */
   async updateTrack(
     trackId: string,
     currentUser: IUser,
@@ -293,12 +332,16 @@ class TrackService {
 
         // Sync Primary
         if (newArtistId !== oldArtistId) {
-          await Artist.findByIdAndUpdate(oldArtistId, {
-            $inc: { trackCount: -1 },
-          }).session(session);
-          await Artist.findByIdAndUpdate(newArtistId, {
-            $inc: { trackCount: 1 },
-          }).session(session);
+          await Artist.findByIdAndUpdate(
+            oldArtistId,
+            { $inc: { totalTracks: -1 } },
+            { session },
+          );
+          await Artist.findByIdAndUpdate(
+            newArtistId,
+            { $inc: { totalTracks: 1 } },
+            { session },
+          );
           track.artist = new Types.ObjectId(newArtistId);
         }
 
@@ -313,13 +356,15 @@ class TrackService {
         if (addedFeat.length)
           await Artist.updateMany(
             { _id: { $in: addedFeat } },
-            { $inc: { trackCount: 1 } },
-          ).session(session);
+            { $inc: { totalTracks: 1 } },
+            { session },
+          );
         if (removedFeat.length)
           await Artist.updateMany(
-            { _id: { $in: removedFeat }, trackCount: { $gt: 0 } },
-            { $inc: { trackCount: -1 } },
-          ).session(session);
+            { _id: { $in: removedFeat }, totalTracks: { $gt: 0 } },
+            { $inc: { totalTracks: -1 } },
+            { session },
+          );
 
         track.featuringArtists = cleanFeaturing.map(
           (id) => new Types.ObjectId(id),
@@ -341,12 +386,14 @@ class TrackService {
           await Genre.updateMany(
             { _id: { $in: added } },
             { $inc: { trackCount: 1 } },
-          ).session(session);
+            { session },
+          );
         if (removed.length)
           await Genre.updateMany(
             { _id: { $in: removed }, trackCount: { $gt: 0 } },
             { $inc: { trackCount: -1 } },
-          ).session(session);
+            { session },
+          );
 
         track.genres = data.genreIds.map((id) => new Types.ObjectId(id));
       }
@@ -359,16 +406,20 @@ class TrackService {
           const albumOps: Promise<any>[] = [];
           if (oldAlbumId) {
             albumOps.push(
-              Album.findByIdAndUpdate(oldAlbumId, {
-                $inc: { totalTracks: -1, totalDuration: -oldDuration },
-              }).session(session),
+              Album.findByIdAndUpdate(
+                oldAlbumId,
+                { $inc: { totalTracks: -1, totalDuration: -oldDuration } },
+                { session },
+              ),
             );
           }
           if (newAlbumId) {
             albumOps.push(
-              Album.findByIdAndUpdate(newAlbumId, {
-                $inc: { totalTracks: 1, totalDuration: newDuration },
-              }).session(session),
+              Album.findByIdAndUpdate(
+                newAlbumId,
+                { $inc: { totalTracks: 1, totalDuration: newDuration } },
+                { session },
+              ),
             );
             track.album = new Types.ObjectId(newAlbumId);
           } else {
@@ -448,7 +499,11 @@ class TrackService {
     return track;
   }
 
-  // ── 3. DELETE TRACK (Soft delete) ──────────────────────────────────────────
+  // ── 3. DELETE TRACK (Hard delete) ─────────────────────────────────────────
+  /**
+   * Permanently delete a track and decrement related counters inside a transaction.
+   * Post-commit: attempt to remove associated files from B2 storage.
+   */
   async deleteTrack(trackId: string, currentUser: IUser) {
     const track = await Track.findById(trackId);
     if (!track)
@@ -464,30 +519,40 @@ class TrackService {
     try {
       // 1. Trừ thông số trong các bảng liên quan (giữ nguyên logic của bạn)
       await Promise.all([
-        Artist.findByIdAndUpdate(track.artist, {
-          $inc: { totalTracks: -1 },
-        }).session(session),
+        Artist.findByIdAndUpdate(
+          track.artist,
+          { $inc: { totalTracks: -1 } },
+          { session },
+        ),
         track.genres?.length
           ? Genre.updateMany(
               { _id: { $in: track.genres }, trackCount: { $gt: 0 } },
               { $inc: { trackCount: -1 } },
-            ).session(session)
+              { session },
+            )
           : null,
         track.album
-          ? Album.findByIdAndUpdate(track.album, {
-              $inc: { totalTracks: -1, totalDuration: -(track.duration || 0) },
-            }).session(session)
+          ? Album.findByIdAndUpdate(
+              track.album,
+              {
+                $inc: {
+                  totalTracks: -1,
+                  totalDuration: -(track.duration || 0),
+                },
+              },
+              { session },
+            )
           : null,
       ]);
 
       // 2. Xóa cứng khỏi Database
-      await Track.findByIdAndDelete(trackId).session(session);
+      await Track.findByIdAndDelete(trackId, { session });
 
       await session.commitTransaction();
 
       // 3. Xóa file trên B2 (Post-commit)
-      // Lưu ý: folderKey thường được cấu trúc từ trackUrl
-      const folderKey = track.trackUrl.split("/").slice(3, 5).join("/");
+      // Lưu ý: folderKey thường được cấu trúc từ trackUrl — dùng helper để trích
+      const folderKey = this.getTrackFolderKey(track.trackUrl);
       if (folderKey) await deleteFolderFromB2(folderKey).catch(console.error);
 
       return true;
@@ -552,26 +617,10 @@ class TrackService {
   //   }
   // }
 
-  private async handlePostTrackDeletion(track: ITrack) {
-    const audioMime = `audio/${track.format === "mp3" ? "mpeg" : track.format}`;
-
-    await Promise.allSettled([
-      CounterTrack.decrement(track.fileSize ?? 0, audioMime),
-      cacheRedis.zadd(
-        DELETED_TRACKS_SET,
-        Date.now() + SOFT_DELETE_GRACE_SECONDS * 1000,
-        JSON.stringify({
-          trackId: track._id.toString(),
-          folderKey: this.getTrackFolderKey(track.trackUrl) ?? "",
-        }),
-      ),
-      invalidateTrackCache(track._id.toString()),
-    ]);
-  }
-
   // ── 3B. PHYSICAL CLEANUP (cron job gọi hàng ngày) ─────────────────────────
 
   async physicalCleanupExpiredTracks(): Promise<number> {
+    // Cron helper: remove expired entries from the zset and delete their B2 folders
     const now = Date.now();
     const expired = await cacheRedis.zrangebyscore(
       DELETED_TRACKS_SET,
@@ -602,43 +651,26 @@ class TrackService {
   }
 
   // ── 4. GET TRACKS ─────────────────────────────────────────────────────────
-
   async getTracks(filter: TrackFilterInput, currentUser?: IUser) {
-    const userRole = currentUser?.role ?? "guest";
-    const isAdmin = userRole === "admin";
-
-    // 1. CHUẨN HÓA FILTER & CACHE KEY
-    // Loại bỏ các trường rỗng để đảm bảo 1 query chỉ có 1 cache key duy nhất
-    const cleanFilter = Object.fromEntries(
-      Object.entries(filter).filter(([_, v]) => v !== undefined && v !== ""),
-    );
-    const cacheKey = buildCacheKey("track:list", userRole, cleanFilter);
-
-    // 2. KIỂM TRA CACHE (với cơ chế Timeout bảo vệ)
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
-    if (cached) return JSON.parse(cached as string);
-
-    // 3. LOGIC TRUY VẤN DATABASE (Giữ nguyên logic phân quyền của bạn)
+    // 3. BUILD QUERY
     const {
       page = 1,
-      limit = 20,
+      limit = APP_CONFIG.PAGINATION_LIMIT,
       keyword,
       artistId,
       albumId,
       genreId,
+      isPublic,
+      isDeleted,
       status,
+      lyricType,
       sort,
-    } = filter;
+    } = filter as any;
+
     const skip = (Number(page) - 1) * Number(limit);
 
-    const query: any = { isDeleted: false };
+    const query: any = {};
     const andConditions: any[] = [];
-
-    if (!isAdmin) {
-      const visibilityConditions: any[] = [{ isPublic: true, status: "ready" }];
-      if (currentUser) visibilityConditions.push({ uploader: currentUser._id });
-      andConditions.push({ $or: visibilityConditions });
-    }
 
     let useTextScore = false;
     if (keyword) {
@@ -646,30 +678,41 @@ class TrackService {
         query.$text = { $search: keyword };
         useTextScore = true;
       } else {
-        const safe = keyword.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+        const safe = String(keyword).replace(
+          /[-[\]{}()*+?.,\\^$|#\s]/g,
+          "\\$&",
+        );
         andConditions.push({ title: { $regex: `^${safe}`, $options: "i" } });
       }
     }
 
     if (andConditions.length > 0) query.$and = andConditions;
     if (status) query.status = status;
-    if (artistId) {
+    if (lyricType) query.lyricType = lyricType;
+    if (isPublic !== undefined)
+      query.isPublic = String(isPublic) === "true" ? true : false;
+    if (isDeleted !== undefined)
+      query.isDeleted = String(isDeleted) === "true" ? true : false;
+    if (artistId)
       query.$or = [{ artist: artistId }, { featuringArtists: artistId }];
-    }
     if (albumId) query.album = albumId;
     if (genreId) query.genres = genreId;
 
+    // 4. SORT
     let sortOption: any = useTextScore
       ? { score: { $meta: "textScore" }, _id: 1 }
       : { createdAt: -1 };
 
     if (!useTextScore) {
+      if (sort === "newest") sortOption = { createdAt: -1 };
       if (sort === "oldest") sortOption = { createdAt: 1 };
       if (sort === "popular") sortOption = { playCount: -1, _id: 1 };
       if (sort === "name") sortOption = { title: 1, _id: 1 };
+      if (sort === "trending")
+        sortOption = { likeCount: -1, playCount: -1, _id: 1 };
     }
 
-    // 4. THỰC THI QUERY & POPULATE
+    // 5. EXECUTE QUERY & POPULATE
     let baseQuery = Track.find(query)
       .populate("artist", "name avatar slug")
       .populate("featuringArtists", "name slug avatar")
@@ -705,27 +748,14 @@ class TrackService {
       },
     };
 
-    // 5. THIẾT LẬP CACHE VỚI JITTER (Ngăn chặn Cache Stampede)
-    // TTL: 15 - 20 phút (Artist/Track list ít thay đổi hơn dữ liệu realtime)
-    const ttl = 900 + Math.floor(Math.random() * 300);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
-    ).catch((err) => console.error("[Cache] Set Track List Error:", err));
-
     return result;
   }
 
   // ── 5. GET BY ID / SLUG ───────────────────────────────────────────────────
 
-  async getTrackById(slugOrId: string, currentUser?: IUser) {
+  async getTrackDetail(id: string, currentUser?: IUser) {
     const userRole = currentUser?.role ?? "guest";
-    const isAdmin = userRole === "admin";
-    const userId = currentUser?._id?.toString();
-
-    // 1. XÂY DỰNG CACHE KEY (Ưu tiên Key đơn giản cho Detail)
-    // Vì Detail thường chỉ check theo Slug/Id và Role, không cần Sort/Filter phức tạp
-    const cacheKey = buildCacheKey(`track:detail:${slugOrId}`, userRole, {});
-
+    const cacheKey = buildCacheKey(`track:detail:${id}`, userRole, {});
     // 2. KIỂM TRA CACHE
     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
     if (cached) {
@@ -734,18 +764,9 @@ class TrackService {
 
       return track;
     }
-
-    // 3. TRUY VẤN DATABASE NẾU CACHE MISS
-    const isId = Types.ObjectId.isValid(slugOrId);
-    const query = isId ? { _id: slugOrId } : { slug: slugOrId };
-
-    const track = await Track.findOne({ ...query, isDeleted: false })
-      .select(
-        "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
-      )
-      .select(
-        "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
-      )
+    const trackDoc = await Track.findOne({
+      _id: id,
+    })
       .populate("artist", "name avatar slug")
       .populate("featuringArtists", "name slug avatar")
       .populate("album", "title coverImage slug")
@@ -756,48 +777,80 @@ class TrackService {
       })
       .lean();
 
-    if (!track) {
+    if (!trackDoc)
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy bài hát");
+
+    // Quyền truy cập: admin hoặc chính uploader có thể xem mọi trạng thái.
+    const isAdmin = userRole === "admin";
+    const isOwner =
+      currentUser && trackDoc.uploader
+        ? String(trackDoc.uploader) === String(currentUser._id)
+        : false;
+
+    if (!isAdmin && !isOwner) {
+      if (
+        !(
+          trackDoc.isPublic &&
+          trackDoc.status === "ready" &&
+          !trackDoc.isDeleted
+        )
+      )
+        throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy bài hát");
     }
 
-    // 4. KIỂM TRA QUYỀN TRUY CẬP TRƯỚC KHI LƯU CACHE
-    const isOwner = userId && track.uploader?.toString() === userId;
+    // Sanitize result: không trả về các trường nội bộ
+    const sanitized: any = { ...trackDoc };
+    delete sanitized.uploader;
+    delete sanitized.status;
+    delete sanitized.isPublic;
+    delete sanitized.isDeleted;
+    delete sanitized.errorReason;
 
-    // 5. THIẾT LẬP CACHE (TTL dài vì Detail ít thay đổi hơn List)
-    // Sử dụng Jitter để tránh hết hạn đồng loạt (30 - 40 phút)
     const ttl = 1800 + Math.floor(Math.random() * 600);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(track), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(sanitized), { ex: ttl } as any),
     ).catch((err) => console.error("[Cache] Set Track Detail Error:", err));
 
-    return track;
+    return sanitized;
   }
 
   // ── 6. RETRY OPERATIONS ───────────────────────────────────────────────────
-  // Delegate hoàn toàn sang track-job.service để đảm bảo consistent guards
+  // Lightweight wrappers that validate the track exists then delegate to the
+  // Track job service. These methods intentionally do minimal logic so the
+  // job orchestration remains centralized in `Track job.service`.
 
   /** Retry toàn bộ pipeline (xoá HLS + lyrics cũ) */
   async retryFull(trackId: string) {
+    const exists = await Track.exists({ _id: trackId });
+    if (!exists) throw new ApiError(httpStatus.NOT_FOUND, "Track not found");
     return retryFullPipeline(trackId);
   }
 
   /** Retry chỉ HLS transcode — lyrics và mood giữ nguyên */
   async retryTranscode(trackId: string) {
+    const exists = await Track.exists({ _id: trackId });
+    if (!exists) throw new ApiError(httpStatus.NOT_FOUND, "Track not found");
     return jobRetryTranscode(trackId);
   }
 
   /** Retry lyrics từ đầu (LRCLIB + karaoke fallback chain) */
   async retryLyrics(trackId: string) {
+    const exists = await Track.exists({ _id: trackId });
+    if (!exists) throw new ApiError(httpStatus.NOT_FOUND, "Track not found");
     return jobRetryLyrics(trackId);
   }
 
   /** Retry chỉ forced alignment (karaoke) — cần plainLyrics trong DB */
   async retryKaraoke(trackId: string) {
+    const exists = await Track.exists({ _id: trackId });
+    if (!exists) throw new ApiError(httpStatus.NOT_FOUND, "Track not found");
     return jobRetryKaraoke(trackId);
   }
 
   /** Retry mood canvas matching (tags thay đổi) */
   async retryMoodCanvas(trackId: string) {
+    const exists = await Track.exists({ _id: trackId });
+    if (!exists) throw new ApiError(httpStatus.NOT_FOUND, "Track not found");
     return jobRetryMoodCanvas(trackId);
   }
 
@@ -807,6 +860,7 @@ class TrackService {
     handler: (id: string) => Promise<T>,
     chunkSize = 20,
   ) {
+    // Process ids in chunks to avoid overwhelming downstream services.
     const results: Array<{ id: string; success: boolean; error?: string }> = [];
     for (let i = 0; i < ids.length; i += chunkSize) {
       const chunk = ids.slice(i, i + chunkSize);
@@ -826,17 +880,26 @@ class TrackService {
     return results;
   }
 
+  /**
+   * Ensure the current user is admin or owner (uploader) for all given tracks.
+   * Throws `ApiError(403)` on permission mismatch.
+   */
+  private async _ensureAdminOrOwnerForTracks(
+    currentUser: IUser,
+    trackIds: string[],
+  ) {
+    if (currentUser.role === "admin") return;
+    const count = await Track.countDocuments({
+      _id: { $in: trackIds },
+      uploader: currentUser._id,
+    });
+    if (count !== trackIds.length)
+      throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
+  }
+
   /** Bulk retry HLS transcode for multiple tracks (chunked) */
   async bulkRetryTranscode(currentUser: IUser, trackIds: string[]) {
-    // Authorization: allow admin or owner-of-tracks
-    if (currentUser.role !== "admin") {
-      const count = await Track.countDocuments({
-        _id: { $in: trackIds },
-        uploader: currentUser._id,
-      });
-      if (count !== trackIds.length)
-        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
-    }
+    await this._ensureAdminOrOwnerForTracks(currentUser, trackIds);
 
     const details = await this._chunkAndRun(trackIds, this.retryTranscode);
     const queued = details.filter((d) => d.success).length;
@@ -850,14 +913,7 @@ class TrackService {
 
   /** Bulk retry lyrics (LRCLIB + karaoke) */
   async bulkRetryLyrics(currentUser: IUser, trackIds: string[]) {
-    if (currentUser.role !== "admin") {
-      const count = await Track.countDocuments({
-        _id: { $in: trackIds },
-        uploader: currentUser._id,
-      });
-      if (count !== trackIds.length)
-        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
-    }
+    await this._ensureAdminOrOwnerForTracks(currentUser, trackIds);
 
     const details = await this._chunkAndRun(trackIds, this.retryLyrics);
     const queued = details.filter((d) => d.success).length;
@@ -871,14 +927,7 @@ class TrackService {
 
   /** Bulk retry karaoke (forced alignment) */
   async bulkRetryKaraoke(currentUser: IUser, trackIds: string[]) {
-    if (currentUser.role !== "admin") {
-      const count = await Track.countDocuments({
-        _id: { $in: trackIds },
-        uploader: currentUser._id,
-      });
-      if (count !== trackIds.length)
-        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
-    }
+    await this._ensureAdminOrOwnerForTracks(currentUser, trackIds);
 
     const details = await this._chunkAndRun(trackIds, this.retryKaraoke);
     const queued = details.filter((d) => d.success).length;
@@ -892,14 +941,7 @@ class TrackService {
 
   /** Bulk retry mood canvas matching */
   async bulkRetryMood(currentUser: IUser, trackIds: string[]) {
-    if (currentUser.role !== "admin") {
-      const count = await Track.countDocuments({
-        _id: { $in: trackIds },
-        uploader: currentUser._id,
-      });
-      if (count !== trackIds.length)
-        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
-    }
+    await this._ensureAdminOrOwnerForTracks(currentUser, trackIds);
 
     const details = await this._chunkAndRun(trackIds, this.retryMoodCanvas);
     const queued = details.filter((d) => d.success).length;
@@ -913,14 +955,7 @@ class TrackService {
 
   /** Bulk retry full pipeline (HLS + Lyrics + Mood) */
   async bulkRetryFull(currentUser: IUser, trackIds: string[]) {
-    if (currentUser.role !== "admin") {
-      const count = await Track.countDocuments({
-        _id: { $in: trackIds },
-        uploader: currentUser._id,
-      });
-      if (count !== trackIds.length)
-        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
-    }
+    await this._ensureAdminOrOwnerForTracks(currentUser, trackIds);
 
     const details = await this._chunkAndRun(trackIds, this.retryFull);
     const queued = details.filter((d) => d.success).length;
@@ -940,14 +975,7 @@ class TrackService {
     updates: BulkUpdateTrackInput["updates"],
   ) {
     // 1. Phân quyền
-    if (currentUser.role !== "admin") {
-      const count = await Track.countDocuments({
-        _id: { $in: trackIds },
-        uploader: currentUser._id,
-      });
-      if (count !== trackIds.length)
-        throw new ApiError(httpStatus.FORBIDDEN, "Từ chối quyền truy cập");
-    }
+    await this._ensureAdminOrOwnerForTracks(currentUser, trackIds);
 
     // 2. Thu thập dữ liệu TRƯỚC khi Update (để Invalidate cache)
     // Lấy thêm moodVideo + tags để có thể điều chỉnh thống kê hoặc re-calc

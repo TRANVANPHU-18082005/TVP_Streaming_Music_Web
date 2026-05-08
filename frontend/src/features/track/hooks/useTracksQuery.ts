@@ -1,7 +1,8 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import trackApi from "../api/trackApi";
 import { trackKeys } from "../utils/trackKeys";
-import type { ITrack, TrackFilterParams } from "../types";
+import type { ITrack } from "../types";
+import { TrackFilterParams } from "../schemas/track.schema";
 
 // ============================================================================
 // PHẦN A: PUBLIC QUERIES (Dành cho Người dùng cuối - Client)
@@ -13,11 +14,11 @@ import type { ITrack, TrackFilterParams } from "../types";
  */
 export const usePublicTracks = (params: TrackFilterParams) => {
   // Ghi đè/Ép kiểu status luôn là "ready"
-  const publicParams = { ...params, status: "ready" };
+  const publicParams: TrackFilterParams = { ...params, status: "ready" };
 
   return useQuery({
     queryKey: trackKeys.list(publicParams),
-    queryFn: () => trackApi.getAll(publicParams),
+    queryFn: () => trackApi.getTracks(publicParams),
     placeholderData: keepPreviousData,
     staleTime: 2 * 60 * 1000, // Tránh gọi API liên tục, Cache 2 phút
     select: (response) => ({
@@ -41,7 +42,7 @@ export const useTopTracks = (limit = 10) => {
 
   return useQuery({
     queryKey: trackKeys.list(params),
-    queryFn: () => trackApi.getAll(params),
+    queryFn: () => trackApi.getTracks(params),
     staleTime: 5 * 60 * 1000, // Top tracks ít đổi, Cache hẳn 5 phút
     select: (response) => response.data.data as ITrack[],
   });
@@ -56,7 +57,7 @@ export const usePublicTrackDetail = (slugOrId: string) => {
     queryFn: () => trackApi.getTrackDetail(slugOrId), // Hoặc getById tùy cấu trúc Backend
     enabled: !!slugOrId,
     staleTime: 10 * 60 * 1000, // Chi tiết bài hát gần như không đổi, Cache 10 phút
-    select: (response) => response.data as ITrack,
+    select: (response) => response,
   });
 };
 
@@ -71,7 +72,7 @@ export const usePublicTrackDetail = (slugOrId: string) => {
 export const useAdminTracks = (params: TrackFilterParams) => {
   return useQuery({
     queryKey: trackKeys.list(params),
-    queryFn: () => trackApi.getAll(params),
+    queryFn: () => trackApi.getTracks(params),
     placeholderData: keepPreviousData,
 
     // 🔥 SMART POLLING: Chỉ tự động gọi lại API nếu có bài hát đang xử lý
@@ -108,7 +109,7 @@ export const useAdminTrackDetail = (id: string) => {
 
     // 🔥 SMART POLLING: Tự cập nhật trang Detail nếu hệ thống đang encode file Audio
     refetchInterval: (query) => {
-      const track = query.state.data?.data as ITrack | undefined;
+      const track = query.state.data as ITrack | undefined;
       if (!track) return false;
 
       const isProcessing =
@@ -116,7 +117,7 @@ export const useAdminTrackDetail = (id: string) => {
       return isProcessing ? 5000 : false;
     },
 
-    select: (response) => response.data as ITrack,
+    select: (response) => response,
   });
 };
 // ============================================================================

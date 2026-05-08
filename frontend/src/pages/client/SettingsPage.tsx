@@ -185,13 +185,13 @@ const TAB_VARIANTS = {
     opacity: 1,
     x: 0,
     filter: "blur(0px)",
-    transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+    transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] as const },
   },
   exit: {
     opacity: 0,
     x: -12,
     filter: "blur(2px)",
-    transition: { duration: 0.18, ease: [0.4, 0, 1, 1] },
+    transition: { duration: 0.18, ease: [0.4, 0, 1, 1] as const },
   },
 };
 

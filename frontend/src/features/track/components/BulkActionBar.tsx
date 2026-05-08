@@ -8,6 +8,13 @@ import {
   RefreshCw,
   FileText,
   Video,
+  Sparkles,
+  Layers,
+  Globe,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  ShieldX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -17,18 +24,33 @@ interface BulkActionBarProps {
   onClear: () => void;
   onEditAlbum: () => void;
   onEditMetadata: () => void;
+  onEditLegal?: () => void;
   onDelete: () => void;
   onRetryTranscode?: () => void;
   onRetryLyrics?: () => void;
+  onRetryKaraoke?: () => void;
   onRetryMood?: () => void;
+  onRetryFull?: () => void;
+  onTogglePublic?: () => void;
+  onToggleExplicit?: () => void;
+  onChangeStatus?: () => void;
 }
 
 export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   selectedCount,
   onClear,
   onEditAlbum,
+  onRetryLyrics,
+  onRetryMood,
+  onRetryKaraoke,
+  onRetryTranscode,
+  onRetryFull,
   onEditMetadata,
   onDelete,
+  onTogglePublic,
+  onToggleExplicit,
+  onChangeStatus,
+  onEditLegal,
 }) => {
   if (selectedCount === 0) return null;
 
@@ -62,6 +84,25 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
         {/* === Right: Actions === */}
         <div className="flex items-center gap-1">
+          {/* Publishing Actions */}
+          {onTogglePublic && (
+            <ActionButton
+              icon={<Globe className="size-4" />}
+              label="Public"
+              onClick={onTogglePublic}
+            />
+          )}
+          {onToggleExplicit && (
+            <ActionButton
+              icon={<ShieldCheck className="size-4" />}
+              label="Explicit"
+              onClick={onToggleExplicit}
+            />
+          )}
+
+          <div className="mx-1 w-px h-5 bg-background/20 block" />
+
+          {/* Metadata Actions */}
           <ActionButton
             icon={<Disc className="size-4" />}
             label="Album"
@@ -72,26 +113,72 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
             label="Metadata"
             onClick={onEditMetadata}
           />
+          {onEditLegal && (
+            <ActionButton
+              icon={<FileText className="size-4" />}
+              label="Legal"
+              onClick={onEditLegal}
+            />
+          )}
 
-          <div className="mx-1 w-px h-5 bg-background/20 block" />
+          {/* Status Action */}
+          {onChangeStatus && (
+            <>
+              <ActionButton
+                icon={<CheckCircle2 className="size-4" />}
+                label="Status"
+                onClick={onChangeStatus}
+              />
+              <div className="mx-1 w-px h-5 bg-background/20 block" />
+            </>
+          )}
 
-          <ActionButton
-            icon={<RefreshCw className="size-4" />}
-            label="Retranscode"
-            onClick={() => onRetryTranscode && onRetryTranscode()}
-          />
-          <ActionButton
-            icon={<FileText className="size-4" />}
-            label="Retry Lyrics"
-            onClick={() => onRetryLyrics && onRetryLyrics()}
-          />
-          <ActionButton
-            icon={<Video className="size-4" />}
-            label="Retry Mood"
-            onClick={() => onRetryMood && onRetryMood()}
-          />
+          {/* Retry Actions */}
+          {(onRetryTranscode ||
+            onRetryLyrics ||
+            onRetryKaraoke ||
+            onRetryMood ||
+            onRetryFull) && (
+            <>
+              {onRetryTranscode && (
+                <ActionButton
+                  icon={<RefreshCw className="size-4" />}
+                  label="Retranscode"
+                  onClick={onRetryTranscode}
+                />
+              )}
+              {onRetryLyrics && (
+                <ActionButton
+                  icon={<FileText className="size-4" />}
+                  label="Retry Lyrics"
+                  onClick={onRetryLyrics}
+                />
+              )}
+              {onRetryKaraoke && (
+                <ActionButton
+                  icon={<Video className="size-4" />}
+                  label="Retry Karaoke"
+                  onClick={onRetryKaraoke}
+                />
+              )}
+              {onRetryMood && (
+                <ActionButton
+                  icon={<Sparkles className="size-4" />}
+                  label="Retry Mood"
+                  onClick={onRetryMood}
+                />
+              )}
+              {onRetryFull && (
+                <ActionButton
+                  icon={<Layers className="size-4" />}
+                  label="Retry Full"
+                  onClick={onRetryFull}
+                />
+              )}
 
-          <div className="mx-1 w-px h-5 bg-background/20 block" />
+              <div className="mx-1 w-px h-5 bg-background/20 block" />
+            </>
+          )}
 
           <Button
             variant="ghost"

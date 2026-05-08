@@ -93,11 +93,11 @@ import {
   EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MoodVideo } from "../types";
 import { useMoodVideoForm } from "../hooks/useMoodVideoForm";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { IMoodVideo } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MODULE-SCOPE CONSTANTS
@@ -133,7 +133,7 @@ const EQ_HEIGHTS = [30, 55, 80, 45, 95, 65, 38, 72, 50, 85] as const;
 interface MoodVideoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  videoToEdit?: MoodVideo | null;
+  videoToEdit?: IMoodVideo | null;
   onSubmit: (data: FormData) => Promise<void>;
   isPending: boolean;
 }

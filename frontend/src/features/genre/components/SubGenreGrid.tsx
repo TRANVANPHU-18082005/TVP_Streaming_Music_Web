@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { Genre } from "@/features/genre/types";
+import { IGenre } from "../types";
 
-export const SubGenreGrid = ({ genres }: { genres: Genre[] }) => {
+export const SubGenreGrid = ({ genres }: { genres: IGenre[] }) => {
   if (!genres || genres.length === 0) return null;
 
   return (

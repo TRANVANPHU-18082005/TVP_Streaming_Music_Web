@@ -35,7 +35,7 @@ import {
 import { TrendingUp, Eye, BarChart2, Clock } from "lucide-react";
 
 import { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
-import { ChartTrack } from "@/features/track/types";
+import { ChartTrack, IChartDataPoint } from "@/features/track/types";
 import { RadioLoader } from "@/components/ui/MusicLoadingEffects";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
@@ -46,16 +46,8 @@ import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface ChartDataPoint {
-  time: string;
-  top1?: number;
-  top2?: number;
-  top3?: number;
-  [key: string]: string | number | undefined;
-}
-
 export interface ChartLineProps {
-  data: ChartDataPoint[];
+  data: IChartDataPoint[];
   tracks: RankedTrack[]; // RankedTrack ⊇ ChartTrack — fully backward safe
   animationDelay?: number; // seconds — from HeroSection stagger (default 0)
   isLoading: boolean;
@@ -205,7 +197,7 @@ function useChartTheme(): ChartTheme {
 // HOOK — usePeakStats (unchanged from v1.0)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function usePeakStats(data: ChartDataPoint[]): number[] {
+function usePeakStats(data: IChartDataPoint[]): number[] {
   return useMemo(
     () =>
       SERIES.map((s) =>
@@ -291,83 +283,86 @@ interface ChartTooltipInnerProps extends TooltipProps<number, string> {
   tracks: RankedTrack[];
 }
 
-const ChartTooltipInner = memo(
-  ({ active, payload, label, tracks }: ChartTooltipInnerProps) => {
-    if (!active || !payload?.length) return null;
+const ChartTooltipInner = memo((props: any) => {
+  const { active, payload, label, tracks } = props as any;
+  if (!active || !payload?.length) return null;
 
-    const rows = payload
-      .map((entry, i) => ({ entry, track: tracks[i], s: SERIES[i] }))
-      .filter(({ track, entry }) => track != null && entry.value != null);
+  const rows = (payload as any[])
+    .map((entry: any, i: number) => ({
+      entry,
+      track: (tracks as any)[i],
+      s: SERIES[i],
+    }))
+    .filter(({ track, entry }: any) => track != null && entry.value != null);
 
-    if (!rows.length) return null;
+  if (!rows.length) return null;
 
-    const formattedLabel = makeTooltipLabel(label as string);
+  const formattedLabel = makeTooltipLabel(label as string);
 
-    return (
-      <div
-        role="tooltip"
-        className={cn(
-          "min-w-[210px] rounded-xl overflow-hidden",
-          "bg-card/90 dark:bg-card/88",
-          "backdrop-blur-[28px] saturate-[175%]",
-          "border border-border/60 dark:border-border/35",
-          "shadow-floating dark:shadow-black/55",
-          "shadow-[inset_0_1px_0_hsl(0_0%_100%/0.07)]",
-        )}
-      >
-        {/* Time header — FIX: formatted label + Clock icon */}
-        <div className="px-3.5 py-2 border-b border-border/45 bg-muted/25 dark:bg-muted/12">
-          <div className="flex items-center gap-1.5">
-            <Clock
-              aria-hidden="true"
-              className="size-[9px] text-muted-foreground/50 shrink-0"
-            />
-            <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-[0.14em] font-mono">
-              {formattedLabel}
-            </p>
-          </div>
-        </div>
-
-        {/* Series rows — unchanged */}
-        <div className="px-3 py-3 space-y-2.5">
-          {rows.map(({ entry, track, s }, idx) => (
-            <div key={idx} className="flex items-center gap-2.5">
-              <span
-                aria-hidden="true"
-                className="shrink-0 w-[3px] h-8 rounded-full"
-                style={{ backgroundColor: s.stroke }}
-              />
-              <div className="w-8 h-8 rounded-lg overflow-hidden border border-border/60 shrink-0">
-                <ImageWithFallback
-                  src={toCDN(track.coverImage) || track.coverImage}
-                  alt=""
-                  aria-hidden="true"
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11.5px] font-semibold text-foreground/90 truncate leading-snug">
-                  {track.title}
-                </p>
-                <div className="flex items-center gap-1 mt-[3px]">
-                  <Eye
-                    aria-hidden="true"
-                    className="size-[9px] text-muted-foreground/50 shrink-0"
-                  />
-                  <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
-                    +{Math.round(Number(entry.value)).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
+  return (
+    <div
+      role="tooltip"
+      className={cn(
+        "min-w-[210px] rounded-xl overflow-hidden",
+        "bg-card/90 dark:bg-card/88",
+        "backdrop-blur-[28px] saturate-[175%]",
+        "border border-border/60 dark:border-border/35",
+        "shadow-floating dark:shadow-black/55",
+        "shadow-[inset_0_1px_0_hsl(0_0%_100%/0.07)]",
+      )}
+    >
+      {/* Time header — FIX: formatted label + Clock icon */}
+      <div className="px-3.5 py-2 border-b border-border/45 bg-muted/25 dark:bg-muted/12">
+        <div className="flex items-center gap-1.5">
+          <Clock
+            aria-hidden="true"
+            className="size-[9px] text-muted-foreground/50 shrink-0"
+          />
+          <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-[0.14em] font-mono">
+            {formattedLabel}
+          </p>
         </div>
       </div>
-    );
-  },
-);
+
+      {/* Series rows — unchanged */}
+      <div className="px-3 py-3 space-y-2.5">
+        {rows.map(({ entry, track, s }: any, idx: number) => (
+          <div key={idx} className="flex items-center gap-2.5">
+            <span
+              aria-hidden="true"
+              className="shrink-0 w-[3px] h-8 rounded-full"
+              style={{ backgroundColor: s.stroke }}
+            />
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-border/60 shrink-0">
+              <ImageWithFallback
+                src={toCDN(track.coverImage) || track.coverImage}
+                alt=""
+                aria-hidden="true"
+                className="w-full h-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11.5px] font-semibold text-foreground/90 truncate leading-snug">
+                {track.title}
+              </p>
+              <div className="flex items-center gap-1 mt-[3px]">
+                <Eye
+                  aria-hidden="true"
+                  className="size-[9px] text-muted-foreground/50 shrink-0"
+                />
+                <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
+                  +{Math.round(Number(entry.value)).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
 ChartTooltipInner.displayName = "ChartTooltipInner";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -508,7 +503,7 @@ LegendGrid.displayName = "LegendGrid";
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ChartCanvasProps {
-  data: ChartDataPoint[];
+  data: IChartDataPoint[];
   tracks: RankedTrack[];
   theme: ChartTheme;
   seriesOpacity: SeriesRenderCfg[];

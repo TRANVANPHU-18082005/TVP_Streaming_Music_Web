@@ -7,9 +7,12 @@ import MusicResult from "@/components/ui/Result";
 import Pagination from "@/utils/pagination";
 import AlbumFilter from "@/features/album/components/AlbumFilter";
 import { useAlbumParams } from "@/features/album/hooks/useAlbumParams";
-import { useAlbumsQuery } from "@/features/album/hooks/useAlbumsQuery";
 
-import { Albumpageskeleton, useSyncInteractions } from "@/features";
+import {
+  Albumpageskeleton,
+  useAlbumsByUserQuery,
+  useSyncInteractions,
+} from "@/features";
 import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
@@ -143,9 +146,10 @@ const AlbumPage: React.FC = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useAlbumParams(DEFAULT_GRID_META.pageSize);
+  } = useAlbumParams();
 
-  const { data, isLoading, isError, refetch } = useAlbumsQuery(filterParams);
+  const { data, isLoading, isError, refetch } =
+    useAlbumsByUserQuery(filterParams);
 
   const albums = useMemo(() => data?.albums ?? [], [data?.albums]);
   const meta = useMemo(

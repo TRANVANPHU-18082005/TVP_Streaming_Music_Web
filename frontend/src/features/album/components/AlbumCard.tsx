@@ -11,8 +11,6 @@ import {
   EyeOff,
 } from "lucide-react";
 
-import type { Album } from "@/features/album/types";
-
 // UI Components
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,11 +22,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { IAlbum } from "@/features";
 
 interface AlbumCardProps {
-  album: Album;
-  onEdit: (album: Album) => void;
-  onDelete: (album: Album) => void;
+  album: IAlbum;
+  onEdit: (album: IAlbum) => void;
+  onDelete: (album: IAlbum) => void;
 }
 
 const AlbumCard: React.FC<AlbumCardProps> = ({ album, onEdit, onDelete }) => {

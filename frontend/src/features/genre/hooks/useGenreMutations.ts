@@ -11,7 +11,7 @@ export const useGenreMutations = () => {
     queryClient.invalidateQueries({ queryKey: genreKeys.lists() });
     queryClient.invalidateQueries({ queryKey: genreKeys.tree() }); // Nếu có API lấy cây danh mục
   };
-
+  // 1. Create Genre
   const createMutation = useMutation({
     mutationFn: (data: FormData) => genreApi.create(data),
     onSuccess: () => {
@@ -20,7 +20,7 @@ export const useGenreMutations = () => {
     },
     onError: (err) => handleError(err, "Lỗi tạo thể loại"),
   });
-
+  // 2. Update Genre
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: FormData }) =>
       genreApi.update(id, data),
@@ -30,6 +30,7 @@ export const useGenreMutations = () => {
     },
     onError: (err) => handleError(err, "Lỗi cập nhật"),
   });
+  // 3. Toggle Genre Status
   const toggleMutation = useMutation({
     mutationFn: (id: string) => genreApi.toggleStatus(id),
     onSuccess: () => {
@@ -38,6 +39,7 @@ export const useGenreMutations = () => {
     },
     onError: (err) => handleError(err, "Lỗi cập nhật trạng thái"),
   });
+  // 4. Delete Genre
   const deleteMutation = useMutation({
     mutationFn: genreApi.delete,
     onSuccess: () => {

@@ -4,22 +4,26 @@ import {
   trackParamsSchema,
   type TrackFilterParams,
 } from "../schemas/track.schema";
+import { APP_CONFIG } from "@/config/constants";
 
 const DEFAULT_PARAMS: TrackFilterParams = {
   page: 1,
-  limit: 10,
-  keyword: undefined,
+  limit: APP_CONFIG.PAGINATION_LIMIT,
+  keyword: "",
   sort: "newest",
   status: undefined,
   genreId: undefined,
   albumId: undefined,
   artistId: undefined,
+  isDeleted: undefined,
+  isPublic: undefined,
+  moodVideoId: undefined,
+  lyricType: undefined,
 };
 
-export const useTrackParams = (initialLimit = 10) => {
+export const useTrackParams = () => {
   const { params: rawParams, setParams } = useQueryParams({
     ...DEFAULT_PARAMS,
-    limit: initialLimit,
   });
 
   const filterParams = useMemo(
@@ -56,12 +60,14 @@ export const useTrackParams = (initialLimit = 10) => {
     },
     [setParams],
   );
-
+  const clearFilters = useCallback(() => {
+    setParams({ ...DEFAULT_PARAMS });
+  }, [setParams]);
   return {
     filterParams,
     handlePageChange,
     handleSearch,
     handleFilterChange,
-    clearFilters: () => setParams(DEFAULT_PARAMS),
+    clearFilters,
   };
 };

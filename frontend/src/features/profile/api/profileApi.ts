@@ -2,6 +2,7 @@ import api from "@/lib/axios";
 import { ApiResponse, PagedResponse } from "@/types";
 import { ProfileDashboard, AnalyticsData, UserLibrary } from "../types";
 import { ITrack } from "@/features/track";
+import { IUser } from "@/features/user";
 
 const profileApi = {
   /**
@@ -65,7 +66,7 @@ const profileApi = {
    */
   updateProfile: async (data: FormData) => {
     const isFormData = data instanceof FormData;
-    const response = await api.patch<ApiResponse<User>>(
+    const response = await api.patch<ApiResponse<IUser>>(
       "/profile/update",
       data,
       {

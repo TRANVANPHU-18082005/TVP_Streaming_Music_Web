@@ -1,7 +1,6 @@
 import { useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Playlist } from "../types";
 import {
   playlistCreateSchema,
   playlistEditSchema,
@@ -10,6 +9,8 @@ import {
 } from "../schemas/playlist.schema";
 import { mapEntityToForm } from "../utils/formMapper";
 import { buildPlaylistPayload } from "../utils/payloadBuilder";
+import { toast } from "sonner";
+import { IPlaylist } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES — Sử dụng Overload để ép kiểu chặt chẽ theo Mode
@@ -23,7 +24,7 @@ interface UsePlaylistFormCreateProps {
 
 interface UsePlaylistFormEditProps {
   mode: "edit";
-  playlistToEdit: Playlist; // Bắt buộc phải có playlist khi ở mode edit
+  playlistToEdit: IPlaylist; // Bắt buộc phải có playlist khi ở mode edit
   onSubmit: (formData: FormData) => Promise<void>;
 }
 
@@ -48,12 +49,12 @@ export const usePlaylistForm = ({
   // 2. Memoize default values - Dùng _id để tránh reset vòng lặp
   const defaultValues = useMemo(
     () => mapEntityToForm(isEditMode ? playlistToEdit : undefined),
-    [playlistToEdit?._id, isEditMode],
+    [isEditMode, playlistToEdit, playlistToEdit?._id],
   );
 
   // 3. Init Form
   const form = useForm<PlaylistCreateFormValues | PlaylistEditFormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues,
     mode: "onSubmit",
     reValidateMode: "onChange", // Re-validate ngay khi user sửa lỗi
@@ -83,7 +84,48 @@ export const usePlaylistForm = ({
     // Build Payload (FormData) - buildPlaylistPayload sẽ chỉ lấy các field bị "dirty" khi Edit
     const payload = buildPlaylistPayload(values, dirtyFields, isEditMode);
 
-    await onSubmit(payload);
+    try {
+      await onSubmit(payload);
+    } catch (err: any) {
+      // Map server-side validation errors to form fields where possible.
+      const resp = err?.response?.data || err?.response || null;
+
+      let handled = false;
+
+      const maybeFieldMap = resp?.data ?? resp?.errors ?? resp;
+      if (maybeFieldMap && typeof maybeFieldMap === "object") {
+        if (Array.isArray(maybeFieldMap)) {
+          for (const item of maybeFieldMap) {
+            if (!item) continue;
+            if (typeof item === "string") {
+              toast.error(item);
+            } else if (item.field && (item.message || item.msg)) {
+              form.setError(item.field, {
+                type: "server",
+                message: item.message || item.msg,
+              });
+              handled = true;
+            }
+          }
+        } else {
+          Object.entries(maybeFieldMap).forEach(([k, v]) => {
+            if (!k) return;
+            const msg = Array.isArray(v) ? v.join(" ") : String(v || "");
+            if (k === "message" || k === "errorCode") return;
+            form.setError(k as any, { type: "server", message: msg });
+            handled = true;
+          });
+        }
+      }
+
+      if (!handled) {
+        const message = resp?.message || err?.message || "Lỗi lưu playlist";
+        toast.error(message);
+      }
+
+      // Keep modal open for user to fix errors — swallow the error here.
+      return;
+    }
   });
 
   return {

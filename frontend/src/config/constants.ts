@@ -11,16 +11,17 @@ export const APP_CONFIG = {
   SELECTOR_LIMIT: 7,
   PAGINATION_LIMIT: 7,
   HOME_PAGE_LIMIT: 7,
-  GRID_LIMIT: 12,
+  GRID_LIMIT: 6,
   UPLOAD_MAX_SIZE: 50 * 1024 * 1024, // 50MB
   API_TIMEOUT: 10000,
+  VIRTUALIZER_LIMIT: 50,
 } as const;
 
 export const DEFAULT_GRID_META = {
   totalPages: 1,
   totalItems: 0,
   page: 1,
-  pageSize: APP_CONFIG.GRID_LIMIT || 24,
+  pageSize: APP_CONFIG.GRID_LIMIT || 6,
 } as const;
 export const DEFAULT_PAGINATION_META = {
   totalPages: 1,
@@ -38,6 +39,26 @@ export interface Country {
   value: string;
   flag: string;
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// SPRING PRESETS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SP_GENTLE = {
+  type: "spring",
+  stiffness: 300,
+  damping: 30,
+} as const;
+export const SP_SNAPPY = {
+  type: "spring",
+  stiffness: 440,
+  damping: 28,
+} as const;
+export const SP_HERO = {
+  type: "spring",
+  stiffness: 260,
+  damping: 26,
+  mass: 0.9,
+} as const;
 
 // 🔥 Top quốc gia có nhiều nghệ sĩ nhất để ưu tiên hiển thị đầu danh sách
 export const TOP_NATIONALITIES: Country[] = [

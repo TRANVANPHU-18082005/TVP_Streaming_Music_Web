@@ -5,7 +5,7 @@ import { LikedContentParams } from "../types";
 export const useProfileParams = (
   defaultType: "track" | "album" | "playlist" = "track",
 ) => {
-  const { params, setParams } = useQueryParams<LikedContentParams>({
+  const { params, setParams } = useQueryParams<LikedContentParams & Record<string, unknown>>({
     type: defaultType,
     page: 1,
     limit: 20,

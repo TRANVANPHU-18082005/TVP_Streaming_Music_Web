@@ -11,4 +11,24 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          const p = id.replace(/\\\\/g, "/");
+          if (p.includes("/features/track/components/TrackList"))
+            return "track-list";
+          if (
+            p.includes("/features/artist/components/ArtistSelector") ||
+            p.includes("/features/genre/components/GenreSelector") ||
+            p.includes("/components/ui/NationalitySelector")
+          )
+            return "selectors";
+          // keep manual chunking targeted to specific heavy components only
+          // avoid grouping all admin pages into a single huge chunk
+          if (p.includes("/node_modules/")) return "vendor";
+        },
+      },
+    },
+  },
 });

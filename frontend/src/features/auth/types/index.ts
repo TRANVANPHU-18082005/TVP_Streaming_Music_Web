@@ -1,4 +1,4 @@
-import type { User } from "@/features/user";
+import { IUser } from "@/features/user";
 
 // ✅ Dữ liệu trả về từ backend
 export interface AuthDto<TUser> {
@@ -10,7 +10,7 @@ export interface AuthDto<TUser> {
 // ✅ Mô tả user trong hệ thống
 
 // ✅ Redux slice state
-export interface AuthState<TUser = User> {
+export interface AuthState<TUser = IUser> {
   token: string | null;
   user: TUser | null;
   isAuthChecking: boolean;
@@ -47,6 +47,6 @@ export interface ClaimProfileRequest {
   newEmail: string;
   newPassword: string;
 }
-export type LoginResponse = AuthDto<User>;
-export type RegisterResponse = AuthDto<User>;
-export type RefreshResponse = AuthDto<User>;
+export type LoginResponse = AuthDto<IUser>;
+export type RegisterResponse = AuthDto<IUser>;
+export type RefreshResponse = AuthDto<IUser>;

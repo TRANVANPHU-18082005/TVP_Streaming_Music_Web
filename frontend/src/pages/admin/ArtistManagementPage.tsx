@@ -20,9 +20,12 @@ import ArtistModal from "@/features/artist/components/artist-model";
 
 // Hooks & Types
 import { useArtistParams } from "@/features/artist/hooks/useArtistParams";
-import { useArtistsQuery } from "@/features/artist/hooks/useArtistsQuery";
 import { useArtistMutations } from "@/features/artist/hooks/useArtistMutations";
-import { Artistpageskeleton, IArtist } from "@/features";
+import {
+  Artistpageskeleton,
+  IArtist,
+  useArtistsByAdminQuery,
+} from "@/features";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useSmartBack } from "@/hooks/useSmartBack";
 
@@ -34,18 +37,19 @@ const ArtistManagementPage = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useArtistParams(APP_CONFIG.PAGINATION_LIMIT || 12);
+  } = useArtistParams();
 
   // --- 2. DATA FETCHING ---
   const { data, isLoading, isFetching, isError, refetch } =
-    useArtistsQuery(filterParams);
+    useArtistsByAdminQuery(filterParams);
 
   // --- 3. MUTATIONS ---
   const {
     createArtistAsync,
     updateArtistAsync,
     deleteArtist,
-    toggleArtistStatus,
+    toggleArtistStatusAsync,
+    isCreating,
     isMutating,
   } = useArtistMutations();
 
@@ -64,19 +68,6 @@ const ArtistManagementPage = () => {
     setArtistToEdit(artist);
     setIsModalOpen(true);
   }, []);
-
-  const handleToggleStatus = async (artist: IArtist) => {
-    try {
-      await toggleArtistStatus(artist._id);
-      toast.success(
-        artist.isActive
-          ? `Archived ${artist.name}`
-          : `Published ${artist.name}`,
-      );
-    } catch (error) {
-      handleError(error, "Failed to toggle artist status");
-    }
-  };
 
   const handleConfirmDelete = () => {
     if (artistToDelete) {
@@ -100,8 +91,11 @@ const ArtistManagementPage = () => {
         toast.success("New artist created successfully");
       }
       setIsModalOpen(false);
+      setArtistToEdit(null);
     } catch (error) {
       handleError(error, "Failed to save artist");
+      // Rethrow so the form hook can map server validation errors to fields
+      throw error;
     }
   };
 
@@ -168,6 +162,7 @@ const ArtistManagementPage = () => {
         action={
           <Button
             onClick={handleOpenCreate}
+            disabled={isCreating || isMutating}
             className="shadow-lg bg-primary hover:bg-primary/90 font-bold px-6 transition-all active:scale-95"
           >
             <UserPlus className="size-4 mr-2" /> New Artist
@@ -178,6 +173,7 @@ const ArtistManagementPage = () => {
       {/* --- FILTER SECTION --- */}
       <div className="bg-card rounded-2xl shadow-sm">
         <ArtistFilters
+          isAdmin
           params={filterParams}
           onSearch={handleSearch}
           onFilterChange={handleFilterChange}
@@ -213,7 +209,9 @@ const ArtistManagementPage = () => {
                 artist={artist}
                 onEdit={() => handleOpenEdit(artist)}
                 onDelete={() => setArtistToDelete(artist)}
-                onToggle={() => handleToggleStatus(artist)}
+                onToggle={() =>
+                  toggleArtistStatusAsync && toggleArtistStatusAsync(artist._id)
+                }
               />
             ))}
           </div>
@@ -236,7 +234,10 @@ const ArtistManagementPage = () => {
       {/* --- MODALS --- */}
       <ArtistModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setArtistToEdit(null);
+        }}
         artistToEdit={artistToEdit}
         onSubmit={handleSubmitForm}
         isPending={isMutating}

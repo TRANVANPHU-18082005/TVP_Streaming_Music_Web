@@ -331,4 +331,4 @@ const PublicArtistCard: React.FC<PublicArtistCardProps> = ({
   );
 };
 
-export default PublicArtistCard;
+export default memo(PublicArtistCard);

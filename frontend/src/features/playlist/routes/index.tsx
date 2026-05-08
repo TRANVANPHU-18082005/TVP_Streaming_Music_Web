@@ -5,7 +5,7 @@ import { type RouteObject } from "react-router-dom";
 export const playlistRoutes: RouteObject[] = [
   { path: CLIENT_PATHS.PLAYLISTS, element: <PlaylistsPage /> },
   {
-    path: CLIENT_PATHS.PLAYLIST_DETAIL(":slug"),
+    path: CLIENT_PATHS.PLAYLIST_DETAIL(":id"),
     element: <PlaylistDetailPage />,
   },
 ];

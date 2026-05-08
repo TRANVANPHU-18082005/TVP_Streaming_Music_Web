@@ -1,4 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  memo,
+  lazy,
+  Suspense,
+} from "react";
 import { createPortal } from "react-dom";
 import { Controller } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
@@ -8,25 +16,21 @@ import {
   Music,
   Palette,
   Layers,
-  Image as ImageIcon,
   TrendingUp,
   AlertCircle,
-  Hash,
-  Paintbrush,
-  Camera,
-  AlignLeft,
   Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Genre } from "../types";
 import { useGenreForm } from "../hooks/useGenreForm";
 
 import { GenreSelector } from "./GenreSelector";
+const GenreImageUploadLazy = lazy(() => import("./GenreImageUpload"));
+const GenreDesignFieldsLazy = lazy(() => import("./GenreDesignFields"));
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { IGenre } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS — FIX 7: module scope
@@ -53,7 +57,7 @@ const MODAL_SPRING = { type: "spring", stiffness: 380, damping: 30 } as const;
 interface GenreModalProps {
   isOpen: boolean;
   onClose: () => void;
-  genreToEdit?: Genre | null;
+  genreToEdit?: IGenre | null;
   onSubmit: (data: FormData) => Promise<void>;
   isPending: boolean;
 }
@@ -87,14 +91,13 @@ const GenreModal = memo<GenreModalProps>(
       control,
       formState: { errors },
     } = form;
-
     const isEditing = !!genreToEdit;
     const watchGradient = watch("gradient");
     const watchColor = watch("color");
     const currentParentId = watch("parentId");
     const isTrending = watch("isTrending");
     const imageValue = watch("image");
-
+    console.log(currentParentId);
     // FIX 10: single useMemo — computed once per render, used in 5 places
     const isWorking = useMemo(
       () => isPending || isFormSubmitting,
@@ -173,7 +176,7 @@ const GenreModal = memo<GenreModalProps>(
       // FIX 3: AnimatePresence enables exit animation (fade + scale out)
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div className="fixed inset-0 z-100 flex items-center justify-center p-4 sm:p-6">
             {/* Backdrop — FIX 3: motion.div for smooth fade out */}
             <motion.div
               key="genre-modal-backdrop"
@@ -182,7 +185,6 @@ const GenreModal = memo<GenreModalProps>(
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 bg-black/80 backdrop-blur-md"
-              onClick={!isWorking ? onClose : undefined}
             />
 
             {/* Content — FIX 3: scale + fade out, FIX 4: stopPropagation */}
@@ -193,7 +195,7 @@ const GenreModal = memo<GenreModalProps>(
               exit={{ opacity: 0, scale: 0.96, y: 4 }}
               transition={MODAL_SPRING}
               onClick={(e) => e.stopPropagation()}
-              className="relative z-[101] w-full max-w-2xl bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
+              className="relative z-101 w-full max-w-2xl bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
               role="dialog"
               aria-modal="true"
               aria-labelledby="genre-modal-title"
@@ -213,12 +215,12 @@ const GenreModal = memo<GenreModalProps>(
                       id="genre-modal-title"
                       className="text-lg font-bold leading-none text-foreground uppercase tracking-tight"
                     >
-                      {isEditing ? "Cap Nhat The Loai" : "Tao The Loai Moi"}
+                      {isEditing ? "Cập nhật Thể loại" : "Tạo Thể loại mới"}
                     </h3>
                     <p className="text-[13px] font-medium text-muted-foreground mt-1">
                       {isEditing
-                        ? "Chinh sua thong tin chi tiet cua danh muc nay."
-                        : "Them mot danh muc am nhac moi vao he thong."}
+                        ? "Chỉnh sửa thông tin chi tiết của danh mục này."
+                        : "Thêm một danh mục âm nhạc mới vào hệ thống."}
                     </p>
                   </div>
                 </div>
@@ -244,68 +246,26 @@ const GenreModal = memo<GenreModalProps>(
                   {/* SECTION 1: GENERAL */}
                   <div>
                     <h4 className="text-[13px] font-bold uppercase tracking-widest text-foreground mb-6">
-                      Thong tin chung
+                      Thông tin chung
                     </h4>
                     <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-start">
-                      {/* Image upload */}
+                      {/* Image upload (extracted) */}
                       <div className="flex flex-col gap-2 shrink-0">
-                        <div
-                          className={cn(
-                            "relative group size-36 sm:size-40 rounded-xl border-2 border-dashed overflow-hidden flex items-center justify-center cursor-pointer transition-all duration-300",
-                            errors.image || imageFileError
-                              ? "border-destructive/50 bg-destructive/5"
-                              : "border-muted-foreground/20 bg-secondary/10 hover:border-primary/50 hover:bg-primary/5 shadow-sm hover:shadow-md",
-                          )}
+                        <Suspense
+                          fallback={
+                            <div className="size-36 sm:size-40 rounded-xl bg-muted/10 flex items-center justify-center">
+                              ...
+                            </div>
+                          }
                         >
-                          {imagePreview ? (
-                            <>
-                              <img
-                                src={imagePreview}
-                                alt="Genre image preview"
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                              />
-                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center text-white backdrop-blur-[2px]">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  className="cursor-pointer font-semibold shadow-md pointer-events-none"
-                                >
-                                  <Camera className="w-4 h-4 mr-2" /> Doi anh
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex flex-col items-center justify-center text-muted-foreground transition-colors group-hover:text-primary">
-                              <div className="p-3 rounded-full bg-background shadow-sm mb-2 border border-border/50">
-                                <ImageIcon className="size-6" />
-                              </div>
-                              <span className="text-[10px] font-bold uppercase tracking-wide">
-                                Tai anh / icon
-                              </span>
-                            </div>
-                          )}
-
-                          {/* FIX 9: aria-label on file input */}
-                          <input
-                            type="file"
-                            accept={ACCEPTED_TYPES.join(",")}
-                            aria-label="Upload genre image"
-                            className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                            onChange={handleImageChange}
+                          <GenreImageUploadLazy
+                            imagePreview={imagePreview}
+                            onImageChange={handleImageChange}
+                            imageFileError={imageFileError}
+                            error={errors.image}
+                            disabled={isWorking}
                           />
-
-                          {(errors.image || imageFileError) && (
-                            <div className="absolute bottom-2 right-2 bg-destructive/90 backdrop-blur px-2 py-1 rounded text-[10px] text-destructive-foreground font-bold flex items-center gap-1 z-20">
-                              <AlertCircle className="size-3" />
-                              {imageFileError ? "File khong hop le" : "Loi anh"}
-                            </div>
-                          )}
-                        </div>
-                        {imageFileError && (
-                          <p className="text-[11px] text-destructive font-medium max-w-[160px]">
-                            {imageFileError}
-                          </p>
-                        )}
+                        </Suspense>
                       </div>
 
                       {/* Basic inputs */}
@@ -313,7 +273,7 @@ const GenreModal = memo<GenreModalProps>(
                         <div className="space-y-2">
                           <Label htmlFor="name" className={LABEL_CLASS}>
                             <Music className="size-3.5" />
-                            Ten the loai{" "}
+                            Tên thể loại{" "}
                             <span className="text-destructive">*</span>
                           </Label>
                           <div className="relative">
@@ -343,7 +303,7 @@ const GenreModal = memo<GenreModalProps>(
                         <div className="space-y-2">
                           <Label className={LABEL_CLASS}>
                             <Layers className="size-3.5" />
-                            The loai cha (Danh muc goc)
+                            Thể loại cha (Danh mục gốc)
                           </Label>
                           <div className="bg-background rounded-md border border-input p-2 focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
                             <GenreSelector
@@ -367,133 +327,16 @@ const GenreModal = memo<GenreModalProps>(
 
                   <hr className="border-border border-dashed" />
 
-                  {/* SECTION 2: DESIGN */}
+                  {/* SECTION 2: DESIGN — extracted */}
                   <div>
-                    <h4 className="text-[13px] font-bold uppercase tracking-widest text-foreground mb-6">
-                      Cau hinh giao dien
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-5">
-                        {/* Color */}
-                        <div>
-                          <Label className={LABEL_CLASS}>
-                            <Palette className="size-3.5" /> Mau chu dao
-                          </Label>
-                          <div
-                            className={cn(
-                              "flex gap-3 items-center p-1.5 border rounded-md bg-transparent transition-colors",
-                              errors.color
-                                ? "border-destructive ring-1 ring-destructive/20"
-                                : "border-input",
-                            )}
-                          >
-                            <div className="relative size-8 rounded overflow-hidden border border-border shadow-inner shrink-0 group hover:ring-2 hover:ring-primary/50 transition-all cursor-pointer">
-                              <input
-                                type="color"
-                                {...register("color")}
-                                className="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] cursor-pointer p-0 m-0"
-                              />
-                            </div>
-                            {/* FIX 11: show "Chua chon mau" when no color selected */}
-                            <span className="text-xs font-mono uppercase text-foreground font-semibold">
-                              {watchColor || "Chua chon mau"}
-                            </span>
-                          </div>
-                          {errors.color && (
-                            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1.5">
-                              <AlertCircle className="size-3.5" />{" "}
-                              {errors.color.message as string}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Priority */}
-                        <div>
-                          <Label className={LABEL_CLASS}>
-                            <Hash className="size-3.5" /> Do uu tien hien thi
-                          </Label>
-                          <Input
-                            type="number"
-                            {...register("priority", { valueAsNumber: true })}
-                            placeholder="0"
-                            className={cn(
-                              "h-11 bg-transparent border-input font-mono text-[15px] focus-visible:ring-1 focus-visible:ring-primary",
-                              errors.priority &&
-                                "border-destructive focus-visible:ring-destructive",
-                            )}
-                          />
-                          {errors.priority && (
-                            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1.5">
-                              <AlertCircle className="size-3.5" />{" "}
-                              {errors.priority.message as string}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-5">
-                        {/* Gradient */}
-                        <div>
-                          <Label className={LABEL_CLASS}>
-                            <Paintbrush className="size-3.5" /> Background
-                            Gradient CSS
-                          </Label>
-                          <div className="flex gap-2">
-                            <Input
-                              {...register("gradient")}
-                              placeholder="linear-gradient(to right, ...)"
-                              className={cn(
-                                "h-11 bg-transparent border-input font-mono text-xs focus-visible:ring-1 focus-visible:ring-primary",
-                                errors.gradient &&
-                                  "border-destructive focus-visible:ring-destructive",
-                              )}
-                            />
-                            <div
-                              className="size-11 rounded-md border border-border shadow-sm shrink-0 bg-checkerboard relative overflow-hidden"
-                              title="Gradient Preview"
-                              aria-hidden="true"
-                            >
-                              <div
-                                className="absolute inset-0"
-                                style={{
-                                  background: watchGradient || "transparent",
-                                }}
-                              />
-                            </div>
-                          </div>
-                          {errors.gradient && (
-                            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1.5">
-                              <AlertCircle className="size-3.5" />{" "}
-                              {errors.gradient.message as string}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Description */}
-                        <div>
-                          <Label htmlFor="description" className={LABEL_CLASS}>
-                            <AlignLeft className="size-3.5" /> Mo ta ngan
-                          </Label>
-                          <Textarea
-                            id="description"
-                            {...register("description")}
-                            rows={2}
-                            className={cn(
-                              "resize-none h-[44px] custom-scrollbar bg-transparent border-input text-sm focus-visible:ring-1 focus-visible:ring-primary",
-                              errors.description &&
-                                "border-destructive focus-visible:ring-destructive",
-                            )}
-                            placeholder="Thong tin them (neu co)..."
-                          />
-                          {errors.description && (
-                            <p className="text-[12px] font-medium text-destructive mt-1 flex items-center gap-1.5">
-                              <AlertCircle className="size-3.5" />{" "}
-                              {errors.description.message as string}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                    <Suspense fallback={<div className="py-6">...</div>}>
+                      <GenreDesignFieldsLazy
+                        register={register}
+                        errors={errors}
+                        watchColor={watchColor}
+                        watchGradient={watchGradient}
+                      />
+                    </Suspense>
                   </div>
 
                   <hr className="border-border border-dashed" />
@@ -530,7 +373,7 @@ const GenreModal = memo<GenreModalProps>(
                       </div>
                       <div>
                         <span className="text-sm font-bold text-foreground block">
-                          Trang thai Trending (Thinh hanh)
+                          Trạng thái Thịnh hành
                         </span>
                         <p
                           className={cn(
@@ -541,8 +384,8 @@ const GenreModal = memo<GenreModalProps>(
                           )}
                         >
                           {isTrending
-                            ? "Dang duoc danh dau la the loai thinh hanh"
-                            : "Khong nam trong danh sach thinh hanh"}
+                            ? "Đang được đánh dấu là thể loại thịnh hành"
+                            : "Không nằm trong danh sách thịnh hành"}
                         </p>
                       </div>
                     </div>
@@ -573,9 +416,9 @@ const GenreModal = memo<GenreModalProps>(
               {/* FOOTER */}
               <div className="flex items-center justify-between p-5 border-t border-border bg-background shrink-0 z-20">
                 <p className="text-[11px] text-muted-foreground font-medium hidden sm:block">
-                  Cac truong co{" "}
+                  Các trường có{" "}
                   <span className="text-destructive font-bold text-sm">*</span>{" "}
-                  la bat buoc.
+                  là bắt buộc.
                 </p>
                 <div className="flex gap-3 w-full sm:w-auto">
                   <Button
@@ -595,13 +438,13 @@ const GenreModal = memo<GenreModalProps>(
                   >
                     {isWorking ? (
                       <>
-                        <Loader2 className="mr-2 size-4 animate-spin" /> Dang
-                        luu...
+                        <Loader2 className="mr-2 size-4 animate-spin" /> Đang
+                        lưu...
                       </>
                     ) : (
                       <>
                         <Save className="size-4 mr-2" />
-                        {isEditing ? "Luu thay doi" : "Tao the loai"}
+                        {isEditing ? "Lưu thay đổi" : "Tạo thể loại"}
                       </>
                     )}
                   </Button>

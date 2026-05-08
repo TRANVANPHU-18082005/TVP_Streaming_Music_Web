@@ -7,9 +7,12 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
 import { ArtistFilters } from "@/features/artist/components/ArtistFilters";
 import { useArtistParams } from "@/features/artist/hooks/useArtistParams";
-import { useArtistsQuery } from "@/features/artist/hooks/useArtistsQuery";
 import { DEFAULT_GRID_META } from "@/config/constants";
-import { IArtist, useSyncInteractions } from "@/features";
+import {
+  IArtist,
+  useArtistsByUserQuery,
+  useSyncInteractions,
+} from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 
@@ -131,9 +134,10 @@ const ArtistPage: React.FC = () => {
     handleFilterChange,
     handlePageChange,
     clearFilters,
-  } = useArtistParams(DEFAULT_GRID_META.pageSize);
+  } = useArtistParams();
 
-  const { data, isLoading, isError, refetch } = useArtistsQuery(filterParams);
+  const { data, isLoading, isError, refetch } =
+    useArtistsByUserQuery(filterParams);
 
   // Granular derived slices — avoids full object diff
   const artists = useMemo(() => data?.artists ?? [], [data?.artists]);
@@ -141,7 +145,6 @@ const ArtistPage: React.FC = () => {
     () => ({ ...DEFAULT_GRID_META, ...data?.meta }),
     [data?.meta],
   );
-  console.log(artists);
   // Must run unconditionally — enabled guard prevents execution when empty
   const artistIds = useMemo(
     () => artists.map((a: IArtist) => a._id),

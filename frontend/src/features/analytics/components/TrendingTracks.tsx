@@ -4,9 +4,10 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Radio, Music, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { RankedTrack } from "@/features/analytics/types";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { toCDN } from "@/utils/track-helper";
+import { RankedTrack } from "@/features/track";
+import { AnalyticsRankedTrack } from "../types";
 
 // ─── Rank medal colors (dùng wave tokens từ design system) ───────
 const RANK_STYLES = [
@@ -104,7 +105,7 @@ const NowListeningRow = ({
   item,
   index,
 }: {
-  item: RankedTrack;
+  item: AnalyticsRankedTrack;
   index: number;
 }) => (
   <motion.div
@@ -251,7 +252,7 @@ const TabToggle = ({
 // ─── Main component ───────────────────────────────────────────────
 interface TrendingTracksProps {
   trendingData: RankedTrack[];
-  nowListeningData: RankedTrack[];
+  nowListeningData: AnalyticsRankedTrack[];
 }
 
 const TrendingTracks = ({

@@ -1,11 +1,19 @@
-import React, { useMemo, useCallback, useRef, memo, type FC } from "react";
+import React, {
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  memo,
+  lazy,
+  Suspense,
+  useState,
+  type FC,
+  type CSSProperties,
+} from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Play,
-  Pause,
   BadgeCheck,
-  MoreHorizontal,
   Globe,
   Instagram,
   Youtube,
@@ -17,56 +25,85 @@ import {
   Facebook,
   Mic2,
   Camera,
-  Loader2,
   ChevronLeft,
-  Shuffle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-
+import type { ArtistAvatarProps } from "./components/ArtistAvatar";
 import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
-import { TrackList } from "@/features/track/components/TrackList";
+
+// ─── Lazy imports ─────────────────────────────────────────────────────────────
+
+const TrackList = lazy(() =>
+  import("@/features/track/components/TrackList").then((m) => ({
+    default: m.TrackList,
+  })),
+);
+
+const ArtistActionBarLazy = lazy(() =>
+  import("./components/ArtistActionBar").then((m) => ({
+    default: m.ArtistActionBar,
+  })),
+);
+
+const ArtistAvatarLazy = lazy(() =>
+  import("./components/ArtistAvatar").then((m) => ({
+    default: m.ArtistAvatar,
+  })),
+);
+
+// Wrapper components with Suspense
+const ArtistActionBar = (props: ArtistActionBarProps) => (
+  <Suspense fallback={<div className="h-11 w-full" />}>
+    <ArtistActionBarLazy {...props} />
+  </Suspense>
+);
+
+const ArtistAvatar = (props: ArtistAvatarProps) => (
+  <Suspense fallback={<AvatarSkeleton size={props.size} />}>
+    <ArtistAvatarLazy {...props} />
+  </Suspense>
+);
+
 import {
   useArtistDetail,
   useArtistTracksInfinite,
 } from "@/features/artist/hooks/useArtistsQuery";
 import {
   Artistdetailskeleton,
-  FollowButton,
-  IAlbum,
-  IArtist,
-  ITrack,
+  type IAlbum,
+  type IArtist,
+  type ITrack,
 } from "@/features";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useArtistPlayback } from "@/features/player/hooks/useArtistPlayback";
-import { buildPalette, Palette } from "@/utils/color";
+import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
-
+import { useTheme } from "@/hooks/useTheme";
 import MusicResult from "@/components/ui/Result";
+import { formatListeners } from "@/utils/track-helper";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
-import { APP_CONFIG } from "@/config/constants";
+import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import type { ArtistActionBarProps } from "./components/ArtistActionBar";
+import { WaveformBars } from "@/components/MusicVisualizer";
+import { useTitleStyle } from "@/hooks/useTitleStyle";
+import { useSmartBack } from "@/hooks/useSmartBack";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SPRING PRESETS — same as AlbumDetailPage
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
-const SP_GENTLE = { type: "spring", stiffness: 300, damping: 30 } as const;
-const SP_SNAPPY = { type: "spring", stiffness: 440, damping: 28 } as const;
-const SP_HERO = {
-  type: "spring",
-  stiffness: 260,
-  damping: 26,
-  mass: 0.9,
-} as const;
+/** EQ bar indices — static, never re-created */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES
-// ─────────────────────────────────────────────────────────────────────────────
+/** Spring presets for motion */
+const FADE_UP = {
+  initial: { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0 },
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ArtistDetailPageProps {
   variant?: "page" | "embedded";
@@ -74,24 +111,43 @@ interface ArtistDetailPageProps {
   onClose?: () => void;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
+type PaletteType = ReturnType<typeof buildPalette>;
 
-const artistNameSizeClass = (name: string): string => {
-  const len = name.length;
-  if (len > 28) return "text-3xl sm:text-4xl md:text-5xl lg:text-6xl";
-  if (len > 18) return "text-4xl sm:text-5xl md:text-6xl lg:text-7xl";
-  if (len > 10) return "text-5xl sm:text-6xl md:text-7xl lg:text-8xl";
-  return "text-6xl sm:text-7xl md:text-8xl lg:text-[6.5rem] xl:text-[8rem]";
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getSystemDark(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches
+  );
+}
+
+function getCSSVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
+    fallback
+  );
+}
+
+// ─── Sub-components ────────────────────────────────────────────────────────────
+
+/** Skeleton for AvatarSuspense fallback */
+const AvatarSkeleton: FC<{ size?: "sm" | "md" | "lg" }> = ({ size = "md" }) => {
+  const cls =
+    size === "lg"
+      ? "size-36 md:size-44 lg:size-52"
+      : size === "sm"
+        ? "size-16"
+        : "size-24";
+  return (
+    <div
+      className={cn("rounded-full bg-muted/60 animate-pulse shrink-0", cls)}
+    />
+  );
 };
 
-const formatListeners = (n: number): string =>
-  new Intl.NumberFormat("vi-VN").format(n);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SectionHeader
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── SectionHeader ─────────────────────────────────────────────────────────────
 
 const SectionHeader = memo<{
   label: string;
@@ -114,84 +170,74 @@ const SectionHeader = memo<{
 ));
 SectionHeader.displayName = "SectionHeader";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DraggableImageGallery
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── DraggableImageGallery ──────────────────────────────────────────────────────
 
-const DraggableImageGallery = memo<{
-  images: string[];
-  artistName: string;
-}>(({ images, artistName }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const isDraggingRef = useRef(false);
-  const dragState = useRef({ startX: 0, scrollLeft: 0 });
+const DraggableImageGallery = memo<{ images: string[]; artistName: string }>(
+  ({ images, artistName }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const dragRef = useRef({ active: false, startX: 0, scrollLeft: 0 });
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!scrollRef.current) return;
-    isDraggingRef.current = true;
-    dragState.current = {
-      startX: e.pageX - scrollRef.current.offsetLeft,
-      scrollLeft: scrollRef.current.scrollLeft,
-    };
-  }, []);
+    const onMouseDown = useCallback((e: React.MouseEvent) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      dragRef.current = {
+        active: true,
+        startX: e.pageX - el.offsetLeft,
+        scrollLeft: el.scrollLeft,
+      };
+    }, []);
 
-  const onMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDraggingRef.current || !scrollRef.current) return;
-    e.preventDefault();
-    const x = e.pageX - scrollRef.current.offsetLeft;
-    const walk = (x - dragState.current.startX) * 1.6;
-    scrollRef.current.scrollLeft = dragState.current.scrollLeft - walk;
-  }, []);
+    const onMouseMove = useCallback((e: React.MouseEvent) => {
+      const { active, startX, scrollLeft } = dragRef.current;
+      if (!active || !scrollRef.current) return;
+      e.preventDefault();
+      scrollRef.current.scrollLeft =
+        scrollLeft - (e.pageX - scrollRef.current.offsetLeft - startX) * 1.6;
+    }, []);
 
-  const stopDrag = useCallback(() => {
-    isDraggingRef.current = false;
-  }, []);
+    const stopDrag = useCallback(() => {
+      dragRef.current.active = false;
+    }, []);
 
-  return (
-    <div
-      ref={scrollRef}
-      role="list"
-      aria-label={`${artistName} photo gallery`}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={stopDrag}
-      onMouseLeave={stopDrag}
-      className="flex gap-4 overflow-x-auto pb-3 -mx-4 px-4 sm:-mx-0 sm:px-0 no-scrollbar cursor-grab snap-x snap-mandatory scroll-smooth active:cursor-grabbing"
-    >
-      {images.map((img: string, idx: number) => (
-        <div
-          key={idx}
-          role="listitem"
-          className={cn(
-            "shrink-0 snap-center rounded-2xl sm:rounded-3xl overflow-hidden",
-            "aspect-[16/10] w-[82vw] sm:w-[360px] md:w-[440px]",
-            "border border-border/30 bg-muted shadow-md",
-            "group select-none relative",
-          )}
-        >
-          <img
-            src={img}
-            alt={`${artistName} photo ${idx + 1}`}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            className="size-full object-cover transition-transform duration-[2500ms] group-hover:scale-[1.04] pointer-events-none"
-          />
+    return (
+      <div
+        ref={scrollRef}
+        role="list"
+        aria-label={`${artistName} photo gallery`}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={stopDrag}
+        onMouseLeave={stopDrag}
+        className="flex gap-4 overflow-x-auto pb-3 -mx-4 px-4 sm:-mx-0 sm:px-0 no-scrollbar cursor-grab snap-x snap-mandatory scroll-smooth active:cursor-grabbing"
+      >
+        {images.map((img, idx) => (
           <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-black/0 group-hover:bg-black/[0.08] transition-colors duration-500 pointer-events-none"
-          />
-        </div>
-      ))}
-      <div className="shrink-0 w-4 sm:hidden" aria-hidden="true" />
-    </div>
-  );
-});
+            key={img + idx}
+            role="listitem"
+            className="shrink-0 snap-center rounded-2xl sm:rounded-3xl overflow-hidden aspect-[16/10] w-[82vw] sm:w-[360px] md:w-[440px] border border-border/30 bg-muted shadow-md group select-none relative"
+          >
+            <img
+              src={img}
+              alt={`${artistName} photo ${idx + 1}`}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              className="size-full object-cover transition-transform duration-[2500ms] group-hover:scale-[1.04] pointer-events-none"
+            />
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-black/0 group-hover:bg-black/[0.08] transition-colors duration-500 pointer-events-none"
+            />
+          </div>
+        ))}
+        <div className="shrink-0 w-4 sm:hidden" aria-hidden="true" />
+      </div>
+    );
+  },
+);
 DraggableImageGallery.displayName = "DraggableImageGallery";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SocialLink
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── SocialLink ────────────────────────────────────────────────────────────────
 
 const SocialLink = memo<{
   icon: React.ReactNode;
@@ -205,14 +251,8 @@ const SocialLink = memo<{
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn(
-        "group flex items-center justify-center sm:justify-start gap-3 h-11",
-        "rounded-2xl bg-card border border-border/50 px-4",
-        "hover:border-border hover:-translate-y-0.5 hover:shadow-md",
-        "transition-all duration-150 active:scale-95",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
-      )}
-      aria-label={`Visit ${label} profile`}
+      className="group flex items-center justify-center sm:justify-start gap-3 h-11 rounded-2xl bg-card border border-border/50 px-4 hover:border-border hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
+      aria-label={`${label} profile`}
     >
       <span
         className="shrink-0 transition-transform duration-150 group-hover:scale-110"
@@ -229,282 +269,172 @@ const SocialLink = memo<{
 });
 SocialLink.displayName = "SocialLink";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ActionBar — mirrors AlbumDetailPage's ActionBar
-// Play/Pause toggle, isPlaying state, motion animations, glow shadow
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── PlayingPill ───────────────────────────────────────────────────────────────
 
-interface ActionBarProps {
-  artist: IArtist;
-  handleMoreOptions: (artist: IArtist) => void;
-  palette: Palette;
-  isLoadingPlay: boolean;
-  isLoadingShuffle: boolean;
+const PlayingPill: FC<{
   isPlaying: boolean;
-  hasTracks: boolean;
-  density?: "compact" | "full";
-  onPlay: () => void;
-  onShuffle: () => void;
-}
+  palette: PaletteType;
+}> = memo(({ isPlaying, palette }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.88, y: 4 }}
+    animate={{ opacity: 1, scale: 1, y: 0 }}
+    exit={{ opacity: 0, scale: 0.88, y: 4 }}
+    transition={SP_SNAPPY}
+    className="flex items-center gap-2 px-3 py-1.5 rounded-full border backdrop-blur-sm"
+    style={{
+      background: palette.r(0.1),
+      borderColor: palette.r(0.28),
+    }}
+  >
+    <WaveformBars color={palette.hex} active={isPlaying} />
+    <span
+      className="text-[10px] font-black uppercase tracking-widest"
+      style={{ color: palette.hex }}
+    >
+      {isPlaying ? "Đang phát" : "Đã tạm dừng"}
+    </span>
+  </motion.div>
+));
+PlayingPill.displayName = "PlayingPill";
 
-const ActionBar = memo<ActionBarProps>(
-  ({
-    artist,
-    handleMoreOptions,
-    palette,
-    isLoadingPlay,
-    isLoadingShuffle,
-    isPlaying,
-    hasTracks,
-    density = "full",
-    onPlay,
-    onShuffle,
-  }) => {
-    const isCompact = density === "compact";
-    const playSz = isCompact ? "size-12" : "size-14 sm:size-16";
-    const playIconSz = isCompact ? "size-5" : "size-6 sm:size-7";
-    const ctrlSz = isCompact ? "size-10" : "size-10 sm:size-11";
-    const ctrlIconSz = isCompact ? "size-3.5" : "size-4";
-    const canPlay = hasTracks && !isLoadingPlay;
-    const canShuffle = hasTracks && !isLoadingShuffle;
+// ─── HeroCoverImage ────────────────────────────────────────────────────────────
+
+/** Cover image with blur-up loading */
+const HeroCoverImage: FC<{ src: string; isDark: boolean }> = memo(
+  ({ src, isDark }) => {
+    const [loaded, setLoaded] = useState(false);
 
     return (
-      <div
-        className="flex items-center gap-3"
-        role="toolbar"
-        aria-label="Artist controls"
-      >
-        {/* ── PLAY / PAUSE ── */}
-        <motion.button
-          type="button"
-          onClick={onPlay}
-          disabled={!canPlay}
-          aria-label={isPlaying ? "Pause artist" : "Play artist"}
-          aria-pressed={isPlaying}
+      <>
+        {/* Blurred placeholder */}
+        <div
+          aria-hidden="true"
           className={cn(
-            playSz,
-            "rounded-full flex items-center justify-center shrink-0 shadow-lg",
-            "transition-[box-shadow,transform] duration-300",
-            "disabled:opacity-60 disabled:cursor-not-allowed",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
+            "absolute inset-0 bg-cover bg-center z-0 pointer-events-none scale-105 blur-xl transition-opacity duration-700",
+            loaded ? "opacity-0" : "opacity-100",
+          )}
+          style={{ backgroundImage: `url(${src})` }}
+        />
+        {/* Full image */}
+        <img
+          src={src}
+          alt=""
+          aria-hidden="true"
+          onLoad={() => setLoaded(true)}
+          className={cn(
+            "absolute inset-0 size-full object-cover z-0 pointer-events-none transition-all duration-[5000ms] ease-out group-hover/hero:scale-105",
+            loaded ? "opacity-100 blur-0" : "opacity-0 blur-xl",
+            isDark ? "mix-blend-overlay" : "",
           )}
           style={{
-            backgroundColor: palette.hex,
-            boxShadow: isPlaying
-              ? `${palette.glowShadow}, 0 0 0 5px ${palette.r(0.22)}`
-              : palette.glowShadow,
+            opacity: loaded ? (isDark ? 0.32 : 0.92) : 0,
+            filter: !isDark ? "saturate(1.06) brightness(1)" : undefined,
           }}
-          whileHover={canPlay ? { scale: 1.06 } : undefined}
-          whileTap={canPlay ? { scale: 0.93 } : undefined}
-          transition={SP_SNAPPY}
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            {isLoadingPlay ? (
-              <motion.span
-                key="load"
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.6, opacity: 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <Loader2
-                  className={cn(playIconSz, "text-white animate-spin")}
-                  aria-hidden="true"
-                />
-              </motion.span>
-            ) : isPlaying ? (
-              <motion.span
-                key="pause"
-                initial={{ scale: 0.6, opacity: 0, rotate: -15 }}
-                animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                exit={{ scale: 0.6, opacity: 0, rotate: 15 }}
-                transition={SP_SNAPPY}
-              >
-                <Pause
-                  className={cn(playIconSz, "text-white fill-white")}
-                  aria-hidden="true"
-                />
-              </motion.span>
-            ) : (
-              <motion.span
-                key="play"
-                initial={{ scale: 0.6, opacity: 0, rotate: 15 }}
-                animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                exit={{ scale: 0.6, opacity: 0, rotate: -15 }}
-                transition={SP_SNAPPY}
-              >
-                <Play
-                  className={cn(playIconSz, "text-white fill-white ml-0.5")}
-                  aria-hidden="true"
-                />
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.button>
-
-        {/* ── SHUFFLE ── */}
-        <motion.button
-          type="button"
-          onClick={onShuffle}
-          disabled={!canShuffle}
-          aria-label="Shuffle artist tracks"
-          className={cn(
-            ctrlSz,
-            "rounded-full flex items-center justify-center border border-border/50",
-            "bg-background/30 backdrop-blur-sm text-foreground/70",
-            "hover:text-foreground hover:bg-muted/60 hover:border-border",
-            "transition-colors duration-150",
-            "disabled:opacity-40 disabled:cursor-not-allowed",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
-          )}
-          whileTap={canShuffle ? { scale: 0.9 } : undefined}
-          transition={SP_SNAPPY}
-        >
-          {isLoadingShuffle ? (
-            <Loader2
-              className={cn(ctrlIconSz, "animate-spin")}
-              aria-hidden="true"
-            />
-          ) : (
-            <Shuffle className={ctrlIconSz} aria-hidden="true" />
-          )}
-        </motion.button>
-
-        <FollowButton artistId={artist?._id} />
-        <div className="flex-1" aria-hidden="true" />
-        <button
-          className="rounded-full flex items-center justify-center border border-border/50  size-10  text-white/70 hover:text-white  active:scale-90 transition-all"
-          aria-label="More options"
-          onClick={() => handleMoreOptions(artist)}
-        >
-          <MoreHorizontal className="size-6" strokeWidth={2} />
-        </button>
-      </div>
+        />
+      </>
     );
   },
 );
-ActionBar.displayName = "ActionBar";
+HeroCoverImage.displayName = "HeroCoverImage";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ArtistAvatar — mirrors HeroCover, avatar circle with playing ring + EQ
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── BiographyCard ────────────────────────────────────────────────────────────
 
-const ArtistAvatar = memo<{
-  src?: string;
-  name: string;
-  palette: Palette;
-  isPlaying?: boolean;
-  size?: "sm" | "lg";
-}>(({ src, name, palette, isPlaying = false, size = "lg" }) => {
-  const isLg = size === "lg";
+const BiographyCard: FC<{
+  artist: IArtist;
+  palette: PaletteType;
+}> = memo(({ artist }) => (
+  <section
+    aria-label="Artist biography"
+    className="bg-card/55 backdrop-blur-md rounded-3xl p-6 border border-border/50 shadow-lg overflow-hidden"
+  >
+    <h3 className="font-black text-base uppercase tracking-wider mb-5 flex items-center gap-2.5 text-foreground">
+      <Info className="size-4 text-primary shrink-0" aria-hidden="true" />
+      Tiểu sử
+    </h3>
 
-  return (
-    <div
-      className={cn(
-        "group/avatar relative shrink-0",
-        isLg ? "self-center md:self-auto" : "",
-      )}
-    >
-      {/* Glow halo */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 rounded-full blur-[40px] pointer-events-none transition-opacity duration-700"
-        style={{
-          backgroundColor: palette.hex,
-          opacity: isPlaying ? 0.55 : 0.35,
-        }}
-      />
-
-      {/* Spinning conic ring — only lg + playing */}
-      <AnimatePresence>
-        {isPlaying && isLg && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.4 }}
-            aria-hidden="true"
-            className="absolute -inset-[5px] rounded-full pointer-events-none"
-            style={{
-              background: `conic-gradient(
-                ${palette.r(0.9)} 0deg,
-                ${palette.r(0.1)} 120deg,
-                ${palette.r(0.7)} 240deg,
-                ${palette.r(0.9)} 360deg
-              )`,
-              animation: "album-ring-spin 4s linear infinite",
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Avatar shell */}
-      <Avatar
-        className={cn(
-          "relative z-10 border-background bg-card transition-[transform,box-shadow] duration-500 group-hover/avatar:scale-[1.02]",
-          isLg
-            ? "size-[160px] sm:size-[210px] md:size-[260px] rounded-full border-[5px] sm:border-[7px] shadow-2xl"
-            : "size-20 rounded-2xl border-2 shadow-xl",
-        )}
-        style={
-          isPlaying && isLg
-            ? {
-                boxShadow: `0 0 0 3px ${palette.r(0.65)}, 0 24px 60px rgba(0,0,0,0.48)`,
-              }
-            : undefined
-        }
-      >
-        <AvatarImage
-          src={src}
-          className={cn(
-            "object-cover transition-[filter] duration-700",
-            isPlaying && isLg && "saturate-[1.12] brightness-[0.9]",
-          )}
-          fetchPriority={isLg ? "high" : undefined}
-        />
-        <AvatarFallback
-          className={cn(
-            "font-black bg-primary/20 text-primary",
-            isLg ? "text-5xl rounded-full" : "text-2xl rounded-2xl",
-          )}
-        >
-          {name[0]}
+    <div className="flex items-center gap-3 mb-5 pb-5 border-b border-border/40">
+      <Avatar className="size-14 rounded-2xl border border-border/50 shadow-sm shrink-0">
+        <AvatarImage src={artist.avatar} />
+        <AvatarFallback className="rounded-2xl bg-primary/15 text-primary font-black text-lg">
+          {artist.name[0]}
         </AvatarFallback>
-
-        {/* Now Playing overlay — EQ bars + gradient tint (lg only) */}
-        <AnimatePresence>
-          {isPlaying && isLg && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.35 }}
-              className="absolute inset-0 rounded-full flex flex-col items-center justify-end pb-5 gap-2"
-              style={{
-                background: `linear-gradient(to top, ${palette.r(0.82)} 0%, ${palette.r(0.18)} 55%, transparent 100%)`,
-              }}
-              aria-hidden="true"
-            >
-              <div className="eq-bars h-7">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <span
-                    key={i}
-                    className="eq-bar"
-                    style={{ background: "rgba(255,255,255,0.88)" }}
-                  />
-                ))}
-              </div>
-              <span className="text-[9px] font-black text-white/72 uppercase tracking-[0.22em]">
-                Đang phát
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </Avatar>
+      <div className="min-w-0">
+        <p className="font-black text-sm text-foreground truncate uppercase tracking-tight">
+          {artist.name}
+        </p>
+        <Badge className="mt-1 text-[9px] font-black uppercase tracking-widest bg-primary/10 text-primary border-none px-2 py-0.5">
+          Hồ sơ chính thức
+        </Badge>
+      </div>
     </div>
+
+    {artist.bio ? (
+      <p className="text-[13px] sm:text-sm text-muted-foreground leading-[1.85] font-medium line-clamp-[14] border-l-2 border-primary/30 pl-3.5">
+        {artist.bio}
+      </p>
+    ) : (
+      <div className="py-8 text-center bg-muted/25 rounded-2xl border border-dashed border-border/40">
+        <Mic2
+          className="size-7 text-muted-foreground/25 mx-auto mb-2.5"
+          aria-hidden="true"
+        />
+        <p className="text-[10px] font-black text-muted-foreground/50 uppercase tracking-widest italic">
+          Tiểu sử đang cập nhật
+        </p>
+      </div>
+    )}
+  </section>
+));
+BiographyCard.displayName = "BiographyCard";
+
+// ─── SocialLinksSection ────────────────────────────────────────────────────────
+
+const SocialLinksSection: FC<{
+  socialLinks: IArtist["socialLinks"];
+  accentColor: string;
+}> = memo(({ socialLinks, accentColor }) => {
+  if (!socialLinks || !Object.values(socialLinks).some(Boolean)) return null;
+  return (
+    <section aria-label="Social media links" className="space-y-3">
+      <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2 px-1">
+        <span
+          className="inline-block w-4 h-0.5 rounded-full"
+          style={{ backgroundColor: accentColor }}
+          aria-hidden="true"
+        />
+        Mạng xã hội
+      </h3>
+      <div className="grid grid-cols-2 gap-2">
+        <SocialLink
+          icon={<Instagram size={18} />}
+          label="Instagram"
+          href={socialLinks.instagram}
+          color="#E4405F"
+        />
+        <SocialLink
+          icon={<Facebook size={18} />}
+          label="Facebook"
+          href={socialLinks.facebook}
+          color="#1877F2"
+        />
+        <SocialLink
+          icon={<Youtube size={18} />}
+          label="YouTube"
+          href={socialLinks.youtube}
+          color="#FF0000"
+        />
+        <SocialLink
+          icon={<Globe size={18} />}
+          label="Website"
+          href={socialLinks.website}
+          color={accentColor}
+        />
+      </div>
+    </section>
   );
 });
-ArtistAvatar.displayName = "ArtistAvatar";
+SocialLinksSection.displayName = "SocialLinksSection";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
@@ -521,15 +451,14 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
   const isEmbedded = variant === "embedded";
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // useScrollY — same pattern as AlbumDetailPage
+  // ── Scroll ────────────────────────────────────────────────────────────────
   const scrollY = useScrollY(scrollRef, !isEmbedded);
   const isScrolled = scrollY > (isEmbedded ? 150 : 340);
 
   // ── Data ──────────────────────────────────────────────────────────────────
+  const { data: artist, isLoading, isError, refetch } = useArtistDetail(slug);
 
-  const { data, isLoading, isError, refetch } = useArtistDetail(slug);
-  const artist = data?.artist;
-  const albums = data?.albums || [];
+  const albums = artist?.albums ?? [];
 
   const {
     data: tracksData,
@@ -540,94 +469,105 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
     error: tracksError,
     refetch: refetchTracks,
   } = useArtistTracksInfinite(artist?._id);
+
   const {
     togglePlayArtist,
     shuffleArtist,
     isThisArtistActive,
     isThisArtistPlaying,
-    isFetching,
+    isFetching: isPlaybackFetching,
   } = useArtistPlayback(artist);
-  // ── Derived ───────────────────────────────────────────────────────────────
 
-  const allTracks = useMemo<ITrack[]>(
-    () => tracksData?.allTracks ?? [],
+  // ── Derived state ─────────────────────────────────────────────────────────
+
+  /** Flat track list — stable reference when pages haven't changed */
+  const allTracks = useMemo(
+    () => tracksData?.allTracks ?? ([] as ITrack[]),
     [tracksData?.allTracks],
   );
+  const totalItems = artist?.trackIds.length ?? tracksData?.totalItems ?? 0;
 
-  const totalItems = useMemo(
-    () => artist?.trackIds.length ?? tracksData?.totalItems ?? 0,
-    [artist?.trackIds.length, tracksData?.totalItems],
-  );
-
+  // Sync interactions
   const artistIds = useMemo(
     () => (artist?._id ? [artist._id] : []),
     [artist?._id],
   );
   useSyncInteractions(artistIds, "follow", "artist", !!artist?._id);
-
-  const syncTracksEnabled = useMemo(
-    () => !isLoadingTracks && !!artist?._id,
-    [isLoadingTracks, artist?._id],
-  );
   useSyncInteractionsPaged(
     tracksData?.allTracks,
     "like",
     "track",
-    syncTracksEnabled,
+    !isLoadingTracks && !!artist?._id,
   );
 
-  // buildPalette — same as AlbumDetailPage
-  const palette = useMemo(
-    () => buildPalette(artist?.themeColor ?? "#3b82f6"),
-    [artist?.themeColor],
+  // ── Palette ───────────────────────────────────────────────────────────────
+  /** buildPalette is only called when themeColor changes */
+  const palette = useMemo(() => {
+    const fallback = getCSSVar("--primary", "#3b82f6");
+    return buildPalette(artist?.themeColor ?? fallback);
+  }, [artist?.themeColor]);
+
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  const { theme } = useTheme();
+  const isDark = useMemo(
+    () =>
+      theme === "dark" ? true : theme === "light" ? false : getSystemDark(),
+    [theme],
   );
+
+  // ── Memoized styles ───────────────────────────────────────────────────────
+  /** CSS styles used by multiple children — stable objects */
+  const accentBg = useMemo<CSSProperties>(
+    () => ({ backgroundColor: palette.hex }),
+    [palette.hex],
+  );
+  const accentColor = useMemo<CSSProperties>(
+    () => ({ color: palette.hex }),
+    [palette.hex],
+  );
+
+  // ── Prefetch lazy chunks ───────────────────────────────────────────────────
+  useEffect(() => {
+    void import("@/features/track/components/TrackList");
+    void import("./components/ArtistActionBar");
+    void import("./components/ArtistAvatar");
+  }, []);
 
   // ── Actions ───────────────────────────────────────────────────────────────
-
-  const handleBack = useCallback(() => {
-    if (isEmbedded && onClose) onClose();
-    else {
-      if (window.history.length > 1) {
-        navigate(-1);
-      } else {
-        navigate("/", { replace: true });
-      }
-    }
-  }, [isEmbedded, onClose, navigate]);
+  const handleBack = useSmartBack()
+  // ── Artist name size — computed once ──────────────────────────────────────
+  const { className: titleCls } = useTitleStyle(artist?.name ?? "");
   const { openArtistSheet } = useContextSheet();
-  const openSheet = useCallback(
-    (a: IArtist) => {
-      openArtistSheet(a);
-    },
+  const handleMoreOptions = useCallback(
+    (a: IArtist) => openArtistSheet(a),
     [openArtistSheet],
   );
-  const handleMoreOptions = useCallback(
-    (a: IArtist) => openSheet(a),
-    [openSheet],
-  );
-  // ── Shared props ──────────────────────────────────────────────────────────
 
-  const sharedActionBarProps: ActionBarProps = useMemo(
+  // ── Shared props (stable references) ─────────────────────────────────────
+  /** Avoid re-rendering ActionBar by keeping a stable prop bag */
+  const sharedActionBarProps = useMemo<ArtistActionBarProps>(
     () => ({
       artist: artist!,
       handleMoreOptions,
       palette,
-      isLoadingPlay: isFetching,
-      isLoadingShuffle: isFetching,
+      isLoadingPlay: isPlaybackFetching,
+      isLoadingShuffle: isPlaybackFetching,
       isPlaying: isThisArtistPlaying,
       hasTracks: totalItems > 0,
       onPlay: togglePlayArtist,
       onShuffle: shuffleArtist,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      artist,
-      handleMoreOptions,
-      palette,
-      isFetching,
+      artist?._id, // identity, not full object
+      isPlaybackFetching,
       isThisArtistPlaying,
       totalItems,
+      // functions are stable from their own hooks
       togglePlayArtist,
       shuffleArtist,
+      handleMoreOptions,
+      palette,
     ],
   );
 
@@ -643,6 +583,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
       onFetchNextPage: fetchNextPage,
       onRetry: refetchTracks,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       artist?.trackIds,
       allTracks,
@@ -657,26 +598,9 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
   );
 
   const isOnline = useOnlineStatus();
-  // ── Error state ─────────────────────────────────────────────────────────
-  // Initial Load
-  if (isLoading && !artist) {
-    return <Artistdetailskeleton />;
-  }
-  // Switching
-  if (isLoading && artist) {
-    return <WaveformLoader glass={false} text="Đang tải" />;
-  }
-  // Deep Error
-  if (isError || !artist) {
-    return (
-      <>
-        <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
-        </div>
-      </>
-    );
-  }
-  // Offline
+
+  // ── Early returns ──────────────────────────────────────────────────────────
+
   if (!isOnline) {
     return (
       <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
@@ -687,6 +611,23 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
         />
       </div>
     );
+  }
+
+  if (isLoading && !artist) {
+    return <Artistdetailskeleton />;
+  }
+
+  if (isError || !artist) {
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <MusicResult variant="error" onRetry={refetch} />
+      </div>
+    );
+  }
+
+  // Switching between artists — keep layout, show inline loader
+  if (isLoading) {
+    return <WaveformLoader glass={false} text="Đang tải" />;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -701,6 +642,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
         role="region"
         aria-label={`Artist: ${artist.name}`}
       >
+        {/* Color wash strip */}
         <div
           aria-hidden="true"
           className="sticky top-0 h-[200px] shrink-0 pointer-events-none z-0"
@@ -708,6 +650,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
         />
 
         <div className="relative z-10 -mt-[200px] px-4 pb-10">
+          {/* Close button */}
           {onClose && (
             <div className="pt-4 pb-3">
               <button
@@ -721,6 +664,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
             </div>
           )}
 
+          {/* Avatar + meta */}
           <motion.div
             className="flex items-end gap-4 pt-4 pb-5"
             initial={{ opacity: 0, y: 10 }}
@@ -753,7 +697,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                   {formatListeners(artist.monthlyListeners)} người nghe / tháng
                 </p>
               )}
-              {/* Playing indicator in embedded */}
+
               <AnimatePresence>
                 {isThisArtistPlaying && (
                   <motion.div
@@ -762,19 +706,13 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                     exit={{ opacity: 0, y: 4 }}
                     className="flex items-center gap-1.5 mt-1.5"
                   >
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <span
-                        key={i}
-                        className="eq-bar w-[3px] rounded-full sw-animate-eq"
-                        style={{
-                          animationDelay: `${i * 0.12}s`,
-                          backgroundColor: palette.hex,
-                        }}
-                      />
-                    ))}
+                    <WaveformBars
+                      color={palette.hex}
+                      active={isThisArtistPlaying}
+                    />
                     <span
                       className="text-[9px] font-black uppercase tracking-widest"
-                      style={{ color: palette.hex }}
+                      style={accentColor}
                     >
                       Đang phát
                     </span>
@@ -785,7 +723,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
           </motion.div>
 
           <div className="mb-5">
-            <ActionBar {...sharedActionBarProps} density="full" />
+            <ArtistActionBar {...sharedActionBarProps} density="full" />
           </div>
 
           {/* Top tracks */}
@@ -801,41 +739,40 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                 }
                 compact
               />
-
-              <TrackList
-                {...trackListProps}
-                maxHeight={700}
-                moodColor={palette.hex}
-                skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
-                staggerAnimation={false}
-              />
+              <Suspense fallback={<WaveformLoader />}>
+                <TrackList
+                  {...trackListProps}
+                  maxHeight="auto"
+                  moodColor={palette.hex}
+                  skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
+                  staggerAnimation={false}
+                />
+              </Suspense>
             </div>
           )}
 
           {/* Albums */}
-          {albums.length > 0 ? (
-            <div className="mt-8">
-              <SectionHeader
-                label="Đĩa nhạc"
-                icon={
-                  <Disc3 className="size-3.5 text-primary" aria-hidden="true" />
-                }
-                compact
-              />
-              <div className="grid grid-cols-2 gap-3 ">
+          <div className="mt-8">
+            <SectionHeader
+              label="Đĩa nhạc"
+              icon={
+                <Disc3 className="size-3.5 text-primary" aria-hidden="true" />
+              }
+              compact
+            />
+            {albums.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
                 {albums.slice(0, 4).map((album: IAlbum) => (
                   <PublicAlbumCard key={album._id} album={album} />
                 ))}
               </div>
-            </div>
-          ) : (
-            <div className="mt-8">
+            ) : (
               <MusicResult
                 variant="empty-artists"
                 description="Artist hiện đang trống"
               />
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Bio snippet */}
           {artist.bio && (
@@ -859,28 +796,24 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
 
   return (
     <main className="relative min-h-screen bg-background text-foreground overflow-x-hidden pb-32 selection:bg-primary/20 animate-in fade-in duration-700">
-      {/* ── Immersive Hero */}
+      {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section
         aria-label="Artist hero"
         className="relative w-full min-h-[460px] sm:min-h-[520px] md:min-h-[620px] flex flex-col justify-end overflow-hidden shrink-0 group/hero"
       >
-        {/* Dynamic color wash — uses palette.heroGradient */}
+        {/* Color wash */}
         <div
           aria-hidden="true"
           className="absolute inset-0 z-0 pointer-events-none transition-colors duration-1000"
           style={{ background: palette.heroGradient }}
         />
 
-        {/* Cover image */}
+        {/* Cover image with blur-up */}
         {artist.coverImage && (
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-cover bg-center z-0 pointer-events-none transition-transform duration-[5000ms] ease-out group-hover/hero:scale-105 opacity-50 dark:opacity-30 mix-blend-overlay"
-            style={{ backgroundImage: `url(${artist.coverImage})` }}
-          />
+          <HeroCoverImage src={artist.coverImage} isDark={isDark} />
         )}
 
-        {/* Noise texture — matches AlbumDetailPage */}
+        {/* Noise texture */}
         <div
           aria-hidden="true"
           className="absolute inset-0 z-0 pointer-events-none opacity-[0.025] dark:opacity-[0.05]"
@@ -901,14 +834,14 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
           <button
             type="button"
             onClick={handleBack}
-            className="inline-flex items-center gap-1.5 text-sm font-bold text-foreground/70 hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-background/30 backdrop-blur-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
+            className="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:text-primary/70 transition-colors px-2 py-1 rounded-lg   backdrop-blur-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
           >
             <ChevronLeft className="size-4" aria-hidden="true" />
             Quay lại
           </button>
         </div>
 
-        {/* Hero content — motion entrance */}
+        {/* Hero content */}
         <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 pb-10 sm:pb-14 mt-20">
           <motion.div
             className="flex flex-col md:flex-row items-center md:items-end gap-7 md:gap-10 text-center md:text-left"
@@ -916,7 +849,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
           >
-            {/* Avatar with playing ring + EQ overlay */}
+            {/* Avatar */}
             <motion.div
               initial={{ opacity: 0, y: 24, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -951,7 +884,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
               <h1
                 className={cn(
                   "font-black tracking-tighter leading-[0.88] drop-shadow-xl text-foreground w-full",
-                  artistNameSizeClass(artist.name),
+                  titleCls,
                 )}
               >
                 {artist.name}
@@ -981,46 +914,13 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                 )}
               </div>
 
-              {/* Playing status pill — mirrors AlbumDetailPage */}
+              {/* Playing pill */}
               <AnimatePresence>
                 {isThisArtistActive && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.88, y: 4 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.88, y: 4 }}
-                    transition={SP_SNAPPY}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full border backdrop-blur-sm"
-                    style={{
-                      background: palette.r(0.1),
-                      borderColor: palette.r(0.28),
-                    }}
-                  >
-                    <div
-                      aria-hidden="true"
-                      className={cn(
-                        "eq-bars shrink-0 flex items-end gap-[2px] h-4",
-                        !isThisArtistPlaying && "paused opacity-40",
-                        "transition-opacity duration-300",
-                      )}
-                    >
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <span
-                          key={i}
-                          className="eq-bar w-[3px] rounded-full sw-animate-eq"
-                          style={{
-                            animationDelay: `${i * 0.12}s`,
-                            backgroundColor: palette.hex,
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <span
-                      className="text-[10px] font-black uppercase tracking-widest"
-                      style={{ color: palette.hex }}
-                    >
-                      {isThisArtistPlaying ? "Đang phát" : "Đã tạm dừng"}
-                    </span>
-                  </motion.div>
+                  <PlayingPill
+                    isPlaying={isThisArtistPlaying}
+                    palette={palette}
+                  />
                 )}
               </AnimatePresence>
             </motion.div>
@@ -1028,7 +928,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
         </div>
       </section>
 
-      {/* ── Sticky Action Bar */}
+      {/* ── Sticky Action Bar ────────────────────────────────────────────────── */}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
         <div
           className={cn(
@@ -1043,15 +943,13 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
           )}
           style={
             {
-              animationDelay: "80ms",
-              // Nếu không có moodColor thì fallback về màu primary mặc định
               "--local-shadow-color": palette.hslChannels || "var(--primary)",
-            } as React.CSSProperties
+            } as CSSProperties
           }
         >
-          <ActionBar {...sharedActionBarProps} density="full" />
+          <ArtistActionBar {...sharedActionBarProps} density="full" />
 
-          {/* Scrolled artist identity — AnimatePresence like AlbumDetailPage */}
+          {/* Scrolled identity badge */}
           <AnimatePresence>
             {isScrolled && (
               <motion.div
@@ -1062,24 +960,12 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                 transition={SP_GENTLE}
                 aria-hidden="true"
               >
-                {/* Mini EQ when playing */}
                 <AnimatePresence>
                   {isThisArtistPlaying && (
-                    <div
-                      aria-hidden="true"
-                      className="eq-bars shrink-0 flex items-end gap-[2px] h-4 transition-opacity duration-300"
-                    >
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <span
-                          key={i}
-                          className="eq-bar w-[3px] rounded-full sw-animate-eq"
-                          style={{
-                            animationDelay: `${i * 0.12}s`,
-                            backgroundColor: palette.hex,
-                          }}
-                        />
-                      ))}
-                    </div>
+                    <WaveformBars
+                      color={palette.hex}
+                      active={isThisArtistPlaying}
+                    />
                   )}
                 </AnimatePresence>
 
@@ -1087,7 +973,6 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                   {artist.name}
                 </span>
 
-                {/* Avatar thumbnail — ring when playing */}
                 <Avatar
                   className={cn(
                     "size-9 sm:size-10 rounded-full border shrink-0 transition-all duration-300",
@@ -1112,15 +997,15 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
         </div>
       </div>
 
-      {/* ── Main Content */}
+      {/* ── Main Content ─────────────────────────────────────────────────────── */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 mt-10 md:mt-14">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 md:gap-14 xl:gap-20">
-          {/* Left: tracks + gallery + albums */}
+          {/* Left column */}
           <div className="lg:col-span-8 space-y-16">
+            {/* Top tracks */}
             <motion.section
               aria-label="Top tracks"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
+              {...FADE_UP}
               transition={{ ...SP_GENTLE, delay: 0.18 }}
             >
               <SectionHeader
@@ -1132,20 +1017,22 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                   />
                 }
               />
-              <TrackList
-                {...trackListProps}
-                maxHeight={700}
-                moodColor={palette.hslChannels}
-                skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
-                staggerAnimation={true}
-              />
+              <Suspense fallback={<WaveformLoader />}>
+                <TrackList
+                  {...trackListProps}
+                  maxHeight="auto"
+                  moodColor={palette.hslChannels}
+                  skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
+                  staggerAnimation
+                />
+              </Suspense>
             </motion.section>
 
+            {/* Photo gallery */}
             {artist.images?.length > 0 && (
               <motion.section
                 aria-label="Photo gallery"
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
+                {...FADE_UP}
                 transition={{ ...SP_GENTLE, delay: 0.22 }}
               >
                 <SectionHeader
@@ -1157,19 +1044,17 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                     />
                   }
                 />
-                <div>
-                  <DraggableImageGallery
-                    images={artist.images}
-                    artistName={artist.name}
-                  />
-                </div>
+                <DraggableImageGallery
+                  images={artist.images}
+                  artistName={artist.name}
+                />
               </motion.section>
             )}
 
+            {/* Discography */}
             <motion.section
               aria-label="Discography"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
+              {...FADE_UP}
               transition={{ ...SP_GENTLE, delay: 0.26 }}
             >
               <SectionHeader
@@ -1187,30 +1072,28 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
                       onClick={() => navigate(`/artists/${slug}/albums`)}
                       className="text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 rounded"
                     >
-                      Xem tất cả{" "}
+                      Xem tất cả
                       <ChevronRight className="size-3.5" aria-hidden="true" />
                     </button>
                   ) : undefined
                 }
               />
-              <div>
-                {albums.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-7 sm:gap-x-5 sm:gap-y-9">
-                    {albums.map((album: IAlbum) => (
-                      <PublicAlbumCard key={album._id} album={album} />
-                    ))}
-                  </div>
-                ) : (
-                  <MusicResult
-                    variant="empty-albums"
-                    description="Album hiện đang trống"
-                  />
-                )}
-              </div>
+              {albums.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-7 sm:gap-x-5 sm:gap-y-9">
+                  {albums.map((album: IAlbum) => (
+                    <PublicAlbumCard key={album._id} album={album} />
+                  ))}
+                </div>
+              ) : (
+                <MusicResult
+                  variant="empty-albums"
+                  description="Album hiện đang trống"
+                />
+              )}
             </motion.section>
           </div>
 
-          {/* Right: bio + social */}
+          {/* Right column — sticky sidebar */}
           <motion.aside
             className="lg:col-span-4"
             initial={{ opacity: 0, x: 16 }}
@@ -1222,99 +1105,14 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
               <div
                 aria-hidden="true"
                 className="absolute -top-12 -right-8 w-[110%] aspect-square rounded-full blur-[100px] opacity-10 pointer-events-none -z-10"
-                style={{ backgroundColor: palette.hex }}
+                style={accentBg}
               />
 
-              {/* Bio card */}
-              <section
-                aria-label="Artist biography"
-                className="bg-card/55 backdrop-blur-md rounded-3xl p-6 border border-border/50 shadow-lg overflow-hidden"
-              >
-                <h3 className="font-black text-base uppercase tracking-wider mb-5 flex items-center gap-2.5 text-foreground">
-                  <Info
-                    className="size-4 text-primary shrink-0"
-                    aria-hidden="true"
-                  />
-                  Tiểu sử
-                </h3>
-
-                <div className="flex items-center gap-3 mb-5 pb-5 border-b border-border/40">
-                  <Avatar className="size-14 rounded-2xl border border-border/50 shadow-sm shrink-0">
-                    <AvatarImage src={artist.avatar} />
-                    <AvatarFallback className="rounded-2xl bg-primary/15 text-primary font-black text-lg">
-                      {artist.name[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="font-black text-sm text-foreground truncate uppercase tracking-tight">
-                      {artist.name}
-                    </p>
-                    <Badge className="mt-1 text-[9px] font-black uppercase tracking-widest bg-primary/10 text-primary border-none px-2 py-0.5">
-                      Hồ sơ chính thức
-                    </Badge>
-                  </div>
-                </div>
-
-                {artist.bio ? (
-                  <p className="text-[13px] sm:text-sm text-muted-foreground leading-[1.85] font-medium line-clamp-[14] border-l-2 border-primary/30 pl-3.5">
-                    {artist.bio}
-                  </p>
-                ) : (
-                  <div className="py-8 text-center bg-muted/25 rounded-2xl border border-dashed border-border/40">
-                    <Mic2
-                      className="size-7 text-muted-foreground/25 mx-auto mb-2.5"
-                      aria-hidden="true"
-                    />
-                    <p className="text-[10px] font-black text-muted-foreground/50 uppercase tracking-widest italic">
-                      Tiểu sử đang cập nhật
-                    </p>
-                  </div>
-                )}
-              </section>
-
-              {/* Social links */}
-              {artist.socialLinks &&
-                Object.values(artist.socialLinks).some(Boolean) && (
-                  <section
-                    aria-label="Social media links"
-                    className="space-y-3"
-                  >
-                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2 px-1">
-                      <span
-                        className="inline-block w-4 h-0.5 rounded-full"
-                        style={{ backgroundColor: palette.hex }}
-                        aria-hidden="true"
-                      />
-                      Mạng xã hội
-                    </h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <SocialLink
-                        icon={<Instagram size={18} />}
-                        label="Instagram"
-                        href={artist.socialLinks.instagram}
-                        color="#E4405F"
-                      />
-                      <SocialLink
-                        icon={<Facebook size={18} />}
-                        label="Facebook"
-                        href={artist.socialLinks.facebook}
-                        color="#1877F2"
-                      />
-                      <SocialLink
-                        icon={<Youtube size={18} />}
-                        label="YouTube"
-                        href={artist.socialLinks.youtube}
-                        color="#FF0000"
-                      />
-                      <SocialLink
-                        icon={<Globe size={18} />}
-                        label="Website"
-                        href={artist.socialLinks.website}
-                        color={palette.hex}
-                      />
-                    </div>
-                  </section>
-                )}
+              <BiographyCard artist={artist} palette={palette} />
+              <SocialLinksSection
+                socialLinks={artist.socialLinks}
+                accentColor={palette.hex}
+              />
             </div>
           </motion.aside>
         </div>

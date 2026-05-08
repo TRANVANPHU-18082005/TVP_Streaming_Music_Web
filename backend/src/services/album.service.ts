@@ -4,18 +4,14 @@ import mongoose from "mongoose";
 import Album, { IAlbum } from "../models/Album";
 import Track from "../models/Track";
 import Artist from "../models/Artist";
-import User, { IUser } from "../models/User";
+import { IUser } from "../models/User";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 import escapeStringRegexp from "escape-string-regexp";
 import { deleteFileFromCloud } from "../utils/cloudinary";
-import {
-  AlbumFilterInput,
-  CreateAlbumInput,
-  UpdateAlbumInput,
-} from "../validations/album.validation";
-import { parseGenreIds, parseTags } from "../utils/helper";
-import Genre from "../models/Genre";
+
+import { parseTags } from "../utils/helper";
+
 import { cacheRedis } from "../config/redis";
 import {
   buildCacheKey,
@@ -24,13 +20,19 @@ import {
   invalidateAlbumListCache,
 } from "../utils/cacheHelper";
 import { CounterAlbum, CounterTrack } from "../utils/counter";
+import themeColorService from "./themeColor.service";
+import { APP_CONFIG } from "../config/constants";
+import {
+  AlbumAdminFilterInput,
+  AlbumUserFilterInput,
+  CreateAlbumInput,
+  UpdateAlbumInput,
+} from "../validations/album.validation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Mime type cho ảnh bìa album upload qua Cloudinary */
-const COVER_MIME = "image/jpeg";
 async function syncAlbumStats(albumId: string): Promise<void> {
   try {
     await Album.calculateStats(albumId);
@@ -39,14 +41,12 @@ async function syncAlbumStats(albumId: string): Promise<void> {
   }
 }
 class AlbumService {
-  // ── 1. CREATE ─────────────────────────────────────────────────────────────
-
+  // 1. CREATE
   async createAlbum(
     currentUser: IUser,
     data: CreateAlbumInput,
     file?: Express.Multer.File,
   ) {
-    // 1. Phân quyền & Xác định Artist (Oce)
     let targetArtistId: string;
     if (currentUser.role === "admin") {
       if (!data.artist)
@@ -64,9 +64,16 @@ class AlbumService {
 
     // 2. Chuẩn bị dữ liệu
     const tagsArray = parseTags(data.tags);
-    const coverPath = file?.path ?? "";
     const coverSize = file?.size ?? 0;
-
+    let themeColor = data.themeColor || "#121212";
+    const coverPath = file?.path ?? "";
+    if (!data.themeColor && coverPath) {
+      try {
+        themeColor = await themeColorService.extractThemeColor(coverPath);
+      } catch (err) {
+        console.error("[AlbumService] Color extraction failed:", err);
+      }
+    }
     // 3. Transaction
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -88,6 +95,8 @@ class AlbumService {
             isPublic: String(data.isPublic) === "true",
             totalTracks: 0,
             totalDuration: 0,
+            playCount: 0,
+            likeCount: 0,
           },
         ],
         { session },
@@ -129,8 +138,7 @@ class AlbumService {
     }
   }
 
-  // ── 2. UPDATE ─────────────────────────────────────────────────────────────
-
+  // 2. UPDATE
   async updateAlbum(
     id: string,
     currentUser: IUser,
@@ -151,7 +159,15 @@ class AlbumService {
     const oldCoverImage = album.coverImage;
     const oldCoverSize = album.fileSize ?? 0;
     const newCoverSize = file?.size ?? 0;
+    let newThemeColor = data.themeColor || album.themeColor || "#121212";
 
+    if (file && !data.themeColor) {
+      try {
+        newThemeColor = await themeColorService.extractThemeColor(file.path);
+      } catch (err) {
+        console.error("[AlbumService] Color extraction failed:", err);
+      }
+    }
     // ── Transaction ──────────────────────────────────────────────────────────
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -196,13 +212,9 @@ class AlbumService {
       if (data.description !== undefined) album.description = data.description;
       if (data.type) album.type = data.type;
 
-      // FIX 3: Bỏ releaseYear thủ công — pre-save middleware tự set
       if (data.releaseDate) {
         album.releaseDate = new Date(data.releaseDate);
-        // releaseYear sẽ được pre-save tính lại tự động
       }
-
-      // C. Genres (diff-based, giữ trong session)
 
       if (data.tags) album.tags = parseTags(data.tags);
 
@@ -214,65 +226,49 @@ class AlbumService {
       if (file) {
         album.coverImage = file.path;
         album.fileSize = newCoverSize;
+        if (newThemeColor) album.themeColor = newThemeColor;
       } else {
-        if (data.themeColor) album.themeColor = data.themeColor;
+        album.themeColor = newThemeColor;
       }
 
       await album.save({ session });
       await session.commitTransaction();
 
-      // ── FIX 4: Sau commit — cleanup + cache invalidate ────────────────────
-      const postCommitTasks: Promise<any>[] = [invalidateAlbumCache(id)];
+      // 3. Hậu kỳ (Async)
+      const postCommitTasks: Promise<any>[] = [
+        invalidateAlbumCache(id),
+        syncAlbumStats(id), // Đảm bảo số liệu luôn khớp
+      ];
 
-      // Xóa ảnh cũ khỏi Cloudinary nếu đổi cover
+      // Dọn dẹp ảnh cũ
       if (file && oldCoverImage && !oldCoverImage.includes("default")) {
-        postCommitTasks.push(
-          deleteFileFromCloud(oldCoverImage, "image").catch((err) =>
-            console.error("[AlbumService] Old cover cleanup failed:", err),
-          ),
-        );
+        postCommitTasks.push(deleteFileFromCloud(oldCoverImage, "image"));
       }
 
-      // FIX 1: Điều chỉnh imageBytes counter nếu đổi cover
+      // Cập nhật Counter Storage
       if (file && newCoverSize > 0) {
-        if (oldCoverSize > 0) {
-          // Trừ cái cũ, cộng cái mới
-          const pipeline = cacheRedis.pipeline();
+        const pipeline = cacheRedis.pipeline();
+        if (oldCoverSize > 0)
           pipeline.decrby("stats:storage:image_bytes", oldCoverSize);
-          pipeline.incrby("stats:storage:image_bytes", newCoverSize);
-          postCommitTasks.push(pipeline.exec().catch(() => {}));
-        } else {
-          postCommitTasks.push(
-            CounterTrack.increment(newCoverSize, COVER_MIME),
-          );
-        }
+        pipeline.incrby("stats:storage:image_bytes", newCoverSize);
+        postCommitTasks.push(pipeline.exec());
       }
 
-      Promise.allSettled([
-        ...postCommitTasks, // ✅ Spread mảng ra
-        syncAlbumStats(album._id.toString()),
-      ]);
+      Promise.allSettled(postCommitTasks).catch(console.error);
       return album;
     } catch (error) {
       await session.abortTransaction();
-
-      // Xóa file mới nếu transaction fail
-      if (file?.path) {
-        deleteFileFromCloud(file.path, "image").catch((err) =>
-          console.error("[AlbumService] New cover cleanup failed:", err),
-        );
-      }
+      if (file?.path)
+        await deleteFileFromCloud(file.path, "image").catch(console.error);
       throw error;
     } finally {
       session.endSession();
     }
   }
+  // ── 3. GET LIST BY USER ───────────────────────────────────────────────────────────
 
-  // ── 3. GET LIST ───────────────────────────────────────────────────────────
-
-  async getAlbums(filter: AlbumFilterInput, currentUser?: IUser) {
-    const userRole = currentUser?.role ?? "guest";
-    const isAdmin = userRole === "admin";
+  async getAlbumsByUser(filter: AlbumUserFilterInput, currentUser?: IUser) {
+    const userRole = currentUser?.role ? "user" : "guest";
 
     const cleanFilter = Object.fromEntries(
       Object.entries(filter).filter(([, v]) => v !== undefined && v !== ""),
@@ -284,25 +280,112 @@ class AlbumService {
 
     const {
       page = 1,
-      limit = 10,
+      limit = APP_CONFIG.GRID_LIMIT,
       keyword,
       artistId,
       year,
-      genreId,
       type,
       sort,
-      isPublic,
     } = filter;
 
     const skip = (page - 1) * limit;
-    const query: Record<string, any> = {};
+    const query: Record<string, any> = { isDeleted: false, isPublic: true };
 
+    let sortOption: Record<string, any>;
+    let useTextScore = false;
+
+    if (keyword) {
+      const safeKeyword = escapeStringRegexp(keyword.substring(0, 100));
+      if (!sort) {
+        // $text search: tận dụng text index, sort theo relevance
+        query.$text = { $search: keyword };
+        useTextScore = true;
+        sortOption = { score: { $meta: "textScore" }, _id: 1 };
+      } else {
+        // Prefix regex + compound index (sort được ưu tiên)
+        query.title = { $regex: `^${safeKeyword}`, $options: "i" };
+      }
+    }
+
+    // ── Filters ──────────────────────────────────────────────────────────────
+    if (artistId) query.artist = artistId;
+    if (year) query.releaseYear = year;
+    if (type) query.type = type;
+
+    // ── Sort fallback ────────────────────────────────────────────────────────
+    if (!useTextScore) {
+      const SORT_MAP: Record<string, any> = {
+        popular: { playCount: -1, _id: 1 },
+        newest: { releaseDate: -1, _id: 1 },
+        oldest: { releaseDate: 1, _id: 1 },
+        name: { title: 1, _id: 1 },
+      };
+      sortOption = SORT_MAP[sort ?? "newest"] ?? SORT_MAP.newest;
+    }
+
+    // ── Query ────────────────────────────────────────────────────────────────
+    let baseQuery = Album.find(query)
+      .populate("artist", "name slug")
+      .select("title coverImage artist releaseYear type playCount slug")
+      .sort(sortOption!)
+      .skip(skip)
+      .limit(limit)
+      .lean<IAlbum & { score?: number }>();
+
+    // Thêm score vào projection khi dùng text search
+    if (useTextScore) {
+      baseQuery = baseQuery.select({
+        score: { $meta: "textScore" },
+      } as any);
+    }
+
+    const [albums, total] = await Promise.all([
+      baseQuery.lean(),
+      Album.countDocuments(query),
+    ]);
+
+    const result = {
+      data: albums,
+      meta: {
+        totalItems: Number(total),
+        page: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: Number(page) * Number(limit) < Number(total),
+      },
+    };
+
+    // Cache với jitter để tránh thundering herd
+    const ttl = 600 + Math.floor(Math.random() * 120);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+    ).catch((err) => console.error("[Cache] SET error:", err));
+
+    return result;
+  }
+  // ── 4. GET LIST BY ADMIN ───────────────────────────────────────────────────────────
+
+  async getAlbumsByAdmin(filter: AlbumAdminFilterInput, currentUser?: IUser) {
+    const userRole = currentUser?.role ?? "guest";
+    const isAdmin = userRole === "admin";
     // ── Authorization ────────────────────────────────────────────────────────
     if (!isAdmin) {
-      query.isPublic = true;
-    } else if (isPublic !== undefined) {
-      query.isPublic = isPublic;
+      throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Admin mới được truy cập");
     }
+    const {
+      page = 1,
+      limit = APP_CONFIG.GRID_LIMIT,
+      keyword,
+      artistId,
+      year,
+      type,
+      sort,
+      isPublic,
+      isDeleted,
+    } = filter;
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const query: Record<string, any> = {};
 
     // ── Search strategy ──────────────────────────────────────────────────────
     // Khi có keyword VÀ không có explicit sort → dùng $text (full Atlas scoring)
@@ -327,26 +410,24 @@ class AlbumService {
     // ── Filters ──────────────────────────────────────────────────────────────
     if (artistId) query.artist = artistId;
     if (year) query.releaseYear = year;
-    if (genreId) query.genres = genreId;
+    if (isPublic !== undefined) query.isPublic = isPublic;
+    if (isDeleted !== undefined) query.isDeleted = isDeleted;
     if (type) query.type = type;
 
     // ── Sort fallback ────────────────────────────────────────────────────────
     if (!useTextScore) {
       const SORT_MAP: Record<string, any> = {
         popular: { playCount: -1, _id: 1 },
+        newest: { releaseDate: -1, _id: 1 },
         oldest: { releaseDate: 1, _id: 1 },
         name: { title: 1, _id: 1 },
-        newest: { releaseDate: -1, _id: 1 },
       };
       sortOption = SORT_MAP[sort ?? "newest"] ?? SORT_MAP.newest;
     }
 
     // ── Query ────────────────────────────────────────────────────────────────
     let baseQuery = Album.find(query)
-      .populate("artist", "name avatar slug isVerified")
-      .select(
-        "title coverImage artist releaseYear type playCount slug isPublic genres themeColor",
-      )
+      .populate("artist", "name slug")
       .sort(sortOption!)
       .skip(skip)
       .limit(limit)
@@ -367,50 +448,62 @@ class AlbumService {
     const result = {
       data: albums,
       meta: {
-        totalItems: total,
+        totalItems: Number(total),
         page: Number(page),
         pageSize: Number(limit),
-        totalPages: Math.ceil(total / Number(limit)),
-        hasNextPage: page * limit < total,
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: Number(page) * Number(limit) < Number(total),
       },
     };
-
-    // Cache với jitter để tránh thundering herd
-    const ttl = 600 + Math.floor(Math.random() * 120);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
-    ).catch((err) => console.error("[Cache] SET error:", err));
 
     return result;
   }
 
-  // ── 4. DELETE ─────────────────────────────────────────────────────────────
+  // ── 5. DELETE ─────────────────────────────────────────────────────────────
 
   async deleteAlbum(id: string, currentUser: IUser) {
     const album = await Album.findById(id);
-    if (!album) throw new ApiError(httpStatus.NOT_FOUND, "Album not found");
+    if (!album || album.isDeleted) {
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Album không tồn tại hoặc đã bị xóa",
+      );
+    }
 
+    // 1. Kiểm tra quyền sở hữu
     const isOwner =
       currentUser.artistProfile &&
       album.artist.toString() === currentUser.artistProfile.toString();
-
     if (currentUser.role !== "admin" && !isOwner) {
       throw new ApiError(httpStatus.FORBIDDEN, "Không có quyền xóa");
     }
 
-    // Snapshot trước khi xóa — dùng trong cleanup sau commit
-    const coverImageToDelete = album.coverImage;
-    const coverSizeToDeduct = album.fileSize ?? 0;
     const artistId = album.artist;
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
+      // 2. Thực hiện xóa mềm
+      await Album.findByIdAndUpdate(
+        id,
+        {
+          isDeleted: true,
+          isPublic: false, // Ẩn khỏi mọi nơi ngay lập tức
+          deletedAt: new Date(), // Nên thêm trường này để theo dõi
+        },
+        { session },
+      );
+
+      // 3. Xử lý các dữ liệu liên quan
       await Promise.all([
-        // Unlink tracks khỏi album
-        Track.updateMany({ album: id }, { $unset: { album: "" } }, { session }),
-        // Giảm counter Artist
+        // Cách A: Gỡ album khỏi các bài hát (như bạn đang làm)
+        // Track.updateMany({ album: id }, { $unset: { album: "" } }, { session }),
+
+        // Cách B (Khuyên dùng nếu muốn khôi phục sau này):
+        // Chỉ đánh dấu các Track đó thuộc về một album đã bị xóa mềm.
+
+        // Giảm counter của Artist (Vì album không còn hiển thị nữa)
         Artist.findByIdAndUpdate(
           artistId,
           { $inc: { totalAlbums: -1 } },
@@ -418,26 +511,17 @@ class AlbumService {
         ),
       ]);
 
-      await album.deleteOne({ session });
       await session.commitTransaction();
 
-      // ── Sau commit: cleanup không block response ──────────────────────────
-      await Promise.allSettled([
-        // Redis counters
+      // 4. Hậu kỳ (Async)
+      Promise.allSettled([
         CounterAlbum.decrement(),
-        coverSizeToDeduct > 0
-          ? CounterTrack.decrement(coverSizeToDeduct, COVER_MIME)
-          : Promise.resolve(),
-
-        // Cache invalidation
         invalidateAlbumCache(id),
-        // Cloudinary cleanup
-        coverImageToDelete && !coverImageToDelete.includes("default")
-          ? deleteFileFromCloud(coverImageToDelete, "image")
-          : Promise.resolve(),
-      ]);
+        // LƯU Ý: Với xóa mềm, KHÔNG xóa ảnh trên Cloudinary
+        // để có thể khôi phục lại Album nguyên vẹn khi cần.
+      ]).catch(console.error);
 
-      return { message: "Xóa đĩa nhạc thành công" };
+      return { message: "Xóa đĩa nhạc thành công (Soft Delete)" };
     } catch (error) {
       await session.abortTransaction();
       throw error;
@@ -446,86 +530,25 @@ class AlbumService {
     }
   }
 
-  // ── 5. GET DETAIL ─────────────────────────────────────────────────────────
+  // ── 6. GET DETAIL ─────────────────────────────────────────────────────────
 
-  async getAlbumDetail(
-    slugOrId: string,
-    currentUserId?: string,
-    userRole: string = "guest", // Mặc định là guest để build key
-  ) {
-    // 1. Khởi tạo Query & Cache Key
-    const isId = /^[0-9a-fA-F]{24}$/.test(slugOrId);
-    const query = isId ? { _id: slugOrId } : { slug: slugOrId };
-
-    // Cache key phụ thuộc vào slugOrId và role (vì admin/owner thấy được album private)
-    const cacheKey = buildCacheKey(`album:detail:${slugOrId}`, userRole, {});
-
-    // 2. Thử lấy dữ liệu từ Cache trước
-    const cachedData = await withCacheTimeout(() => cacheRedis.get(cacheKey));
-    if (cachedData) {
-      const parsed = JSON.parse(cachedData as string);
-
-      // Kiểm tra bảo mật cho dữ liệu cache (nếu album riêng tư)
-      if (!parsed.isPublic) {
-        await this.checkAlbumAccess(parsed, currentUserId, userRole);
-      }
-      return parsed;
-    }
-
-    // 3. Nếu Cache miss -> Truy vấn Database
-    const album = await Album.findOne(query)
-      .populate("artist", "name avatar slug isVerified")
-      .lean();
-
-    if (!album)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy đĩa nhạc");
-
-    // 4. Kiểm tra quyền truy cập (Private check)
-    await this.checkAlbumAccess(album, currentUserId, userRole);
-
-    // 5. Lấy danh sách trackIds (Nguồn cho Virtual Scroll ở FE)
-    const tracks = await Track.find({
-      album: album._id,
-      status: "ready",
-      isDeleted: false,
-    })
-      .sort({ trackNumber: 1, createdAt: 1 })
-      .select("_id")
-      .lean();
-
-    const result = {
-      ...album,
-      trackIds: tracks.map((t) => t._id),
-    };
-
-    // 6. Lưu vào Cache (TTL 1 tiếng hoặc tùy Phú chỉnh)
-    await withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
-    );
-
-    return result;
-  }
-
-  /**
-   * Hàm hỗ trợ kiểm tra quyền truy cập (Tách ra để dùng chung cho cả Cache & DB)
-   */
   private async checkAlbumAccess(
     album: any,
-    currentUserId?: string,
-    userRole?: string,
+    currentUser?: IUser, // Truyền cả object user từ request vào
   ) {
     if (album.isPublic) return;
+
+    const userRole = currentUser?.role || "guest";
+    const currentUserId = currentUser?._id?.toString();
+    const userArtistProfile = currentUser?.artistProfile?.toString();
 
     const albumArtistId =
       album.artist?._id?.toString() ?? album.artist?.toString();
 
+    // Kiểm tra quyền: Admin hoặc là chủ sở hữu Album
     const isOwner =
       currentUserId &&
-      (userRole === "admin" ||
-        (await mongoose.model("User").exists({
-          _id: currentUserId,
-          artistProfile: albumArtistId,
-        })));
+      (userRole === "admin" || userArtistProfile === albumArtistId);
 
     if (!isOwner) {
       throw new ApiError(
@@ -535,11 +558,68 @@ class AlbumService {
     }
   }
 
-  // ── 6. GET ALBUM TRACKS ───────────────────────────────────────────────────
+  async getAlbumDetail(
+    slug: string,
+    currentUser?: IUser, // Nhận currentUser từ Controller
+  ) {
+    const userRole = currentUser?.role || "guest";
+
+    // KHÔNG lọc isPublic ở đây để Admin/Owner vẫn tìm thấy bản ghi
+    const query = { slug, isDeleted: false };
+
+    const cacheKey = buildCacheKey(`album:detail:${slug}`, userRole, {});
+
+    // 1. Check Cache
+    const cachedData = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    if (cachedData) {
+      const parsed = JSON.parse(cachedData as string);
+      // Nếu cache là private, check quyền ngay
+      if (!parsed.isPublic) {
+        await this.checkAlbumAccess(parsed, currentUser);
+      }
+      return parsed;
+    }
+
+    // 2. Database Query
+    const album = await Album.findOne(query)
+      .populate("artist", "name avatar slug")
+      .lean();
+
+    if (!album)
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy đĩa nhạc");
+
+    // 3. Kiểm tra bảo mật (Dành cho cả trường hợp isPublic = false)
+    await this.checkAlbumAccess(album, currentUser);
+
+    // 4. Lấy Track IDs
+    const tracks = await Track.find({
+      album: album._id,
+      status: "ready",
+      isPublic: true,
+      isDeleted: false,
+    })
+      .sort({ playCount: -1, createdAt: -1 })
+      .limit(APP_CONFIG.TRACKS_LIMIT) // Ngưỡng an toàn để tránh Payload quá lớn
+      .select("_id")
+      .lean();
+    const result = {
+      ...album,
+      trackIds: tracks.map((t) => t._id),
+    };
+
+    // 5. Lưu Cache (Chỉ lưu nếu hợp lệ)
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
+    ).catch(console.error);
+
+    return result;
+  }
+
+  // ── 7. GET ALBUM TRACKS ───────────────────────────────────────────────────
 
   async getAlbumTracks(
     albumId: string,
-    filter: AlbumFilterInput,
+    filter: AlbumUserFilterInput,
     currentUser?: IUser,
   ) {
     const userRole = currentUser?.role ?? "guest";
@@ -547,10 +627,11 @@ class AlbumService {
     const isAdmin = userRole === "admin";
 
     const album = await Album.findById(albumId)
-      .select("isPublic artist")
+      .populate("artist", "name avatar slug")
       .lean();
+
     if (!album)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy Album");
+      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy đĩa nhạc");
 
     if (!album.isPublic && !isAdmin) {
       const isOwner = userId && album.artist?.toString() === userId;
@@ -561,8 +642,17 @@ class AlbumService {
         );
       }
     }
+    if (!album.isDeleted && !isAdmin) {
+      const isOwner = userId && album.artist?.toString() === userId;
+      if (!isOwner && !album.isPublic) {
+        throw new ApiError(
+          httpStatus.FORBIDDEN,
+          "Bạn không có quyền xem danh sách này",
+        );
+      }
+    }
 
-    const { page = 1, limit = 20 } = filter;
+    const { page = 1, limit = APP_CONFIG.VIRTUAL_SCROLL_LIMIT } = filter;
     const cacheKey = buildCacheKey(`album:tracks:${albumId}`, userRole, {
       page,
       limit,
@@ -571,14 +661,20 @@ class AlbumService {
     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
     if (cached) return JSON.parse(cached as string);
 
-    const skip = (page - 1) * limit;
+    const skip = (Number(page) - 1) * Number(limit);
 
-    const trackQuery: Record<string, any> = { album: albumId, status: "ready" };
+    const trackQuery: Record<string, any> = {
+      album: albumId,
+      status: "ready",
+      isPublic: true,
+      isDeleted: false,
+    };
     if (!isAdmin) trackQuery.isPublic = true;
 
     const [tracks, total] = await Promise.all([
       Track.find(trackQuery)
-        .sort({ trackNumber: 1, createdAt: 1 })
+        .sort({ playCount: -1, createdAt: -1 })
+
         .skip(skip)
         .limit(limit)
         .select(
@@ -616,6 +712,37 @@ class AlbumService {
     ).catch((err) => console.error("[Cache] Set Album Tracks Error:", err));
 
     return result;
+  }
+  // ── 8. TOGGLE ALBUM PUBLICITY ─────────────────────────────────────────
+  async toggleAlbumPublicity(id: string, currentUser: IUser) {
+    const album = await Album.findById(id);
+    if (!album || album.isDeleted) {
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Album không tồn tại hoặc đã bị xóa",
+      );
+    }
+
+    const isOwner =
+      currentUser.artistProfile &&
+      album.artist.toString() === currentUser.artistProfile.toString();
+    if (currentUser.role !== "admin" && !isOwner) {
+      throw new ApiError(httpStatus.FORBIDDEN, "Không có quyền thực hiện");
+    }
+
+    album.isPublic = !album.isPublic;
+    await album.save(); // Lưu lại để trigger middleware nếu có
+
+    // Invalidate cache liên quan
+    Promise.allSettled([
+      invalidateAlbumCache(id),
+      invalidateAlbumListCache(), // Xóa cache list để cập nhật trạng thái công khai
+    ]).catch(console.error);
+
+    return {
+      id: album._id,
+      isPublic: album.isPublic,
+    };
   }
 }
 

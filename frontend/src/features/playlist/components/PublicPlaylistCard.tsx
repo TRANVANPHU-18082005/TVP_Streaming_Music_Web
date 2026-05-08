@@ -30,21 +30,34 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
     } = usePlaylistPlayback(playlist);
 
     const handleNavigate = useCallback(() => {
-      navigate(`/playlists/${playlist.slug || playlist._id}`);
-    }, [navigate, playlist.slug, playlist._id]);
+      navigate(`/playlists/${playlist._id}`);
+    }, [navigate, playlist._id]);
+
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleNavigate();
+        }
+      },
+      [handleNavigate],
+    );
 
     const creatorName = playlist.isSystem
-      ? "MusicHub"
+      ? "TVP Music"
       : playlist.user?.fullName || "Ẩn danh";
 
     return (
       <article
         onClick={handleNavigate}
+        onKeyDown={handleKeyDown}
         role="button"
         tabIndex={0}
+        aria-label={`Open playlist ${playlist.title || "playlist"}`}
         className={cn(
           "group cursor-pointer flex flex-col gap-3 relative",
           "album-card !overflow-visible p-2 rounded-2xl transition-all duration-300",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "hover:bg-muted/10",
           isThisPlaylistActive && "bg-primary/5 shadow-brand-soft", // Highlight vùng card
           className,
@@ -123,6 +136,12 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
                 "control-btn control-btn--primary size-12 sm:size-14 shadow-glow-sm",
                 isThisPlaylistActive && "bg-primary text-white",
               )}
+              aria-label={
+                isThisPlaylistPlaying
+                  ? `Pause ${playlist.title}`
+                  : `Play ${playlist.title}`
+              }
+              aria-pressed={isThisPlaylistPlaying}
             >
               <AnimatePresence mode="wait">
                 {isFetching ? (
@@ -179,7 +198,7 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
 
             {/* Sóng nhạc mini cạnh tiêu đề - Đồng bộ trạng thái Playing */}
             {isThisPlaylistActive && (
-              <WaveformBars active={isThisPlaylistPlaying} bars={3} />
+              <WaveformBars color="primary" active={isThisPlaylistPlaying} bars={3} />
             )}
           </div>
 

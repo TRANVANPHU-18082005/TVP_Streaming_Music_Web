@@ -30,6 +30,9 @@ import {
   Languages,
   Info,
   Upload,
+  FileText,
+  Hash,
+  Copyright,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -400,7 +403,7 @@ const PublishToggle = memo(
 PublishToggle.displayName = "PublishToggle";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRACK MODAL
+// TRACK MODAL — Rebuilt for track.schema v3.0
 // ─────────────────────────────────────────────────────────────────────────────
 const TrackModal = ({
   isOpen,
@@ -421,6 +424,7 @@ const TrackModal = ({
       ? { mode: "edit", trackToEdit, onSubmit }
       : { mode: "create", onSubmit },
   );
+
   const {
     register,
     setValue,
@@ -431,19 +435,21 @@ const TrackModal = ({
   const isEditing = !!trackToEdit;
   const isLoading = isPending || isSubmitting;
 
-  // Watched values — each selector is isolated to avoid full-form re-renders
+  // Watched values for reactive UI
   const isPublic = useWatch({ control, name: "isPublic" });
   const isExplicit = useWatch({ control, name: "isExplicit" });
   const lyricType = useWatch({ control, name: "lyricType" });
   const trackTags = useWatch({ control, name: "tags" }) ?? [];
   const selectedMainArtist = useWatch({ control, name: "artistId" });
   const mainArtistValue = selectedMainArtist ? [selectedMainArtist] : [];
-  // Use functional form to read latest form value — avoids stale closure + setState loop
+
+  // Smart UX callbacks
   const togglePublic = useCallback(
     () =>
       setValue("isPublic", !form.getValues("isPublic"), { shouldDirty: true }),
     [setValue, form],
   );
+
   const toggleExplicit = useCallback(
     () =>
       setValue("isExplicit", !form.getValues("isExplicit"), {
@@ -462,17 +468,20 @@ const TrackModal = ({
     [setValue],
   );
 
-  // Body scroll lock — cleanup always runs regardless of isOpen
+  // Body scroll lock with cleanup
   useEffect(() => {
     if (!isOpen) return;
-    const prev = document.body.style.overflow;
+    const scrollbarWidth =
+      window.innerWidth - document.documentElement.clientWidth;
     document.body.style.overflow = "hidden";
+    document.body.style.paddingRight = `${scrollbarWidth}px`;
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = "";
+      document.body.style.paddingRight = "";
     };
   }, [isOpen]);
 
-  // Canvas "smart selection" tag summary
+  // Canvas tag summary for smart selection
   const tagSummary = useMemo(
     () =>
       trackTags.length
@@ -493,7 +502,6 @@ const TrackModal = ({
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-foreground/50 backdrop-blur-xl animate-fade-in"
-        onClick={onClose}
         aria-hidden="true"
       />
 
@@ -635,6 +643,7 @@ const TrackModal = ({
                         { value: "metadata", label: "Info", icon: Type },
                         { value: "canvas", label: "Canvas", icon: Video },
                         { value: "lyrics", label: "Lyrics", icon: Languages },
+                        { value: "legal", label: "Legal", icon: FileText },
                       ] as const
                     ).map(({ value, label, icon: Icon }) => (
                       <TabsTrigger
@@ -690,6 +699,26 @@ const TrackModal = ({
                       }
                     />
                     <ErrorMessage message={errors.title?.message} />
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-1.5">
+                    <FieldLabel icon={AlignLeft} htmlFor="track-description">
+                      Description
+                    </FieldLabel>
+                    <Textarea
+                      id="track-description"
+                      {...register("description")}
+                      placeholder="Optional track description…"
+                      className={cn(
+                        "min-h-[80px] bg-card/50 border-border/60",
+                        "focus:border-primary/60 focus:ring-primary/20 rounded-xl px-4 py-3",
+                        "resize-none",
+                        errors.description && "border-destructive/60",
+                      )}
+                      aria-invalid={!!errors.description}
+                    />
+                    <ErrorMessage message={errors.description?.message} />
                   </div>
 
                   {/* Artist + Album */}
@@ -1010,6 +1039,68 @@ const TrackModal = ({
                       </div>
                     </div>
                   )}
+                </TabsContent>
+
+                {/* ── TAB 4: Legal ────────────────────────────────────────── */}
+                <TabsContent
+                  value="legal"
+                  className="space-y-6 animate-fade-up animation-fill-both focus:outline-none"
+                >
+                  <SectionHeader
+                    icon={FileText}
+                    title="Legal Information"
+                    description="Copyright and distribution metadata"
+                  />
+
+                  {/* Copyright */}
+                  <div className="space-y-1.5">
+                    <FieldLabel icon={Copyright} htmlFor="track-copyright">
+                      Copyright Notice
+                    </FieldLabel>
+                    <Textarea
+                      id="track-copyright"
+                      {...register("copyright")}
+                      placeholder="© 2024 Artist Name. All rights reserved."
+                      className={cn(
+                        "min-h-[80px] bg-card/50 border-border/60",
+                        "focus:border-primary/60 focus:ring-primary/20 rounded-xl px-4 py-3",
+                        "resize-none",
+                        errors.copyright && "border-destructive/60",
+                      )}
+                      aria-invalid={!!errors.copyright}
+                    />
+                    <ErrorMessage message={errors.copyright?.message} />
+                  </div>
+
+                  {/* ISRC */}
+                  <div className="space-y-1.5">
+                    <FieldLabel icon={Hash} htmlFor="track-isrc">
+                      ISRC Code
+                    </FieldLabel>
+                    <Input
+                      id="track-isrc"
+                      {...register("isrc")}
+                      placeholder="USRC17607839"
+                      className={cn(
+                        "h-11 bg-card/50 border-border/60",
+                        "focus:border-primary/60 focus:ring-primary/20 rounded-xl px-4",
+                        "font-mono uppercase",
+                        errors.isrc && "border-destructive/60",
+                      )}
+                      aria-invalid={!!errors.isrc}
+                      aria-describedby={errors.isrc ? "isrc-error" : undefined}
+                    />
+                    <div className="flex items-start gap-2 text-muted-foreground/55 px-1">
+                      <Info
+                        className="size-3 mt-0.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <p className="text-[10px] leading-relaxed">
+                        International Standard Recording Code (optional).
+                      </p>
+                    </div>
+                    <ErrorMessage message={errors.isrc?.message} />
+                  </div>
                 </TabsContent>
               </Tabs>
             </main>
