@@ -2,10 +2,10 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import authApi from "@/features/auth/api/authApi";
 
-import { login } from "@/features";
 import { toast } from "sonner";
 import { useAppDispatch } from "@/store/hooks";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { login } from "@/features/auth";
 
 const FacebookCallbackPage = () => {
   const [searchParams] = useSearchParams();

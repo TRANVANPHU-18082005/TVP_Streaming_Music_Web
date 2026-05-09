@@ -70,12 +70,7 @@ import {
   useArtistDetail,
   useArtistTracksInfinite,
 } from "@/features/artist/hooks/useArtistsQuery";
-import {
-  Artistdetailskeleton,
-  type IAlbum,
-  type IArtist,
-  type ITrack,
-} from "@/features";
+
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useArtistPlayback } from "@/features/player/hooks/useArtistPlayback";
@@ -92,6 +87,14 @@ import type { ArtistActionBarProps } from "./components/ArtistActionBar";
 import { WaveformBars } from "@/components/MusicVisualizer";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 import { useSmartBack } from "@/hooks/useSmartBack";
+import type { QueueSourceType } from "@/features/player/slice/playerSlice";
+import {
+  Artistdetailskeleton,
+  IArtist,
+  IArtistDetail,
+} from "@/features/artist";
+import { ITrack } from "@/features/track";
+import { IAlbum } from "@/features/album";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -534,12 +537,12 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
   }, []);
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  const handleBack = useSmartBack()
+  const handleBack = useSmartBack();
   // ── Artist name size — computed once ──────────────────────────────────────
   const { className: titleCls } = useTitleStyle(artist?.name ?? "");
   const { openArtistSheet } = useContextSheet();
   const handleMoreOptions = useCallback(
-    (a: IArtist) => openArtistSheet(a),
+    (a: IArtistDetail) => openArtistSheet(a),
     [openArtistSheet],
   );
 
@@ -582,8 +585,13 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
       hasNextPage: hasNextPage ?? false,
       onFetchNextPage: fetchNextPage,
       onRetry: refetchTracks,
+      source: {
+        id: artist?._id ?? "",
+        type: "artist" as QueueSourceType,
+        title: artist?.name,
+        url: `/artists/${artist?.slug}`,
+      },
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       artist?.trackIds,
       allTracks,
@@ -594,6 +602,9 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
       hasNextPage,
       fetchNextPage,
       refetchTracks,
+      artist?._id,
+      artist?.name,
+      artist?.slug,
     ],
   );
 

@@ -40,9 +40,11 @@ import { cn } from "@/lib/utils";
 import { SearchSkeleton } from "@/features/search/components/SearchSkeleton";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
-import { ITrack, SuggestItem, useSyncInteractions } from "@/features";
 import { handleError } from "@/utils/handleError";
 import MusicResult from "@/components/ui/Result";
+import { useSyncInteractions } from "@/features/interaction";
+import { ITrack } from "@/features/track";
+import { SuggestItem } from "@/features/search";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -222,7 +224,11 @@ const EmptyState = memo(({ query, tab }: { query: string; tab: SearchTab }) => {
     genre: `Không tìm thấy thể loại "${query}"`,
   };
   return (
-    <MusicResult title={msgs[tab]} description={"Thử từ khóa khác hoặc kiểm tra chính tả"} variant="empty-search" />
+    <MusicResult
+      title={msgs[tab]}
+      description={"Thử từ khóa khác hoặc kiểm tra chính tả"}
+      variant="empty-search"
+    />
   );
 });
 EmptyState.displayName = "EmptyState";
@@ -435,13 +441,12 @@ export default function SearchPage() {
       }
     },
     [
-      localInput,
-      saveToHistory,
-      setSearchParams,
       showSuggestions,
       suggestions,
+      localInput,
       suggestionIndex,
-      startTransition,
+      saveToHistory,
+      setSearchParams,
     ],
   );
 
@@ -545,7 +550,14 @@ export default function SearchPage() {
         setLoadingId(null);
       }
     },
-    [currentTrackId, isGlobalPlaying, query, searchResult, dispatch, saveToHistory],
+    [
+      currentTrackId,
+      isGlobalPlaying,
+      query,
+      searchResult,
+      dispatch,
+      saveToHistory,
+    ],
   );
 
   // ── isNoResults ───────────────────────────────────────────────────────────
@@ -568,8 +580,6 @@ export default function SearchPage() {
     };
     return checks[activeTab];
   }, [data, isLoading, query, activeTab]);
-
-
 
   // ── TAB DIRECTION ─────────────────────────────────────────────────────────
   const tabOrder = SEARCH_TABS.map((t) => t.id);

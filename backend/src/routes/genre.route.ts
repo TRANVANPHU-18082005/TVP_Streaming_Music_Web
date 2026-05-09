@@ -87,5 +87,11 @@ router.patch(
 );
 // 5. DELETE /api/genres/:id (Xóa thể loại)
 router.delete("/:id", validate(deleteGenreSchema), genreController.deleteGenre);
+// 6. RESTORE /api/genres/:id/restore (Khôi phục soft-deleted genre)
+router.patch(
+  "/:id/restore",
+  validate(deleteGenreSchema),
+  genreController.restoreGenre,
+);
 
 export default router;

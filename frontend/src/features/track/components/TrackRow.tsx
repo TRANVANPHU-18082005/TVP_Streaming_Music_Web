@@ -1,12 +1,17 @@
-import React, { memo, useCallback, useRef } from "react";
-import { TableCell, TableRow } from "@/components/ui/table";
+import React, { memo, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { formatDuration, toCDN } from "@/utils/track-helper";
-import { Link } from "react-router-dom";
 import { ITrack } from "@/features/track/types";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { TrackTitleMarquee } from "@/features/player/components/TrackTitleMarquee";
-import { WaveformBars } from "@/components/MusicVisualizer";
+import { useSelector } from "react-redux";
+import { selectPlayer } from "@/features/player";
+
+import TrackRowShell from "./TrackRowShell";
+import PlayCell from "./PlayCell";
+import LazyImage from "./LazyImage";
+import { prefersReducedMotion } from "@/utils/playerLayout";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -17,13 +22,16 @@ export interface TrackRowProps {
   index: number;
   isActive: boolean;
   isPlaying: boolean;
-  onPlay: () => void;
+  isSelected?: boolean;
+  onPlay: (e?: React.MouseEvent) => void;
+  onSelect?: (id: string, mode: "single" | "range" | "toggle") => void;
+  onContextMenu?: (track: ITrack, anchorEl: HTMLElement) => void;
+  onNavigate?: (direction: "up" | "down") => void;
   animationDelay?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Custom areEqual — only re-render when these props actually change
-// Avoids re-renders from parent state that don't affect this row
+// Custom areEqual — prevents re-renders from unrelated parent state
 // ─────────────────────────────────────────────────────────────────────────────
 
 function trackRowAreEqual(prev: TrackRowProps, next: TrackRowProps): boolean {
@@ -32,126 +40,23 @@ function trackRowAreEqual(prev: TrackRowProps, next: TrackRowProps): boolean {
     prev.index === next.index &&
     prev.isActive === next.isActive &&
     prev.isPlaying === next.isPlaying &&
+    prev.isSelected === next.isSelected &&
     prev.onPlay === next.onPlay &&
+    prev.onSelect === next.onSelect &&
+    prev.onContextMenu === next.onContextMenu &&
+    prev.onNavigate === next.onNavigate &&
     prev.animationDelay === next.animationDelay
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PlayCell — number ↔ waveform toggle
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface PlayCellProps {
-  index: number;
-  isActive: boolean;
-  isPlaying: boolean;
-  onPlay: () => void;
-}
-
-const PlayCell = memo(
-  ({ index, isActive, isPlaying, onPlay }: PlayCellProps) => {
-    const showBars = isActive && isPlaying;
-
-    const handleKeyDown = useCallback(
-      (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          e.stopPropagation();
-          onPlay();
-        }
-      },
-      [onPlay],
-    );
-
-    const handleClick = useCallback(
-      (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onPlay();
-      },
-      [onPlay],
-    );
-
-    return (
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={
-          showBars ? `Tạm dừng bài ${index + 1}` : `Phát bài ${index + 1}`
-        }
-        className="relative flex size-full items-center justify-center cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-        onClick={handleClick}
-        onKeyDown={handleKeyDown}
-      >
-        {/* Track number */}
-        <span
-          className={cn(
-            "absolute text-[12px] font-medium tabular-nums leading-none",
-            "transition-[opacity,transform] duration-200 ease-out",
-            isActive ? "text-primary" : "text-muted-foreground/60",
-            showBars
-              ? "opacity-0 scale-75"
-              : "opacity-100 scale-100 group-hover:opacity-0 group-hover:scale-75",
-          )}
-        >
-          {index + 1}
-        </span>
-
-        {/* Waveform bars */}
-        <span
-          className={cn(
-            "absolute flex items-center justify-center",
-            "transition-[opacity,transform] duration-200 ease-out",
-            showBars
-              ? "opacity-100 scale-100 group-hover:opacity-0 group-hover:scale-75"
-              : "opacity-0 scale-75 pointer-events-none",
-          )}
-        >
-          <WaveformBars active={showBars} color="primary" />
-        </span>
-      </div>
-    );
-  },
-);
-PlayCell.displayName = "PlayCell";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CoverArt — lazy loaded, ring on active
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface CoverArtProps {
-  src: string;
-  alt: string;
-  isActive: boolean;
-  onClick: (e: React.MouseEvent) => void;
-}
-
-const CoverArt = memo(({ src, alt, isActive, onClick }: CoverArtProps) => (
-  <div
-    role="button"
-    tabIndex={-1}
-    aria-hidden="true"
-    className="relative size-10 shrink-0 overflow-hidden rounded-md cursor-pointer select-none"
-    style={{
-      transition: "box-shadow 0.2s ease",
-      boxShadow: isActive
-        ? "0 0 0 1.5px hsl(var(--primary) / 0.7), 0 0 12px hsl(var(--primary) / 0.15)"
-        : "none",
-    }}
-    onClick={onClick}
-  >
-    <img
-      src={src}
-      alt={alt}
-      className="size-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.08]"
-      loading="lazy"
-      decoding="async"
-    />
-  </div>
-));
-CoverArt.displayName = "CoverArt";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // TrackRow — main export
+//
+// Key decisions:
+// - Row is the primary tab stop (tabIndex=0), not individual cells
+// - Long-press triggers context menu on mobile (same path as right-click)
+// - Ctrl/Cmd+click → toggle selection, Shift+click → range selection
+// - Hover actions use hasFocused lazy mount to avoid 1000x hidden DOM nodes
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TrackRow = memo(
@@ -160,152 +65,167 @@ export const TrackRow = memo(
     index,
     isActive,
     isPlaying,
+    isSelected = false,
     onPlay,
+    onSelect,
+    onContextMenu,
+    onNavigate,
     animationDelay = 0,
   }: TrackRowProps) => {
-    const rowRef = useRef<HTMLTableRowElement>(null);
-    const handleRowClick = useCallback(
-      (e: React.MouseEvent<HTMLTableRowElement>) => {
-        const target = e.target as HTMLElement;
-        if (target.closest("a, button, [role='button'], [data-no-row-click]"))
-          return;
-        onPlay();
-      },
-      [onPlay],
-    );
+    const { loadingState } = useSelector(selectPlayer);
+    const isGlobalLoading =
+      loadingState === "loading" || loadingState === "buffering";
 
     const handlePlayClick = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
-        onPlay();
+        onPlay?.(e);
       },
       [onPlay],
     );
 
-    return (
-      <TableRow
-        ref={rowRef}
-        data-active={isActive || undefined}
-        onClick={handleRowClick}
-        className={cn(
-          "group relative h-14 cursor-pointer select-none",
-          "border-b border-border/[0.05] last:border-b-0",
-          "transition-colors duration-100 ease-out",
-          // Active state: subtle primary tint
-          isActive
-            ? "bg-primary/[0.06] hover:bg-primary/[0.09]"
-            : "hover:bg-muted/30",
-        )}
-        style={{ animationDelay: `${animationDelay}ms` }}
-        aria-current={isActive ? "true" : undefined}
-      >
-        {/* COL 1 — Play toggle */}
-        <TableCell className="w-12 p-0">
-          <div className="flex h-14 items-center justify-center">
-            <PlayCell
-              index={index}
-              isActive={isActive}
-              isPlaying={isPlaying}
-              onPlay={onPlay}
+    const center = (
+      <>
+        <LazyImage
+          src={toCDN(track.coverImage) || track.coverImage}
+          alt={track.title}
+          isActive={isActive}
+          isLoading={isGlobalLoading}
+          isCurrentPlaying={isPlaying && isActive}
+          onClick={handlePlayClick}
+        />
+        <div className="min-w-0 flex-1">
+          {isActive ? (
+            <TrackTitleMarquee
+              id={track._id}
+              title={track.title}
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="text-sm"
+              artistClassName="text-xs"
             />
-          </div>
-        </TableCell>
-
-        {/* COL 2 — Cover + Title + Artist */}
-        <TableCell className="py-0 pl-1 pr-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <CoverArt
-              src={toCDN(track.coverImage) || track.coverImage}
-              alt={track.title}
-              isActive={isActive}
-              onClick={handlePlayClick}
-            />
-            <div className="min-w-0 flex-1">
-              {isActive ? (
-                <TrackTitleMarquee
-                  title={track.title}
+          ) : (
+            <>
+              <Link
+                to={`/tracks/${track._id}`}
+                title={track.title}
+                className={cn(
+                  "truncate text-sm font-medium leading-snug mb-0.5",
+                  "text-foreground/90",
+                  prefersReducedMotion ? "" : "transition-colors duration-100",
+                  "group-hover:text-foreground",
+                )}
+              >
+                {track.title}
+              </Link>
+              <div className="min-w-0 truncate">
+                <ArtistDisplay
                   mainArtist={track.artist}
                   featuringArtists={track.featuringArtists}
-                  className="text-sm"
-                  artistClassName="text-xs"
+                  className={cn(
+                    "text-xs text-muted-foreground/55 truncate",
+                    "hover:text-foreground/70 hover:underline underline-offset-2",
+                    prefersReducedMotion
+                      ? ""
+                      : "transition-colors duration-100",
+                  )}
                 />
-              ) : (
-                <>
-                  <p
-                    title={track.title}
-                    className={cn(
-                      "truncate text-sm font-medium leading-snug mb-0.5",
-                      "text-foreground/90 transition-colors duration-100",
-                      "group-hover:text-foreground",
-                    )}
-                  >
-                    {track.title}
-                  </p>
-                  <div className="min-w-0 truncate">
-                    <ArtistDisplay
-                      mainArtist={track.artist}
-                      featuringArtists={track.featuringArtists}
-                      className={cn(
-                        "text-xs text-muted-foreground/55 truncate",
-                        "hover:text-foreground/70 hover:underline underline-offset-2",
-                        "transition-colors duration-100",
-                      )}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </TableCell>
-
-        {/* COL 3 — Album (hidden < md) */}
-        <TableCell className="hidden md:table-cell py-0 pr-4">
-          {track.album?.slug ? (
-            <Link
-              to={`/albums/${track.album.slug}`}
-              title={track.album.title}
-              className={cn(
-                "block truncate max-w-[180px]",
-                "text-xs text-muted-foreground/50 truncate",
-                "hover:text-foreground/70 hover:underline underline-offset-2",
-                "transition-colors duration-100",
-              )}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {track.album.title}
-            </Link>
-          ) : (
-            <span className="text-xs text-muted-foreground/30 italic">
-              Single
-            </span>
+              </div>
+            </>
           )}
-        </TableCell>
+        </div>
+      </>
+    );
 
-        {/* COL 4 — Like button */}
-        {/* <TableCell className="py-0 pr-4">
-          <span
-            className={cn(
-              "relative flex items-center justify-center w-8 h-8 shrink-0",
-              "overflow-hidden isolate transition-opacity duration-150",
-              isLiked
-                ? "opacity-100 pointer-events-auto"
-                : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto",
-            )}
-            style={{ contain: "layout paint" }}
-          >
-            <TrackLikeButton id={track._id} />
-          </span>
-        </TableCell> */}
+    const albumNode = track.album?.slug ? (
+      <Link
+        to={`/albums/${track.album.slug}`}
+        title={track.album.title}
+        tabIndex={-1}
+        className={cn(
+          "block truncate max-w-[180px]",
+          "text-xs text-muted-foreground/50",
+          "hover:text-foreground/70 hover:underline underline-offset-2",
+          prefersReducedMotion ? "" : "transition-colors duration-100",
+        )}
+        onClick={(e) => e.stopPropagation()}
+        data-no-row-click=""
+      >
+        {track.album.title}
+      </Link>
+    ) : (
+      <span className="text-xs text-muted-foreground/30 italic">Single</span>
+    );
 
-        {/* COL 5 — Duration */}
-        <TableCell className="py-0 pr-3" data-no-row-click="">
-          <div className="flex items-center justify-end">
-            <span className="text-xs tabular-nums text-muted-foreground/45 font-medium px-1">
-              {formatDuration(track.duration)}
-            </span>
-          </div>
-        </TableCell>
-      </TableRow>
+    const actionsNode = onContextMenu ? (
+      <button
+        tabIndex={-1}
+        aria-label={`Tùy chọn cho ${track.title}`}
+        data-no-row-click=""
+        className={cn(
+          "flex items-center justify-center w-8 h-8 rounded-full",
+          "text-muted-foreground/40 hover:text-foreground/70",
+          "hover:bg-muted/50",
+          prefersReducedMotion
+            ? ""
+            : "transition-[opacity,colors] duration-150",
+          "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          onContextMenu(track, e.currentTarget);
+        }}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <circle cx="7" cy="2" r="1.2" />
+          <circle cx="7" cy="7" r="1.2" />
+          <circle cx="7" cy="12" r="1.2" />
+        </svg>
+      </button>
+    ) : null;
+
+    const durationNode = (
+      <span className="text-xs tabular-nums text-muted-foreground/45 font-medium px-1">
+        {formatDuration(track.duration)}
+      </span>
+    );
+
+    return (
+      <TrackRowShell
+        id={track._id}
+        ariaLabel={`${track.title} by ${
+          typeof track.artist === "string" ? track.artist : track.artist?.name
+        }, ${formatDuration(track.duration)}`}
+        index={index}
+        isActive={isActive}
+        isPlaying={isPlaying}
+        isSelected={isSelected}
+        onPlay={onPlay}
+        onSelect={onSelect}
+        onContextMenu={
+          onContextMenu ? (anchor) => onContextMenu(track, anchor) : undefined
+        }
+        onNavigate={(dir) => onNavigate?.(dir)}
+        animationDelay={animationDelay}
+        left={
+          <PlayCell
+            index={index}
+            isActive={isActive}
+            isPlaying={isPlaying}
+            onPlay={onPlay}
+          />
+        }
+        center={center}
+        album={albumNode}
+        actions={actionsNode}
+        duration={durationNode}
+      />
     );
   },
   trackRowAreEqual,

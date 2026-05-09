@@ -49,14 +49,27 @@ export const useGenreMutations = () => {
     onError: (err) => handleError(err, "Lỗi xóa"),
   });
 
+  // 5. Restore Genre (Admin)
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => genreApi.restore(id),
+    onSuccess: () => {
+      toast.success("Đã khôi phục thể loại");
+      invalidate();
+    },
+    onError: (err) => handleError(err, "Lỗi khôi phục thể loại"),
+  });
+
   return {
     createGenreAsync: createMutation.mutateAsync,
     updateGenreAsync: updateMutation.mutateAsync,
     deleteGenre: deleteMutation.mutate,
     toggleGenreStatus: toggleMutation.mutateAsync,
+    restoreGenre: restoreMutation.mutate,
+    restoreGenreAsync: restoreMutation.mutateAsync,
     isMutating:
       createMutation.isPending ||
       updateMutation.isPending ||
-      deleteMutation.isPending,
+      deleteMutation.isPending ||
+      restoreMutation.isPending,
   };
 };

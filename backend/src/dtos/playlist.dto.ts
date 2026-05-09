@@ -3,14 +3,12 @@ import {
   createPlaylistSchema,
   updatePlaylistSchema,
   addTracksToPlaylistSchema,
-  getPlaylistsSchema,
 } from "../validations/playlist.validation";
 
 // Input DTOs
 export type CreatePlaylistDTO = z.infer<typeof createPlaylistSchema>["body"];
 export type UpdatePlaylistDTO = z.infer<typeof updatePlaylistSchema>["body"];
 export type AddTracksDTO = z.infer<typeof addTracksToPlaylistSchema>["body"];
-export type PlaylistFilterDTO = z.infer<typeof getPlaylistsSchema>["query"];
 
 // Response DTO
 export interface PlaylistResponseDTO {

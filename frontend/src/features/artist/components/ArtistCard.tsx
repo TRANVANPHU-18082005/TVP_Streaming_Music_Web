@@ -12,6 +12,7 @@ import {
   Users,
   Mic2,
   ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ import { getInitialsTextAvartar } from "@/utils/genTextAvartar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { IArtist } from "@/features";
+import { IArtist } from "../types";
 
 // Helper lấy cờ
 const getFlagEmoji = (countryCode: string) => {
@@ -43,6 +44,7 @@ interface ArtistCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
+  onRestore?: () => void;
 }
 
 const ArtistCard: React.FC<ArtistCardProps> = ({
@@ -50,6 +52,7 @@ const ArtistCard: React.FC<ArtistCardProps> = ({
   onEdit,
   onDelete,
   onToggle,
+  onRestore,
 }) => {
   const navigate = useNavigate();
   return (
@@ -125,12 +128,21 @@ const ArtistCard: React.FC<ArtistCardProps> = ({
                   View
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1" />
-                <DropdownMenuItem
-                  onClick={onDelete}
-                  className="text-destructive font-bold py-2 px-3 focus:bg-destructive/10"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" /> Delete
-                </DropdownMenuItem>
+                {artist.isDeleted ? (
+                  <DropdownMenuItem
+                    onClick={() => onRestore && onRestore()}
+                    className="text-success font-bold py-2 px-3 focus:bg-success/10"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" /> Restore
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={onDelete}
+                    className="text-destructive font-bold py-2 px-3 focus:bg-destructive/10"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" /> Delete
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

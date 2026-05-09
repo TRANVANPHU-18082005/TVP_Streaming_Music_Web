@@ -2,12 +2,12 @@ import React, { memo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, Pause, Loader2, Shuffle, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { IGenre } from "@/features";
 import type { Palette } from "@/utils/color";
+import { IGenreDetail } from "@/features/genre";
 
 export interface GenreActionBarProps {
-  genre: IGenre;
-  handleMoreOptions: (genre: IGenre) => void;
+  genre: IGenreDetail;
+  handleMoreOptions: (genre: IGenreDetail) => void;
   palette: Palette;
   isLoadingPlay: boolean;
   isLoadingShuffle: boolean;
@@ -15,7 +15,7 @@ export interface GenreActionBarProps {
   loadingTracks: boolean;
   hasTracks: boolean;
   density?: "compact" | "full";
-  onPlay: () => void;
+  onPlay: (e?: React.MouseEvent) => void;
   onShuffle: () => void;
 }
 

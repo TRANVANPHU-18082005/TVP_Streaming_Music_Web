@@ -20,5 +20,5 @@ RUN npm run build
 EXPOSE 8000
 
 # 8. Lệnh chạy server khi container khởi động
-# Lưu ý: Chạy file js trong dist, không chạy ts-node
-CMD ["node", "dist/app.js"]
+# Lưu ý: Chạy file js trong dist (entry: dist/index.js)
+CMD ["node", "dist/index.js"]

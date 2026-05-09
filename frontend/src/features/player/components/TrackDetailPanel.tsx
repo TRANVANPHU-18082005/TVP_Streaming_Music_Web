@@ -17,7 +17,6 @@ import {
   Clock3,
   Mic2,
   Loader2,
-  Play,
   Zap,
   CheckCheck,
 } from "lucide-react";
@@ -26,6 +25,8 @@ import { ITrack } from "@/features/track/types";
 import { useRecommendedTracks, useSimilarTracks } from "@/features/track";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import PlayCell from "@/features/track/components/PlayCell";
+import LazyImage from "@/features/track/components/LazyImage";
 import { MarqueeText } from "./MarqueeText";
 import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
@@ -122,8 +123,13 @@ interface TrackRowProps {
 }
 
 const TrackRow = memo(
-  ({ item, onPlay, onAddToPlaylist, onMoreOptions }: TrackRowProps) => {
+  ({ item, onPlay, onAddToPlaylist, onMoreOptions, index }: TrackRowProps) => {
     const prefersReduced = useReducedMotion();
+
+    const { currentTrackId, isPlaying: isGlobalPlaying } =
+      useAppSelector(selectPlayer);
+    const isActive = currentTrackId === item._id;
+    const isPlaying = isActive && isGlobalPlaying;
 
     const handleMore = useCallback(
       (e: React.MouseEvent) => {
@@ -132,15 +138,23 @@ const TrackRow = memo(
       },
       [item, onMoreOptions],
     );
+
     const handleAdd = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
-
         onAddToPlaylist(item);
       },
       [item, onAddToPlaylist],
     );
-    const handlePlay = useCallback(() => onPlay?.(item), [item, onPlay]);
+
+    const playWrapper = useCallback(
+      (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        onPlay?.(item);
+      },
+      [item, onPlay],
+    );
+
     const handleKey = useCallback(
       (e: React.KeyboardEvent) => {
         e.preventDefault();
@@ -159,28 +173,41 @@ const TrackRow = memo(
       <motion.div
         variants={prefersReduced ? {} : STAGGER_ITEM}
         layout="position"
-        className="group relative flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-[var(--fp-hover-bg)] active:bg-[var(--fp-active-bg)] transition-colors duration-150 cursor-pointer"
+        className={cn(
+          "group relative flex items-center gap-3 px-2 py-1.5 rounded-xl transition-colors duration-150 cursor-pointer",
+          "hover:bg-[var(--fp-hover-bg)] active:bg-[var(--fp-active-bg)]",
+          isPlaying ? "dark:bg-primary/10 bg-primary/8 shadow-sm" : "",
+        )}
         role="button"
         tabIndex={0}
         onKeyDown={handleKey}
         aria-label={`Phát ${item.title} — ${artistName}`}
       >
-        {/* Cover — PERF-1: CSS overlay, no Framer motion.div */}
-        <div className="relative shrink-0 w-10 h-10" onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          handlePlay();
-        }}>
-          <ImageWithFallback
-            src={toCDN(item.coverImage) || item.coverImage}
-            alt={item.title}
-            className="w-10 h-10 rounded-lg object-cover ring-1 ring-[var(--fp-border)]"
+        <div className="w-6 shrink-0 flex justify-center items-center">
+          <PlayCell
+            index={index}
+            isActive={isActive}
+            isPlaying={isPlaying}
+            onPlay={playWrapper}
           />
         </div>
 
-        {/* Text */}
+        <LazyImage
+          src={toCDN(item.coverImage) || item.coverImage}
+          alt={item.title}
+          isActive={isActive}
+          isCurrentPlaying={isPlaying}
+          isLoading={false}
+          onClick={(e) => playWrapper(e)}
+        />
+
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-[var(--fp-fg)] truncate leading-snug">
+          <p
+            className={cn(
+              "text-[13px] font-semibold truncate leading-snug",
+              isActive ? "text-primary" : "text-[var(--fp-fg)]",
+            )}
+          >
             {item.title}
           </p>
           <ArtistDisplay
@@ -190,7 +217,6 @@ const TrackRow = memo(
           />
         </div>
 
-        {/* Actions — hidden by default, visible on hover/focus (cleaner mobile UX) */}
         <div
           className="flex items-center gap-0.5 shrink-0 opacity-100 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
           onClick={(e) => e.stopPropagation()}
@@ -416,7 +442,11 @@ RecommendedSection.displayName = "RecommendedSection";
 const SimilarSection = memo(({ trackId, onPlay }: TrackSectionProps) => {
   const { openTrackSheet, openAddToPlaylistSheet } = useContextSheet();
 
-  const { data: tracks, isLoading, error } = useSimilarTracks(trackId!, APP_CONFIG.SELECTOR_LIMIT);
+  const {
+    data: tracks,
+    isLoading,
+    error,
+  } = useSimilarTracks(trackId!, APP_CONFIG.SELECTOR_LIMIT);
 
   const openSheet = useCallback(
     (type: "playlist" | "options", t: ITrack) => {
@@ -569,7 +599,6 @@ ActionBar.displayName = "ActionBar";
 interface TrackDetailPanelProps {
   track: ITrack;
   direction: number;
-
 }
 
 export const TrackDetailPanel = memo(

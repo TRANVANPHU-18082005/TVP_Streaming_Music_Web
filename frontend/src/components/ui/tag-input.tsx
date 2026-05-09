@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 interface TagInputProps {
   placeholder?: string;
-  value: string[];
+  value?: string[];
   onChange: (tags: string[]) => void;
   maxTags?: number;
   className?: string;
@@ -80,7 +80,7 @@ export const TagInput: React.FC<TagInputProps> = ({
         // Disabled State
         disabled && "cursor-not-allowed opacity-50",
 
-        className
+        className,
       )}
     >
       {/* Render Tags */}
@@ -112,7 +112,7 @@ export const TagInput: React.FC<TagInputProps> = ({
         type="text"
         className={cn(
           "flex-1 bg-transparent outline-none placeholder:text-muted-foreground min-w-[120px]",
-          "disabled:cursor-not-allowed"
+          "disabled:cursor-not-allowed",
         )}
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
@@ -122,8 +122,8 @@ export const TagInput: React.FC<TagInputProps> = ({
           value.length >= maxTags
             ? "Đã đạt giới hạn"
             : value.length === 0
-            ? placeholder
-            : ""
+              ? placeholder
+              : ""
         }
         disabled={disabled || value.length >= maxTags}
       />

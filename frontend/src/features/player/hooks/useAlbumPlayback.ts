@@ -9,8 +9,8 @@ import {
   useCollectionPlayback,
 } from "./Usecollectionplayback";
 
-import { albumKeys, IAlbum } from "@/features";
 import albumApi from "@/features/album/api/albumApi";
+import { albumKeys, IAlbum } from "@/features/album";
 
 export interface UseAlbumPlaybackReturn {
   togglePlayAlbum: CollectionPlaybackReturn["togglePlay"];

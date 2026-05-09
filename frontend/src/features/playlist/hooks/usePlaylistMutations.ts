@@ -52,6 +52,15 @@ export const usePlaylistMutations = () => {
     onError: (err) => handleError(err, "Lỗi xóa playlist"),
   });
 
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => playlistApi.restore(id),
+    onSuccess: () => {
+      toast.success("Đã khôi phục playlist");
+      invalidatePlaylist();
+    },
+    onError: (err) => handleError(err, "Lỗi khôi phục playlist"),
+  });
+
   // ==========================================
   // B. QUICK ACTIONS (Spotify Style - Tốc độ cao)
   // ==========================================
@@ -141,6 +150,8 @@ export const usePlaylistMutations = () => {
 
     deletePlaylist: deleteMutation.mutate,
     deletePlaylistAsync: deleteMutation.mutateAsync,
+    restorePlaylist: restoreMutation.mutate,
+    restorePlaylistAsync: restoreMutation.mutateAsync,
 
     // --- Quick User Actions ---
     createQuickPlaylist: quickCreateMutation.mutate,

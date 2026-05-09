@@ -11,8 +11,6 @@ export interface IWord {
   endTime: number;
 }
 
-export type LyricType = "none" | "plain" | "synced" | "karaoke";
-
 export interface ILyricLine extends ILyricSyncLine, IKaraokeLine {}
 
 export interface ILyricSyncLine {

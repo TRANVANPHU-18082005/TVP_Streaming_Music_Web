@@ -99,7 +99,7 @@ export function useTrackMetadataResolver(): void {
           // After await, re-check abort to avoid a dispatch on a stale request
           if (signal.aborted) return;
 
-          dispatch(upsertMetadataCache([track]));
+          dispatch(upsertMetadataCache([track.data ?? track]));
           return; // success — exit retry loop
         } catch (err) {
           if (isAbortError(err)) return; // intentional cancel — stop silently

@@ -13,16 +13,17 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  IPlaylist,
-  ITrack,
-  useMyPlaylists,
-  usePlaylistMutations,
-} from "@/features";
+
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { toCDN } from "@/utils/track-helper";
 import { SP, SheetBackdrop, HandleBar } from "../sheetPrimitives";
 import { toast } from "sonner";
+import {
+  IPlaylist,
+  useMyPlaylists,
+  usePlaylistMutations,
+} from "@/features/playlist";
+import { ITrack } from "@/features/track";
 const SHEET_VARIANTS: Variants = {
   hidden: { y: "100%", opacity: 0 },
   show: { y: 0, opacity: 1 },
@@ -596,7 +597,8 @@ export const AddToPlaylistSheet = memo(
                           !!(
                             playlists &&
                             tracks &&
-                            tracks.length > 0 && tracks.length <= 1 &&
+                            tracks.length > 0 &&
+                            tracks.length <= 1 &&
                             pl.tracks?.includes(tracks[0]._id)
                           )
                         }

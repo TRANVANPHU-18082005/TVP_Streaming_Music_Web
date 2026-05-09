@@ -8,13 +8,13 @@ import { GenreFilters } from "@/features/genre/components/GenreFilters";
 import { useGenreParams } from "@/features/genre/hooks/useGenreParams";
 import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
-import { Genrepageskeleton, useGenresByUserQuery } from "@/features";
 import SectionAmbient from "@/components/SectionAmbient";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { KeyboardMusic } from "lucide-react";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { Genrepageskeleton, useGenresByUserQuery } from "@/features/genre";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS

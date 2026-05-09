@@ -30,6 +30,7 @@ interface Artist {
 }
 
 interface TrackTitleMarqueeProps {
+  id: string;
   title: string;
   mainArtist: Artist;
   featuringArtists?: Artist[];
@@ -104,6 +105,7 @@ function ArtistSuffix({
 
 export const TrackTitleMarquee = memo(
   ({
+    id,
     title,
     mainArtist,
     featuringArtists = [],
@@ -222,9 +224,12 @@ export const TrackTitleMarquee = memo(
           }
         >
           {/* Track title */}
-          <span className={cn("font-medium text-primary", titleClassName)}>
+          <Link
+            to={`/tracks/${id}`}
+            className={cn("font-medium text-primary", titleClassName)}
+          >
             {title}
-          </span>
+          </Link>
 
           {/* Artist suffix — only if at least mainArtist exists */}
           <ArtistSuffix

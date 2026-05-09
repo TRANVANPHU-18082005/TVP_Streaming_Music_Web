@@ -15,14 +15,11 @@ import { cn } from "@/lib/utils";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { useAlbumDetail } from "@/features/album/hooks/useAlbumsQuery";
 import {
-  AlbumDetailSkeleton,
-  IAlbum,
-  ITrack,
+  useAlbumDetail,
   useAlbumTracksInfinite,
-  useSyncInteractions,
-} from "@/features";
+} from "@/features/album/hooks/useAlbumsQuery";
+
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useAlbumPlayback } from "@/features/player/hooks/useAlbumPlayback";
 import { formatDuration } from "@/utils/track-helper";
@@ -39,6 +36,10 @@ import { useSmartBack } from "@/hooks/useSmartBack";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { WaveformBars } from "@/components/MusicVisualizer";
+import { ITrack } from "@/features/track";
+import { useSyncInteractions } from "@/features/interaction";
+import { AlbumDetailSkeleton, IAlbumDetail } from "@/features/album";
+import { QueueSourceType } from "@/features/player";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lazy imports — eager preload on module init (not inside effect)
@@ -293,7 +294,7 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
 
   const { openAlbumSheet } = useContextSheet();
   const handleMoreOptions = useCallback(
-    (a: IAlbum) => openAlbumSheet(a),
+    (a: IAlbumDetail) => openAlbumSheet(a),
     [openAlbumSheet],
   );
 
@@ -336,9 +337,18 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
       hasNextPage: hasNextPage ?? false,
       onFetchNextPage: fetchNextPage,
       onRetry: refetchTracks,
+      source: {
+        id: album?._id ?? "",
+        type: "album" as QueueSourceType,
+        title: album?.title,
+        url: `/albums/${album?.slug}`,
+      },
     }),
     [
       album?.trackIds,
+      album?._id,
+      album?.title,
+      album?.slug,
       allTracks,
       totalItems,
       isLoadingTracks,

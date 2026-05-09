@@ -23,16 +23,21 @@ export interface UsePlaylistPlaybackReturn {
 export const usePlaylistPlayback = (
   playlist: IPlaylist | undefined,
 ): UsePlaylistPlaybackReturn => {
-  const config = useMemo(
-    () => ({
-      collectionId: playlist?._id,
+  const config = useMemo(() => {
+    const id = playlist?._id;
+    return {
+      collectionId: id,
       collectionName: playlist?.title,
       collectionType: "playlist" as const,
-      queryKey: playlist?._id ? playlistKeys.detail(playlist._id) : [],
-      fetchFn: () => playlistApi.getDetail(playlist!._id),
-    }),
-    [playlist?._id, playlist?.title],
-  );
+      // ✅ Không tạo config rác khi chưa có id
+      queryKey: id ? playlistKeys.detail(id) : (["__noop__"] as const),
+      // ✅ Guard an toàn, không dùng non-null assertion
+      fetchFn: () => {
+        if (!id) return Promise.reject(new Error("Missing playlist id"));
+        return playlistApi.getDetail(id);
+      },
+    };
+  }, [playlist?._id, playlist?.title]);
 
   const { togglePlay, shuffle, isActive, isPlaying, isFetching } =
     useCollectionPlayback(config);

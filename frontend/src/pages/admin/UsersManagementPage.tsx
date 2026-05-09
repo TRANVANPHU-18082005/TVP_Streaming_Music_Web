@@ -48,9 +48,10 @@ import UserModal from "@/features/user/components/UserModal";
 import { useUserParams } from "@/features/user/hooks/useUserParams";
 import { useUsersQuery } from "@/features/user/hooks/useUsersQuery";
 import { useUserMutations } from "@/features/user/hooks/useUserMutations";
-import { Genrepageskeleton, IUser } from "@/features";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { IUser } from "@/features/user";
+import { Genrepageskeleton } from "@/features/genre";
 
 const UsersManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL) ---

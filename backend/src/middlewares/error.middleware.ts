@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
+import logger from "../config/logger";
+import { clearRefreshTokenCookie } from "../utils/token";
 
 export const errorHandler = (
   err: any,
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   let { statusCode, message, errorCode } = err; // <-- Lấy thêm errorCode
 
@@ -16,7 +18,7 @@ export const errorHandler = (
     message = message || "Internal Server Error";
   }
   if (err.errorCode === "ACCOUNT_LOCKED" || err.message?.includes("khóa")) {
-    res.clearCookie("refreshToken"); // <--- THÊM DÒNG NÀY
+    clearRefreshTokenCookie(res);
   }
   const response = {
     success: false, // Thêm cờ này cho chuẩn format
@@ -28,7 +30,7 @@ export const errorHandler = (
 
   // Log lỗi ra console nếu là dev
   if (process.env.NODE_ENV === "development") {
-    console.error("💥 ERROR:", err);
+    logger.error("💥 ERROR:", err);
   }
 
   res.status(statusCode).json(response);

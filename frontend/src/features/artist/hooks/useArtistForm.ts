@@ -11,7 +11,7 @@ import {
 import { mapEntityToForm } from "../utils/formMapper";
 import { buildArtistPayload } from "../utils/payloadBuilder";
 import { toast } from "sonner";
-import { IArtist } from "@/features";
+import { IArtist } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -60,7 +60,7 @@ export const useArtistForm = <TMode extends "create" | "edit">({
   });
 
   useEffect(() => {
-    form.reset(defaultValues);
+    form.reset(defaultValues as any);
   }, [defaultValues, form]);
 
   const handleSubmit = form.handleSubmit(async (values) => {
@@ -72,7 +72,7 @@ export const useArtistForm = <TMode extends "create" | "edit">({
       const hasNewFiles =
         values.avatar instanceof File ||
         values.coverImage instanceof File ||
-        values.images.some((img) => img instanceof File);
+        values.images?.some((img) => img instanceof File);
 
       const hasChanges = Object.keys(dirtyFields).length > 0;
 
@@ -84,7 +84,11 @@ export const useArtistForm = <TMode extends "create" | "edit">({
     }
 
     // Build Payload - Payload builder sẽ xử lý việc lọc dirtyFields cho Phú
-    const payload = buildArtistPayload(values, dirtyFields, isEditMode);
+    const payload = buildArtistPayload(
+      values as any,
+      dirtyFields as any,
+      isEditMode,
+    );
 
     try {
       await onSubmit(payload);

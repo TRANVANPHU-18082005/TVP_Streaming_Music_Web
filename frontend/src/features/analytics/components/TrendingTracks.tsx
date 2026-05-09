@@ -6,8 +6,7 @@ import { Radio, Music, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { toCDN } from "@/utils/track-helper";
-import { RankedTrack } from "@/features/track";
-import { AnalyticsRankedTrack } from "../types";
+import { IChartItem } from "@/features/track";
 
 // ─── Rank medal colors (dùng wave tokens từ design system) ───────
 const RANK_STYLES = [
@@ -24,7 +23,7 @@ const TrackRow = ({
   index,
   maxScore,
 }: {
-  item: RankedTrack;
+  item: IChartItem;
   index: number;
   maxScore: number;
 }) => {
@@ -105,7 +104,7 @@ const NowListeningRow = ({
   item,
   index,
 }: {
-  item: AnalyticsRankedTrack;
+  item: IChartItem;
   index: number;
 }) => (
   <motion.div
@@ -251,8 +250,8 @@ const TabToggle = ({
 
 // ─── Main component ───────────────────────────────────────────────
 interface TrendingTracksProps {
-  trendingData: RankedTrack[];
-  nowListeningData: AnalyticsRankedTrack[];
+  trendingData: IChartItem[];
+  nowListeningData: IChartItem[];
 }
 
 const TrendingTracks = ({

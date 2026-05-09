@@ -88,6 +88,15 @@ export const deleteGenre = catchAsync(async (req: Request, res: Response) => {
     message: "Đã xóa thể loại vĩnh viễn",
   });
 });
+// Restore Genre (Admin)
+export const restoreGenre = catchAsync(async (req: Request, res: Response) => {
+  await genreService.restoreGenre(req.params.id);
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: "Đã khôi phục thể loại",
+  });
+});
 // 7. GET GENRE DETAIL
 export const getGenreDetail = catchAsync(
   async (req: Request, res: Response) => {

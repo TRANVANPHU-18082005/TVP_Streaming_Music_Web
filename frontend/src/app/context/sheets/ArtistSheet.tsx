@@ -16,16 +16,6 @@ import {
 } from "lucide-react";
 
 import {
-  appendQueueIds,
-  artistKeys,
-  IArtist,
-  IArtistDetail,
-  ITrack,
-  selectPlayer,
-  useInteraction,
-} from "@/features";
-
-import {
   ActionButton,
   ActionItem,
   CancelFooter,
@@ -40,6 +30,10 @@ import { usePlayCollection } from "@/features/player/hooks/usePlayCollection";
 import { toast } from "sonner";
 import artistApi from "@/features/artist/api/artistApi";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { artistKeys, IArtist, IArtistDetail } from "@/features/artist";
+import { ITrack } from "@/features/track";
+import { appendQueueIds, selectPlayer } from "@/features/player";
+import { useInteraction } from "@/features/interaction";
 const ArtistPreviewRow = memo(({ artist }: { artist: IArtist }) => (
   <div className="flex items-center gap-3 px-5 py-3 border-b border-border">
     {artist.avatar ? (
@@ -81,7 +75,7 @@ const ArtistPreviewRow = memo(({ artist }: { artist: IArtist }) => (
 ArtistPreviewRow.displayName = "ArtistPreviewRow";
 
 export interface ArtistSheetProps {
-  artist: IArtistDetail;
+  artist?: IArtistDetail;
   isOpen: boolean;
   onClose: () => void;
   onOpenAddToPlaylistSheet?: (tracks: ITrack[]) => void;

@@ -23,7 +23,11 @@ import {
 import { cn } from "@/lib/utils";
 import { useGenreForm } from "../hooks/useGenreForm";
 
-import { GenreSelector } from "./GenreSelector";
+const GenreSelector = lazy(() =>
+  import("./GenreSelector").then((m) => ({
+    default: m.GenreSelector,
+  })),
+);
 const GenreImageUploadLazy = lazy(() => import("./GenreImageUpload"));
 const GenreDesignFieldsLazy = lazy(() => import("./GenreDesignFields"));
 import { Input } from "@/components/ui/input";
@@ -31,6 +35,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { IGenre } from "../types";
+import { env } from "@/config/env";
+import { WaveformBars } from "@/components/MusicVisualizer";
+import { handleError } from "@/utils/handleError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS — FIX 7: module scope
@@ -103,6 +110,21 @@ const GenreModal = memo<GenreModalProps>(
       () => isPending || isFormSubmitting,
       [isPending, isFormSubmitting],
     );
+
+    if (env.NODE_ENV === "development") {
+      try {
+        // eslint-disable-next-line no-console
+        console.debug("[GenreModal] render status:", {
+          isWorking,
+          isFormSubmitting,
+          isPending,
+          dirtyFields: form.formState.dirtyFields,
+        });
+      } catch (e) {
+        /* ignore */
+        handleError(e, "[GenreModal] Debug log error");
+      }
+    }
 
     // ── Image preview ──────────────────────────────────────────────────────────
 
@@ -306,19 +328,23 @@ const GenreModal = memo<GenreModalProps>(
                             Thể loại cha (Danh mục gốc)
                           </Label>
                           <div className="bg-background rounded-md border border-input p-2 focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
-                            <GenreSelector
-                              variant="form"
-                              excludeIds={genreToEdit ? [genreToEdit._id] : []}
-                              singleSelect={true}
-                              value={currentParentId}
-                              onChange={(id) => {
-                                setValue("parentId", id || "", {
-                                  shouldDirty: true,
-                                  shouldValidate: true,
-                                });
-                              }}
-                              className="border-none shadow-none"
-                            />
+                            <Suspense fallback={<WaveformBars active />}>
+                              <GenreSelector
+                                variant="form"
+                                excludeIds={
+                                  genreToEdit ? [genreToEdit._id] : []
+                                }
+                                singleSelect={true}
+                                value={currentParentId}
+                                onChange={(id) => {
+                                  setValue("parentId", id || "", {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  });
+                                }}
+                                className="border-none shadow-none"
+                              />
+                            </Suspense>
                           </div>
                         </div>
                       </div>
@@ -346,12 +372,25 @@ const GenreModal = memo<GenreModalProps>(
                    * Adds keyboard access (Tab focus, Enter/Space activate).
                    * aria-pressed communicates toggle state to screen readers.
                    */}
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     aria-pressed={isTrending}
-                    onClick={() =>
-                      setValue("isTrending", !isTrending, { shouldDirty: true })
-                    }
+                    onClick={(e) => {
+                      // Avoid toggling when an inner <button> (the Radix Switch) was clicked
+                      if ((e.target as HTMLElement).closest("button")) return;
+                      setValue("isTrending", !isTrending, {
+                        shouldDirty: true,
+                      });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setValue("isTrending", !isTrending, {
+                          shouldDirty: true,
+                        });
+                      }
+                    }}
                     className={cn(
                       "w-full flex items-center justify-between p-4 border rounded-xl transition-all cursor-pointer select-none group text-left",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
@@ -371,18 +410,16 @@ const GenreModal = memo<GenreModalProps>(
                       >
                         <TrendingUp className="size-5" aria-hidden="true" />
                       </div>
-                      <div>
-                        <span className="text-sm font-bold text-foreground block">
-                          Trạng thái Thịnh hành
-                        </span>
-                        <p
-                          className={cn(
-                            "text-[11px] font-medium mt-0.5 transition-colors",
-                            isTrending
-                              ? "text-primary"
-                              : "text-muted-foreground",
-                          )}
-                        >
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        aria-hidden="true"
+                        className={cn(
+                          "pl-2 shrink-0",
+                          "text-[11px] font-medium mt-0.5 transition-colors",
+                          isTrending ? "text-primary" : "text-muted-foreground",
+                        )}
+                      >
+                        <p>
                           {isTrending
                             ? "Đang được đánh dấu là thể loại thịnh hành"
                             : "Không nằm trong danh sách thịnh hành"}
@@ -409,7 +446,7 @@ const GenreModal = memo<GenreModalProps>(
                         )}
                       />
                     </div>
-                  </button>
+                  </div>
                 </form>
               </div>
 
@@ -434,6 +471,13 @@ const GenreModal = memo<GenreModalProps>(
                     type="submit"
                     form="genre-form"
                     disabled={isWorking}
+                    onClick={() =>
+                      // eslint-disable-next-line no-console
+                      console.debug("[GenreModal] Save clicked", {
+                        isWorking,
+                        dirtyFields: form.formState.dirtyFields,
+                      })
+                    }
                     className="font-bold shadow-md hover:shadow-lg transition-all h-10 px-6 rounded-md flex-1 sm:flex-none"
                   >
                     {isWorking ? (

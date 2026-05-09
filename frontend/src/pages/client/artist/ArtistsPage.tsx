@@ -8,17 +8,15 @@ import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
 import { ArtistFilters } from "@/features/artist/components/ArtistFilters";
 import { useArtistParams } from "@/features/artist/hooks/useArtistParams";
 import { DEFAULT_GRID_META } from "@/config/constants";
-import {
-  IArtist,
-  useArtistsByUserQuery,
-  useSyncInteractions,
-} from "@/features";
+
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { IArtist, useArtistsByUserQuery } from "@/features/artist";
+import { useSyncInteractions } from "@/features/interaction";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS

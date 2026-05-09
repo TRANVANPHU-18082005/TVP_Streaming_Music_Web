@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 // Logic
 import { useAlbumForm } from "@/features/album/hooks/useAlbumForm";
 import { Form } from "@/components/ui/form";
-import { IAlbum } from "@/features";
+import { IAlbum } from "../../types";
 
 interface AlbumModalProps {
   isOpen: boolean;

@@ -64,18 +64,91 @@ export const useGenreForm = <TMode extends "create" | "edit">({
   // Sync khi genreToEdit thay đổi (chuyển sang genre khác để edit)
   // Bỏ `form` khỏi deps — reset là stable, form object thì không
   useEffect(() => {
-    form.reset(defaultValues);
+    form.reset(defaultValues as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultValues]);
 
   const handleSubmit = form.handleSubmit(async (values) => {
     const { dirtyFields } = form.formState;
 
+    if (env.NODE_ENV === "development") {
+      console.debug("[GenreForm] submit values:", values);
+      console.debug("[GenreForm] dirtyFields:", dirtyFields);
+    }
+
     if (isEditMode) {
       // dirtyFields.image = true khi xóa ảnh (image = null) hoặc đổi file
-      const hasChanges = Object.keys(dirtyFields).length > 0;
+      const dirtyCount = Object.keys(dirtyFields).length;
+      let hasChanges = dirtyCount > 0;
+
+      // FALLBACK: nếu RHF không đánh dấu dirty nhưng giá trị thực sự khác default,
+      // so sánh values vs defaultValues để phát hiện thay đổi (bảo toàn tính năng).
       if (!hasChanges) {
+        const orig = defaultValues as any;
+        const cur = values as any;
+
+        const serialize = (v: any) => {
+          if (v === null || v === undefined) return null;
+          if (v instanceof File) return "__FILE__";
+          if (typeof v === "boolean") return v ? "true" : "false";
+          return String(v);
+        };
+
+        const normalizeParent = (v: any) => {
+          if (v === null || v === undefined) return "root";
+          const s = String(v).trim();
+          return s === "" || s === "null" || s === "undefined" || s === "root"
+            ? "root"
+            : s;
+        };
+
+        for (const key of Object.keys(cur)) {
+          if (key === "image") {
+            if (cur.image instanceof File) {
+              hasChanges = true;
+              break;
+            }
+            if ((dirtyFields as any).image && cur.image === null) {
+              hasChanges = true;
+              break;
+            }
+            continue;
+          }
+
+          if (key === "parentId") {
+            if (
+              normalizeParent(cur.parentId) !== normalizeParent(orig.parentId)
+            ) {
+              hasChanges = true;
+              break;
+            }
+            continue;
+          }
+
+          if (serialize(cur[key]) !== serialize(orig[key])) {
+            hasChanges = true;
+            break;
+          }
+        }
+
+        if (env.NODE_ENV === "development") {
+          // eslint-disable-next-line no-console
+          console.debug(
+            "[GenreForm] fallback compare -> hasChanges:",
+            hasChanges,
+            { cur: values, orig: defaultValues },
+          );
+        }
+      }
+
+      if (!hasChanges) {
+        // Thông báo rõ ràng cho user thay vì im lặng (tránh nhầm là lỗi)
         console.warn("[GenreForm] No changes detected, skipping...");
+        try {
+          toast.info("Không có thay đổi để lưu.");
+        } catch (e) {
+          /* ignore toast errors */
+        }
         return;
       }
     }
@@ -95,6 +168,7 @@ export const useGenreForm = <TMode extends "create" | "edit">({
     );
 
     try {
+      console.log("🚀 Final Genre Payload (FormData):", payload);
       await onSubmit(payload);
     } catch (err: any) {
       // Map server-side validation errors to form fields where possible.

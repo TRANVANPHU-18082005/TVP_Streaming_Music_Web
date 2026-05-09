@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useMemo, useCallback, memo } from "react";
 import { VideoMoodEngine } from "./VideoMoodEngine";
 import { MoodLyricLine, type MoodWord } from "./MoodLyricLine";
-import { ITrack } from "@/features";
+import { ITrack } from "@/features/track";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES — compatible với IKaraokeLine / ILyricSyncLine từ @/features

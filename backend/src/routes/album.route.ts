@@ -100,4 +100,12 @@ router.delete(
   albumController.deleteAlbum,
 );
 
+// 9. Restore Album (Admin)
+router.patch(
+  "/:id/restore",
+  authorize("admin"),
+  validate(deleteAlbumSchema),
+  albumController.restoreAlbum,
+);
+
 export default router;

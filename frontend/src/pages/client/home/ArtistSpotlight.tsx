@@ -6,12 +6,13 @@ import { Link } from "react-router-dom";
 import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useSpotlightArtists } from "@/features/artist/hooks/useArtistsQuery";
-import { IArtist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { IArtist } from "@/features/artist";
+import { useSyncInteractions } from "@/features/interaction";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — vertical reveal suits portrait/avatar card rhythm

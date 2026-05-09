@@ -45,7 +45,7 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
   console.log(playlist);
   const navigate = useNavigate();
   const [editTrackPlaylist, setEditTrackPlaylist] = useState(false);
-  const [deleteTrackPlaylist, setDeleteTrackPlaylist] = useState(false);
+  const [deletePlaylist, setDeletePlaylist] = useState(false);
   const handleNavigate = () => {
     navigate(`/playlists/${playlist._id}`);
   };
@@ -159,7 +159,9 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem
-                  onClick={(e) => handleAction(e, () => setDeleteTrackPlaylist(true))}
+                  onClick={(e) =>
+                    handleAction(e, () => setDeletePlaylist(true))
+                  }
                   className={cn(
                     "font-medium  focus:text-destructive cursor-pointer focus:bg-destructive/10",
                     playlist.isDeleted ? "text-green-500" : "text-red-500",
@@ -167,7 +169,11 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
                   disabled={isMutating}
                 >
                   {playlist.isDeleted ? " Khôi phục" : "Xóa"}
-                  {playlist.isDeleted ? <ArrowUpLeftSquare className="mr-2 size-4" /> : <Trash2 className="mr-2 size-4" />}
+                  {playlist.isDeleted ? (
+                    <ArrowUpLeftSquare className="mr-2 size-4" />
+                  ) : (
+                    <Trash2 className="mr-2 size-4" />
+                  )}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -198,8 +204,8 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
       />
       {/* Delete Confirmation */}
       <ConfirmationModal
-        isOpen={!!deleteTrackPlaylist}
-        onCancel={() => setDeleteTrackPlaylist(false)}
+        isOpen={!!deletePlaylist}
+        onCancel={() => setDeletePlaylist(false)}
         onConfirm={onDelete}
         title={playlist.isDeleted ? "Khôi phục playlist" : "Xóa playlist?"}
         variant={playlist.isDeleted ? "info" : "destructive"}
@@ -208,9 +214,12 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
         description={
           <div className="space-y-4">
             <p className="text-sm text-foreground/80">
-              Bạn có chắc chắn muốn {playlist.isDeleted ? "Khôi phục" : "xóa"} {<strong className="text-foreground text-base">
-                {playlist.title}
-              </strong>}
+              Bạn có chắc chắn muốn {playlist.isDeleted ? "Khôi phục" : "xóa"}{" "}
+              {
+                <strong className="text-foreground text-base">
+                  {playlist.title}
+                </strong>
+              }
               ?
             </p>
           </div>

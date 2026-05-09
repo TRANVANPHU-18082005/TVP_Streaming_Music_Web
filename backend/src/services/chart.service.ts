@@ -87,21 +87,23 @@ export const getRealtimeChart = async () => {
         from: "artists",
         localField: "track.artist",
         foreignField: "_id",
-        as: "artist",
+        as: "artistDetails",
       },
     },
-    { $unwind: { path: "$artist", preserveNullAndEmptyArrays: true } },
+    { $unwind: { path: "$artistDetails", preserveNullAndEmptyArrays: true } },
+
+    // Lookup Featuring Artists (Giữ nguyên mảng để $map)
     {
       $lookup: {
-        from: "artists", // Tên collection chứa nghệ sĩ
+        from: "artists",
         localField: "track.featuringArtists",
         foreignField: "_id",
-        as: "featuringArtistsDetails",
+        as: "featuringDetails",
       },
     },
-    { $unwind: { path: "$artist", preserveNullAndEmptyArrays: true } },
 
     // FIX #4 — Chỉ project đúng fields cần cho Chart, loại bỏ plainLyrics / lyricPreview / description
+    // ── Project Final ──────────────────────────────────
     {
       $project: {
         _id: "$track._id",
@@ -109,9 +111,13 @@ export const getRealtimeChart = async () => {
         slug: "$track.slug",
         duration: "$track.duration",
         coverImage: "$track.coverImage",
+        playCount: "$track.playCount",
+        score: "$score",
+
+        // Map lại mảng feature để lấy đúng fields cần thiết
         featuringArtists: {
           $map: {
-            input: "$featuringArtistsDetails",
+            input: "$featuringDetails",
             as: "feat",
             in: {
               _id: "$$feat._id",
@@ -121,19 +127,19 @@ export const getRealtimeChart = async () => {
             },
           },
         },
-        playCount: "$track.playCount",
+
         album: {
           _id: "$albumDetails._id",
           title: "$albumDetails.title",
           slug: "$albumDetails.slug",
         },
+
         artist: {
-          _id: "$artist._id",
-          name: "$artist.name",
-          avatar: "$artist.avatar",
-          slug: "$artist.slug",
+          _id: "$artistDetails._id",
+          name: "$artistDetails.name",
+          avatar: "$artistDetails.avatar",
+          slug: "$artistDetails.slug",
         },
-        score: "$score",
       },
     },
   ]);

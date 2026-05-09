@@ -14,13 +14,6 @@ import {
   Music2,
 } from "lucide-react";
 
-import {
-  appendQueueIds,
-  IGenre,
-  IGenreDetail,
-  ITrack,
-  selectPlayer,
-} from "@/features";
 import { usePlayCollection } from "@/features/player/hooks/usePlayCollection";
 import { genreKeys } from "@/features/genre/utils/genreKeys";
 import genreApi from "@/features/genre/api/genreApi";
@@ -38,6 +31,9 @@ import { useGenrePlayback } from "@/features/player/hooks/useGenrePlayback";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { toast } from "sonner";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { IGenre, IGenreDetail } from "@/features/genre";
+import { ITrack } from "@/features/track";
+import { appendQueueIds, selectPlayer } from "@/features/player";
 
 const GenrePreviewRow = memo(({ genre }: { genre: IGenre }) => (
   <div className="flex items-center gap-3 px-5 py-3 border-b border-border">
@@ -105,23 +101,11 @@ export interface GenreSheetProps {
   genre?: IGenreDetail;
   isOpen: boolean;
   onClose: () => void;
-  onPlay?: (genre: IGenre) => void;
-  onShuffle?: (genre: IGenre) => void;
-  onAddToQueue?: (genre: IGenre) => void;
   onOpenAddToPlaylistSheet?: (tracks: ITrack[]) => void;
-  onViewPlaylists?: (genre: IGenre) => void;
-  onViewAllTracks?: (genre: IGenre) => void;
-  onShare?: (genre: IGenre) => void;
 }
 
 export const GenreSheet = memo(
-  ({
-    genre,
-    isOpen,
-    onClose,
-
-    onOpenAddToPlaylistSheet,
-  }: GenreSheetProps) => {
+  ({ genre, isOpen, onClose, onOpenAddToPlaylistSheet }: GenreSheetProps) => {
     const dispatch = useAppDispatch();
     const { togglePlayGenre, shuffleGenre, isThisGenrePlaying } =
       useGenrePlayback(genre as IGenre | undefined);

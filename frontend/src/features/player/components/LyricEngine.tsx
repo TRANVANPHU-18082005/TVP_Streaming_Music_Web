@@ -10,7 +10,7 @@ import {
 } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { IKaraokeLine, ILyricSyncLine, LyricType } from "@/features";
+import { IKaraokeLine, ILyricSyncLine, LyricType } from "@/features/track";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC PROPS
@@ -950,7 +950,7 @@ const KLine = memo(
     }, [rafTime, isCurrent, line.words]);
 
     const fs = calcFontSize(line.text.length, isCurrent);
-    const isBacking = /^\s*[\(\（]/.test(line.text);
+    const isBacking = /^\s*[(\（]/.test(line.text);
 
     const handleClick = useCallback(() => {
       if (!isInst) onSeek(line.start);

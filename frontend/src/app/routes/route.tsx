@@ -3,8 +3,8 @@ import { albumRoutes } from "@/features/album/routes";
 import { artistRoutes } from "@/features/artist/routes";
 import { playlistRoutes } from "@/features/playlist/routes";
 
-import { ClientLayout, RootLayout } from "@/layouts";
-import AdminLayout from "@/layouts/admin/AdminLayout";
+import { AdminLayout, ClientLayout, RootLayout } from "@/layouts";
+
 import ProtectedRoute from "@/app/routes/ProtectedRoute";
 import {
   AlbumManagementPage,
@@ -13,25 +13,25 @@ import {
   DashboardPage,
   GenreManagementPage,
   HomePage,
+  MoodVideoManagementPage,
   NotFoundPage,
+  PlaylistManagementPage,
   ProfilePage,
   SearchPage,
   SettingPage,
   SettingsPage,
   SongPage,
+  TopChartPage,
   UserPage,
 } from "@/pages";
 import { GuestRoute } from "@/app/routes/GuestRoute";
 import { guestAuthRoutes, protectedAuthRoutes } from "@/features/auth/routes";
 import { ADMIN_PATHS, CLIENT_PATHS } from "@/config/paths";
-import PlaylistManagementPage from "@/pages/admin/PlaylistManagementPage";
 import {
   becomeArtistRoutes,
   verifyArtistAdminRoutes,
 } from "@/features/verification/routes";
-import { TopChartPage } from "@/pages/client/TopChartPage.tsx";
 import { GenreClientRoutes } from "@/features/genre/routes";
-import MoodVideoManagementPage from "@/pages/admin/MoodVideoManagementPage";
 import { trackRoutes } from "@/features/track/routes";
 
 export const router = createBrowserRouter([

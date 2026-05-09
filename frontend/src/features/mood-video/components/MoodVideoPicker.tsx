@@ -541,7 +541,7 @@ const FilterBar = ({
 // ─── Shared VideoGrid ─────────────────────────────────────────────────────────
 
 interface VideoGridProps {
-  gridRef: React.RefObject<HTMLDivElement>;
+  gridRef: React.RefObject<HTMLDivElement | null>;
   isLoading: boolean;
   isError: boolean;
   filteredVideos: MoodVideo[];
@@ -680,7 +680,7 @@ interface FilterVariantProps {
   totalCount: number;
   focusedIndex: number;
   setFocusedIndex: (n: number) => void;
-  gridRef: React.RefObject<HTMLDivElement>;
+  gridRef: React.RefObject<HTMLDivElement | null>;
   handleSelect: (id: string) => void;
   handleDeselect: () => void;
   handleGridKeyDown: (e: React.KeyboardEvent) => void;
@@ -971,7 +971,7 @@ interface PickerVariantLayoutProps {
   totalCount: number;
   focusedIndex: number;
   setFocusedIndex: (n: number) => void;
-  gridRef: React.RefObject<HTMLDivElement>;
+  gridRef: React.RefObject<HTMLDivElement | null>;
   handleSelect: (id: string) => void;
   handleDeselect: () => void;
   handleGridKeyDown: (e: React.KeyboardEvent) => void;
@@ -1101,7 +1101,7 @@ export const MoodVideoPicker = memo(
     const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
     const [focusedIndex, setFocusedIndex] = useState<number>(-1);
     const gridRef = useRef<HTMLDivElement>(null);
-    const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     const { data, isLoading, isError, refetch } = useMoodVideosQuery({
       isActive: true,

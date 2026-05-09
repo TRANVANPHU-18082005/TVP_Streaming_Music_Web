@@ -2,12 +2,12 @@ import axios, { AxiosError } from "axios";
 import { RawLyricData } from "../../types/worker.types";
 import { parseLRC } from "./lrc-parser";
 
-const LYRICS_TIMEOUT_MS = 8_000;
+const LYRICS_TIMEOUT_MS = 16_000;
 
 export async function fetchLyrics(
   trackTitle: string,
   artistName: string,
-  duration: number,
+  duration: number | undefined,
   jobId: string | undefined,
 ): Promise<RawLyricData> {
   const empty: RawLyricData = {
@@ -15,6 +15,10 @@ export async function fetchLyrics(
     syncedLines: [],
     plainLyrics: "",
   };
+  trackTitle = "NUNA";
+  artistName = "队长";
+  duration = undefined;
+
   console.log(trackTitle, artistName, duration);
   try {
     // --- BƯỚC 1: Thử gọi lệnh GET (Yêu cầu khớp chính xác duration) ---
@@ -23,7 +27,11 @@ export async function fetchLyrics(
       syncedLyrics?: string;
       plainLyrics?: string;
     }>("https://lrclib.net/api/get", {
-      params: { track_name: trackTitle, artist_name: artistName, duration },
+      params: {
+        track_name: trackTitle,
+        artist_name: artistName,
+        duration: undefined,
+      },
       timeout: LYRICS_TIMEOUT_MS,
       validateStatus: (s) => s < 500,
     });
@@ -49,7 +57,7 @@ export async function fetchLyrics(
       timeout: LYRICS_TIMEOUT_MS,
     });
 
-    if (searchRes.data && searchRes.data.length > 0) {
+    if (searchRes.data && searchRes.data.length > 0 && duration !== undefined) {
       // Tìm bài có thời lượng gần nhất (lệch không quá 10s)
       const bestMatch =
         searchRes.data.find(

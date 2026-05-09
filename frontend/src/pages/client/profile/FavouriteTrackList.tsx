@@ -1,9 +1,9 @@
 import { memo, useMemo } from "react";
 import { useFavouriteTracksInfinite } from "@/features/profile/hooks/useProfileQuery";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
-import { ITrack, TrackList } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 import { MusicResult } from "@/components/ui/Result";
+import { ITrack, TrackList } from "@/features/track";
 
 const FavouriteTrackList = memo(() => {
   const {

@@ -8,16 +8,16 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import PlaylistFilter from "@/features/playlist/components/PlaylistFilter";
 import { usePlaylistParams } from "@/features/playlist/hooks/usePlaylistParams";
 
-import {
-  Playlistpageskeleton,
-  usePlaylistsByUserQuery,
-  useSyncInteractions,
-} from "@/features";
 import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import {
+  Playlistpageskeleton,
+  usePlaylistsByUserQuery,
+} from "@/features/playlist";
+import { useSyncInteractions } from "@/features/interaction";
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────

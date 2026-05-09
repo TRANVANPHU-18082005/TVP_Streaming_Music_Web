@@ -29,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import ConfirmationModal from "@/components/ui/ConfirmationModal";
 import { ITrack } from "@/features/track/types";
-import { IPlaylist } from "@/features/playlist/types";
+import { IPlaylist, IPlaylistDetail } from "@/features/playlist/types";
 import { usePlaylistMutations } from "@/features/playlist/hooks/usePlaylistMutations";
 import {
   usePlaylistDetail,
@@ -53,6 +53,7 @@ import { useSmartBack } from "@/hooks/useSmartBack";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { WaveformBars } from "@/components/MusicVisualizer";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import type { QueueSourceType } from "@/features/player/slice/playerSlice";
 
 dayjs.extend(relativeTime);
 
@@ -378,7 +379,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
 
   const { openPlaylistSheet } = useContextSheet();
   const handleMoreOptions = useCallback(
-    (p: IPlaylist) => openPlaylistSheet(p),
+    (p: IPlaylistDetail) => openPlaylistSheet(p),
     [openPlaylistSheet],
   );
 
@@ -423,6 +424,12 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
       hasNextPage: hasNextPage ?? false,
       onFetchNextPage: fetchNextPage,
       onRetry: refetchTracks,
+      source: {
+        id: playlist?._id ?? "",
+        type: "playlist" as QueueSourceType,
+        title: playlist?.title,
+        url: `/playlists/${playlist?.slug}`,
+      },
     }),
     [
       playlist?.trackIds,
@@ -434,6 +441,9 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
       hasNextPage,
       fetchNextPage,
       refetchTracks,
+      playlist?._id,
+      playlist?.title,
+      playlist?.slug,
     ],
   );
 
@@ -589,13 +599,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
             <Suspense
               fallback={<WaveformLoader glass={false} text="Đang tải" />}
             >
-              <LazyTrackList
-                {...trackListProps}
-                maxHeight="auto"
-                moodColor={palette.hslChannels}
-                skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
-                staggerAnimation={false}
-              />
+              <LazyTrackList {...trackListProps} />
             </Suspense>
           </div>
         </div>

@@ -1,6 +1,7 @@
 // src/features/profile/types/index.ts
 
-import { IAlbum, IPlaylist } from "@/features";
+import { IAlbum } from "@/features/album";
+import { IPlaylist } from "@/features/playlist";
 import { ITrack } from "@/features/track/types"; // Đảm bảo đúng path
 
 export interface AnalyticsData {

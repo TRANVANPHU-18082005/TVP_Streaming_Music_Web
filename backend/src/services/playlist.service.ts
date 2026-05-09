@@ -6,7 +6,7 @@ import Playlist, { IPlaylist } from "../models/Playlist";
 import Track from "../models/Track";
 import { IUser } from "../models/User";
 import ApiError from "../utils/ApiError";
-import { generateUniqueSlug, generatePlaylistSlug } from "../utils/slug";
+import { generatePlaylistSlug } from "../utils/slug";
 import { deleteFileFromCloud } from "../utils/cloudinary";
 import { parseTags } from "../utils/helper";
 import {
@@ -24,7 +24,7 @@ import {
 } from "../utils/cacheHelper";
 import { cacheRedis } from "../config/redis";
 import themeColorService from "./themeColor.service";
-import { APP_CONFIG } from "../config/constants";
+import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
 import { da, is, vi } from "zod/v4/locales";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,8 +130,8 @@ class PlaylistService {
       // 4. Xử lý Collaborators an toàn
       const collaboratorIds = data.collaborators
         ? parseTags(data.collaborators)
-          .filter((id) => Types.ObjectId.isValid(id)) // Bảo vệ định dạng ID
-          .map((id) => new Types.ObjectId(id))
+            .filter((id) => Types.ObjectId.isValid(id)) // Bảo vệ định dạng ID
+            .map((id) => new Types.ObjectId(id))
         : [];
 
       const [newPlaylist] = await Playlist.create(
@@ -513,6 +513,73 @@ class PlaylistService {
       ]).catch(console.error);
 
       return { message: "Xóa playlist thành công", _id: id };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  // ── 3.B RESTORE PLAYLIST (UNDO SOFT DELETE) ─────────────────────────────
+  async restorePlaylist(id: string, currentUser: IUser) {
+    const playlist = await Playlist.findById(id);
+    if (!playlist || !playlist.isDeleted)
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Playlist không tồn tại hoặc không ở trạng thái đã xóa",
+      );
+
+    const isOwner = playlist.user.toString() === currentUser._id.toString();
+    const isAdmin = currentUser.role === "admin";
+
+    // Nếu là System Playlist, chỉ Admin mới được restore
+    if (playlist.isSystem && !isAdmin)
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "Chỉ Admin mới được khôi phục Playlist hệ thống",
+      );
+
+    // Cho phép Owner hoặc Admin restore
+    if (!isOwner && !isAdmin) {
+      throw new ApiError(httpStatus.FORBIDDEN, "Bạn không có quyền khôi phục");
+    }
+
+    const ownerId = playlist.user.toString();
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      await Playlist.findByIdAndUpdate(
+        id,
+        { isDeleted: false, deletedAt: null },
+        { session },
+      );
+
+      // Tăng counter cho User (Trừ khi là System Playlist)
+      if (!playlist.isSystem) {
+        await mongoose
+          .model("User")
+          .findByIdAndUpdate(
+            ownerId,
+            { $inc: { totalPlaylists: 1 } },
+            { session },
+          );
+      }
+
+      await session.commitTransaction();
+
+      // Hậu kỳ: invalidate caches
+      Promise.allSettled([
+        invalidatePlaylistCache(id),
+        invalidateUserPlaylistCache(id, ownerId),
+        playlist.isSystem
+          ? cacheRedis.del("playlists:system:all")
+          : Promise.resolve(),
+      ]).catch(console.error);
+
+      return { message: "Khôi phục playlist thành công", _id: id };
     } catch (error) {
       await session.abortTransaction();
       throw error;
@@ -954,13 +1021,12 @@ class PlaylistService {
 
     const { page = 1, limit = 12, keyword, type, sort, tag } = filter;
 
-    const skip = (page - 1) * limit;
+    const skip = (Number(page) - 1) * Number(limit);
     const now = new Date();
     const query: Record<string, any> = {
       isDeleted: false,
       isSystem: true,
       visibility: "public",
-      // 🔥 Bổ sung logic Hẹn giờ phát hành
       $or: [
         { publishAt: { $exists: false } },
         { publishAt: null },
@@ -1050,9 +1116,7 @@ class PlaylistService {
     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
     if (cached) return JSON.parse(cached as string);
 
-    const query = { _id: id, isDeleted: false } as Record<string, any>;
-
-    const playlist = await Playlist.findOne(query)
+    const playlist = await Playlist.findOne({ _id: id, isDeleted: false })
       .populate("user", "fullName avatar slug isVerified")
       .populate("collaborators", "fullName avatar slug")
       .lean();
@@ -1060,47 +1124,52 @@ class PlaylistService {
     if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
 
-    // 3. Logic Quyền Truy Cập (Giữ nguyên logic của Phú)
+    // Logic quyền truy cập
     const isAdmin = userRole === "admin";
     const isOwner =
-      currentUserId && (playlist.user as any)?._id.toString() === currentUserId;
+      currentUserId && playlist.user?._id.toString() === currentUserId;
     const isCollaborator =
       currentUserId &&
       playlist.collaborators.some(
         (c: any) => c._id?.toString() === currentUserId,
       );
 
-    const hasAccess = isAdmin || isOwner || isCollaborator;
-
-    if (!hasAccess) {
+    if (!isAdmin && !isOwner && !isCollaborator) {
       if (playlist.visibility === "private")
         throw new ApiError(httpStatus.FORBIDDEN, "Đây là Playlist riêng tư");
-      if (new Date(playlist.publishAt) > new Date())
+      if (playlist.publishAt && new Date(playlist.publishAt) > new Date())
         throw new ApiError(
           httpStatus.NOT_FOUND,
           "Playlist chưa được công khai",
         );
     }
 
-    const { tracks, ...metadata } = playlist;
-    const validTracks = await Track.find({
-      _id: { $in: tracks },
+    // 🔥 QUAN TRỌNG: Lọc valid tracks và BẢO TOÀN THỨ TỰ
+    const validTracksFromDb = await Track.find({
+      _id: { $in: playlist.tracks },
       status: "ready",
       isPublic: true,
       isDeleted: false,
     })
       .select("_id")
       .lean();
+
+    const validIdSet = new Set(validTracksFromDb.map((t) => t._id.toString()));
+
+    // Chỉ giữ lại những ID hợp lệ theo đúng thứ tự trong playlist gốc
+    const orderedValidTrackIds = playlist.tracks.filter((id) =>
+      validIdSet.has(id.toString()),
+    );
+
+    const { tracks, ...metadata } = playlist;
     const result = {
       ...metadata,
-      trackIds: validTracks.map((t) => t._id) || [],
+      trackIds: orderedValidTrackIds, // Mảng ID "sạch" và đúng thứ tự
     };
 
-    // 4. Lưu Cache (TTL 1 giờ)
     await withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
     );
-
     return result;
   }
 
@@ -1112,110 +1181,62 @@ class PlaylistService {
     currentUser?: IUser,
   ) {
     const userRole = currentUser?.role ?? "guest";
-    const userId = currentUser?._id?.toString();
-    const isAdmin = userRole === "admin";
     const currentUserId = currentUser?._id?.toString();
+    const isAdmin = userRole === "admin";
+
+    const { page = 1, limit = 20 } = filter;
+    const skip = (Number(page) - 1) * Number(limit);
 
     const playlist = await Playlist.findById(playlistId)
-      .select("visibility user collaborators tracks")
+      .select("visibility user collaborators tracks isDeleted publishAt")
       .lean();
 
-    if (!playlist)
+    if (!playlist || (playlist.isDeleted && !isAdmin))
       throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy Playlist");
 
-    if (playlist.visibility !== "public" && !isAdmin) {
-      const isOwner = userId && playlist.user?.toString() === userId;
-      if (!isOwner) {
-        throw new ApiError(
-          httpStatus.FORBIDDEN,
-          "Bạn không có quyền xem danh sách này",
-        );
-      }
-    }
-    if (!playlist.isDeleted && !isAdmin) {
-      const isOwner = userId && playlist.user?.toString() === userId;
-      if (!isOwner && playlist.visibility !== "public") {
-        throw new ApiError(
-          httpStatus.FORBIDDEN,
-          "Bạn không có quyền xem danh sách này",
-        );
-      }
-    }
-    const { page = 1, limit = 20 } = filter;
-    const skip = (page - 1) * limit;
-
-    if (!playlist)
-      throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy Playlist");
-
+    // Kiểm tra quyền xem
     const isOwner =
-      currentUserId && (playlist.user as any).toString() === currentUserId;
+      currentUserId && playlist.user?.toString() === currentUserId;
     const isCollab =
       currentUserId &&
       playlist.collaborators.some((id: any) => id.toString() === currentUserId);
 
-    if (
-      !isAdmin &&
-      !isOwner &&
-      !isCollab &&
-      playlist.visibility === "private"
-    ) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Bạn không có quyền xem danh sách này",
-      );
+    if (!isAdmin && !isOwner && !isCollab) {
+      if (playlist.visibility === "private")
+        throw new ApiError(httpStatus.FORBIDDEN, "Quyền truy cập bị từ chối");
+      if (playlist.publishAt && new Date(playlist.publishAt) > new Date())
+        throw new ApiError(
+          httpStatus.FORBIDDEN,
+          "Playlist chưa được phát hành",
+        );
     }
 
-    const cacheKey = buildCacheKey(
-      `playlist:tracks:${playlistId}`,
-      userRole || "guest",
-      { page, limit },
-    );
+    const cacheKey = buildCacheKey(`playlist:tracks:${playlistId}`, userRole, {
+      page,
+      limit,
+    });
     const cached = await cacheRedis.get(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    // Cắt mảng ID theo phân trang (giữ nguyên thứ tự)
+    // Lấy đoạn ID theo phân trang
     const pagedTrackIds = playlist.tracks.slice(skip, skip + limit);
 
-    if (!pagedTrackIds.length) {
-      return {
-        data: [],
-        meta: {
-          totalItems: Number(playlist.tracks.length),
-          page: Number(page),
-          pageSize: Number(limit),
-          totalPages: Math.ceil(Number(playlist.tracks.length) / Number(limit)),
-          hasNextPage: false,
-        },
-      };
-    }
-
+    // Truy vấn dữ liệu chi tiết
     const tracks = await Track.find({
       _id: { $in: pagedTrackIds },
       status: "ready",
       isPublic: true,
       isDeleted: false,
     })
-      .select(
-        "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
-      )
-      .select(
-        "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
-      )
-      .populate("artist", "name avatar slug")
-      .populate("featuringArtists", "name slug avatar")
-      .populate("album", "title coverImage slug")
-      .populate("genres", "name slug")
-      .populate({
-        path: "moodVideo",
-        select: "videoUrl loop",
-      })
+      .select(TRACK_SELECT)
+      .populate(TRACK_POPULATE as any)
       .lean();
 
-    // Bảo toàn thứ tự playlist (MongoDB $in không giữ thứ tự)
+    // 🔥 ĐỒNG BỘ THỨ TỰ: Khớp tracks với pagedTrackIds
     const trackMap = new Map(tracks.map((t) => [t._id.toString(), t]));
     const sortedTracks = pagedTrackIds
       .map((id) => trackMap.get(id.toString()))
-      .filter(Boolean);
+      .filter(Boolean); // Loại bỏ những bài không đủ điều kiện (pending, deleted, etc.)
 
     const result = {
       data: sortedTracks,
@@ -1223,15 +1244,15 @@ class PlaylistService {
         totalItems: playlist.tracks.length,
         page: Number(page),
         pageSize: Number(limit),
-        totalPages: Math.ceil(playlist.tracks.length / limit),
-        hasNextPage: skip + limit < playlist.tracks.length,
+        totalPages: Math.ceil(playlist.tracks.length / Number(limit)),
+        hasNextPage: skip + Number(limit) < playlist.tracks.length,
       },
     };
 
     const ttl = 600 + Math.floor(Math.random() * 60);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
-    ).catch(console.error);
+    cacheRedis
+      .set(cacheKey, JSON.stringify(result), { ex: ttl } as any)
+      .catch(console.error);
 
     return result;
   }

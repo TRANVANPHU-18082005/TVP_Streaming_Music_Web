@@ -142,6 +142,16 @@ export const deleteArtist = catchAsync(async (req: Request, res: Response) => {
     message: "Đã xóa nghệ sĩ vĩnh viễn",
   });
 });
+// 11. ADMIN: RESTORE ARTIST
+export const restoreArtist = catchAsync(async (req: Request, res: Response) => {
+  const result = await artistService.restoreArtist(req.params.id);
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: "Đã khôi phục nghệ sĩ",
+    data: result,
+  });
+});
 // 10. GET ARTIST TRACKS
 export const getArtistTracks = catchAsync(async (req, res) => {
   // 1. Parse query - Đảm bảo dữ liệu sạch

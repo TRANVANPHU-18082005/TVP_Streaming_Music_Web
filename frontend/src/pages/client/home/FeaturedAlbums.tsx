@@ -8,7 +8,6 @@ import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useFeatureAlbums } from "@/features/album/hooks/useAlbumsQuery";
 
-import { IAlbum, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 
 import MusicResult from "@/components/ui/Result";
@@ -16,7 +15,8 @@ import MusicResult from "@/components/ui/Result";
 import SectionAmbient from "@/components/SectionAmbient";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
-import { APP_CONFIG } from "@/config/constants";
+import { IAlbum } from "@/features/album";
+import { useSyncInteractions } from "@/features/interaction";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS

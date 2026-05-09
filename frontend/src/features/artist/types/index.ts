@@ -1,4 +1,4 @@
-import { IAlbum } from "@/features";
+import { IAlbum } from "@/features/album";
 import { IUser } from "@/features/user";
 
 // ─────────────────────────────────────────────────────────────────────────────

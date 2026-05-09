@@ -502,6 +502,7 @@ const TrackInfo = memo(
         >
           <div className="flex items-center gap-1.5 min-w-0">
             <TrackTitleMarquee
+              id={track._id}
               title={track.title}
               mainArtist={track.artist}
               featuringArtists={track.featuringArtists}

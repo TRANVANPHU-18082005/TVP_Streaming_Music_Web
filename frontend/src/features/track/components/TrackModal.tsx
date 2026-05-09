@@ -5,6 +5,8 @@ import React, {
   useMemo,
   useRef,
   useState,
+  lazy,
+  Suspense,
 } from "react";
 import { createPortal } from "react-dom";
 import { Controller, useWatch } from "react-hook-form";
@@ -37,9 +39,22 @@ import {
 import { cn } from "@/lib/utils";
 
 // UI Components
-import { ArtistSelector } from "@/features/artist/components/ArtistSelector";
-import { GenreSelector } from "@/features/genre/components/GenreSelector";
-import { AlbumSelector } from "@/features/album/components/AlbumSelector";
+
+const ArtistSelector = lazy(() =>
+  import("@/features/artist/components/ArtistSelector").then((m) => ({
+    default: m.ArtistSelector,
+  })),
+);
+const GenreSelector = lazy(() =>
+  import("@/features/genre/components/GenreSelector").then((m) => ({
+    default: m.GenreSelector,
+  })),
+);
+const AlbumSelector = lazy(() =>
+  import("@/features/album/components/AlbumSelector").then((m) => ({
+    default: m.AlbumSelector,
+  })),
+);
 import { MoodVideoPicker } from "@/features/mood-video/components/MoodVideoPicker";
 import { TagInput } from "@/components/ui/tag-input";
 import { Switch } from "@/components/ui/switch";
@@ -59,6 +74,7 @@ import {
 // Hooks & Types
 import { useTrackForm } from "../hooks/useTrackForm";
 import { ITrack } from "@/features/track/types";
+import { WaveformBars } from "@/components/MusicVisualizer";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -728,15 +744,17 @@ const TrackModal = ({
                       name="artistId"
                       render={({ field, fieldState }) => (
                         <div>
-                          <ArtistSelector
-                            label="Nghệ sĩ chính"
-                            singleSelect
-                            value={mainArtistValue}
-                            required
-                            onChange={(ids) => field.onChange(ids[0] || "")}
-                            className="bg-transparent border-input rounded-md"
-                          />
-                          <ErrorMessage message={fieldState.error?.message} />
+                          <Suspense fallback={<WaveformBars active />}>
+                            <ArtistSelector
+                              label="Nghệ sĩ chính"
+                              singleSelect
+                              value={mainArtistValue}
+                              required
+                              onChange={(ids) => field.onChange(ids[0] || "")}
+                              className="bg-transparent border-input rounded-md"
+                            />
+                            <ErrorMessage message={fieldState.error?.message} />
+                          </Suspense>
                         </div>
                       )}
                     />
@@ -760,11 +778,13 @@ const TrackModal = ({
                       name="albumId"
                       control={control}
                       render={({ field }) => (
-                        <AlbumSelector
-                          label="Parent Album"
-                          value={field.value || ""}
-                          onChange={field.onChange}
-                        />
+                        <Suspense fallback={<WaveformBars active />}>
+                          <AlbumSelector
+                            label="Parent Album"
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                          />
+                        </Suspense>
                       )}
                     />
                   </div>
@@ -776,14 +796,17 @@ const TrackModal = ({
                       control={control}
                       render={({ field }) => (
                         <div className="space-y-1.5">
-                          <GenreSelector
-                            label="Musical Genres"
-                            variant="form"
-                            required
-                            value={field.value}
-                            onChange={field.onChange}
-                            className="bg-card/50 border-border/60 rounded-xl"
-                          />
+                          <Suspense fallback={<WaveformBars active />}>
+                            <GenreSelector
+                              label="Musical Genres"
+                              variant="form"
+                              required
+                              value={field.value}
+                              onChange={field.onChange}
+                              className="bg-card/50 border-border/60 rounded-xl"
+                            />
+                          </Suspense>
+
                           <ErrorMessage
                             message={errors.genreIds?.message as string}
                           />

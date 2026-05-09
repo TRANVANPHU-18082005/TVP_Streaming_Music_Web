@@ -33,7 +33,12 @@ export const initAuth = createAsyncThunk(
       const { accessToken, user } = response.data;
       return { accessToken, user };
     } catch (error: unknown) {
-      return rejectWithValue(error || "Session expired");
+      const e: any = error;
+      // Normalize axios error shape -> prefer server payload (response.data)
+      const payload = e?.response?.data ?? {
+        message: e?.message ?? "Session expired",
+      };
+      return rejectWithValue(payload);
     }
   },
 );
@@ -47,7 +52,11 @@ export const fetchCurrentUser = createAsyncThunk(
       const response = await authApi.getMe();
       return response.data; // Trả về UserProfile mới
     } catch (error: unknown) {
-      return rejectWithValue(error);
+      const e: any = error;
+      const payload = e?.response?.data ?? {
+        message: e?.message ?? "Failed fetching user",
+      };
+      return rejectWithValue(payload);
     }
   },
 );
@@ -59,7 +68,11 @@ export const loginUser = createAsyncThunk(
       const res = await authApi.login(data);
       return res.data; // { accessToken, user }
     } catch (error: unknown) {
-      return rejectWithValue(error);
+      const e: any = error;
+      const payload = e?.response?.data ?? {
+        message: e?.message ?? "Login failed",
+      };
+      return rejectWithValue(payload);
     }
   },
 );

@@ -16,9 +16,13 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import { useAlbumParams } from "@/features/album/hooks/useAlbumParams";
 import { useAlbumMutations } from "@/features/album/hooks/useAlbumMutations";
 import AlbumModal from "@/features/album/components/album-modal";
-import { Albumpageskeleton, IAlbum, useAlbumsByAdminQuery } from "@/features";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useSmartBack } from "@/hooks/useSmartBack";
+import {
+  Albumpageskeleton,
+  IAlbum,
+  useAlbumsByAdminQuery,
+} from "@/features/album";
 
 const AlbumManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL) ---
@@ -31,8 +35,13 @@ const AlbumManagementPage = () => {
   } = useAlbumParams();
   const { data, isLoading, isError, refetch } =
     useAlbumsByAdminQuery(filterParams);
-  const { createAlbumAsync, updateAlbumAsync, deleteAlbum, isMutating } =
-    useAlbumMutations();
+  const {
+    createAlbumAsync,
+    updateAlbumAsync,
+    deleteAlbum,
+    restoreAlbum,
+    isMutating,
+  } = useAlbumMutations();
 
   // --- 4. LOCAL UI STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -175,10 +184,15 @@ const AlbumManagementPage = () => {
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6 animate-in fade-in duration-500">
           {albums.map((album) => (
             <AlbumCard
+              isMutating={isMutating}
               key={album._id}
               album={album}
               onEdit={handleEditClick}
-              onDelete={handleDeleteClick}
+              onDelete={() =>
+                album.isDeleted
+                  ? restoreAlbum(album._id)
+                  : handleDeleteClick(album)
+              }
             />
           ))}
         </div>

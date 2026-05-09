@@ -55,7 +55,7 @@ interface TrackTableRowProps {
   isPlaying: boolean;
   isSelected: boolean;
   onSelect: (id: string, checked: boolean) => void;
-  onPlay: () => void;
+  onPlay: (e?: React.MouseEvent) => void;
   onEdit: (track: ITrack) => void;
   onDelete: (track: ITrack) => void;
   retryFull: (trackId: string) => void;

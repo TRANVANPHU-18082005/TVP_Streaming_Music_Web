@@ -22,7 +22,6 @@ import relativeTime from "dayjs/plugin/relativeTime";
 
 import { cn } from "@/lib/utils";
 import { SubGenreGrid } from "@/features/genre/components/SubGenreGrid";
-import { Genredetailskeleton, IGenre, ITrack } from "@/features";
 import {
   useGenreDetailQuery,
   useGenreTracksInfinite,
@@ -32,6 +31,7 @@ import { useGenrePlayback } from "@/features/player/hooks/useGenrePlayback";
 import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
+import type { QueueSourceType } from "@/features/player/slice/playerSlice";
 
 import MusicResult from "@/components/ui/Result";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
@@ -43,6 +43,8 @@ import { formatCount } from "@/utils/track-helper";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { WaveformBars } from "@/components/MusicVisualizer";
+import { ITrack } from "@/features/track";
+import { Genredetailskeleton, IGenreDetail } from "@/features/genre";
 
 dayjs.extend(relativeTime);
 
@@ -314,7 +316,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
 
   const { openGenreSheet } = useContextSheet();
   const handleMoreOptions = useCallback(
-    (g: IGenre) => openGenreSheet(g),
+    (g: IGenreDetail) => openGenreSheet(g),
     [openGenreSheet],
   );
 
@@ -358,9 +360,14 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
       hasNextPage: hasNextPage ?? false,
       onFetchNextPage: fetchNextPage,
       onRetry: refetchTracks,
+      source: {
+        id: genre?._id ?? "",
+        type: "genre" as QueueSourceType,
+        title: genre?.name,
+        url: `/genres/${genre?.slug}`,
+      },
     }),
-    // allTracks ref is stable when unchanged, so this is safe
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     [
       genre?.trackIds,
       allTracks,
@@ -369,6 +376,11 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
       tracksError,
       isFetchingNextPage,
       hasNextPage,
+      fetchNextPage,
+      refetchTracks,
+      genre?._id,
+      genre?.name,
+      genre?.slug,
     ],
   );
 

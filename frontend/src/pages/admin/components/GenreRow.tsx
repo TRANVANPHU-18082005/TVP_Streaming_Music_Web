@@ -32,8 +32,9 @@ import {
   EyeOff,
   Eye,
   MoreVertical,
+  RotateCcw,
 } from "lucide-react";
-import { IGenre } from "@/features";
+import { IGenre } from "@/features/genre";
 
 export type GenreRowProps = {
   genre: IGenre;
@@ -42,6 +43,8 @@ export type GenreRowProps = {
   pageSize: number;
   onEdit: (g: IGenre) => void;
   onAskDelete: (g: IGenre) => void;
+  onRestore?: (g: IGenre) => void;
+  onResetParent?: (g: IGenre) => void;
   onToggleStatus: (g: IGenre) => void;
   isMutating: boolean;
 };
@@ -53,6 +56,8 @@ export const GenreRow = React.memo(function GenreRow({
   pageSize,
   onEdit,
   onAskDelete,
+  onRestore: _onRestore,
+  onResetParent: _onResetParent,
   onToggleStatus,
   isMutating,
 }: GenreRowProps) {
@@ -276,13 +281,34 @@ export const GenreRow = React.memo(function GenreRow({
 
               <DropdownMenuSeparator className="my-1.5" />
 
-              <DropdownMenuItem
-                onClick={handleAskDeleteClick}
-                className="rounded-lg text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
-                disabled={isMutating}
-              >
-                <Trash2 className="mr-2 size-4" /> Permanent Delete
-              </DropdownMenuItem>
+              {/* Quick reset parent action: visible only when this genre has a parent */}
+              {genre.parentId && (
+                <DropdownMenuItem
+                  onClick={() => _onResetParent && _onResetParent(genre)}
+                  className="rounded-lg cursor-pointer"
+                  disabled={isMutating}
+                >
+                  <RotateCcw className="mr-2 size-4 text-muted-foreground" />
+                  Unset Parent
+                </DropdownMenuItem>
+              )}
+
+              {genre.isDeleted ? (
+                <DropdownMenuItem
+                  onClick={() => _onRestore && _onRestore(genre)}
+                  className="rounded-lg cursor-pointer text-success"
+                >
+                  <RotateCcw className="mr-2 size-4" /> Restore Genre
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  onClick={handleAskDeleteClick}
+                  className="rounded-lg text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                  disabled={isMutating}
+                >
+                  <Trash2 className="mr-2 size-4" /> Permanent Delete
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

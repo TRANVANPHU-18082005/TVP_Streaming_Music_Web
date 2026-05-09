@@ -2,20 +2,21 @@ import React, { memo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, Pause, Loader2, Shuffle, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FollowButton } from "@/features";
-import type { IArtist } from "@/features";
+
 import type { Palette } from "@/utils/color";
+import { IArtistDetail } from "@/features/artist";
+import { FollowButton } from "@/features/interaction";
 
 export interface ArtistActionBarProps {
-  artist: IArtist;
-  handleMoreOptions: (artist: IArtist) => void;
+  artist: IArtistDetail;
+  handleMoreOptions: (artist: IArtistDetail) => void;
   palette: Palette;
   isLoadingPlay: boolean;
   isLoadingShuffle: boolean;
   isPlaying: boolean;
   hasTracks: boolean;
   density?: "compact" | "full";
-  onPlay: () => void;
+  onPlay: (e?: React.MouseEvent) => void;
   onShuffle: () => void;
 }
 

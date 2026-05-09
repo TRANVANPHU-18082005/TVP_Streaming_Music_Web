@@ -69,7 +69,7 @@ export const useAlbumForm = <TMode extends "create" | "edit">({
 
   // ── Reset khi mở modal Edit với album khác ─────────────────────────────────
   useEffect(() => {
-    form.reset(defaultValues);
+    form.reset(defaultValues as any);
   }, [defaultValues, form]);
 
   // ── Submit handler ─────────────────────────────────────────────────────────

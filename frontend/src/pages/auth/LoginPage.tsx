@@ -1,5 +1,5 @@
 // src/features/auth/pages/LoginPage.tsx
-import { LoginForm } from "@/features";
+import { LoginForm } from "@/features/auth";
 import { useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
 import { Palette } from "@/utils/color";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 
 export type AlbumHeroCoverProps = {
   src: string;
@@ -90,7 +91,7 @@ export const AlbumHeroCover = memo<AlbumHeroCoverProps>(
               : { boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }
           }
         >
-          <img
+          <ImageWithFallback
             src={src || "/images/default-album.png"}
             alt={alt}
             className={cn(

@@ -147,4 +147,12 @@ router.delete(
   playlistController.deletePlaylist,
 );
 
+// 15. Restore Playlist (Admin)
+router.patch(
+  "/:id/restore",
+  authorize("admin"),
+  validate(deletePlaylistSchema),
+  playlistController.restorePlaylist,
+);
+
 export default router;

@@ -1,13 +1,6 @@
 "use client";
 
-import React, {
-  useState,
-  useMemo,
-  useEffect,
-  useCallback,
-  useRef,
-  memo,
-} from "react";
+import React, { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import {
   ListMusic,
@@ -369,7 +362,6 @@ export const EditPlaylistTracksModal: React.FC<
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   // Track snapshot for undo (reorder)
-  const orderSnapshotRef = useRef<ITrack[]>([]);
 
   // ── Data ──
   const { data: searchRes, isLoading: isSearching } = usePublicTracks({
@@ -413,8 +405,8 @@ export const EditPlaylistTracksModal: React.FC<
       setOrderedTracks([]);
       return;
     }
-    const source =
-      fetched.length > 0 ? fetched : ((playlist?.tracks as ITrack[]) ?? []);
+    const source = fetched;
+    if (source.length === 0 && playlist?.tracks?.length) return; // Chờ tải dữ liệu bài hát đầy đủ
     const idOrder = playlist?.trackIds ?? source.map((t) => t._id);
     const map = new Map(source.map((t) => [t._id, t]));
     const ordered = idOrder
@@ -551,12 +543,6 @@ export const EditPlaylistTracksModal: React.FC<
     setIsDirty(false);
     handleClose();
   }, [playlistId, isDirty, orderedTracks, reorderTracks, handleClose]);
-
-  const handleUndoReorder = useCallback(() => {
-    setOrderedTracks(orderSnapshotRef.current);
-    setIsDirty(false);
-    setUndoToast(null);
-  }, []);
 
   const handleDiscardReorder = useCallback(() => {
     setOrderedTracks(currentTracks);

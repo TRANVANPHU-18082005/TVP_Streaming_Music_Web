@@ -1,9 +1,15 @@
 import { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import passport from "passport";
 import httpStatus from "http-status"; // Import thêm enum status
 import catchAsync from "../utils/catchAsync";
 import AuthService from "../services/auth.service";
-import { generateTokens, setRefreshTokenCookie } from "../utils/token";
+import {
+  generateTokens,
+  setRefreshTokenCookie,
+  clearRefreshTokenCookie,
+} from "../utils/token";
+import logger from "../config/logger";
 import { IUser } from "../models/User";
 
 // 1. Google Auth (Start)
@@ -28,7 +34,7 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
   user.refreshToken = refreshToken;
   await user.save();
   setRefreshTokenCookie(res, refreshToken);
-  console.log(`Set refresh cookie for user=${user._id}`);
+  logger.info(`Set refresh cookie for user=${user._id}`);
 
   res.redirect(`${process.env.CLIENT_URL}/auth/google?token=${accessToken}`);
 };
@@ -55,7 +61,7 @@ export const facebookCallbackHandler = async (req: Request, res: Response) => {
   user.refreshToken = refreshToken;
   await user.save();
   setRefreshTokenCookie(res, refreshToken);
-  console.log(`Set refresh cookie for user=${user._id}`);
+  logger.info(`Set refresh cookie for user=${user._id}`);
 
   res.redirect(`${process.env.CLIENT_URL}/auth/facebook?token=${accessToken}`);
 };
@@ -177,14 +183,32 @@ export const logout = catchAsync(async (req: Request, res: Response) => {
   const currentUserId = req.user
     ? (req.user as IUser)._id.toString()
     : undefined;
+
+  // If we have an authenticated user, revoke server-side refresh token
   if (currentUserId) {
     await AuthService.logout(currentUserId);
+  } else {
+    // Fallback: try to decode refresh cookie and revoke that session server-side
+    const cookieToken = req.cookies?.refreshToken;
+    if (cookieToken) {
+      try {
+        const decoded: any = jwt.verify(
+          cookieToken,
+          process.env.JWT_REFRESH_SECRET!,
+        );
+        const cookieUserId = decoded?.id;
+        if (cookieUserId) await AuthService.logout(cookieUserId);
+      } catch (err) {
+        // ignore invalid token — still proceed to clear cookie
+      }
+    }
   }
-  res.clearCookie("refreshToken");
-  res.status(httpStatus.OK).json({
-    success: true,
-    message: "Đăng xuất thành công",
-  });
+
+  // Clear client cookie in all cases (use helper to match cookie attributes)
+  clearRefreshTokenCookie(res);
+  res
+    .status(httpStatus.OK)
+    .json({ success: true, message: "Đăng xuất thành công" });
 });
 
 // 9. Resend OTP

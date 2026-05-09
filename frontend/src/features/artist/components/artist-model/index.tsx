@@ -12,7 +12,7 @@ import GallerySection from "./GallerySection";
 
 // Logic Hook Mới
 import { useArtistForm } from "@/features/artist/hooks/useArtistForm";
-import { IArtist } from "@/features";
+import { IArtist } from "../../types";
 
 interface ArtistModalProps {
   isOpen: boolean;

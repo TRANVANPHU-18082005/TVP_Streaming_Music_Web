@@ -23,7 +23,7 @@ import { cacheRedis } from "../config/redis";
 import escapeStringRegexp from "escape-string-regexp";
 import themeColorService from "./themeColor.service";
 import { is } from "zod/v4/locales";
-import { APP_CONFIG } from "../config/constants";
+import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -119,6 +119,35 @@ class GenreService {
           "Tên thể loại hoặc đường dẫn (slug) đã tồn tại",
         );
       }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
+  // ── 6. RESTORE GENRE (UNDO SOFT DELETE) ─────────────────────────────────
+  async restoreGenre(id: string) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const genre = await Genre.findById(id).session(session);
+      if (!genre || !genre.isDeleted) {
+        throw new ApiError(
+          httpStatus.NOT_FOUND,
+          "Không tìm thấy thể loại hoặc không ở trạng thái đã xóa",
+        );
+      }
+
+      await Genre.findByIdAndUpdate(id, { isDeleted: false }, { session });
+
+      await session.commitTransaction();
+
+      // Hậu kỳ: invalidate cache
+      Promise.allSettled([invalidateGenreCache(id)]).catch(console.error);
+
+      return { message: "Khôi phục thể loại thành công", _id: id };
+    } catch (error) {
+      await session.abortTransaction();
       throw error;
     } finally {
       await session.endSession();
@@ -583,20 +612,8 @@ class GenreService {
         .sort({ playCount: -1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .select(
-          "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
-        )
-        .select(
-          "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
-        )
-        .populate("artist", "name avatar slug")
-        .populate("featuringArtists", "name slug avatar")
-        .populate("album", "title coverImage slug")
-        .populate("genres", "name slug")
-        .populate({
-          path: "moodVideo",
-          select: "videoUrl loop",
-        })
+        .select(TRACK_SELECT)
+        .populate(TRACK_POPULATE as any)
         .lean(),
       Track.countDocuments(trackQuery),
     ]);

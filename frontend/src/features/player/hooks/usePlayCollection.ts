@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { setQueue, setIsPlaying, QueueSourceType } from "../slice/playerSlice";
 import { ITrack } from "@/features/track/types";
+import { handleError } from "@/utils/handleError";
 
 interface PlayOptions {
   queryKey: readonly any[];
@@ -49,50 +50,60 @@ export const usePlayCollection = () => {
           queryFn: fetchFn,
           staleTime: 5 * 60 * 1000,
         });
+        console.log("[usePlayCollection] Fetched data:", res);
         const root = res?.data ?? res;
         let tracks: ITrack[] = [];
-        // Chiết xuất danh sách tracks
-        if (Array.isArray(root)) {
-          tracks = root;
-        } else {
-          tracks = root.tracks ?? root.items ?? root.data ?? root.songs ?? [];
+        let title = "";
+        let trackIds: string[] = [];
+        let id = "";
+        let slug = "";
+        if (sourceType === "playlist") {
+          console.log("Data structure for playlist:", res);
+          tracks = root.tracks ?? [];
+          title = root.title ?? "Danh sách mới";
+          trackIds = root.trackIds ?? [];
+          id = root._id ?? "";
+          slug = root.slug ?? "";
+        } else if (sourceType === "album") {
+          console.log("Data structure for album:", res);
+          tracks = root.tracks ?? [];
+          title = root.title ?? "Album mới";
+          trackIds = root.trackIds ?? [];
+          id = root._id ?? "";
+          slug = root.slug ?? "";
+        } else if (sourceType === "artist") {
+          console.log("Data structure for artist:", res);
+          tracks = root.topTracks ?? [];
+          title = root.name ?? "Nghệ sĩ mới";
+          trackIds = root.trackIds ?? [];
+          id = root._id ?? "";
+          slug = root.slug ?? "";
+        } else if (sourceType === "genre") {
+          console.log("Data structure for genre:", res);
+          tracks = root.topTracks ?? [];
+          title = root.name ?? "Thể loại mới";
+          trackIds = root.trackIds ?? [];
+          id = root._id ?? "";
+          slug = root.slug ?? "";
         }
-
-        const title =
-          collectionName ?? root.title ?? root.name ?? "Danh sách mới";
-
-        // Chiết xuất danh sách IDs
-        const trackIds =
-          root.trackIds || root.artist?.trackIds
-            ? (root.trackIds ?? root.artist?.trackIds)
-            : tracks
-                .map((t: any) => (typeof t === "string" ? t : t?._id))
-                .filter(Boolean);
-
-        if (!trackIds || trackIds.length === 0) {
+        if (trackIds.length === 0) {
           throw new Error("Không có bài hát nào trong danh sách này.");
         }
-
+        console.log(tracks, title, trackIds, id, slug);
         // DISPATCH VÀO STORE VỚI ĐẦY ĐỦ SOURCE CONTEXT
         dispatch(
           setQueue({
             trackIds,
             // Nếu là bài hát (object) thì nạp vào cache, nếu là string ID thì bỏ qua
-            initialMetadata: typeof tracks[0] === "object" ? tracks : [],
+            initialMetadata: tracks,
             startIndex,
             isShuffling: shuffle, // 🔥 Truyền trạng thái shuffle vào Reducer
             source: {
-              id: root._id || root.artist?._id,
+              id: id,
               type: sourceType,
-              title:
-                root.title ||
-                root.name ||
-                root.artist?.name ||
-                root.artist?.title ||
-                collectionName ||
-                "Danh sách phát",
+              title: collectionName || title,
               // Tự động thêm chữ 's' vào sourceType để match với route (ví dụ: /albums/, /playlists/)
-              url: `/${sourceType}s/${root.slug || root._id}`,
+              url: `/${sourceType}s/${sourceType === "playlist" ? id : slug}`,
             },
           }),
         );
@@ -101,14 +112,8 @@ export const usePlayCollection = () => {
         toast.success(`Đang phát: ${title}`, { id: toastId });
 
         if (onSuccess) onSuccess(root);
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
-
-        console.error("[PlayCollection Global Error]", err);
-        const errorMsg =
-          err?.response?.data?.message ||
-          "Không thể tải nội dung. Vui lòng thử lại.";
-        toast.error(errorMsg, { id: toastId });
+      } catch (err) {
+        handleError(err, "Lỗi khi phát danh sách");
 
         if (onError) onError(err);
       } finally {

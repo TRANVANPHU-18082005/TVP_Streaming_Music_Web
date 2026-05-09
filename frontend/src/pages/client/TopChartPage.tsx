@@ -23,7 +23,10 @@ import {
   ArrowDown,
 } from "lucide-react";
 
-import { useRealtimeChart } from "@/features/track/hooks/useRealtimeChart";
+import {
+  RankedTrack,
+  useRealtimeChart,
+} from "@/features/track/hooks/useRealtimeChart";
 // Lazy-load heavy track components to split large chart/vendor bundles
 const ChartItem = lazy(() =>
   import("@/features/track/components/ChartItem").then((m) => ({
@@ -37,7 +40,6 @@ const ChartLine = lazy(() =>
 );
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { IChartDataPoint, RankedTrack, useSyncInteractions } from "@/features";
 import SectionAmbient from "@/components/SectionAmbient";
 import TopChartPageSkeleton from "@/features/analytics/components/TopChartPageSkeleton";
 
@@ -47,6 +49,8 @@ import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { toCDN } from "@/utils/track-helper";
+import { IChartDataPoint } from "@/features/track";
+import { useSyncInteractions } from "@/features/interaction";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS

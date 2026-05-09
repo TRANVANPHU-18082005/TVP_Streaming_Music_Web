@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 
 import { toast } from "sonner"; // Hoặc notification của bạn
 import authApi from "@/features/auth/api/authApi";
-import { logout } from "@/features";
 
 import { useAppDispatch } from "@/store/hooks";
 import { persistor } from "@/store/store";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { logout } from "@/features/auth";
 
 const LogoutPage = () => {
   const navigate = useNavigate();

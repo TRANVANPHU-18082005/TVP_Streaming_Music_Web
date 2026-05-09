@@ -7,11 +7,11 @@ import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { GenreCard } from "@/features/genre/components/GenreCard";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
-import { IGenre, useGenresByUserQuery } from "@/features";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { APP_CONFIG } from "@/config/constants";
+import { IGenre, useGenresByUserQuery } from "@/features/genre";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — scale-first reveal suits the wide genre cards

@@ -1,10 +1,11 @@
-import { IAlbum, IArtist, ITrack } from "@/features";
+import { IAlbum } from "@/features/album";
+import { IArtist } from "@/features/artist";
 import { IGenre } from "@/features/genre";
 import { IPlaylist } from "@/features/playlist";
+import { ITrack } from "@/features/track";
 
 // --- Base Entities ---
 export interface SearchArtist extends IArtist {
-
   highlightHtml?: string; // Mới thêm từ backend v4
 }
 
@@ -14,7 +15,6 @@ export interface SearchTrack extends ITrack {
 
 export interface SearchAlbum extends IAlbum {
   highlightHtml?: string; // Mới thêm từ backend v4
-
 }
 export interface SearchGenre extends IGenre {
   highlightHtml?: string; // Mới thêm từ backend v4

@@ -1,5 +1,5 @@
-import { IArtist } from "@/features";
 import { ArtistEditFormValues } from "../schemas/artist.schema";
+import { IArtist } from "../types";
 
 export const ARTIST_DEFAULT_VALUES: ArtistEditFormValues = {
   name: "",

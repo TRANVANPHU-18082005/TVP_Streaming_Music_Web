@@ -8,12 +8,13 @@ import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCar
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 import { useMyPlaylists } from "@/features/playlist/hooks/usePlaylistsQuery";
 
-import { IPlaylist, useSyncInteractions } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { IPlaylist } from "@/features/playlist";
+import { useSyncInteractions } from "@/features/interaction";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS — slightly softer than Albums for tonal differentiation

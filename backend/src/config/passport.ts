@@ -3,6 +3,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as FacebookStrategy } from "passport-facebook";
 import dotenv from "dotenv";
 import AuthService from "../services/auth.service"; // Import Service chúng ta vừa viết
+import logger from "./logger";
 
 // 1. Load biến môi trường
 dotenv.config();
@@ -25,18 +26,18 @@ passport.use(
       passReqToCallback: true, // Để sau này có thể lấy req nếu cần
     },
     async (req, accessToken, refreshToken, profile, done) => {
-      console.log("🔥 Google Profile Received:", profile.id);
+      logger.info("Google Profile Received: %s", profile.id);
 
       try {
         // 3. Gọi Service để xử lý logic nghiệp vụ (Tìm, Tạo, hoặc Gộp tài khoản)
         const user = await AuthService.loginWithGoogle(profile);
 
-        console.log("✅ Google Auth Success for:", user.email);
+        logger.info("Google Auth Success for: %s", user.email);
 
         // 4. Trả user về cho Controller (googleCallbackHandler)
         return done(null, user);
       } catch (error) {
-        console.error("❌ Google Auth Error:", error);
+        logger.error("Google Auth Error:", error);
         return done(error, undefined);
       }
     },
@@ -80,7 +81,7 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
     ),
   );
 } else {
-  console.warn(
-    "⚠️ FACEBOOK_APP_ID or FACEBOOK_APP_SECRET not set; Facebook login disabled",
+  logger.warn(
+    "FACEBOOK_APP_ID or FACEBOOK_APP_SECRET not set; Facebook login disabled",
   );
 }

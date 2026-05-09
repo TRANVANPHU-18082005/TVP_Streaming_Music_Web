@@ -1,13 +1,14 @@
 import React, { memo, useMemo } from "react";
 import { motion, AnimatePresence, PanInfo, Variants } from "framer-motion";
 
-import { ITrack, useInteraction } from "@/features";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { toCDN } from "@/utils/track-helper";
 import { SP, SheetBackdrop, HandleBar } from "../sheetPrimitives";
 import { useIsLiked } from "@/features/interaction/hooks/useIsLiked";
 import { Heart, ListPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ITrack } from "@/features/track";
+import { useInteraction } from "@/features/interaction";
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED: TRACK PREVIEW ROW
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export const TrackSheet = memo(
                     className={cn(
                       "w-full flex items-center gap-4 px-5 py-3.5",
                       "text-muted-foreground hover:text-foreground hover:bg-muted",
-                      "transition-colors text-left"
+                      "transition-colors text-left",
                     )}
                   >
                     <Icon className="w-5 h-5 shrink-0" />

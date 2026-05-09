@@ -18,7 +18,7 @@ import { useSocket } from "@/hooks/useSocket";
 import { RootState } from "@/store/store";
 import { env } from "@/config/env";
 import { toCDN } from "@/utils/track-helper";
-import { ITrack } from "@/features";
+import { ITrack } from "@/features/track";
 
 // ---------------------------------------------------------------------------
 // Constants & pure helpers
@@ -459,7 +459,7 @@ export const useAudioPlayer = () => {
       if (autoplayEnabled && currentTrack._id) {
         try {
           const resp = await trackApi.getSimilarTracks(currentTrack._id, 10);
-          const recs = resp?.data?.tracks ?? [];
+          const recs = resp?.tracks ?? [];
           const ids = recs.map((t: ITrack) => t._id).filter(Boolean);
           if (ids.length > 0) {
             // Append recommended IDs and immediately advance to the next track

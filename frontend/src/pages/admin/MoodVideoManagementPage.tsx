@@ -18,8 +18,8 @@ import { MoodVideoGrid } from "@/features/mood-video/components/MoodVideoGrid";
 import MoodVideoModal from "@/features/mood-video/components/MoodVideoModal";
 import { IMoodVideo } from "@/features/mood-video/types";
 import { useSmartBack } from "@/hooks/useSmartBack";
-import { Genrepageskeleton } from "@/features";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { Genrepageskeleton } from "@/features/genre";
 
 const MoodVideoManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL & Query) ---

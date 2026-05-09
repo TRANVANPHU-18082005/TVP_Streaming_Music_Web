@@ -40,12 +40,13 @@ import TableSkeleton from "@/components/ui/TableSkeleton";
 import { GenreFilters } from "@/features/genre/components/GenreFilters";
 
 import { handleError } from "@/utils/handleError";
-import { IGenre, useGenresByAdminQuery } from "@/features";
 import { useSmartBack } from "@/hooks/useSmartBack";
 
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { toast } from "sonner";
+import { IGenre, useGenresByAdminQuery } from "@/features/genre";
 
 // Lazy-load the heavy row component so admin page initial bundle is smaller
 const GenreRowLazy = lazy(() =>
@@ -96,8 +97,26 @@ const GenreManagementPage: React.FC = () => {
     toggleGenreStatus,
     createGenreAsync,
     updateGenreAsync,
+    restoreGenreAsync,
     isMutating,
   } = useGenreMutations();
+
+  // Reset parentId to 'none' for a genre (quick action)
+  const handleResetParent = useCallback(
+    async (g: IGenre) => {
+      try {
+        console.log("Reset parent clicked for:", g._id);
+        const fd = new FormData();
+        // send empty string to explicitly clear parentId (backend accepts "" or null)
+        fd.append("parentId", "");
+        await updateGenreAsync({ id: g._id, data: fd } as any);
+        toast.success(`Genre "${g.name}" là top-level.`);
+      } catch (err) {
+        handleError(err, "Lỗi khi đặt lại thể loại cha");
+      }
+    },
+    [updateGenreAsync],
+  );
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [genreToEdit, setGenreToEdit] = useState<IGenre | null>(null);
@@ -130,6 +149,17 @@ const GenreManagementPage: React.FC = () => {
     deleteGenre(genreToDelete._id);
     setGenreToDelete(null);
   }, [genreToDelete, deleteGenre]);
+
+  const handleRestore = useCallback(
+    async (g: IGenre) => {
+      try {
+        await restoreGenreAsync?.(g._id);
+      } catch (err) {
+        handleError(err, "Lỗi khôi phục thể loại");
+      }
+    },
+    [restoreGenreAsync],
+  );
 
   const handleSubmitForm = useCallback(
     async (formData: FormData) => {
@@ -353,6 +383,8 @@ const GenreManagementPage: React.FC = () => {
                                 }
                                 onEdit={handleOpenEdit}
                                 onAskDelete={handleAskDelete}
+                                onRestore={handleRestore}
+                                onResetParent={handleResetParent}
                                 onToggleStatus={handleToggleStatus}
                                 isMutating={isMutating}
                               />
@@ -386,6 +418,8 @@ const GenreManagementPage: React.FC = () => {
                         pageSize={meta.pageSize || APP_CONFIG.PAGINATION_LIMIT}
                         onEdit={handleOpenEdit}
                         onAskDelete={handleAskDelete}
+                        onRestore={handleRestore}
+                        onResetParent={handleResetParent}
                         onToggleStatus={handleToggleStatus}
                         isMutating={isMutating}
                       />

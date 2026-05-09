@@ -110,6 +110,18 @@ export const deletePlaylist = catchAsync(
   },
 );
 
+// Restore Playlist (Admin)
+export const restorePlaylist = catchAsync(
+  async (req: Request, res: Response) => {
+    await playlistService.restorePlaylist(req.params.id, req.user as IUser);
+
+    res.status(httpStatus.OK).json({
+      success: true,
+      message: "Đã khôi phục playlist thành công",
+    });
+  },
+);
+
 // 6. Add Tracks (Batch Support)
 export const addTracks = catchAsync(async (req: Request, res: Response) => {
   const { trackIds } = req.body;

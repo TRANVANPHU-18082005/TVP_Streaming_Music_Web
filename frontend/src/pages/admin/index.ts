@@ -10,5 +10,8 @@ export const AlbumManagementPage = lazy(() => import("./AlbumManagementPage"));
 export const PlaylistManagementPage = lazy(
   () => import("./PlaylistManagementPage"),
 );
+export const MoodVideoManagementPage = lazy(
+  () => import("./MoodVideoManagementPage"),
+);
 export const AnalyticPage = lazy(() => import("./AnalyticPage"));
 export const SettingPage = lazy(() => import("./SettingPage"));

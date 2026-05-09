@@ -89,7 +89,7 @@ export interface QueueStats {
   delayed: number;
 }
 
-export interface TrackStatus {
+export interface TrackCountStatus {
   ready: number;
   failed: number;
   pending: number;
@@ -99,7 +99,7 @@ export interface TrackStatus {
 export interface SystemHealthData {
   storage: StorageHealth;
   queue: QueueStats;
-  trackStatus: TrackStatus;
+  trackStatus: TrackCountStatus;
   redis: {
     queueWorker: RedisWorkerInfo; // NEW: replaces old `memory` string
     upstash: UpstashStats | null;

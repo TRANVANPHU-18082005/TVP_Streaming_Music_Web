@@ -38,8 +38,9 @@ import { ITrack } from "@/features/track/types";
 import { useAdminTracks } from "@/features/track/hooks/useTracksQuery";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
-import { Genrepageskeleton } from "@/features";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useContextSheet } from "@/app/provider/SheetProvider";
+import { Genrepageskeleton } from "@/features/genre";
 
 const TrackManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL) ---
@@ -89,6 +90,7 @@ const TrackManagementPage = () => {
   >(null);
 
   // --- HANDLERS ---
+  const { openAddToPlaylistSheet } = useContextSheet();
 
   // Selection Logic
   const handleSelectOne = (id: string, checked: boolean) => {
@@ -260,6 +262,13 @@ const TrackManagementPage = () => {
     });
   };
 
+  const handleAddToPlaylist = () => {
+    if (selectedIds.length === 0) return;
+    const toAdd = tracks.filter((t) => selectedIds.includes(t._id));
+    if (toAdd.length === 0) return;
+    openAddToPlaylistSheet(undefined, toAdd);
+  };
+
   // Safe Access Data
   const tracks = data?.tracks || [];
   const meta = data?.meta || {
@@ -406,6 +415,7 @@ const TrackManagementPage = () => {
         onEditAlbum={() => setBulkMode("album")}
         onEditMetadata={() => setBulkMode("metadata")}
         onEditLegal={() => setBulkMode("legal")}
+        onAddToPlaylist={handleAddToPlaylist}
         onDelete={handleBulkDelete}
         onRetryTranscode={handleBulkRetryTranscode}
         onRetryLyrics={handleBulkRetryLyrics}

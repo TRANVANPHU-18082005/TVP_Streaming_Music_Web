@@ -209,7 +209,7 @@ const ArtistCardSkeleton = memo(({ index }: ArtistCardSkeletonProps) => {
 
   return (
     <div
-      className="flex flex-col bg-card rounded-2xl overflow-hidden border border-border/40 shadow-raised"
+      className="flex flex-col bg-card rounded-xl overflow-hidden border border-border/40 shadow-raised"
       style={{ animationDelay: `${staggerDelay(index)}ms` }}
       aria-hidden="true"
     >

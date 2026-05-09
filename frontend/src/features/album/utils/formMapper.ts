@@ -1,5 +1,5 @@
-import { IAlbum } from "@/features";
 import { type AlbumFormValues } from "../schemas/album.schema";
+import { IAlbum } from "../types";
 
 // 1. Định nghĩa giá trị mặc định chuẩn xác
 export const ALBUM_DEFAULT_VALUES: AlbumFormValues = {

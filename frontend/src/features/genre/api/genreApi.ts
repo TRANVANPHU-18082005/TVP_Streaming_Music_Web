@@ -75,7 +75,7 @@ const genreApi = {
   // 8. Toggle genre status (Admin - Bật/Tắt hoạt động nhanh)
   toggleStatus: async (id: string) => {
     const response = await api.patch<ApiResponse<IGenre>>(
-      `/genres/${id}/toggle-status`,
+      `/genres/${id}/toggle`,
     );
     return response.data;
   },
@@ -83,6 +83,13 @@ const genreApi = {
   // 9. Delete genre (Admin - Xóa vĩnh viễn, Backend sẽ kiểm tra ràng buộc dữ liệu trước khi xóa)
   delete: async (id: string) => {
     const response = await api.delete<ApiResponse<null>>(`/genres/${id}`);
+    return response.data;
+  },
+  // 10. Restore genre (Admin - undo soft delete)
+  restore: async (id: string) => {
+    const response = await api.patch<ApiResponse<null>>(
+      `/genres/${id}/restore`,
+    );
     return response.data;
   },
 };

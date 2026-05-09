@@ -4,6 +4,7 @@ import Playlist from "../models/Playlist";
 import Track from "../models/Track";
 import Genre from "../models/Genre";
 import { cacheRedis } from "../config/redis";
+import { TRACK_SELECT } from "../config/constants";
 
 // ─────────────────────────────────────────────
 // Constants
@@ -58,7 +59,7 @@ class SearchService {
     try {
       const cached = await cacheRedis.get(cacheKey);
       if (cached) return JSON.parse(cached);
-    } catch (_) { }
+    } catch (_) {}
 
     // Atlas $search với prefix — nhanh hơn fuzzy cho autocomplete
     const atlasPipeline = (nameField: string) => [
@@ -102,7 +103,7 @@ class SearchService {
 
       cacheRedis
         .setex(cacheKey, SUGGEST_CACHE_TTL, JSON.stringify(result))
-        .catch(() => { });
+        .catch(() => {});
 
       return result;
     } catch (err) {
@@ -160,7 +161,7 @@ class SearchService {
     try {
       const cached = await cacheRedis.get(cacheKey);
       if (cached) return JSON.parse(cached);
-    } catch (_) { }
+    } catch (_) {}
 
     const [tracks, artists, albums, playlists, genres] = await Promise.all([
       this.searchCollection(Track, safe, limit, "track"),
@@ -194,7 +195,7 @@ class SearchService {
 
     cacheRedis
       .setex(cacheKey, SEARCH_CACHE_TTL, JSON.stringify(result))
-      .catch(() => { });
+      .catch(() => {});
 
     return result;
   };
@@ -211,7 +212,7 @@ class SearchService {
     cacheRedis
       .zincrby(TRENDING_KEY, 1, normalized)
       .then(() => cacheRedis.expire(TRENDING_KEY, TRENDING_WINDOW))
-      .catch(() => { });
+      .catch(() => {});
   }
 
   /** Lấy top trending keywords */
@@ -240,7 +241,9 @@ class SearchService {
     limit: number,
     type: "track" | "artist" | "album" | "playlist" | "genre",
   ) {
-    const nameField = ["track", "album", "playlist"].includes(type) ? "title" : "name";
+    const nameField = ["track", "album", "playlist"].includes(type)
+      ? "title"
+      : "name";
 
     try {
       /**
@@ -274,10 +277,17 @@ class SearchService {
             _atlasScore: { $meta: "searchScore" },
             _highlights: { $meta: "searchHighlights" },
             _popularityScore: (() => {
-              if (type === "track" || type === "album" || type === "playlist" || type === "genre") {
+              if (
+                type === "track" ||
+                type === "album" ||
+                type === "playlist" ||
+                type === "genre"
+              ) {
                 return {
                   $multiply: [
-                    { $log: [{ $add: [{ $ifNull: ["$playCount", 0] }, 1] }, 10] },
+                    {
+                      $log: [{ $add: [{ $ifNull: ["$playCount", 0] }, 1] }, 10],
+                    },
                     0.5, // weight = 0.5 (có thể tune)
                   ],
                 };
@@ -285,7 +295,12 @@ class SearchService {
               if (type === "artist") {
                 return {
                   $multiply: [
-                    { $log: [{ $add: [{ $ifNull: ["$totalFollowers", 0] }, 1] }, 10] },
+                    {
+                      $log: [
+                        { $add: [{ $ifNull: ["$totalFollowers", 0] }, 1] },
+                        10,
+                      ],
+                    },
                     0.5,
                   ],
                 };
@@ -335,12 +350,10 @@ class SearchService {
           _highlightRaw: "$_highlights",
           // giữ thêm fields cần thiết để không cần query lại
           ...(type === "track" && {
-            title: 1,
-            coverImage: 1,
-            duration: 1,
-            playCount: 1,
-            artist: 1,
-            featuringArtists: 1,
+            ...TRACK_SELECT.split(" ").reduce(
+              (acc, field) => ({ ...acc, [field]: 1 }),
+              {},
+            ),
           }),
           ...(type === "artist" && { name: 1, avatar: 1, totalFollowers: 1 }),
           ...(type === "album" && {
@@ -405,7 +418,9 @@ class SearchService {
     type: string,
   ) {
     const regex = new RegExp(escapeRegex(keyword), "i");
-    const nameField = ["track", "album", "playlist"].includes(type) ? "title" : "name";
+    const nameField = ["track", "album", "playlist"].includes(type)
+      ? "title"
+      : "name";
     const query: any = { [nameField]: regex };
 
     if (type === "track") {
@@ -440,7 +455,11 @@ class SearchService {
     } else if (type === "artist") {
       result = await base.sort({ totalFollowers: -1 }).limit(limit).lean();
     } else if (type === "album") {
-      result = await base.populate("artist", "name slug").sort({ playCount: -1 }).limit(limit).lean();
+      result = await base
+        .populate("artist", "name slug")
+        .sort({ playCount: -1 })
+        .limit(limit)
+        .lean();
     } else if (type === "playlist") {
       result = await base.sort({ playCount: -1 }).limit(limit).lean();
     } else if (type === "genre") {
@@ -459,4 +478,4 @@ class SearchService {
   }
 }
 
-export default new SearchService
+export default new SearchService();

@@ -1,5 +1,7 @@
 // features/analytics/types/index.ts
 
+import { IChartItem } from "@/features/track";
+
 // ── Track shapes ──────────────────────────────────────────────────────────────
 
 // Ranked track used in realtime/top lists
@@ -30,8 +32,8 @@ export interface RealtimeStats {
   // From analyticsService.getStats()
   activeUsers: number; // authenticated users online
   activeGuests: number; // guest_ users online (NEW)
-  nowListening: AnalyticsRankedTrack[]; // top 5 tracks being listened RIGHT NOW
-  trending: AnalyticsRankedTrack[]; // top 5 in current hour window
+  nowListening: IChartItem[]; // top 5 tracks being listened RIGHT NOW
+  trending: IChartItem[]; // top 5 in current hour window
   geoData: GeoLocation[];
 
   // Socket-level (appended by buildLiveStats)

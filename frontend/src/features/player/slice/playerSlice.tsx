@@ -68,7 +68,10 @@ export type QueueSourceType =
   | "single"
   | "chart"
   | "search"
-  | "collection";
+  | "collection"
+  | "suggestions"
+  | "likedTracks"
+  | "recentlyPlayed";
 
 interface QueueSource {
   id: string;
@@ -648,8 +651,8 @@ export const selectNextTrack = createSelector(
 /** Kiểm tra nhanh metadata của một trackId có trong cache chưa. */
 export const selectIsTrackCached =
   (trackId: string) =>
-    (state: RootState): boolean =>
-      Boolean(state.player.trackMetadataCache[trackId]);
+  (state: RootState): boolean =>
+    Boolean(state.player.trackMetadataCache[trackId]);
 
 /** Tổng số bài trong queue (dùng cho Virtual Scroll totalCount). */
 export const selectQueueLength = (state: RootState): number =>

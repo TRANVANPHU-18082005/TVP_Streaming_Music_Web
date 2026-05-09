@@ -8,3 +8,8 @@ export const playerLayout = {
     showVolume: true,
   },
 };
+export const prefersReducedMotion =
+  typeof window !== "undefined"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+export const LONG_PRESS_MS = 500;

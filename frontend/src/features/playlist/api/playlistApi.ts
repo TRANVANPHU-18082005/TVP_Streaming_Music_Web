@@ -1,11 +1,11 @@
-import {
-  ITrack,
-  PlaylistAdminFilterParams,
-  PlaylistFilterParams,
-} from "@/features";
 import type { IPlaylist, IPlaylistDetail } from "@/features/playlist/types";
 import api from "@/lib/axios";
 import { type ApiResponse, type PagedResponse } from "@/types";
+import {
+  PlaylistAdminFilterParams,
+  PlaylistFilterParams,
+} from "../schemas/playlist.schema";
+import { ITrack } from "@/features/track";
 
 const playlistApi = {
   // ==========================================
@@ -154,6 +154,13 @@ const playlistApi = {
   // Xóa Playlist (Soft Delete ở Backend)
   delete: async (id: string) => {
     const response = await api.delete<ApiResponse<null>>(`/playlists/${id}`);
+    return response.data;
+  },
+  // Khôi phục Playlist (Admin)
+  restore: async (id: string) => {
+    const response = await api.patch<ApiResponse<null>>(
+      `/playlists/${id}/restore`,
+    );
     return response.data;
   },
 };

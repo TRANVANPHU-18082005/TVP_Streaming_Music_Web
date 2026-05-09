@@ -45,7 +45,12 @@ const startServer = async () => {
     initCronJobs();
     console.log("✅ Cron Jobs initialized");
     // Sơn Tùng MTP — track: Buông Đôi Tay Nhau Ra - durion: 227.
-    // const test = await fetchLyrics("Lạc Trôi", "Sơn Tùng M-TP", 234, "001");
+    // const test = await fetchLyrics(
+    //   "double take",
+    //   "dhruv",
+    //   undefined,
+    //   "test-job-123",
+    // );
     // console.log(test);
     // 6. Chạy Server
     const PORT = process.env.PORT || 8000;

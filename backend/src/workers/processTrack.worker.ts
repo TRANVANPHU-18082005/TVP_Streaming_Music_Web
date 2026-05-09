@@ -33,11 +33,10 @@ import { downloadFile } from "../services/audio/downloader.service";
 import { getAudioMetadata } from "../services/audio/metadata.service";
 import { transcodeToHLS } from "../services/audio/transcoder.service";
 import { fetchLyrics } from "../services/lyrics/lrclib.service";
-import { runForcedAlignment } from "../services/lyrics/aligner.service";
 import { buildFinalLyricResult } from "../services/lyrics/lyric-builder.service";
 import { uploadConcurrently } from "../services/upload/b2-upload.service";
-import moodVideoService from "../services/MoodVideo.service";
 import { invalidateTrackCache } from "../utils/cacheHelper";
+import MoodVideoService from "../services/moodVideo.service";
 
 const ffprobeStatic = require("ffprobe-static");
 dotenv.config();
@@ -89,54 +88,6 @@ async function runLyricPipeline(
     jobId,
   );
 }
-
-/** Chỉ chạy forced alignment trên plainLyrics đã có trong DB */
-// async function runKaraokeOnlyPipeline(
-//   trackId: string,
-//   plainLyrics: string,
-//   inputPath: string,
-//   tmpDir: string,
-//   trackFolderKey: string,
-//   bucketName: string,
-//   jobId: string,
-// ) {
-//   if (!plainLyrics.trim()) {
-//     console.log(
-//       `[Job ${jobId}] ℹ️ No plainLyrics in DB — cannot run karaoke_only.`,
-//     );
-//     return null;
-//   }
-
-//   const karaokeJsonPath = path.join(tmpDir, "karaoke.json");
-//   return runForcedAlignment(
-//     inputPath,
-//     plainLyrics,
-//     karaokeJsonPath,
-//     jobId,
-//   ).catch((err) => {
-//     console.warn(
-//       `[Job ${jobId}] ⚠️ karaoke_only alignment failed: ${err.message}`,
-//     );
-//     return null;
-//   });
-// }
-function getTrackFolderKey(fileUrl: string): string {
-  try {
-    const url = new URL(fileUrl);
-    // Path thường có dạng: /tracks/slug-timestamp/audio/filename.mp3
-    // Chúng ta muốn lấy: tracks/slug-timestamp
-    const parts = url.pathname.split("/").filter(Boolean); // ["tracks", "slug-timestamp", "audio", "filename.mp3"]
-    if (parts.length >= 2) {
-      return `${parts[0]}/${parts[1]}`;
-    }
-    return "tracks/unknown";
-  } catch {
-    return "tracks/unknown";
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// WORKER
-// ─────────────────────────────────────────────────────────────────────────────
 
 const worker = new Worker<ProcessTrackJobData>(
   "audio-transcoding",
@@ -240,7 +191,7 @@ const worker = new Worker<ProcessTrackJobData>(
       let moodVideoId: mongoose.Types.ObjectId | undefined;
       if (type === "full" || doMoodOnly) {
         console.log(`[Job ${job.id}] 🎨 Matching mood canvas...`);
-        moodVideoId = await moodVideoService.matchMoodCanvas(
+        moodVideoId = await MoodVideoService.matchMoodCanvas(
           trackDoc.tags ?? [],
           String(job.id),
         );

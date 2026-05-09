@@ -6,8 +6,8 @@ import {
   syncInteractions,
   InteractionTargetType,
 } from "../slice/interactionSlice";
-import type { ITrack } from "@/features";
 import { env } from "@/config/env";
+import { ITrack } from "@/features/track";
 
 /**
  * Sync tăng dần: mỗi lần allTracks.length tăng (page mới load),

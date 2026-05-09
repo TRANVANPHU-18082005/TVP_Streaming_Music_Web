@@ -14,15 +14,7 @@ import {
   Pause,
 } from "lucide-react";
 
-import { IAlbum } from "@/features/album/types";
-
-import {
-  albumKeys,
-  appendQueueIds,
-  IAlbumDetail,
-  ITrack,
-  selectPlayer,
-} from "@/features";
+import { IAlbum, IAlbumDetail } from "@/features/album/types";
 
 import { useAlbumPlayback } from "@/features/player/hooks/useAlbumPlayback";
 
@@ -42,6 +34,9 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { usePlayCollection } from "@/features/player/hooks/usePlayCollection";
 import albumApi from "@/features/album/api/albumApi";
 import { useNavigate } from "react-router-dom";
+import { ITrack } from "@/features/track";
+import { appendQueueIds, selectPlayer } from "@/features/player";
+import { albumKeys } from "@/features/album";
 const AlbumPreviewRow = memo(({ album }: { album: IAlbum }) => {
   const typeLabel = {
     album: "Album",

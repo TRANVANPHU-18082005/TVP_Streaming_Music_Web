@@ -2,8 +2,9 @@ import { memo, useMemo } from "react";
 import { History } from "lucide-react";
 import { useRecentlyPlayedInfinite } from "@/features/profile/hooks/useProfileQuery";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
-import { ITrack, TrackList } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
+import { ITrack, TrackList } from "@/features/track";
+import { QueueSourceType } from "@/features/player/slice/playerSlice";
 
 const RecentlyPlayedTrackList = memo(() => {
   const {
@@ -42,6 +43,12 @@ const RecentlyPlayedTrackList = memo(() => {
       hasNextPage: hasNextPage ?? false,
       onFetchNextPage: fetchNextPage,
       onRetry: refetch,
+      source: {
+        id: "recently-played",
+        type: "recentlyPlayed" as QueueSourceType,
+        title: "Nghe gần đây",
+        url: `/tracks/history`,
+      },
     }),
     [
       allTrackIds,

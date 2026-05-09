@@ -96,6 +96,14 @@ const artistApi = {
     return response.data;
   },
 
+  // 12. ADMIN METHODS - Restore soft-deleted artist
+  restore: async (id: string) => {
+    const response = await api.patch<ApiResponse<null>>(
+      `/artists/${id}/restore`,
+    );
+    return response.data;
+  },
+
   // 10. ARTIST METHODS (Artist Portal) - Lấy thông tin profile của chính mình
   getMyProfile: async () => {
     const response = await api.get<ApiResponse<IArtist>>("/artists/me/profile");

@@ -19,18 +19,10 @@ export const mapEntityToForm = (
   playlist?: IPlaylist | null,
 ): PlaylistEditFormValues => {
   if (!playlist) return PLAYLIST_DEFAULT_VALUES;
-  // Convert ISO datetime to input[type="datetime-local"] string (YYYY-MM-DDTHH:mm)
-  const isoToLocalDateTime = (iso?: string | null) => {
+  const parsePublishAt = (iso?: string | Date | null): Date | undefined => {
     if (!iso) return undefined;
-    try {
-      const d = new Date(iso);
-      // Create a local datetime string without timezone offset
-      const tzOffsetMs = d.getTimezoneOffset() * 60000;
-      const local = new Date(d.getTime() - tzOffsetMs);
-      return local.toISOString().slice(0, 16);
-    } catch {
-      return undefined;
-    }
+    const date = typeof iso === "string" ? new Date(iso) : iso;
+    return Number.isNaN(date.getTime()) ? undefined : date;
   };
   return {
     title: playlist.title,
@@ -46,7 +38,7 @@ export const mapEntityToForm = (
       playlist.collaborators?.map((u: any) =>
         typeof u === "object" ? u._id : u,
       ) || [],
-    publishAt: isoToLocalDateTime((playlist as any).publishAt),
+    publishAt: parsePublishAt((playlist as any).publishAt),
     userId:
       playlist.user &&
       (typeof playlist.user === "string"

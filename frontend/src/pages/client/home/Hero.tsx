@@ -30,7 +30,6 @@ import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { cn } from "@/lib/utils";
 
 import { useFeatureAlbums } from "@/features/album/hooks/useAlbumsQuery";
-import { IAlbum } from "@/features";
 import { AlbumLikeButton } from "@/features/interaction/components/LikeButton";
 import { useAlbumPlayback } from "@/features/player/hooks/useAlbumPlayback";
 import { useHeroSlider } from "@/hooks";
@@ -41,6 +40,7 @@ import {
 } from "../../../components/MusicVisualizer";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { IAlbum } from "@/features/album";
 
 type Direction = -1 | 1;
 
@@ -555,7 +555,7 @@ const ContentText = memo(
           custom={direction}
           variants={contentStagger}
           initial="enter"
-          animate={contentStagger.center(0) as any}
+          animate={contentStagger.center(0)}
           className="flex items-center gap-3 flex-wrap justify-center lg:justify-start"
         >
           <div className="flex items-center gap-1.5 px-1">
@@ -599,7 +599,7 @@ const ContentText = memo(
           <motion.h1
             custom={direction}
             variants={contentStagger}
-            animate={contentStagger.center(1) as any}
+            animate={contentStagger.center(1)}
             onClick={onNavigate}
             className={cn(
               "cursor-pointer transition-all duration-500",
@@ -634,7 +634,7 @@ const ContentText = memo(
         <motion.div
           custom={direction}
           variants={contentStagger}
-          animate={contentStagger.center(2) as any}
+          animate={contentStagger.center(2)}
           className="flex items-center gap-2 text-base justify-center lg:justify-start"
         >
           <span className="text-muted-foreground">Trình bày bởi</span>
@@ -651,7 +651,7 @@ const ContentText = memo(
         <motion.p
           custom={direction}
           variants={contentStagger}
-          animate={contentStagger.center(3) as any}
+          animate={contentStagger.center(3)}
           className={cn(
             "text-muted-foreground/80 leading-relaxed font-medium",
             "line-clamp-2 sm:line-clamp-3 text-center lg:text-left",

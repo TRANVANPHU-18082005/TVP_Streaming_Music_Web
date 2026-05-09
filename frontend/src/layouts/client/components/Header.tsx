@@ -39,7 +39,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import UserDropdown from "@/features/user/components/UserDropdown";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAppSelector } from "@/store/hooks";
-import { UserProfile } from "@/features";
+import { UserProfile } from "@/features/user";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS

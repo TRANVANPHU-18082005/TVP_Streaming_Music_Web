@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -33,14 +33,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 
 // Components Selector
-import { AlbumSelector } from "@/features/album/components/AlbumSelector";
-import { GenreSelector } from "@/features/genre/components/GenreSelector";
+const AlbumSelector = lazy(() =>
+  import("@/features/album/components/AlbumSelector").then((m) => ({
+    default: m.AlbumSelector,
+  })),
+);
+const GenreSelector = lazy(() =>
+  import("@/features/genre/components/GenreSelector").then((m) => ({
+    default: m.GenreSelector,
+  })),
+);
 import { TagInput } from "@/components/ui/tag-input";
 import { MoodVideoPicker } from "@/features/mood-video/components/MoodVideoPicker";
 import {
   BulkTrackUpdateFormValues,
   bulkTrackUpdateSchema,
 } from "../schemas/track.schema";
+import { WaveformBars } from "@/components/MusicVisualizer";
 
 interface BulkEditModalProps {
   isOpen: boolean;
@@ -154,11 +163,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         control={control}
                         name="genreIds"
                         render={({ field }) => (
-                          <GenreSelector
-                            value={field.value}
-                            onChange={field.onChange}
-                            className="border-none"
-                          />
+                          <Suspense fallback={<WaveformBars active />}>
+                            <GenreSelector
+                              value={field.value}
+                              onChange={field.onChange}
+                              className="border-none"
+                            />
+                          </Suspense>
                         )}
                       />
                     </div>
@@ -338,10 +349,12 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         control={control}
                         name="albumId"
                         render={({ field }) => (
-                          <AlbumSelector
-                            value={field.value || ""}
-                            onChange={field.onChange}
-                          />
+                          <Suspense fallback={<WaveformBars active />}>
+                            <AlbumSelector
+                              value={field.value || ""}
+                              onChange={field.onChange}
+                            />
+                          </Suspense>
                         )}
                       />
                     </div>

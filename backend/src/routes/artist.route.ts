@@ -97,6 +97,13 @@ router
     validate(deleteArtistSchema),
     artistController.deleteArtist,
   );
+// Restore Artist (Admin)
+router.patch(
+  "/:id/restore",
+  authorize("admin"),
+  validate(deleteArtistSchema),
+  artistController.restoreArtist,
+);
 // 9. Toggle Artist Status (Admin)
 router.patch(
   "/:id/toggle",

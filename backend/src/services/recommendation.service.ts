@@ -17,7 +17,7 @@ import Like from "../models/Like";
 import PlayLog from "../models/PlayLog";
 import { cacheRedis } from "../config/redis";
 import { withCacheTimeout } from "../utils/cacheHelper";
-import { APP_CONFIG } from "../config/constants";
+import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & TYPES
@@ -69,22 +69,7 @@ interface TrackDoc {
 // POPULATE CONFIG (tái sử dụng ở nhiều query)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TRACK_POPULATE = [
-  { path: "artist", select: "name avatar slug" },
-  { path: "featuringArtists", select: "name slug avatar" },
-  { path: "album", select: "title coverImage slug" },
-  { path: "genres", select: "name slug" },
-  {
-    path: "moodVideo",
-    select: "videoUrl loop thumbnailUrl",
-    model: "TrackMoodVideo",
-  },
-] as const;
-
 /** Các field cần thiết cho card bài hát – loại bỏ data nhạy cảm */
-const TRACK_SELECT =
-  "title slug artist featuringArtists album genres coverImage duration " +
-  "hlsUrl lyricType isExplicit playCount releaseDate moodVideo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS

@@ -2,6 +2,7 @@ import React from "react";
 import {
   X,
   Disc,
+  Plus,
   Tags,
   Trash2,
   CheckCircle2,
@@ -11,10 +12,7 @@ import {
   Sparkles,
   Layers,
   Globe,
-  Eye,
-  EyeOff,
   ShieldCheck,
-  ShieldX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -26,6 +24,7 @@ interface BulkActionBarProps {
   onEditMetadata: () => void;
   onEditLegal?: () => void;
   onDelete: () => void;
+  onAddToPlaylist?: () => void;
   onRetryTranscode?: () => void;
   onRetryLyrics?: () => void;
   onRetryKaraoke?: () => void;
@@ -49,6 +48,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onDelete,
   onTogglePublic,
   onToggleExplicit,
+  onAddToPlaylist,
   onChangeStatus,
   onEditLegal,
 }) => {
@@ -113,6 +113,13 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
             label="Metadata"
             onClick={onEditMetadata}
           />
+          {onAddToPlaylist && (
+            <ActionButton
+              icon={<Plus className="size-4" />}
+              label="Playlist"
+              onClick={onAddToPlaylist}
+            />
+          )}
           {onEditLegal && (
             <ActionButton
               icon={<FileText className="size-4" />}

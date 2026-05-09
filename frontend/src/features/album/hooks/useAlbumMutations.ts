@@ -52,6 +52,18 @@ export const useAlbumMutations = () => {
   });
 
   // ==========================================
+  // 5. RESTORE (Admin)
+  // ==========================================
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => albumApi.restore(id),
+    onSuccess: () => {
+      toast.success("Đã khôi phục Album");
+      queryClient.invalidateQueries({ queryKey: albumKeys.lists() });
+    },
+    onError: (err) => handleError(err, "Lỗi khôi phục album"),
+  });
+
+  // ==========================================
   // 4. TOGGLE VISIBILITY (JSON)
   const toggleMutation = useMutation({
     mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
@@ -78,6 +90,9 @@ export const useAlbumMutations = () => {
 
     // 3. Delete Wrapper
     deleteAlbum: deleteMutation.mutate,
+    // 5. Restore Wrapper
+    restoreAlbum: restoreMutation.mutate,
+    restoreAlbumAsync: restoreMutation.mutateAsync,
 
     // 4. Toggle Wrapper
     toggleVisibility: (id: string, isPublic: boolean) =>
@@ -87,6 +102,7 @@ export const useAlbumMutations = () => {
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isRestoring: restoreMutation.isPending,
     isToggling: toggleMutation.isPending,
 
     // Loading chung cho Table Action (Disable nút khi đang làm bất cứ gì)
@@ -94,6 +110,7 @@ export const useAlbumMutations = () => {
       createMutation.isPending ||
       updateMutation.isPending ||
       deleteMutation.isPending ||
+      restoreMutation.isPending ||
       toggleMutation.isPending,
   };
 };

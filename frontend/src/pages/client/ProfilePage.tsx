@@ -36,10 +36,11 @@ import { formatDate } from "@/utils/track-helper";
 import { useProfileDashboard } from "@/features/profile/hooks/useProfileQuery";
 import UserPlaylistModal from "@/features/playlist/components/UserPlaylistModal";
 import { cn } from "@/lib/utils";
-import { IAlbum, IPlaylist, PublicAlbumCard, useMyPlaylists } from "@/features";
 import { Link, useSearchParams, useLocation } from "react-router-dom";
 import PlaylistCardSkeleton from "@/features/playlist/components/PlaylistCardSkeleton";
 import MusicResult from "@/components/ui/Result";
+import { IPlaylist, useMyPlaylists } from "@/features/playlist";
+import { IAlbum, PublicAlbumCard } from "@/features/album";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS

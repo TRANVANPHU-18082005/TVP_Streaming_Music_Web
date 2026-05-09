@@ -1,6 +1,7 @@
 import { type RouteObject } from "react-router-dom";
 import {
   FacebookCallbackPage,
+  ForceChangePasswordPage,
   ForgotPasswordPage,
   GoogleCallbackPage,
   LoginPage,
@@ -10,7 +11,6 @@ import {
   VerifyOtpPage,
 } from "@/pages";
 import { AUTH_PATHS } from "@/config/paths";
-import ForceChangePasswordPage from "@/pages/auth/ForceChangePasswordPage";
 
 // 1. Nhóm dành cho khách (Guest Only) - Đã login thì cấm vào
 export const guestAuthRoutes: RouteObject[] = [

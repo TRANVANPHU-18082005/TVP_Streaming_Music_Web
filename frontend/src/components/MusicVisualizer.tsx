@@ -43,7 +43,7 @@ export const WaveformBars = memo(
     active,
     bars = 5,
   }: {
-    color: string;
+    color?: string;
     active: boolean;
     bars?: number;
   }) => (
@@ -81,11 +81,11 @@ export const RealWaveform = memo(
   ({
     active = true,
     lines = 5,
-    color,
+    color = "primary",
   }: {
     active?: boolean;
     lines?: number;
-    color: string;
+    color?: string;
   }) => (
     <div
       className={cn(
@@ -118,11 +118,11 @@ export const VUMeter = memo(
   ({
     active = true,
     bars = 12,
-    color,
+    color = "primary",
   }: {
     active?: boolean;
     bars?: number;
-    color: string;
+    color?: string;
   }) => (
     <div
       className={cn(
@@ -164,12 +164,12 @@ export const VinylDisc = memo(
     active = true,
     size = 64,
     slow = false,
-    color,
+    color = "primary",
   }: {
     active?: boolean;
     size?: number;
     slow?: boolean;
-    color: string;
+    color?: string;
   }) => (
     <div
       className={cn(

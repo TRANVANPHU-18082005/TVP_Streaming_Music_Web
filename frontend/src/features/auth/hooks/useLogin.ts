@@ -57,8 +57,10 @@ export const useLogin = () => {
  * Helper xử lý lỗi tập trung - Chuẩn Production
  */
 const handleAuthError = (error: any, form: any, navigate: any) => {
-  const errorCode = error.errorCode;
-  const message = error.message || "Đăng nhập thất bại";
+  // Accept either server payload or axios-style error
+  const server = error?.response?.data ?? error;
+  const errorCode = server?.errorCode ?? server?.data?.errorCode;
+  const message = server?.message ?? error?.message ?? "Đăng nhập thất bại";
 
   switch (errorCode) {
     case "ACCOUNT_LOCKED":

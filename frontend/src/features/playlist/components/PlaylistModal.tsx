@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAppSelector } from "@/store/hooks";
-import { PLAYLIST_TYPES } from "../schemas/playlist.schema";
+import { PLAYLIST_TYPES, PlaylistType } from "../schemas/playlist.schema";
 import { cn } from "@/lib/utils";
 import { usePlaylistForm } from "../hooks/usePlaylistForm";
 import { TagInput } from "@/components/ui/tag-input";
@@ -243,11 +243,11 @@ const VisibilityCard = memo(
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           isSelected
             ? cn(
-                "ring-4 shadow-md",
-                option.activeBg,
-                option.activeBorder,
-                option.activeRing,
-              )
+              "ring-4 shadow-md",
+              option.activeBg,
+              option.activeBorder,
+              option.activeRing,
+            )
             : "border-input bg-transparent hover:border-primary/50 hover:bg-muted/30",
         )}
       >
@@ -316,14 +316,14 @@ const PlaylistModal = memo<PlaylistModalProps>(
     } = usePlaylistForm(
       playlistToEdit
         ? {
-            mode: "edit",
-            playlistToEdit,
-            onSubmit,
-          }
+          mode: "edit",
+          playlistToEdit,
+          onSubmit,
+        }
         : {
-            mode: "create",
-            onSubmit,
-          },
+          mode: "create",
+          onSubmit,
+        },
     );
     const {
       register,
@@ -540,7 +540,7 @@ const PlaylistModal = memo<PlaylistModalProps>(
                               className={cn(
                                 "h-11 bg-transparent border-input rounded-md text-[15px] font-semibold focus-visible:ring-1 focus-visible:ring-primary transition-all",
                                 errors.title &&
-                                  "border-destructive focus-visible:ring-destructive pr-10",
+                                "border-destructive focus-visible:ring-destructive pr-10",
                               )}
                             />
                             {errors.title && (
@@ -573,7 +573,7 @@ const PlaylistModal = memo<PlaylistModalProps>(
                             className={cn(
                               "resize-none custom-scrollbar bg-transparent border-input text-sm focus-visible:ring-1 focus-visible:ring-primary",
                               errors.description &&
-                                "border-destructive focus-visible:ring-destructive",
+                              "border-destructive focus-visible:ring-destructive",
                             )}
                           />
                           {errors.description && (
@@ -596,7 +596,7 @@ const PlaylistModal = memo<PlaylistModalProps>(
                             className={cn(
                               "h-10 bg-transparent border-input rounded-md text-sm",
                               errors.publishAt &&
-                                "border-destructive focus-visible:ring-destructive",
+                              "border-destructive focus-visible:ring-destructive",
                             )}
                           />
                           {errors.publishAt && (
@@ -692,7 +692,7 @@ const PlaylistModal = memo<PlaylistModalProps>(
                             <div>
                               <Select
                                 value={field.value}
-                                onValueChange={(v) => {
+                                onValueChange={(v: PlaylistType) => {
                                   field.onChange(v);
                                   setValue("type", v, { shouldDirty: true });
                                 }}
@@ -773,7 +773,7 @@ const PlaylistModal = memo<PlaylistModalProps>(
                                 "rounded-md border border-input bg-transparent overflow-hidden transition-all",
                                 "focus-within:ring-1 focus-within:ring-primary focus-within:border-primary",
                                 errors.collaborators &&
-                                  "border-destructive ring-1 ring-destructive/20",
+                                "border-destructive ring-1 ring-destructive/20",
                               )}
                             >
                               <UserSelector

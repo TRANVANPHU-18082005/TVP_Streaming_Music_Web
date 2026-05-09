@@ -6,13 +6,14 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { useRecentlyPlayedInfinite } from "@/features/profile/hooks/useProfileQuery";
-import { ITrack, TrackList } from "@/features";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { CLIENT_PATHS } from "@/config/paths";
 import MusicResult from "../../../components/ui/Result";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { APP_CONFIG } from "@/config/constants";
+import { ITrack, TrackList } from "@/features/track";
+import { QueueSourceType } from "@/features/player/slice/playerSlice";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -185,6 +186,12 @@ export const RecentlyListenedTrack = () => {
       hasNextPage: hasNextPage ?? false,
       onFetchNextPage: fetchNextPage,
       onRetry: refetchTracks,
+      source: {
+        id: "recently-played",
+        type: "recentlyPlayed" as QueueSourceType,
+        title: "Nghe gần đây",
+        url: `/tracks/history`,
+      },
     }),
     [
       TrackIds,

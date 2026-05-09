@@ -21,7 +21,7 @@ import {
 } from "../utils/cacheHelper";
 import { CounterAlbum, CounterTrack } from "../utils/counter";
 import themeColorService from "./themeColor.service";
-import { APP_CONFIG } from "../config/constants";
+import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
 import {
   AlbumAdminFilterInput,
   AlbumUserFilterInput,
@@ -530,6 +530,62 @@ class AlbumService {
     }
   }
 
+  // ── 9. RESTORE ALBUM (UNDO SOFT DELETE) ────────────────────────────────
+  async restoreAlbum(id: string, currentUser: IUser) {
+    const album = await Album.findById(id);
+    if (!album || !album.isDeleted) {
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Album không tồn tại hoặc không ở trạng thái đã xóa",
+      );
+    }
+
+    const isOwner =
+      currentUser.artistProfile &&
+      album.artist.toString() === currentUser.artistProfile.toString();
+    const isAdmin = currentUser.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      throw new ApiError(httpStatus.FORBIDDEN, "Bạn không có quyền khôi phục");
+    }
+
+    const artistId = album.artist.toString();
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      await Album.findByIdAndUpdate(
+        id,
+        { isDeleted: false, deletedAt: null },
+        { session },
+      );
+
+      // Tăng counter cho Artist
+      await Artist.findByIdAndUpdate(
+        artistId,
+        { $inc: { totalAlbums: 1 } },
+        { session },
+      );
+
+      await session.commitTransaction();
+
+      // Hậu kỳ: invalidate caches và counters
+      Promise.allSettled([
+        CounterAlbum.increment(),
+        invalidateAlbumCache(id),
+        invalidateAlbumListCache(),
+      ]).catch(console.error);
+
+      return { message: "Khôi phục album thành công", _id: id };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
   // ── 6. GET DETAIL ─────────────────────────────────────────────────────────
 
   private async checkAlbumAccess(
@@ -674,23 +730,10 @@ class AlbumService {
     const [tracks, total] = await Promise.all([
       Track.find(trackQuery)
         .sort({ playCount: -1, createdAt: -1 })
-
         .skip(skip)
         .limit(limit)
-        .select(
-          "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
-        )
-        .select(
-          "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
-        )
-        .populate("artist", "name avatar slug")
-        .populate("featuringArtists", "name slug avatar")
-        .populate("album", "title coverImage slug")
-        .populate("genres", "name slug")
-        .populate({
-          path: "moodVideo",
-          select: "videoUrl loop",
-        })
+        .select(TRACK_SELECT)
+        .populate(TRACK_POPULATE as any)
         .lean(),
       Track.countDocuments(trackQuery),
     ]);

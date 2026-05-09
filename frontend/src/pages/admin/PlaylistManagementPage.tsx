@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import PageHeader from "@/components/ui/PageHeader";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import Pagination from "@/utils/pagination";
-import ConfirmationModal from "@/components/ui/ConfirmationModal";
 import MusicResult from "@/components/ui/Result";
 
 // Feature Components
@@ -18,15 +17,15 @@ import PlaylistModal from "@/features/playlist/components/PlaylistModal";
 // 🔥 Hooks mới (đã tách)
 import { usePlaylistParams } from "@/features/playlist/hooks/usePlaylistParams";
 import { usePlaylistMutations } from "@/features/playlist/hooks/usePlaylistMutations";
-import {
-  IPlaylist,
-  Playlistpageskeleton,
-  usePlaylistsByAdminQuery,
-} from "@/features";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import {
+  IPlaylist,
+  Playlistpageskeleton,
+  usePlaylistsByAdminQuery,
+} from "@/features/playlist";
 
 const PlaylistManagementPage = () => {
   // --- 1. STATE MANAGEMENT (URL Source of Truth) ---
@@ -47,6 +46,7 @@ const PlaylistManagementPage = () => {
     createPlaylistAsync,
     updatePlaylistAsync,
     deletePlaylist,
+    restorePlaylist,
     isMutating, // Loading cho Save/Delete
   } = usePlaylistMutations();
 
@@ -64,8 +64,6 @@ const PlaylistManagementPage = () => {
     setPlaylistToEdit(playlist);
     setIsModalOpen(true);
   };
-
-
 
   // 🔥 CORE LOGIC: Handle Form Submit (FormData)
   // Logic giống hệt AlbumManagementPage: Đơn giản, dễ hiểu
@@ -186,7 +184,11 @@ const PlaylistManagementPage = () => {
               playlist={playlist}
               onEdit={() => handleOpenEdit(playlist)}
               isMutating={isMutating}
-              onDelete={() => deletePlaylist(playlist._id)}
+              onDelete={() =>
+                playlist.isDeleted
+                  ? restorePlaylist(playlist._id)
+                  : deletePlaylist(playlist._id)
+              }
             />
           ))}
         </div>

@@ -5,7 +5,6 @@ import { History } from "lucide-react";
 import MusicResult from "@/components/ui/Result";
 import Pagination from "@/utils/pagination";
 
-import { ITrack } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
@@ -14,6 +13,8 @@ import { AnimatePresence } from "framer-motion";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useRecentlyPlayedInfinite } from "@/features/profile/hooks/useProfileQuery";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { ITrack } from "@/features/track";
+import { QueueSourceType } from "@/features/player";
 
 const TrackListModule = import("@/features/track/components/TrackList");
 const TrackListLazy = lazy(() =>
@@ -211,6 +212,12 @@ const TrackHistoryPage: React.FC = () => {
       hasNextPage: hasNextPage ?? false,
       onFetchNextPage: fetchNextPage,
       onRetry: refetchTracks,
+      source: {
+        id: "recently-played",
+        type: "recentlyPlayed" as QueueSourceType,
+        title: "Nghe gần đây",
+        url: `/tracks/history`,
+      },
     }),
     [
       TrackIds,

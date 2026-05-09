@@ -1,18 +1,20 @@
 import { lazy, Suspense } from "react";
 import { CLIENT_PATHS } from "@/config/paths";
-import TrackHitory from "@/pages/client/TrackHistoryPage";
 import { type RouteObject } from "react-router-dom";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { TrackHistoryPage } from "@/pages/client";
 
-const LazyTrackDetailPage = lazy(() => import("@/pages/client/track/TrackDetailPage"));
+const LazyTrackDetailPage = lazy(
+  () => import("@/pages/client/track/TrackDetailPage"),
+);
 
 export const trackRoutes: RouteObject[] = [
   {
     path: CLIENT_PATHS.TRACK_HISTORY,
-    element: <TrackHitory />,
+    element: <TrackHistoryPage />,
   },
   {
-    path: CLIENT_PATHS.TRACK_DETAIL(":slug"),
+    path: CLIENT_PATHS.TRACK_DETAIL(":id"),
     element: (
       <Suspense fallback={<WaveformLoader glass={false} text="Đang tải..." />}>
         <LazyTrackDetailPage />

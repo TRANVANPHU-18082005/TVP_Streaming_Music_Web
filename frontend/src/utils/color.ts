@@ -55,3 +55,51 @@ export function buildPalette(hex: string): Palette {
     glowShadow: `0 8px 28px -6px ${r(0.55)}`,
   };
 }
+function colorWithOpacity(color: string, opacity: number) {
+  if (color.startsWith("#")) {
+    return hexToRgba(color, opacity);
+  }
+
+  if (color.startsWith("hsl")) {
+    return color.replace("hsl(", "hsla(").replace(")", ` / ${opacity})`);
+  }
+
+  return color;
+}
+function extractHslChannels(color: string) {
+  if (color.startsWith("hsl")) {
+    return color.replace("hsl(", "").replace(")", "");
+  }
+
+  return hexToHslChannels(color);
+}
+export function buildPaletteWithColor(color: string): Palette {
+  const r = (opacity: number) => colorWithOpacity(color, opacity);
+
+  return {
+    hex: color,
+    r,
+    hslChannels: extractHslChannels(color),
+
+    heroGradient: `
+      linear-gradient(
+        180deg,
+        ${r(0.62)} 0%,
+        ${r(0.22)} 48%,
+        transparent 100%
+      )
+    `,
+
+    glowShadow: `0 8px 28px -6px ${r(0.55)}`,
+  };
+}
+export function getCssVariable(name: string) {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+}
+export function getThemePrimary() {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue("--color-primary")
+    .trim();
+}

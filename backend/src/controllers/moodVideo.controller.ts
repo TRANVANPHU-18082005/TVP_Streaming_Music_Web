@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
 import { MoodVideoFilterInput } from "../validations/moodVideo.validation";
-import MoodVideoService from "../services/MoodVideo.service";
+import MoodVideoService from "../services/moodVideo.service";
 
 export const createMoodVideo = catchAsync(
   async (req: Request, res: Response) => {

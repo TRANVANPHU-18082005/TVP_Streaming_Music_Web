@@ -1,6 +1,7 @@
 // --- PHÂN TÁCH DỮ LIỆU CHI TIẾT ---
 
-import { PlayInteraction, RealtimeStats } from "@/features";
+import { RealtimeStats } from "@/features/analytics";
+import { PlayInteraction } from "@/features/interaction";
 
 export interface NotificationData {
   id?: string;

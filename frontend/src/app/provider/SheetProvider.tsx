@@ -20,7 +20,11 @@ import {
   ContextSheetPayload,
   ContextSheetProviderProps,
 } from "@/types/sheet.types";
-import { IAlbum, IArtist, IGenre, IPlaylist, ITrack } from "@/features";
+import { IAlbumDetail } from "@/features/album";
+import { IArtistDetail } from "@/features/artist";
+import { IGenreDetail } from "@/features/genre";
+import { ITrack } from "@/features/track";
+import { IPlaylistDetail } from "@/features/playlist";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONTEXT
@@ -47,33 +51,9 @@ export function useContextSheet() {
 export function ContextSheetProvider({
   children,
   zIndexBase = 90,
-  // Album callbacks
-  onAlbumAddToQueue,
-  onAlbumAddAllToPlaylist,
-  onAlbumGoToArtist,
-  onAlbumShare,
-  onAlbumDownloadAll,
-  // Playlist callbacks
-  onPlaylistPlay,
-  onPlaylistShuffle,
-  onPlaylistAddToQueue,
+
   onPlaylistEdit,
   onPlaylistDelete,
-  onPlaylistToggleVisibility,
-  onPlaylistShare,
-  onPlaylistAddToLibrary,
-  // Artist callbacks
-
-  onArtistViewProfile,
-
-  onArtistShare,
-
-  onArtistAddToQueue,
-  // Genre callbacks
-
-  onGenreAddToQueue,
-
-  onGenreShare,
 }: ContextSheetProviderProps) {
   // use zIndexBase to avoid unused var lint; sheets themselves use their own zIndex values
   void zIndexBase;
@@ -93,14 +73,17 @@ export function ContextSheetProvider({
   // Cleanup timer on unmount
   useEffect(() => () => clearTimeout(closeTimerRef.current), []);
 
-  const openAlbumSheet = useCallback((entity: IAlbum) => {
+  const openAlbumSheet = useCallback((entity: IAlbumDetail) => {
     clearTimeout(closeTimerRef.current);
     setFrozen({ type: "album", entity });
     setActive({ type: "album", entity });
   }, []);
 
   const openAddToPlaylistSheet = useCallback(
-    (sourceEntity?: IAlbum | IArtist | IGenre, tracks?: ITrack[] | null) => {
+    (
+      sourceEntity?: IAlbumDetail | IArtistDetail | IGenreDetail,
+      tracks?: ITrack[] | null,
+    ) => {
       clearTimeout(closeTimerRef.current);
       setFrozen({
         type: "addToPlaylist",
@@ -116,7 +99,7 @@ export function ContextSheetProvider({
     [],
   );
 
-  const openPlaylistSheet = useCallback((entity: IPlaylist) => {
+  const openPlaylistSheet = useCallback((entity: IPlaylistDetail) => {
     clearTimeout(closeTimerRef.current);
     setFrozen({ type: "playlist", entity });
     setActive({ type: "playlist", entity });
@@ -128,13 +111,13 @@ export function ContextSheetProvider({
     setActive({ type: "track", track: track ?? null } as ContextSheetPayload);
   }, []);
 
-  const openArtistSheet = useCallback((entity: IArtist) => {
+  const openArtistSheet = useCallback((entity: IArtistDetail) => {
     clearTimeout(closeTimerRef.current);
     setFrozen({ type: "artist", entity });
     setActive({ type: "artist", entity });
   }, []);
 
-  const openGenreSheet = useCallback((entity: IGenre) => {
+  const openGenreSheet = useCallback((entity: IGenreDetail) => {
     clearTimeout(closeTimerRef.current);
     setFrozen({ type: "genre", entity });
     setActive({ type: "genre", entity });
@@ -144,7 +127,8 @@ export function ContextSheetProvider({
   const display = active ?? frozen;
 
   // Capture concrete entities so delayed callbacks don't read a null `active` later
-  const albumEntity = display?.type === "album" ? display.entity : undefined;
+  const albumEntity =
+    display?.type === "album" ? (display.entity as IAlbumDetail) : undefined;
   const playlistEntity =
     display?.type === "playlist" ? display.entity : undefined;
   const artistEntity = display?.type === "artist" ? display.entity : undefined;
@@ -180,25 +164,14 @@ export function ContextSheetProvider({
             ? (tracks) => openAddToPlaylistSheet(albumEntity, tracks)
             : undefined
         }
-        onAddToQueue={onAlbumAddToQueue}
-        onAddAllToPlaylist={onAlbumAddAllToPlaylist}
-        onGoToArtist={onAlbumGoToArtist}
-        onShare={onAlbumShare}
-        onDownloadAll={onAlbumDownloadAll}
       />
 
       <PlaylistSheet
         playlist={playlistEntity}
         isOpen={active?.type === "playlist"}
         onClose={closeContextSheet}
-        onPlay={onPlaylistPlay}
-        onShuffle={onPlaylistShuffle}
-        onAddToQueue={onPlaylistAddToQueue}
         onEdit={onPlaylistEdit}
         onDelete={onPlaylistDelete}
-        onToggleVisibility={onPlaylistToggleVisibility}
-        onShare={onPlaylistShare}
-        onAddToLibrary={onPlaylistAddToLibrary}
       />
 
       <ArtistSheet
@@ -210,9 +183,6 @@ export function ContextSheetProvider({
             ? (tracks) => openAddToPlaylistSheet(artistEntity, tracks)
             : undefined
         }
-        onAddToQueue={onArtistAddToQueue}
-        onViewProfile={onArtistViewProfile}
-        onShare={onArtistShare}
       />
 
       <GenreSheet
@@ -224,8 +194,6 @@ export function ContextSheetProvider({
             ? (tracks) => openAddToPlaylistSheet(genreEntity, tracks)
             : undefined
         }
-        onAddToQueue={onGenreAddToQueue}
-        onShare={onGenreShare}
       />
 
       {/* Track Sheet (global) */}

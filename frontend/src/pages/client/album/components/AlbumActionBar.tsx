@@ -3,21 +3,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Play, Pause, Loader2, MoreHorizontal, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlbumLikeButton } from "@/features/interaction/components/LikeButton";
-import type { IAlbum, IAlbumDetail } from "@/features";
 import { Palette } from "@/utils/color";
+import { IAlbumDetail } from "@/features/album";
 
 const SP_SNAPPY = { type: "spring", stiffness: 440, damping: 28 } as const;
 
 export interface AlbumActionBarProps {
   album: IAlbumDetail;
-  handleMoreOptions: (album: IAlbum) => void;
+  handleMoreOptions: (album: IAlbumDetail) => void;
   palette: Palette;
   isLoadingPlay: boolean;
   isLoadingShuffle: boolean;
   isPlaying: boolean;
   hasTracks: boolean;
   density?: "compact" | "full";
-  onPlay: () => void;
+  onPlay: (e?: React.MouseEvent) => void;
   onShuffle: () => void;
 }
 

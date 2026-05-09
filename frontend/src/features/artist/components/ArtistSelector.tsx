@@ -14,8 +14,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { getInitialsTextAvartar } from "@/utils/genTextAvartar";
 import { Label } from "@/components/ui/label";
-import { IArtist, useArtistsByUserQuery } from "@/features";
 import { APP_CONFIG } from "@/config/constants";
+import { IArtist } from "../types";
+import { useArtistsByUserQuery } from "../hooks/useArtistsQuery";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DEBOUNCE HOOK

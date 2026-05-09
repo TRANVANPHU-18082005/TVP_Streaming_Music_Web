@@ -190,7 +190,11 @@ export const GenreCard = memo<GenreCardProps>(
 
             {/* Sóng nhạc mini cạnh tiêu đề — chỉ hiện khi Active, giống AlbumCard */}
             {isThisGenreActive && (
-              <WaveformBars active={isThisGenrePlaying} bars={3} />
+              <WaveformBars
+                active={isThisGenrePlaying}
+                bars={3}
+                color="primary"
+              />
             )}
           </div>
 

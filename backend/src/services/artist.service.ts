@@ -25,7 +25,7 @@ import {
   invalidateArtistCache,
 } from "../utils/cacheHelper";
 import escapeStringRegexp from "escape-string-regexp";
-import { APP_CONFIG } from "../config/constants";
+import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
 import themeColorService from "./themeColor.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,20 +128,8 @@ class ArtistService {
         .sort({ playCount: -1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .select(
-          "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
-        )
-        .select(
-          "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
-        )
-        .populate("artist", "name avatar slug")
-        .populate("featuringArtists", "name slug avatar")
-        .populate("album", "title coverImage slug")
-        .populate("genres", "name slug")
-        .populate({
-          path: "moodVideo",
-          select: "videoUrl loop",
-        })
+        .select(TRACK_SELECT)
+        .populate(TRACK_POPULATE as any)
         .lean(),
       Track.countDocuments(trackQuery),
     ]);
@@ -699,6 +687,52 @@ class ArtistService {
       ]).catch(console.error);
 
       return true;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  // ── 9. RESTORE ARTIST (UNDO SOFT DELETE) ───────────────────────────────
+  async restoreArtist(id: string) {
+    const artist = await Artist.findById(id);
+    if (!artist || !artist.isDeleted) {
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Không tìm thấy nghệ sĩ hoặc không ở trạng thái đã xóa",
+      );
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      await Artist.findByIdAndUpdate(
+        id,
+        { isDeleted: false, isActive: true, deletedAt: null },
+        { session },
+      );
+
+      // Nếu Artist có liên kết User, cố gắng phục hồi role + artistProfile
+      if (artist.user) {
+        await User.findByIdAndUpdate(
+          artist.user,
+          { role: "artist", artistProfile: artist._id },
+          { session },
+        );
+      }
+
+      await session.commitTransaction();
+
+      // Hậu kỳ: invalidate cache
+      Promise.allSettled([
+        invalidateArtistCache(id),
+        cacheRedis.del("artists:popular"),
+      ]).catch(console.error);
+
+      return { message: "Khôi phục nghệ sĩ thành công", _id: id };
     } catch (error) {
       await session.abortTransaction();
       throw error;

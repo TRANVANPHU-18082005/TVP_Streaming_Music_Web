@@ -10,8 +10,9 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { shallowEqual } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
-import { ListMusic, X, Play, GripVertical } from "lucide-react";
+import { ListMusic, X, GripVertical, Play, Loader2, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
+import PlayCell from "@/features/track/components/PlayCell";
 
 // DnD Kit
 import {
@@ -42,12 +43,12 @@ import {
 
 import type { RootState } from "@/store/store";
 import type { ITrack } from "@/features/track/types";
-import { jumpToIndex, reorderQueue, setIsPlaying } from "@/features";
+
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { WaveformBars } from "@/components/MusicVisualizer";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { TrackTitleMarquee } from "./TrackTitleMarquee";
 import { toCDN } from "@/utils/track-helper";
+import { jumpToIndex, reorderQueue, selectPlayer, setIsPlaying } from "..";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -108,8 +109,8 @@ interface QueueEntry {
 function useStablePlayCallbacks(
   entries: QueueEntry[],
   onPlay: (index: number, trackId: string) => void,
-): Map<string, () => void> {
-  const mapRef = useRef(new Map<string, () => void>());
+): Map<string, (e?: React.MouseEvent) => void> {
+  const mapRef = useRef(new Map<string, (e?: React.MouseEvent) => void>());
   const onPlayRef = useRef(onPlay);
   useEffect(() => {
     onPlayRef.current = onPlay;
@@ -125,7 +126,7 @@ function useStablePlayCallbacks(
       if (!map.has(key)) {
         const ci = index,
           ci_id = id;
-        map.set(key, () => onPlayRef.current(ci, ci_id));
+        map.set(key, (_e?: React.MouseEvent) => onPlayRef.current(ci, ci_id));
       }
     }
     for (const k of map.keys()) if (!nextKeys.has(k)) map.delete(k);
@@ -159,65 +160,109 @@ SectionLabel.displayName = "SectionLabel";
 
 const IndexSlot = memo(
   ({
-    queueIndex,
-    isCurrent,
+    index,
+    isActive,
     isPlaying,
+    onPlay,
   }: {
-    queueIndex: number;
-    isCurrent: boolean;
+    index: number;
+    isActive: boolean;
     isPlaying: boolean;
-  }) => (
-    <div
-      className="w-7 flex justify-center items-center shrink-0"
-      aria-hidden="true"
-    >
-      {isCurrent ? (
-        <WaveformBars active={isPlaying} bars={4} />
-      ) : (
+    onPlay?: (e?: React.MouseEvent) => void;
+  }) => {
+    return (
+      <div
+        className="w-7 flex justify-center items-center shrink-0"
+        aria-hidden="true"
+      >
         <div className="relative flex justify-center items-center w-full h-full">
-          <span className="text-xs font-mono text-[var(--fp-fg-subtle)] group-hover:opacity-0 transition-opacity">
-            {queueIndex + 1}
-          </span>
-          <Play className="size-3.5 fill-current text-[var(--fp-fg)] absolute opacity-0 group-hover:opacity-100 transition-opacity" />
+          <PlayCell
+            index={index}
+            isActive={isActive}
+            isPlaying={isPlaying}
+            onPlay={onPlay ?? (() => {})}
+          />
         </div>
-      )}
-    </div>
-  ),
+      </div>
+    );
+  },
   (prev, next) =>
-    prev.queueIndex === next.queueIndex &&
-    prev.isCurrent === next.isCurrent &&
-    (!prev.isCurrent || prev.isPlaying === next.isPlaying),
+    prev.index === next.index &&
+    prev.isActive === next.isActive &&
+    (!prev.isActive || prev.isPlaying === next.isPlaying),
 );
 IndexSlot.displayName = "IndexSlot";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRACK COVER — isolated, re-renders only on src/isCurrent change
+// TRACK COVER — isolated, re-renders only on src/isActive change
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TrackCover = memo(
   ({
     src,
     title,
-    isCurrent,
+    isActive,
+    isLoading = false,
+    isCurrentPlaying = false,
+    onClick,
   }: {
     src?: string;
     title: string;
-    isCurrent: boolean;
+    isActive: boolean;
+    isLoading?: boolean;
+    isCurrentPlaying?: boolean;
+    onClick?: (e?: React.MouseEvent) => void;
   }) => (
-    <div className="relative size-9 shrink-0 rounded-md overflow-hidden bg-[var(--fp-border)]">
+    <div
+      className="relative size-9 shrink-0 rounded-md overflow-hidden bg-[var(--fp-border)]"
+      onClick={
+        onClick
+          ? (e) => {
+              e.stopPropagation();
+              onClick(e);
+            }
+          : undefined
+      }
+    >
       <ImageWithFallback
         src={src}
         alt={`${title} cover`}
         className={cn(
           "size-full object-cover transition-all duration-300",
-          isCurrent
+          isActive
             ? "opacity-100 scale-[1.04]"
             : "opacity-55 group-hover:opacity-90 group-hover:scale-[1.04]",
         )}
       />
+      <motion.div
+        className="absolute inset-0 flex items-center justify-center dark:bg-black/40 bg-black/30 backdrop-blur-[1px]"
+        initial={{ opacity: 0 }}
+        whileHover={{ opacity: 1 }}
+        animate={{
+          opacity:
+            (isActive && isLoading) ||
+            (isActive && isCurrentPlaying && !isLoading)
+              ? 1
+              : 0,
+        }}
+      >
+        <AnimatePresence mode="wait">
+          {isLoading ? (
+            <Loader2 className="size-4 text-foreground animate-spin" />
+          ) : isCurrentPlaying ? (
+            <Pause className="size-4 text-foreground fill-foreground" />
+          ) : (
+            <Play className="size-4 text-foreground fill-foreground ml-0.5" />
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   ),
-  (prev, next) => prev.src === next.src && prev.isCurrent === next.isCurrent,
+  (prev, next) =>
+    prev.src === next.src &&
+    prev.isActive === next.isActive &&
+    prev.isLoading === next.isLoading &&
+    prev.isCurrentPlaying === next.isCurrentPlaying,
 );
 TrackCover.displayName = "TrackCover";
 
@@ -231,8 +276,9 @@ interface QueueItemProps {
   trackId: string;
   queueIndex: number;
   isCurrent: boolean;
+  isLoading: boolean;
   isPlaying: boolean;
-  onPlay: () => void;
+  onPlay: (e?: React.MouseEvent) => void;
   animate: boolean;
   currentItemRef?: React.RefObject<HTMLDivElement | null>;
 }
@@ -242,6 +288,7 @@ const QueueItem = memo(
     trackId,
     queueIndex,
     isCurrent,
+    isLoading,
     isPlaying,
     onPlay,
     animate,
@@ -272,7 +319,9 @@ const QueueItem = memo(
         className={cn(
           "group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer",
           "transition-colors duration-150 select-none",
-          isCurrent ? "bg-[var(--fp-active-bg)]" : "hover:bg-[var(--fp-hover-bg)]",
+          isCurrent
+            ? "bg-[var(--fp-active-bg)]"
+            : "hover:bg-[var(--fp-hover-bg)]",
         )}
         onClick={onPlay}
         role="button"
@@ -290,19 +339,24 @@ const QueueItem = memo(
         )}
 
         <IndexSlot
-          queueIndex={queueIndex}
-          isCurrent={isCurrent}
+          index={queueIndex}
+          isActive={isCurrent}
           isPlaying={isPlaying}
+          onPlay={(e) => onPlay?.(e)}
         />
         <TrackCover
           src={toCDN(track.coverImage) || track.coverImage}
           title={track.title}
-          isCurrent={isCurrent}
+          isLoading={isLoading}
+          isCurrentPlaying={isPlaying && isCurrent}
+          isActive={isCurrent}
+          onClick={(e) => onPlay?.(e)}
         />
 
         <div className="flex-1 min-w-0">
           {isCurrent ? (
             <TrackTitleMarquee
+              id={track._id}
               title={track.title}
               mainArtist={track.artist}
               featuringArtists={track.featuringArtists}
@@ -416,8 +470,9 @@ interface SortableQueueItemProps {
   trackId: string;
   queueIndex: number;
   isCurrent: boolean;
+  isLoading: boolean;
   isPlaying: boolean;
-  onPlay: () => void;
+  onPlay: (e?: React.MouseEvent) => void;
   animate: boolean;
   isOverlay?: boolean;
   overlayTrack?: ITrack; // passed only for DragOverlay instance
@@ -429,6 +484,7 @@ export const SortableQueueItem = memo(
     queueIndex,
     isPlaying,
     isCurrent,
+    isLoading = false,
     onPlay,
     animate,
     isOverlay = false,
@@ -487,9 +543,11 @@ export const SortableQueueItem = memo(
         className={cn(
           "group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer",
           "transition-colors duration-150 select-none",
-          isCurrent ? "bg-[var(--fp-active-bg)]" : "hover:bg-[var(--fp-hover-bg)]",
+          isCurrent
+            ? "bg-[var(--fp-active-bg)]"
+            : "hover:bg-[var(--fp-hover-bg)]",
           isOverlay &&
-          "shadow-2xl ring-1 ring-[var(--fp-border)] bg-[hsl(var(--surface-2))] opacity-95 scale-[1.02]",
+            "shadow-2xl ring-1 ring-[var(--fp-border)] bg-[hsl(var(--surface-2))] opacity-95 scale-[1.02]",
         )}
         onClick={onPlay}
         role="button"
@@ -506,19 +564,24 @@ export const SortableQueueItem = memo(
         )}
 
         <IndexSlot
-          queueIndex={queueIndex}
-          isCurrent={isCurrent}
+          index={queueIndex}
+          isActive={isCurrent}
           isPlaying={isPlaying}
+          onPlay={(e) => onPlay?.(e)}
         />
         <TrackCover
           src={toCDN(track.coverImage) || track.coverImage}
           title={track.title}
-          isCurrent={isCurrent}
+          isActive={isCurrent}
+          isLoading={isLoading}
+          isCurrentPlaying={isPlaying}
+          onClick={(e) => onPlay?.(e)}
         />
 
         <div className="flex-1 min-w-0">
           {isCurrent ? (
             <TrackTitleMarquee
+              id={track._id}
               title={track.title}
               mainArtist={track.artist}
               featuringArtists={track.featuringArtists}
@@ -619,8 +682,10 @@ const HistoryList = memo(
               queueIndex={index}
               isCurrent={false}
               isPlaying={false}
+              isLoading={false}
               onPlay={
-                playCallbacks.get(`${index}:${id}`) ?? (() => onPlay(index, id))
+                playCallbacks.get(`${index}:${id}`) ??
+                ((_e?: React.MouseEvent) => onPlay(index, id))
               }
               animate={false}
             />
@@ -640,6 +705,7 @@ HistoryList.displayName = "HistoryList";
 
 interface UpNextDndSectionProps {
   entries: QueueEntry[];
+  isLoading: boolean;
   isPlaying: boolean;
   currentTrackId: string | null;
   currentIndex: number;
@@ -649,6 +715,7 @@ interface UpNextDndSectionProps {
 const UpNextDndSection = memo(
   ({
     entries,
+    isLoading,
     isPlaying,
     currentTrackId,
     currentIndex,
@@ -783,6 +850,7 @@ const UpNextDndSection = memo(
           <AnimatePresence mode="popLayout" initial={false}>
             {localEntries.map(({ id, index }, i) => (
               <SortableQueueItem
+                isLoading={isLoading}
                 key={id}
                 trackId={id}
                 queueIndex={index}
@@ -790,7 +858,7 @@ const UpNextDndSection = memo(
                 isPlaying={isPlaying}
                 onPlay={
                   playCallbacks.get(`${index}:${id}`) ??
-                  (() => onPlay(index, id))
+                  ((_e?: React.MouseEvent) => onPlay(index, id))
                 }
                 animate={i < 30}
               />
@@ -807,12 +875,13 @@ const UpNextDndSection = memo(
         >
           {activeTrack && activeEntry ? (
             <SortableQueueItem
+              isLoading={isLoading}
               trackId={activeTrackId!}
               overlayTrack={activeTrack}
               queueIndex={activeEntry.index}
               isCurrent={false}
               isPlaying={false}
-              onPlay={() => { }}
+              onPlay={() => {}}
               animate={false}
               isOverlay
             />
@@ -847,7 +916,9 @@ export const QueuePanel = memo(
         }),
         shallowEqual,
       );
-
+    const { loadingState } = useSelector(selectPlayer); // Subscribe to player state for isActive/isPlaying
+    const isGlobalLoading =
+      loadingState === "loading" || loadingState === "buffering";
     // PERF-1: only current track's metadata — not whole cache
     const currentTrack = useSelector((s: RootState) =>
       currentTrackId
@@ -864,8 +935,8 @@ export const QueuePanel = memo(
       () =>
         currentIndex >= 0
           ? activeQueueIds
-            .slice(currentIndex + 1)
-            .map((id, i) => ({ id, index: currentIndex + 1 + i }))
+              .slice(currentIndex + 1)
+              .map((id, i) => ({ id, index: currentIndex + 1 + i }))
           : activeQueueIds.map((id, i) => ({ id, index: i })),
       [activeQueueIds, currentIndex],
     );
@@ -874,8 +945,8 @@ export const QueuePanel = memo(
       () =>
         currentIndex > 0
           ? activeQueueIds
-            .slice(0, currentIndex)
-            .map((id, i) => ({ id, index: i }))
+              .slice(0, currentIndex)
+              .map((id, i) => ({ id, index: i }))
           : [],
       [activeQueueIds, currentIndex],
     );
@@ -986,6 +1057,7 @@ export const QueuePanel = memo(
                       trackId={currentTrack._id}
                       queueIndex={currentIndex}
                       isCurrent
+                      isLoading={isGlobalLoading}
                       isPlaying={isPlaying}
                       onPlay={handleCurrentPlay}
                       animate
@@ -1005,6 +1077,7 @@ export const QueuePanel = memo(
                     </span>
                   </SectionLabel>
                   <UpNextDndSection
+                    isLoading={isGlobalLoading}
                     entries={upNextEntries}
                     isPlaying={isPlaying}
                     currentTrackId={currentTrackId}

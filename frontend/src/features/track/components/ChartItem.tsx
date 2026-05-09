@@ -426,7 +426,11 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
             !isCurrentTrack && cfg.numGlow,
           )}
         >
-          {isCurrentTrack ? <WaveformBars active={isActivePlaying} /> : rank}
+          {isCurrentTrack ? (
+            <WaveformBars active={isActivePlaying} color="primary" />
+          ) : (
+            rank
+          )}
         </div>
 
         <RankBadge trend={track.trend} rankDelta={track.rankDelta} />
@@ -476,6 +480,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         {/* HIỂN THỊ THỰC TẾ */}
         {isActive ? (
           <TrackTitleMarquee
+            id={track._id}
             title={track.title}
             mainArtist={track.artist}
             featuringArtists={track.featuringArtists}

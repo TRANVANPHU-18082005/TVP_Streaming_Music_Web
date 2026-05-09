@@ -393,6 +393,18 @@ class AuthService {
   async logout(userId: string) {
     // Dọn dẹp Redis Interaction để tránh lệch data cho user sau
     await interactionService.clearUserCache(userId);
+
+    // Thu hồi refresh token server-side: unset field trong DB
+    try {
+      await User.findByIdAndUpdate(userId, { $unset: { refreshToken: 1 } });
+    } catch (err) {
+      // Không block logout nếu việc cập nhật DB thất bại
+      console.warn(
+        "Warning: failed to unset refreshToken for user",
+        userId,
+        err,
+      );
+    }
   }
 }
 

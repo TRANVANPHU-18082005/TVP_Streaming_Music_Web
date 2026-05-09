@@ -885,14 +885,13 @@ interface ViewHeaderProps {
 const ViewHeader = memo(
   ({
     handleMoreOptions,
-    track,
+
     currentView,
     phase,
     setView,
     setSwipeDir,
     onCollapse,
   }: ViewHeaderProps) => {
-
     const handleViewChange = useCallback(
       (v: PlayerView) => {
         setSwipeDir(VIEWS.indexOf(v) > VIEWS.indexOf(currentView) ? -1 : 1);
@@ -1233,7 +1232,7 @@ const FullPlayerComponent = ({
   );
   const phase = usePhase();
   useViewportHeight();
-
+  console.log(track);
   // LOCAL currentTime: poll via getCurrentTime() so parent time ticks
   // don't force FullPlayer re-renders. Updates at ~4Hz when playing.
   const [currentTime, setCurrentTime] = useState(getCurrentTime);
@@ -1248,8 +1247,7 @@ const FullPlayerComponent = ({
   }, [isPlaying, duration]);
 
   // ── Sheet delegation: use global sheet context (centralized rendering)
-  const { openTrackSheet, closeContextSheet } =
-    useContextSheet();
+  const { openTrackSheet, closeContextSheet } = useContextSheet();
 
   const handleMoreOptions = useCallback(
     (t: ITrack) => openTrackSheet(t),
@@ -1358,13 +1356,11 @@ const FullPlayerComponent = ({
           {(currentView !== "mood" || !track.moodVideo) && !showQueue && (
             <ViewHeader
               track={track}
-              handleMoreOptions={
-                (e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  handleMoreOptions(track);
-                }
-              }
+              handleMoreOptions={(e: React.MouseEvent) => {
+                e.stopPropagation();
+                e.preventDefault();
+                handleMoreOptions(track);
+              }}
               currentView={currentView}
               phase={phase}
               setView={setCurrentView}

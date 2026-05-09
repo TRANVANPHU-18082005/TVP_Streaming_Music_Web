@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import { UserSelector } from "@/features/user/components/UserSelector";
@@ -7,8 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle } from "lucide-react";
-import { NationalitySelector } from "@/components/ui/NationalitySelector";
-import { ArtistEditFormValues, IArtist } from "@/features";
+const NationalitySelector = lazy(() =>
+  import("@/components/ui/NationalitySelector").then((m) => ({
+    default: m.NationalitySelector,
+  })),
+);
+import { WaveformBars } from "@/components/MusicVisualizer";
+import { ArtistEditFormValues } from "../../schemas/artist.schema";
+import { IArtist } from "../../types";
 
 interface InfoSectionProps {
   form: UseFormReturn<ArtistEditFormValues>;
@@ -68,21 +74,23 @@ const InfoSection: React.FC<InfoSectionProps> = ({ form, artistToEdit }) => {
             // 🔥 LỖI Ở ĐÂY: Đã xóa defaultValue="VN".
             // Form Edit sẽ tự đổ "US" vào đây, Form Create sẽ tự lấy "VN" từ artist.schema.ts
             render={({ field }) => (
-              <NationalitySelector
-                value={field.value}
-                onChange={(val) => {
-                  field.onChange(val);
-                  setValue("nationality", val, {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  });
-                }}
-                className={cn(
-                  "w-full",
-                  errors.nationality &&
-                    "border-destructive bg-destructive/5 ring-1 ring-destructive/20",
-                )}
-              />
+              <Suspense fallback={<WaveformBars active />}>
+                <NationalitySelector
+                  value={field.value}
+                  onChange={(val) => {
+                    field.onChange(val);
+                    setValue("nationality", val, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                  }}
+                  className={cn(
+                    "w-full",
+                    errors.nationality &&
+                      "border-destructive bg-destructive/5 ring-1 ring-destructive/20",
+                  )}
+                />
+              </Suspense>
             )}
           />
           {errors.nationality && (

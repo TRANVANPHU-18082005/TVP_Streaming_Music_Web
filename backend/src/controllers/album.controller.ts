@@ -101,6 +101,15 @@ export const deleteAlbum = catchAsync(async (req: Request, res: Response) => {
     message: "Đã xóa Album",
   });
 });
+// Restore Album (Admin)
+export const restoreAlbum = catchAsync(async (req: Request, res: Response) => {
+  await albumService.restoreAlbum(req.params.id, req.user as IUser);
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: "Đã khôi phục Album",
+  });
+});
 // 7. GET ALBUM TRACKS
 export const getAlbumTracks = catchAsync(async (req, res) => {
   // 1. Parse query - Đảm bảo dữ liệu sạch

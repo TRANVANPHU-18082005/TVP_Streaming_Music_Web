@@ -198,7 +198,11 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
 
             {/* Sóng nhạc mini cạnh tiêu đề - Đồng bộ trạng thái Playing */}
             {isThisPlaylistActive && (
-              <WaveformBars color="primary" active={isThisPlaylistPlaying} bars={3} />
+              <WaveformBars
+                color="primary"
+                active={isThisPlaylistPlaying}
+                bars={3}
+              />
             )}
           </div>
 

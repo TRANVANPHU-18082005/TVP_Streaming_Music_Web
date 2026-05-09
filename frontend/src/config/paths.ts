@@ -31,7 +31,7 @@ export const CLIENT_PATHS = {
   CHART_TOP: "chart-top",
   TRACK_HISTORY: "/tracks/history",
   // Track
-  TRACK_DETAIL: (slug: string) => `/tracks/${slug}`, // Hàm tạo link động
+  TRACK_DETAIL: (id: string) => `/tracks/${id}`, // Hàm tạo link động
   // User
   PROFILE: "/profile",
 } as const;

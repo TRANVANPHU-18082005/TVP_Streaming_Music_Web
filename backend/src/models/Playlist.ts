@@ -25,7 +25,6 @@ export interface IPlaylist extends Document {
   visibility: "public" | "private" | "unlisted";
   isSystem: boolean;
   isDeleted: boolean;
-
   createdAt: Date;
   updatedAt: Date;
 }

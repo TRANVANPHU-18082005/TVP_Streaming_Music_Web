@@ -44,3 +44,15 @@ export const setRefreshTokenCookie = (
     maxAge: maxAge, // <--- Động theo biến này
   });
 };
+
+// Clear cookie with same attributes as setRefreshTokenCookie to ensure removal
+export const clearRefreshTokenCookie = (res: Response) => {
+  const sameSiteOption: "lax" | "strict" | "none" =
+    process.env.NODE_ENV === "production" ? "none" : "lax";
+
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: sameSiteOption,
+  });
+};

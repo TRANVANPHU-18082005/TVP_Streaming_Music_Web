@@ -11,12 +11,14 @@ import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
 import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
 import { HorizontalScroll } from "@/pages/client/home/HorizontalScroll";
 
-import { IAlbum, IPlaylist, ITrack, TrackList } from "@/features";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import MusicResult from "../../../components/ui/Result";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { APP_CONFIG } from "@/config/constants";
+import { IAlbum } from "@/features/album";
+import { IPlaylist } from "@/features/playlist";
+import { ITrack, TrackList } from "@/features/track";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES

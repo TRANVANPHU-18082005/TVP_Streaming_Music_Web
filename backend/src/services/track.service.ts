@@ -43,7 +43,7 @@ import {
 import recommendationService from "./recommendation.service";
 import { parseGenreIds } from "../utils/helper";
 import { is } from "zod/v4/locales";
-import { APP_CONFIG } from "../config/constants";
+import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
 
 type MulterS3File = Express.Multer.File & { location: string; key: string };
 
@@ -767,14 +767,8 @@ class TrackService {
     const trackDoc = await Track.findOne({
       _id: id,
     })
-      .populate("artist", "name avatar slug")
-      .populate("featuringArtists", "name slug avatar")
-      .populate("album", "title coverImage slug")
-      .populate("genres", "name slug")
-      .populate({
-        path: "moodVideo",
-        select: "videoUrl loop",
-      })
+      .select(TRACK_SELECT)
+      .populate(TRACK_POPULATE as any)
       .lean();
 
     if (!trackDoc)

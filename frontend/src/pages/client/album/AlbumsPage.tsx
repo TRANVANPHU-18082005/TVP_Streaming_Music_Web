@@ -8,11 +8,6 @@ import Pagination from "@/utils/pagination";
 import AlbumFilter from "@/features/album/components/AlbumFilter";
 import { useAlbumParams } from "@/features/album/hooks/useAlbumParams";
 
-import {
-  Albumpageskeleton,
-  useAlbumsByUserQuery,
-  useSyncInteractions,
-} from "@/features";
 import { DEFAULT_GRID_META } from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
@@ -20,6 +15,8 @@ import SectionAmbient from "@/components/SectionAmbient";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { Albumpageskeleton, useAlbumsByUserQuery } from "@/features/album";
+import { useSyncInteractions } from "@/features/interaction";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS

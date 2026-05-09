@@ -16,6 +16,7 @@ export interface IAlbum {
   likeCount: number; // Số lượng yêu thích
   totalTracks: number;
   isPublic: boolean;
+  isDeleted: boolean;
   totalDuration: number; // Tổng thời lượng tất cả track trong album (tính bằng giây)
   createdAt: string;
   updatedAt: string;

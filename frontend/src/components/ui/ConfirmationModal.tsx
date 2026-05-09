@@ -12,15 +12,9 @@
  *  • Proper cleanup: overflow restored on unmount even if isOpen skips false
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -110,12 +104,16 @@ const VARIANT_CONFIG: Record<ModalVariant, VariantConfig> = {
 const FOCUSABLE =
   'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
-function useFocusTrap(containerRef: React.RefObject<HTMLElement>, isOpen: boolean) {
+function useFocusTrap(
+  containerRef: React.RefObject<HTMLElement | null>,
+  isOpen: boolean,
+) {
   useEffect(() => {
     if (!isOpen || !containerRef.current) return;
 
     // Auto-focus the first focusable element
-    const first = containerRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)[0];
+    const first =
+      containerRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)[0];
     first?.focus();
 
     const trap = (e: KeyboardEvent) => {
@@ -150,13 +148,13 @@ function useFocusTrap(containerRef: React.RefObject<HTMLElement>, isOpen: boolea
 // ANIMATION VARIANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const overlayVariants = {
+const overlayVariants: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { duration: 0.2, ease: "easeOut" } },
   exit: { opacity: 0, transition: { duration: 0.18, ease: "easeIn" } },
 };
 
-const panelVariants = {
+const panelVariants: Variants = {
   hidden: { opacity: 0, scale: 0.94, y: 10 },
   visible: {
     opacity: 1,
@@ -177,7 +175,7 @@ const panelVariants = {
   },
 };
 
-const iconRingVariants = {
+const iconRingVariants: Variants = {
   hidden: { opacity: 0, scale: 0.6 },
   visible: {
     opacity: 1,
@@ -224,7 +222,10 @@ const ConfirmationModal = ({
     setRemaining(countdownSeconds);
     const id = setInterval(() => {
       setRemaining((prev) => {
-        if (prev <= 1) { clearInterval(id); return 0; }
+        if (prev <= 1) {
+          clearInterval(id);
+          return 0;
+        }
         return prev - 1;
       });
     }, 1000);
@@ -261,7 +262,9 @@ const ConfirmationModal = ({
     if (!isOpen) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [isOpen]);
 
   // ── Focus trap ────────────────────────────────────────────────────────────
@@ -280,7 +283,9 @@ const ConfirmationModal = ({
             animate="visible"
             exit="exit"
             className="fixed inset-0 z-100 dark:bg-black/60 bg-black/40 backdrop-blur-sm"
-            onClick={resolvedVariant === "destructive" ? triggerShake : onCancel}
+            onClick={
+              resolvedVariant === "destructive" ? triggerShake : onCancel
+            }
             aria-hidden="true"
           />
 
@@ -310,10 +315,14 @@ const ConfirmationModal = ({
               <div
                 className={cn(
                   "absolute inset-x-0 top-0 h-[3px]",
-                  resolvedVariant === "destructive" && "bg-gradient-to-r from-red-500/0 via-red-500 to-red-500/0",
-                  resolvedVariant === "warning" && "bg-gradient-to-r from-amber-500/0 via-amber-500 to-amber-500/0",
-                  resolvedVariant === "info" && "bg-gradient-to-r from-primary/0 via-primary to-primary/0",
-                  resolvedVariant === "success" && "bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0",
+                  resolvedVariant === "destructive" &&
+                    "bg-gradient-to-r from-red-500/0 via-red-500 to-red-500/0",
+                  resolvedVariant === "warning" &&
+                    "bg-gradient-to-r from-amber-500/0 via-amber-500 to-amber-500/0",
+                  resolvedVariant === "info" &&
+                    "bg-gradient-to-r from-primary/0 via-primary to-primary/0",
+                  resolvedVariant === "success" &&
+                    "bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0",
                 )}
               />
 
@@ -338,7 +347,10 @@ const ConfirmationModal = ({
                       variants={iconRingVariants}
                       initial="hidden"
                       animate="visible"
-                      className={cn("absolute -inset-1.5 rounded-full", ringColor)}
+                      className={cn(
+                        "absolute -inset-1.5 rounded-full",
+                        ringColor,
+                      )}
                     />
                     <motion.div
                       variants={iconRingVariants}
@@ -349,7 +361,10 @@ const ConfirmationModal = ({
                         iconBg,
                       )}
                     >
-                      <Icon className={cn("size-5", iconColor)} strokeWidth={1.75} />
+                      <Icon
+                        className={cn("size-5", iconColor)}
+                        strokeWidth={1.75}
+                      />
                     </motion.div>
                   </div>
 
@@ -369,7 +384,7 @@ const ConfirmationModal = ({
                   id={descriptionId}
                   className={cn(
                     "text-[13.5px] leading-relaxed dark:text-white/55 text-gray-600",
-                    "pl-[3.5rem]",           // aligns with title text
+                    "pl-[3.5rem]", // aligns with title text
                     "[&_a]:underline [&_a]:underline-offset-2 [&_a]:dark:text-primary [&_a]:text-primary",
                     "[&_strong]:dark:text-white/80 [&_strong]:text-gray-800 [&_strong]:font-medium",
                     "[&_code]:dark:bg-white/8 [&_code]:bg-black/6 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[12px] [&_code]:font-mono",
@@ -433,7 +448,8 @@ const ConfirmationModal = ({
                       "w-full sm:w-auto h-9 text-[13.5px] font-medium rounded-xl",
                       "shadow-sm transition-all duration-150",
                       // Info/success use primary colour but styled uniformly
-                      resolvedVariant === "info" || resolvedVariant === "success"
+                      resolvedVariant === "info" ||
+                        resolvedVariant === "success"
                         ? "bg-primary hover:bg-primary/90 text-primary-foreground"
                         : undefined,
                       isCountingDown && "opacity-50 cursor-not-allowed",
@@ -447,7 +463,9 @@ const ConfirmationModal = ({
                     ) : isCountingDown ? (
                       <span className="flex items-center gap-1.5 tabular-nums">
                         {confirmLabel}
-                        <span className="text-[11px] opacity-70">({remaining})</span>
+                        <span className="text-[11px] opacity-70">
+                          ({remaining})
+                        </span>
                       </span>
                     ) : (
                       confirmLabel

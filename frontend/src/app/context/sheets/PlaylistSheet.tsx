@@ -25,20 +25,20 @@ import {
   SheetBackdrop,
   SheetWrapper,
 } from "../sheetPrimitives";
-import {
-  appendQueueIds,
-  IPlaylist,
-  IPlaylistDetail,
-  playlistKeys,
-  selectPlayer,
-  usePlaylistMutations,
-} from "@/features";
+
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { usePlaylistPlayback } from "@/features/player/hooks/usePlaylistPlayback";
 import { usePlayCollection } from "@/features/player/hooks/usePlayCollection";
 import { toast } from "sonner";
 import playlistApi from "@/features/playlist/api/playlistApi";
 import ConfirmationModal from "@/components/ui/ConfirmationModal";
+import {
+  IPlaylist,
+  IPlaylistDetail,
+  playlistKeys,
+  usePlaylistMutations,
+} from "@/features/playlist";
+import { appendQueueIds, selectPlayer } from "@/features/player";
 const PlaylistPreviewRow = memo(({ playlist }: { playlist: IPlaylist }) => {
   const { user } = useAppSelector((state) => state.auth);
   return (
@@ -90,14 +90,10 @@ export interface PlaylistSheetProps {
   playlist: IPlaylistDetail | undefined;
   isOpen: boolean;
   onClose: () => void;
-  onPlay?: (playlist: IPlaylist) => void;
-  onShuffle?: (playlist: IPlaylist) => void;
-  onAddToQueue?: (playlist: IPlaylist) => void;
-  onEdit?: (playlist: IPlaylist) => void;
-  onDelete?: (playlist: IPlaylist) => void;
-  onToggleVisibility?: (playlist: IPlaylist) => void;
-  onShare?: (playlist: IPlaylist) => void;
-  onAddToLibrary?: (playlist: IPlaylist) => void;
+  onPlay?: (playlist: IPlaylistDetail) => void;
+  onShuffle?: (playlist: IPlaylistDetail) => void;
+  onEdit?: (playlist: IPlaylistDetail) => void;
+  onDelete?: (playlist: IPlaylistDetail) => void;
 }
 
 export const PlaylistSheet = memo(
@@ -114,7 +110,7 @@ export const PlaylistSheet = memo(
     const { user } = useAppSelector((state) => state.auth);
     const { togglePlayPlaylist, shufflePlaylist, isThisPlaylistPlaying } =
       usePlaylistPlayback(playlist);
-    const { toggleDeletePlaylist, isToggleDeleting } = usePlaylistMutations();
+    const { deletePlaylist, isDeleting } = usePlaylistMutations();
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const player = useAppSelector(selectPlayer);
     const { play } = usePlayCollection();
@@ -220,15 +216,15 @@ export const PlaylistSheet = memo(
         },
         ...(isOwner
           ? [
-            {
-              icon: Trash2,
-              label: "Xóa playlist",
-              onClick: () => {
-                setConfirmOpen(true);
-              },
-              variant: "danger",
-            } as ActionItem,
-          ]
+              {
+                icon: Trash2,
+                label: "Xóa playlist",
+                onClick: () => {
+                  setConfirmOpen(true);
+                },
+                variant: "danger",
+              } as ActionItem,
+            ]
           : []),
         {
           icon: Share2,
@@ -283,19 +279,16 @@ export const PlaylistSheet = memo(
           isOpen={isConfirmOpen}
           onCancel={() => setConfirmOpen(false)}
           onConfirm={() => {
-            if (playlist) toggleDeletePlaylist({ id: playlist._id, isDelete: true });
+            if (playlist) deletePlaylist(playlist._id);
           }}
           title="Xóa playlist?"
-          isLoading={isToggleDeleting}
+          isLoading={isDeleting}
           countdownSeconds={3}
           description={
             <div>
               <p className="text-sm text-foreground/80 mb-2">
                 Bạn có chắc chắn muốn xóa playlist{" "}
-                <strong className="text-foreground">
-                  {playlist?.title}
-                </strong>
-                ?
+                <strong className="text-foreground">{playlist?.title}</strong>?
               </p>
             </div>
           }

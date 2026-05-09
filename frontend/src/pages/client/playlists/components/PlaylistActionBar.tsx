@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PlaylistLikeButton } from "@/features/interaction/components/LikeButton";
-import type { IPlaylist } from "@/features/playlist/types";
+import type { IPlaylist, IPlaylistDetail } from "@/features/playlist/types";
 
 type Palette = {
   hex: string;
@@ -21,8 +21,8 @@ type Palette = {
 };
 
 export interface PlaylistActionBarProps {
-  playlist: IPlaylist;
-  handleMoreOptions: (playlist: IPlaylist) => void;
+  playlist: IPlaylistDetail;
+  handleMoreOptions: (playlist: IPlaylistDetail) => void;
   palette: Palette;
   isLoadingPlay: boolean;
   isLoadingShuffle: boolean;
@@ -30,7 +30,7 @@ export interface PlaylistActionBarProps {
   hasTracks: boolean;
   isOwner: boolean;
   density?: "compact" | "full";
-  onPlay: () => void;
+  onPlay: (e?: React.MouseEvent) => void;
   onShuffle: () => void;
   onManageTracks: () => void;
 }

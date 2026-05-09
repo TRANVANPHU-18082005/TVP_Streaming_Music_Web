@@ -63,6 +63,18 @@ export const useArtistMutations = () => {
     onError: (err) => handleError(err, "Lỗi thay đổi trạng thái"),
   });
 
+  // ==========================================
+  // 5. RESTORE
+  // ==========================================
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => artistApi.restore(id),
+    onSuccess: () => {
+      toast.success("Đã khôi phục nghệ sĩ");
+      invalidateList();
+    },
+    onError: (err) => handleError(err, "Lỗi khôi phục nghệ sĩ"),
+  });
+
   return {
     // --- Wrappers ---
     createArtist: createMutation.mutate,
@@ -76,6 +88,9 @@ export const useArtistMutations = () => {
     deleteArtist: deleteMutation.mutate,
     deleteArtistAsync: deleteMutation.mutateAsync,
 
+    restoreArtist: restoreMutation.mutate,
+    restoreArtistAsync: restoreMutation.mutateAsync,
+
     toggleArtistStatus: toggleStatusMutation.mutate,
     toggleArtistStatusAsync: toggleStatusMutation.mutateAsync,
 
@@ -83,6 +98,7 @@ export const useArtistMutations = () => {
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isRestoring: restoreMutation.isPending,
     isToggling: toggleStatusMutation.isPending,
 
     // Global Loading
@@ -90,6 +106,7 @@ export const useArtistMutations = () => {
       createMutation.isPending ||
       updateMutation.isPending ||
       deleteMutation.isPending ||
+      restoreMutation.isPending ||
       toggleStatusMutation.isPending,
   };
 };

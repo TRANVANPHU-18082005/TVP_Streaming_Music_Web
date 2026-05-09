@@ -21,13 +21,14 @@ import ArtistModal from "@/features/artist/components/artist-model";
 // Hooks & Types
 import { useArtistParams } from "@/features/artist/hooks/useArtistParams";
 import { useArtistMutations } from "@/features/artist/hooks/useArtistMutations";
+
+import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
+import { useSmartBack } from "@/hooks/useSmartBack";
 import {
   Artistpageskeleton,
   IArtist,
   useArtistsByAdminQuery,
-} from "@/features";
-import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
-import { useSmartBack } from "@/hooks/useSmartBack";
+} from "@/features/artist";
 
 const ArtistManagementPage = () => {
   // --- 1. STATE MANAGEMENT ---
@@ -49,6 +50,7 @@ const ArtistManagementPage = () => {
     updateArtistAsync,
     deleteArtist,
     toggleArtistStatusAsync,
+    restoreArtist,
     isCreating,
     isMutating,
   } = useArtistMutations();
@@ -212,6 +214,7 @@ const ArtistManagementPage = () => {
                 onToggle={() =>
                   toggleArtistStatusAsync && toggleArtistStatusAsync(artist._id)
                 }
+                onRestore={() => restoreArtist && restoreArtist(artist._id)}
               />
             ))}
           </div>

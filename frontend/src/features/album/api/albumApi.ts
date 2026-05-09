@@ -1,7 +1,11 @@
 import api from "@/lib/axios";
 import type { IAlbum, IAlbumDetail } from "@/features/album/types";
 import type { ApiResponse, PagedResponse } from "@/types";
-import { AlbumAdminFilterParams, AlbumFilterParams, ITrack } from "@/features";
+import {
+  AlbumAdminFilterParams,
+  AlbumFilterParams,
+} from "../schemas/album.schema";
+import { ITrack } from "@/features/track";
 
 const albumApi = {
   // 1 Lấy danh sách với filter & pagination bởi User
@@ -65,6 +69,11 @@ const albumApi = {
   // 7. Xóa album (Admin)
   delete: async (id: string) => {
     const response = await api.delete(`/albums/${id}`);
+    return response.data;
+  },
+  // 8. Khôi phục album (Admin)
+  restore: async (id: string) => {
+    const response = await api.patch(`/albums/${id}/restore`);
     return response.data;
   },
   // 8. Toggle public status (Admin - Bật/Tắt nhanh)

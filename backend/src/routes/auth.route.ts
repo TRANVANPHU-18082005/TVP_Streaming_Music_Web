@@ -4,6 +4,7 @@ import * as authController from "../controllers/auth.controller";
 import { protect } from "../middlewares/auth.middleware";
 import validate from "../middlewares/validate"; // Middleware quan trọng nhất
 import { authLimiter, otpLimiter } from "../middlewares/rateLimiter";
+import { requireSameOrigin } from "../middlewares/csrf.middleware";
 
 // Import Zod Schemas (Đã define ở các bước trước)
 import {
@@ -69,12 +70,14 @@ router.post(
 // Refresh Token
 router.post(
   "/refresh-token",
+  // enforce origin/referrer check (production only) to mitigate CSRF
+  requireSameOrigin,
   // validate(refreshTokenSchema),
   authController.refreshAccessToken,
 );
 
-// Logout
-router.post("/logout", authController.logout);
+// Logout (also protected by origin check to reduce CSRF risk for cookie-based logout)
+router.post("/logout", requireSameOrigin, authController.logout);
 
 // ==========================================
 // 3. PASSWORD & OTP MANAGEMENT
