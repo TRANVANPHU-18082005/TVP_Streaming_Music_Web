@@ -33,7 +33,6 @@ const MoodVideoManagementPage = () => {
 
   const { data, isLoading, refetch, isError } =
     useMoodVideosQuery(filterParams);
-  console.log(data);
   const {
     createMoodVideo: createVideo,
     updateMoodVideoAsync,

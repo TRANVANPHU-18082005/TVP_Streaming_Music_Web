@@ -313,7 +313,6 @@ const playerSlice = createSlice({
      *       Không động vào "ready" / "buffering" hiện tại để tránh regression.
      */
     upsertMetadataCache: (state, action: PayloadAction<ITrack[]>) => {
-      console.log("Upserting metadata cache for tracks:", action.payload);
       for (const track of action.payload) {
         state.trackMetadataCache[track._id] = track;
       }

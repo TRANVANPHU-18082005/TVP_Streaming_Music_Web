@@ -13,6 +13,7 @@ import {
   GenreSheet,
   TrackSheet,
   AddToPlaylistSheet,
+  SleepTimerSheet,
 } from "@/app/context/SheetContext";
 
 import {
@@ -37,6 +38,7 @@ const ContextSheetContext = createContext<ContextSheetContextValue>({
   openGenreSheet: () => {},
   openAddToPlaylistSheet: () => {},
   openTrackSheet: () => {},
+  openSleepTimerSheet: () => {},
   closeContextSheet: () => {},
 });
 
@@ -123,6 +125,12 @@ export function ContextSheetProvider({
     setActive({ type: "genre", entity });
   }, []);
 
+  const openSleepTimerSheet = useCallback(() => {
+    clearTimeout(closeTimerRef.current);
+    setFrozen({ type: "sleepTimer" } as ContextSheetPayload);
+    setActive({ type: "sleepTimer" } as ContextSheetPayload);
+  }, []);
+
   // Resolve mỗi entity từ frozen (giữ data sống trong animation exit)
   const display = active ?? frozen;
 
@@ -149,6 +157,7 @@ export function ContextSheetProvider({
         openGenreSheet,
         openTrackSheet,
         openAddToPlaylistSheet,
+        openSleepTimerSheet,
         closeContextSheet,
       }}
     >
@@ -218,6 +227,12 @@ export function ContextSheetProvider({
           onClose={closeContextSheet}
         />
       )}
+
+      {/* Sleep Timer Sheet */}
+      <SleepTimerSheet
+        isOpen={active?.type === "sleepTimer"}
+        onClose={closeContextSheet}
+      />
     </ContextSheetContext.Provider>
   );
 }

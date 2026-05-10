@@ -433,7 +433,6 @@ const TrackDetailPage = () => {
     refetch,
   } = usePublicTrackDetail(id ?? "");
   const track = response?.data;
-  console.log("[TrackDetailPage] Fetched track detail:", track);
   // ── Player State ──────────────────────────────────────────────────────────
   const dispatch = useAppDispatch();
   const { currentTrackId, isPlaying: isGlobalPlaying } =
@@ -444,7 +443,6 @@ const TrackDetailPage = () => {
   const palette = useMemo(() => {
     return buildPaletteWithColor(getThemePrimary());
   }, []);
-  console.log("[TrackDetailPage] Computed palette:", palette);
   const { className: titleCls, style: titleStyle } = useTitleStyle(
     track?.title ?? "",
   );

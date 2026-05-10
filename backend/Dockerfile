@@ -1,24 +1,18 @@
-# 1. Chọn Base Image: Node.js bản nhẹ (Alpine)
-FROM node:18-alpine
-
-# 2. Thiết lập thư mục làm việc trong container
+FROM node:18-bullseye-slim
 WORKDIR /app
+ENV NODE_ENV=production
+# Install minimal runtime deps for native binaries (if needed)
+RUN apt-get update && apt-get install -y ca-certificates --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-# 3. Copy file package để cài thư viện trước (Tận dụng cache Docker)
 COPY package*.json ./
+RUN npm ci --production
 
-# 4. Cài đặt toàn bộ thư viện (bao gồm cả ffmpeg-static)
-RUN npm install
-
-# 5. Copy toàn bộ code nguồn vào
+# Copy source and build
 COPY . .
-
-# 6. Build TypeScript sang JavaScript (Ra thư mục dist)
 RUN npm run build
 
-# 7. Mở port 8000 (Để Render biết app chạy port nào)
+# Expose port (app uses 8000 by default)
 EXPOSE 8000
 
-# 8. Lệnh chạy server khi container khởi động
-# Lưu ý: Chạy file js trong dist (entry: dist/index.js)
+# Default start (API server)
 CMD ["node", "dist/index.js"]

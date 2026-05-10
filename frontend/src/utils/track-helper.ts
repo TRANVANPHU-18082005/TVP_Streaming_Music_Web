@@ -27,6 +27,13 @@ export function formatCount(n: number | null | undefined): string | null {
   if (n < 1_000_000) return Math.round(n / 100) / 10 + "k";
   return Math.round(n / 100_000) / 10 + "M+";
 }
+export const formatMs = (ms: number) => {
+  if (ms <= 0) return "0:00";
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${m}:${ss.toString().padStart(2, "0")}`;
+};
 export const formatListeners = (n: number): string =>
   new Intl.NumberFormat("vi-VN").format(n);
 
@@ -128,8 +135,8 @@ export async function extractDominantColor(imageUrl?: string): Promise<string> {
           delta === 0
             ? 0
             : Math.round(
-              (delta / (255 - Math.abs(max + min - 255))) * 60 * 0.7,
-            );
+                (delta / (255 - Math.abs(max + min - 255))) * 60 * 0.7,
+              );
 
         // Hue
         let h = 0;
@@ -158,7 +165,8 @@ export async function extractDominantColor(imageUrl?: string): Promise<string> {
 const CDN_DOMAIN = env.CDN_DOMAIN;
 
 export const toCDN = (url?: string) => {
-  if (!url) return "https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png";
+  if (!url)
+    return "https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png";
 
   // ✅ Case 1: bucket.subdomain (PHẢI để lên trước)
   if (url.includes(".s3.ca-east-006.backblazeb2.com")) {

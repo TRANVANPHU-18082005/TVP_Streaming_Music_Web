@@ -13,7 +13,6 @@ import { MiniPlayer } from "./MiniPlayer";
 const FullPlayerLazy = lazy(() =>
   import("./FullPlayer").then((m) => ({ default: m.FullPlayer ?? m.default })),
 );
-import SleepTimerProvider from "@/features/player/sleepTimer/SleepTimerProvider";
 import { useTrackListeners } from "../hooks/useTrackListeners";
 
 export function MusicPlayer() {
@@ -67,70 +66,68 @@ export function MusicPlayer() {
   }
 
   return (
-    <SleepTimerProvider>
-      <>
-        {/*
+    <>
+      {/*
         <audio> luôn được mount từ đầu, không bao giờ unmount.
         Nếu đặt trong điều kiện !currentTrack thì React sẽ unmount/remount
         → audio bị reset về 0, mất trạng thái buffer.
       */}
-        <audio ref={audioRef} {...events} preload="auto" />
+      <audio ref={audioRef} {...events} preload="auto" />
 
-        {/*
+      {/*
         MiniPlayer luôn render khi có track — không unmount khi mở FullPlayer.
         Ẩn bằng CSS (invisible/opacity-0) thay vì conditional render
         → tránh React phải teardown/rebuild DOM, giữ animation state.
         delay-200: đợi FullPlayer slide in xong mới ẩn hoàn toàn.
       */}
-        <div
-          className={
-            isExpanded
-              ? "invisible opacity-0 transition-opacity duration-500 delay-200"
-              : "visible opacity-100"
-          }
-        >
-          <MiniPlayer
-            isPlaying={isPlaying}
-            duration={duration}
-            track={currentTrack}
-            currentTime={currentTime}
-            getCurrentTime={getCurrentTime}
-            onSeek={seek}
-            onExpand={() => setIsExpanded(true)}
-          />
-        </div>
+      <div
+        className={
+          isExpanded
+            ? "invisible opacity-0 transition-opacity duration-500 delay-200"
+            : "visible opacity-100"
+        }
+      >
+        <MiniPlayer
+          isPlaying={isPlaying}
+          duration={duration}
+          track={currentTrack}
+          currentTime={currentTime}
+          getCurrentTime={getCurrentTime}
+          onSeek={seek}
+          onExpand={() => setIsExpanded(true)}
+        />
+      </div>
 
-        {/*
+      {/*
         FullPlayer chỉ mount khi isExpanded = true.
         AnimatePresence giữ component trong DOM đủ lâu để exit animation chạy xong
         trước khi React unmount thật sự.
       */}
-        <AnimatePresence>
-          {isExpanded && (
-            <Suspense
-              fallback={
-                <div
-                  role="status"
-                  aria-label="Loading player"
-                  className="fixed inset-0 z-[60] flex items-center justify-center bg-background"
-                />
-              }
-            >
-              <FullPlayerLazy
-                listenCount={listenCount}
-                isPlaying={isPlaying}
-                key="full-player"
-                track={currentTrack}
-                duration={duration}
-                onSeek={seek}
-                getCurrentTime={getCurrentTime}
-                onCollapse={() => setIsExpanded(false)}
+      <AnimatePresence>
+        {isExpanded && (
+          <Suspense
+            fallback={
+              <div
+                role="status"
+                aria-label="Loading player"
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-background"
               />
-            </Suspense>
-          )}
-        </AnimatePresence>
-      </>
-    </SleepTimerProvider>
+            }
+          >
+            <FullPlayerLazy
+              listenCount={listenCount}
+              isPlaying={isPlaying}
+              key="full-player"
+              track={currentTrack}
+              duration={duration}
+              onSeek={seek}
+              getCurrentTime={getCurrentTime}
+              onCollapse={() => setIsExpanded(false)}
+            />
+          </Suspense>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

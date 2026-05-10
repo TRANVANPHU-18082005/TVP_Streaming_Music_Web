@@ -65,7 +65,6 @@ const UsersManagementPage = () => {
 
   // --- 2. DATA FETCHING ---
   const { data, isLoading, isError, refetch } = useUsersQuery(filterParams);
-  console.log("Fetched users data:", data);
   // --- 3. MUTATIONS ---
   const {
     createUserAsync,

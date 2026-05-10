@@ -94,7 +94,8 @@ export const TrackRow = memo(
           isCurrentPlaying={isPlaying && isActive}
           onClick={handlePlayClick}
         />
-        <div className="min-w-0 flex-1">
+
+        <div className="min-w-0 flex-1 overflow-hidden">
           {isActive ? (
             <TrackTitleMarquee
               id={track._id}
@@ -110,20 +111,23 @@ export const TrackRow = memo(
                 to={`/tracks/${track._id}`}
                 title={track.title}
                 className={cn(
-                  "truncate text-sm font-medium leading-snug mb-0.5",
+                  "block max-w-full truncate",
+                  "text-sm font-medium leading-snug mb-0.5",
                   "text-foreground/90",
-                  prefersReducedMotion ? "" : "transition-colors duration-100",
                   "group-hover:text-foreground",
+                  prefersReducedMotion ? "" : "transition-colors duration-100",
                 )}
               >
                 {track.title}
               </Link>
-              <div className="min-w-0 truncate">
+
+              <div className="min-w-0 overflow-hidden">
                 <ArtistDisplay
                   mainArtist={track.artist}
                   featuringArtists={track.featuringArtists}
                   className={cn(
-                    "text-xs text-muted-foreground/55 truncate",
+                    "block truncate",
+                    "text-xs text-muted-foreground/55",
                     "hover:text-foreground/70 hover:underline underline-offset-2",
                     prefersReducedMotion
                       ? ""

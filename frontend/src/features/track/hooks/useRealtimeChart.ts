@@ -64,7 +64,6 @@ export const useRealtimeChart = () => {
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60,
   });
-  console.log(apiResponse)
   // ── Normalization ──────────────────────────────────────────────────────────
   const rawData = apiResponse?.data;
   // ── FIX #1 — Tính Trend ngay trong useMemo ────────────────────────────────
@@ -144,7 +143,7 @@ export const useRealtimeChart = () => {
             ...(old.data || {}),
             items: finalItems,
             chart: newChart,
-            lastUpdatedAt: payload?.lastUpdatedAt ?? old.data?.lastUpdatedAt
+            lastUpdatedAt: payload?.lastUpdatedAt ?? old.data?.lastUpdatedAt,
           },
         };
       });

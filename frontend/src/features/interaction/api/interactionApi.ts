@@ -29,7 +29,6 @@ const interactionApi = {
    * @body { targetId, targetType }
    */
   toggleLike: async (targetId: string, targetType: InteractionTargetType) => {
-    console.log("Toggling like:", { targetId, targetType });
     const response = await api.post<ApiResponse<ToggleLikeResponse>>(
       `/interactions/toggle-like`,
       { targetId, targetType },

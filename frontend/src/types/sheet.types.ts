@@ -27,6 +27,7 @@ export type ContextSheetPayload =
   | { type: "artist"; entity: IArtistDetail }
   | { type: "genre"; entity: IGenreDetail }
   | { type: "track"; track: ITrack | null }
+  | { type: "sleepTimer" }
   | {
       type: "addToPlaylist";
       sourceEntity?: IAlbumDetail | IArtistDetail | IGenreDetail;
@@ -48,6 +49,8 @@ export interface ContextSheetContextValue {
     tracks?: ITrack[] | null,
   ) => void;
   openTrackSheet: (track?: ITrack | null) => void;
+  // Open the global Sleep Timer sheet
+  openSleepTimerSheet: () => void;
   closeContextSheet: () => void;
 }
 

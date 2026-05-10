@@ -288,7 +288,6 @@ export default function SearchPage() {
   // Full search — debounce 400ms (trong hook)
   const { data, isLoading, isError } = useSearch(query);
   // Tại SearchPage.tsx
-  console.log("data search", data);
   // Bước 1: Gom IDs (Dùng useMemo để tránh tính toán lại mỗi lần render)
   const trackIds = useMemo(() => data?.tracks.map((t) => t._id) || [], [data]);
   const albumIds = useMemo(() => data?.albums.map((a) => a._id) || [], [data]);

@@ -42,7 +42,6 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({
   onEdit,
   onDelete,
 }) => {
-  console.log(playlist);
   const navigate = useNavigate();
   const [editTrackPlaylist, setEditTrackPlaylist] = useState(false);
   const [deletePlaylist, setDeletePlaylist] = useState(false);

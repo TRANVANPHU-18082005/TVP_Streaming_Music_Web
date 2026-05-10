@@ -5,6 +5,8 @@ import {
   useRef,
   useCallback,
   startTransition,
+  lazy,
+  Suspense,
   type ReactNode,
   type Dispatch,
   type SetStateAction,
@@ -31,6 +33,7 @@ import {
   Loader2,
   Focus,
 } from "lucide-react";
+import { Clock } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 
@@ -47,19 +50,33 @@ import {
 } from "@/features/player/slice/playerSlice";
 import { ProgressBar } from "./ProgressBar";
 import { ILyricLine, ITrack } from "@/features/track";
-import { MoodFocusView } from "./MoodFocusView";
-import { LyricsView } from "./LyricEngine";
 import { useLyrics } from "../hooks/useLyrics";
 import { MarqueeText } from "./MarqueeText";
 import { PlayerBackground } from "@/components/PlayerBackground";
 import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import { EyeViewBadge } from "@/components/ui/LiveViewBadge";
-import { TrackDetailPanel } from "./TrackDetailPanel";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
-import QueuePanel from "./Queuepanel";
-import SleepTimerModal from "@/features/player/sleepTimer/SleepTimerModal";
-import { toCDN } from "@/utils/track-helper";
+import { useSleepTimer } from "@/features/player/sleepTimer/SleepTimerProvider";
+import { formatMs, toCDN } from "@/utils/track-helper";
+
+// Lazy-loaded views to keep initial bundle small and improve responsiveness
+const MoodFocusViewLazy = lazy(() =>
+  import("./MoodFocusView").then((m) => ({
+    default: m.MoodFocusView ?? m.default,
+  })),
+);
+const LyricsViewLazy = lazy(() =>
+  import("./LyricEngine").then((m) => ({ default: m.LyricsView ?? m.default })),
+);
+const TrackDetailPanelLazy = lazy(() =>
+  import("./TrackDetailPanel").then((m) => ({
+    default: m.TrackDetailPanel ?? m.default,
+  })),
+);
+const QueuePanelLazy = lazy(() =>
+  import("./Queuepanel").then((m) => ({ default: m.QueuePanel ?? m.default })),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CSS — PERF-2: inject synchronously, no FOUC
@@ -365,7 +382,6 @@ const VinylDisk = memo(
             className="absolute rounded-full"
             style={{
               inset: `${pct}%`,
-              border: "1px solid var(--fp-border, hsl(0 0% 100% / 0.035))",
             }}
           />
         ))}
@@ -775,6 +791,9 @@ const Toolbar = memo(
     const autoplayEnabled = useSelector(
       (s: RootState) => s.player.autoplayEnabled,
     );
+    const { openSleepTimerSheet } = useContextSheet();
+    const sleep = useSleepTimer();
+
     const items = [
       {
         icon: <Focus className="size-5" />,
@@ -837,7 +856,31 @@ const Toolbar = memo(
         aria-label="Player tools"
       >
         <div className="flex items-center gap-2 relative z-[100]">
-          <SleepTimerModal />
+          {/** Sleep timer sheet trigger */}
+          <button
+            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+              e.stopPropagation();
+              openSleepTimerSheet();
+            }}
+            title={
+              sleep.active
+                ? `Hẹn giờ ngủ — ${formatMs(sleep.remainingMs)} còn lại`
+                : "Hẹn giờ ngủ"
+            }
+            className={cn(
+              "p-2 rounded-xl transition-colors relative",
+              sleep.active
+                ? "bg-[var(--fp-active-bg)] text-[hsl(var(--primary))]"
+                : "text-[var(--fp-fg-subtle)] hover:text-[var(--fp-fg)] hover:bg-[var(--fp-hover-bg)]",
+            )}
+          >
+            <Clock className="size-5" />
+            {sleep.active && (
+              <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] rounded-full px-1 leading-none">
+                {Math.max(1, Math.ceil(sleep.remainingMs / 60000))}m
+              </span>
+            )}
+          </button>
         </div>
 
         {items.map(({ icon, label, title, active, onClick, disabled }) => (
@@ -1077,17 +1120,25 @@ const SwipeableViews = memo(
             transition={SP.swipe}
             className="absolute inset-0"
           >
-            <LyricsView
-              isPlaying={isPlaying}
-              lyricType={track.lyricType}
-              plainLyrics={track.plainLyrics}
-              syncedLines={lyrics ?? []}
-              karaokeLines={lyrics ?? []}
-              currentTime={currentTime}
-              onSeek={onSeek}
-              loading={loadingLyrics}
-              focusRadius={focusMode ? 1 : 0}
-            />
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-foreground">
+                  Đang tải lời...
+                </div>
+              }
+            >
+              <LyricsViewLazy
+                isPlaying={isPlaying}
+                lyricType={track.lyricType}
+                plainLyrics={track.plainLyrics}
+                syncedLines={lyrics ?? []}
+                karaokeLines={lyrics ?? []}
+                currentTime={currentTime}
+                onSeek={onSeek}
+                loading={loadingLyrics}
+                focusRadius={focusMode ? 1 : 0}
+              />
+            </Suspense>
           </motion.div>
         )}
 
@@ -1102,13 +1153,21 @@ const SwipeableViews = memo(
             transition={SP.swipe}
             className="absolute inset-0 bg-transparent"
           >
-            <MoodFocusView
-              lyrics={lyrics ?? []}
-              loading={loadingLyrics}
-              track={track}
-              currentTime={currentTime}
-              isPlaying={isPlaying}
-            />
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-foreground">
+                  Đang tải...
+                </div>
+              }
+            >
+              <MoodFocusViewLazy
+                lyrics={lyrics ?? []}
+                loading={loadingLyrics}
+                track={track}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+              />
+            </Suspense>
           </motion.div>
         )}
 
@@ -1121,7 +1180,15 @@ const SwipeableViews = memo(
             transition={SP.queue}
             className="absolute inset-0 flex flex-col z-50"
           >
-            <TrackDetailPanel track={track} direction={direction} />
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-foreground">
+                  Đang tải thông tin...
+                </div>
+              }
+            >
+              <TrackDetailPanelLazy track={track} direction={direction} />
+            </Suspense>
           </motion.div>
         )}
         {showQueue && (
@@ -1134,7 +1201,15 @@ const SwipeableViews = memo(
             transition={SP.queue}
             className="absolute inset-0 flex flex-col z-50"
           >
-            <QueuePanel showCloseButton onClose={toggleQueue} />
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-foreground">
+                  Đang tải hàng chờ...
+                </div>
+              }
+            >
+              <QueuePanelLazy showCloseButton onClose={toggleQueue} />
+            </Suspense>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1230,9 +1305,9 @@ const FullPlayerComponent = ({
   const [mountedViews, setMountedViews] = useState<Set<PlayerView>>(
     () => new Set<PlayerView>(["artwork"]),
   );
+  console.log(track);
   const phase = usePhase();
   useViewportHeight();
-  console.log(track);
   // LOCAL currentTime: poll via getCurrentTime() so parent time ticks
   // don't force FullPlayer re-renders. Updates at ~4Hz when playing.
   const [currentTime, setCurrentTime] = useState(getCurrentTime);
@@ -1289,6 +1364,17 @@ const FullPlayerComponent = ({
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, [showQueue, closeSheet]);
+
+  // Prefetch heavy view chunks shortly after mount to reduce latency on first open
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      void import("./LyricEngine");
+      void import("./MoodFocusView");
+      void import("./TrackDetailPanel");
+      void import("./Queuepanel");
+    }, 180);
+    return () => clearTimeout(id);
+  }, []);
 
   const dragY = useMotionValue(0);
   const cardScale = useTransform(dragY, [0, 300], [1, 0.94]);

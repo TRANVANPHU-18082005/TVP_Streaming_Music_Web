@@ -54,7 +54,6 @@ const TrackManagementPage = () => {
 
   // --- 2. DATA FETCHING (Read) ---
   const { data, isLoading, isError, refetch } = useAdminTracks(filterParams);
-  console.log(data);
   // --- 3. MUTATIONS (Write) ---
   const {
     createTrackAsync,

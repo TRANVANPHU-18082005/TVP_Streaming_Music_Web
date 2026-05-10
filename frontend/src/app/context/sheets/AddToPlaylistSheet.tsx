@@ -387,13 +387,11 @@ export interface AddToPlaylistSheetProps {
 
 export const AddToPlaylistSheet = memo(
   ({ tracks, isOpen, onClose }: AddToPlaylistSheetProps) => {
-    console.log("Tracks:", tracks);
     const [search, setSearch] = useState("");
     const [addingId, setAddingId] = useState<string | null>(null);
     const [showCreatePopup, setShowCreatePopup] = useState(false);
 
     const { data: playlists, isLoading } = useMyPlaylists();
-    console.log("My Playlists:", playlists); // Debug: Kiểm tra dữ liệu playlist
     const { addTracks, createQuickPlaylistAsync, isCreating } =
       usePlaylistMutations();
 

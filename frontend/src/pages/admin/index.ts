@@ -1,7 +1,7 @@
 import { lazy } from "react";
 export const DashboardPage = lazy(() => import("./DashboardPage"));
-export const UserPage = lazy(() => import("./UsersManagementPage"));
-export const SongPage = lazy(() => import("./TrackManagementPage"));
+export const UsersManagementPage = lazy(() => import("./UsersManagementPage"));
+export const TrackManagementPage = lazy(() => import("./TrackManagementPage"));
 export const ArtistManagementPage = lazy(
   () => import("./ArtistManagementPage"),
 );

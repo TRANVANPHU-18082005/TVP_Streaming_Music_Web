@@ -8,7 +8,6 @@ interface KPISectionProps {
 }
 
 const KPISection = ({ overview }: KPISectionProps) => {
-  console.log("KPI Overview Data:", overview);
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {/* <StatCard

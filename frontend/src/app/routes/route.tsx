@@ -20,9 +20,9 @@ import {
   SearchPage,
   SettingPage,
   SettingsPage,
-  SongPage,
   TopChartPage,
-  UserPage,
+  TrackManagementPage,
+  UsersManagementPage,
 } from "@/pages";
 import { GuestRoute } from "@/app/routes/GuestRoute";
 import { guestAuthRoutes, protectedAuthRoutes } from "@/features/auth/routes";
@@ -97,11 +97,11 @@ export const router = createBrowserRouter([
               { index: true, element: <DashboardPage /> },
               {
                 path: ADMIN_PATHS.USERS,
-                element: <UserPage />,
+                element: <UsersManagementPage />,
               },
               {
                 path: ADMIN_PATHS.SONGS,
-                element: <SongPage />,
+                element: <TrackManagementPage />,
               },
               {
                 path: ADMIN_PATHS.ARTISTS,

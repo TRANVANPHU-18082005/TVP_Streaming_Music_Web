@@ -1,33 +1,29 @@
-// src/features/auth/hooks/useInitAuth.ts
 import { useEffect, useRef } from "react";
 import { initAuth, authCheckFinished } from "@/features/auth/slice/authSlice";
 import { useAppDispatch } from "@/store/hooks";
+
+const SOCIAL_CALLBACK_ROUTES = [
+  "/auth/google/callback",
+  "/auth/facebook/callback",
+];
 
 export const useInitAuth = () => {
   const dispatch = useAppDispatch();
   const initialized = useRef(false);
 
   useEffect(() => {
-    // Chống React StrictMode chạy 2 lần ở môi trường Dev
     if (initialized.current) return;
     initialized.current = true;
 
-    try {
-      // Nếu đang trên callback social kèm token (ví dụ /auth/facebook?token=...), skip initAuth
-      const pathname = window.location?.pathname || "";
-      const search = window.location?.search || "";
-      const isSocialCallback =
-        pathname.startsWith("/auth") &&
-        (search.includes("token=") || search.includes("code="));
+    const { pathname, search } = window.location;
 
-      if (isSocialCallback) {
-        // Let the social callback page handle login using the provided access token
-        // and mark auth check finished so RootLayout won't block rendering.
-        dispatch(authCheckFinished());
-        return;
-      }
-    } catch (e) {
-      // ignore (window may be undefined in some test env)
+    const isSocialCallback =
+      SOCIAL_CALLBACK_ROUTES.includes(pathname) &&
+      (search.includes("token=") || search.includes("code="));
+
+    if (isSocialCallback) {
+      dispatch(authCheckFinished());
+      return;
     }
 
     dispatch(initAuth());

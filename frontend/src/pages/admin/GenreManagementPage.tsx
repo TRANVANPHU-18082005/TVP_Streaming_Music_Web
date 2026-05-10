@@ -105,7 +105,6 @@ const GenreManagementPage: React.FC = () => {
   const handleResetParent = useCallback(
     async (g: IGenre) => {
       try {
-        console.log("Reset parent clicked for:", g._id);
         const fd = new FormData();
         // send empty string to explicitly clear parentId (backend accepts "" or null)
         fd.append("parentId", "");

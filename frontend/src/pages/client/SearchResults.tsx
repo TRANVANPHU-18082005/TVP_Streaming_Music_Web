@@ -482,13 +482,11 @@ export default function SearchResults({
   );
 
   const tracks = searchResult?.tracks ?? [];
-  console.log("SearchResults render with tracks:", tracks);
   const artists = searchResult?.artists ?? [];
   const playlists = searchResult?.playlists ?? [];
   const albums = searchResult?.albums ?? [];
   const genres = searchResult?.genres ?? [];
   const topResult = searchResult?.topResult;
-  console.log("SearchResults render with top result:", topResult);
   return (
     <motion.div
       key={`results-${activeTab}`}

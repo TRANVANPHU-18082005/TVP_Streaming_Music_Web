@@ -124,10 +124,8 @@ const GenrePage: React.FC = () => {
     handlePageChange,
     clearFilters,
   } = useGenreParams();
-  console.log("GenrePage - filterParams:", filterParams);
   const { data, isLoading, isError, refetch } =
     useGenresByUserQuery(filterParams);
-  console.log("GenrePage - data:", data);
   // Granular derived slices — avoids full object diff
   const genres = useMemo(() => data?.genres ?? [], [data?.genres]);
   const meta = useMemo(

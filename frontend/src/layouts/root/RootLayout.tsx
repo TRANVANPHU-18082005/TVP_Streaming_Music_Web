@@ -2,10 +2,14 @@
 import { Outlet } from "react-router-dom";
 import { useInitAuth } from "@/features/auth";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
-import { MusicPlayer } from "@/features/player/components/MusicPlayer";
 import { useAppSelector } from "@/store/hooks";
 import { ContextSheetProvider } from "@/app/provider/SheetProvider";
+import SleepTimerProvider from "@/features/player/sleepTimer/SleepTimerProvider";
+import { lazy, Suspense } from "react";
 
+const MusicPlayer = lazy(
+  () => import("@/features/player/components/MusicPlayer"),
+);
 const RootLayout = () => {
   useInitAuth();
 
@@ -24,17 +28,21 @@ const RootLayout = () => {
   }
 
   return (
-    <ContextSheetProvider>
-      <div className="relative min-h-screen">
-        <main className="">
-          {/* Thêm padding bottom để không bị Player đè mất nội dung cuối trang */}
-          <Outlet />
-        </main>
+    <SleepTimerProvider>
+      <ContextSheetProvider>
+        <div className="relative min-h-screen">
+          <main className="">
+            {/* Thêm padding bottom để không bị Player đè mất nội dung cuối trang */}
+            <Outlet />
+          </main>
 
-        {/* 4. MusicPlayer: Luôn hiện diện xuyên suốt các trang */}
-        <MusicPlayer />
-      </div>
-    </ContextSheetProvider>
+          {/* 4. MusicPlayer: Luôn hiện diện xuyên suốt các trang */}
+          <Suspense fallback={null}>
+            <MusicPlayer />
+          </Suspense>
+        </div>
+      </ContextSheetProvider>
+    </SleepTimerProvider>
   );
 };
 

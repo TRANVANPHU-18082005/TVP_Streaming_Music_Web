@@ -128,7 +128,6 @@ const StatPill = ({ label, value }: { label: string; value: string }) => (
 const GeographySection = ({ data }: { data: GeoLocation[] }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
-  console.log(data);
   const sortedData = useMemo(
     () => [...(data || [])].sort((a, b) => b.value - a.value),
     [data],

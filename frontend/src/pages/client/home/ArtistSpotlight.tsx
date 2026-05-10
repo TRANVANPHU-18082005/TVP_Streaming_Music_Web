@@ -209,7 +209,6 @@ ArtistScroll.displayName = "ArtistScroll";
 // ─────────────────────────────────────────────────────────────────────────────
 export function ArtistSpotlight() {
   const { data: artists, isLoading, isError, refetch } = useSpotlightArtists();
-  console.log(artists);
   const artistIds = useMemo(
     () => artists?.map((a: IArtist) => a._id),
     [artists],

@@ -54,7 +54,6 @@ interface TooltipState {
 
 const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
   const colors = isDark ? COLOR_RAMP.dark : COLOR_RAMP.light;
-  console.log(data);
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false,
     x: 0,

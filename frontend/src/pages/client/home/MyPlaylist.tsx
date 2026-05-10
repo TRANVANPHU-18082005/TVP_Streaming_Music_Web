@@ -200,10 +200,7 @@ PlaylistScroll.displayName = "PlaylistScroll";
 // ─────────────────────────────────────────────────────────────────────────────
 export function MyPlaylist() {
   const { data: playlists, isLoading, isError, refetch } = useMyPlaylists();
-  console.log(
-    "🚀 ~ file: MyPlaylist.tsx:144 ~ MyPlaylist ~ playlists:",
-    playlists,
-  );
+
   const playlistIds = useMemo(
     () => playlists?.map((p) => p._id) ?? [],
     [playlists],

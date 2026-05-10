@@ -44,7 +44,6 @@ export const useMoodVideoForm = ({
     if (isEditMode && !hasChanges && !hasNewVideo) {
       return;
     }
-    console.log(values);
     const payload = buildMoodVideoPayload(
       values,
       dirtyFields as any,

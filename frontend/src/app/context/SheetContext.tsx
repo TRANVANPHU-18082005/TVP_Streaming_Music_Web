@@ -106,3 +106,22 @@ export const QueueSheet = memo((props: QueueSheetProps) => (
   </Suspense>
 ));
 QueueSheet.displayName = "QueueSheet";
+
+// Sleep Timer Sheet (lazy)
+const SleepTimerSheetLazy = lazy(() =>
+  import("./sheets/SleepTimerSheet").then((m) => ({
+    default: m.SleepTimerSheet,
+  })),
+);
+
+export interface SleepTimerSheetProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const SleepTimerSheet = memo((props: SleepTimerSheetProps) => (
+  <Suspense fallback={null}>
+    <SleepTimerSheetLazy {...props} />
+  </Suspense>
+));
+SleepTimerSheet.displayName = "SleepTimerSheet";

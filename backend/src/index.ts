@@ -1,7 +1,6 @@
 // src/index.ts
-import dotenv from "dotenv";
-// 1. Load env đầu tiên
-dotenv.config();
+// Load + validate environment early
+import "./config/env";
 
 import http from "http";
 import mongoose from "mongoose";

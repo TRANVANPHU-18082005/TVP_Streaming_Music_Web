@@ -73,7 +73,6 @@ const AlbumManagementPage = () => {
 
   // 🔥 CORE LOGIC: Handle Form Submit (Data is FormData)
   const handleFormSubmit = async (formData: FormData) => {
-    console.log("Form data received in AlbumManagementPage:", formData);
     try {
       if (editingAlbum) {
         await updateAlbumAsync({ id: editingAlbum._id, data: formData });

@@ -463,10 +463,11 @@ interface TrackInfoProps {
   track: ITrack;
   isPlaying: boolean;
   onExpand: () => void;
+  onPrefetch?: () => void;
 }
 
 const TrackInfo = memo(
-  ({ track, isPlaying, onExpand }: TrackInfoProps) => {
+  ({ track, isPlaying, onExpand, onPrefetch }: TrackInfoProps) => {
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -485,6 +486,8 @@ const TrackInfo = memo(
         tabIndex={0}
         aria-label={`${track.title} by ${track.artist?.name}. Click to expand player.`}
         onKeyDown={handleKeyDown}
+        onPointerEnter={() => onPrefetch?.()}
+        onFocus={() => onPrefetch?.()}
       >
         <VinylArtwork
           src={toCDN(track.coverImage) || track.coverImage}
@@ -523,7 +526,8 @@ const TrackInfo = memo(
     prev.track.title === next.track.title &&
     prev.track.coverImage === next.track.coverImage &&
     prev.isPlaying === next.isPlaying &&
-    prev.onExpand === next.onExpand,
+    prev.onExpand === next.onExpand &&
+    prev.onPrefetch === next.onPrefetch,
 );
 TrackInfo.displayName = "TrackInfo";
 
@@ -535,10 +539,11 @@ interface DesktopRightProps {
   isPlaying: boolean;
   onExpand: () => void;
   onStop: () => void;
+  onPrefetch?: () => void;
 }
 
 const DesktopRight = memo(
-  ({ isPlaying, onExpand, onStop }: DesktopRightProps) => (
+  ({ isPlaying, onExpand, onStop, onPrefetch }: DesktopRightProps) => (
     <div
       className="hidden md:flex items-center justify-end md:w-[32%] gap-2"
       onClick={(e) => e.stopPropagation()}
@@ -554,6 +559,8 @@ const DesktopRight = memo(
         size="icon"
         className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted/70 transition-all duration-150"
         onClick={onExpand}
+        onMouseEnter={() => onPrefetch?.()}
+        onFocus={() => onPrefetch?.()}
         title="Mở rộng player"
         aria-label="Mở rộng player"
       >
@@ -636,6 +643,18 @@ export const MiniPlayer = memo(
     const dispatch = useAppDispatch();
     const labelId = useId();
 
+    // Prefetch lazy FullPlayer chunks on first hover/focus to improve perceived latency
+    const prefetchedRef = useRef(false);
+    const prefetchFullPlayer = useCallback(() => {
+      if (prefetchedRef.current) return;
+      prefetchedRef.current = true;
+      // Warm up lazy chunks used by FullPlayer
+      void import("./LyricEngine");
+      void import("./MoodFocusView");
+      void import("./TrackDetailPanel");
+      void import("./Queuepanel");
+    }, []);
+
     // PERF-7: stable callbacks — dispatch and onExpand are already stable
     const handleStop = useCallback(() => dispatch(stopPlaying()), [dispatch]);
 
@@ -709,6 +728,7 @@ export const MiniPlayer = memo(
               track={track}
               isPlaying={isPlaying}
               onExpand={onExpand}
+              onPrefetch={prefetchFullPlayer}
             />
 
             {/* CENTER (desktop) — transport + scrubber */}
@@ -755,6 +775,7 @@ export const MiniPlayer = memo(
               isPlaying={isPlaying}
               onExpand={onExpand}
               onStop={handleStop}
+              onPrefetch={prefetchFullPlayer}
             />
           </div>
         </motion.div>

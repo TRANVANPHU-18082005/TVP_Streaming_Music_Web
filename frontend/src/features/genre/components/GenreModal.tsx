@@ -104,7 +104,6 @@ const GenreModal = memo<GenreModalProps>(
     const currentParentId = watch("parentId");
     const isTrending = watch("isTrending");
     const imageValue = watch("image");
-    console.log(currentParentId);
     // FIX 10: single useMemo — computed once per render, used in 5 places
     const isWorking = useMemo(
       () => isPending || isFormSubmitting,

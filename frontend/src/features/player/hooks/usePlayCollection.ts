@@ -50,7 +50,6 @@ export const usePlayCollection = () => {
           queryFn: fetchFn,
           staleTime: 5 * 60 * 1000,
         });
-        console.log("[usePlayCollection] Fetched data:", res);
         const root = res?.data ?? res;
         let tracks: ITrack[] = [];
         let title = "";
@@ -58,28 +57,24 @@ export const usePlayCollection = () => {
         let id = "";
         let slug = "";
         if (sourceType === "playlist") {
-          console.log("Data structure for playlist:", res);
           tracks = root.tracks ?? [];
           title = root.title ?? "Danh sách mới";
           trackIds = root.trackIds ?? [];
           id = root._id ?? "";
           slug = root.slug ?? "";
         } else if (sourceType === "album") {
-          console.log("Data structure for album:", res);
           tracks = root.tracks ?? [];
           title = root.title ?? "Album mới";
           trackIds = root.trackIds ?? [];
           id = root._id ?? "";
           slug = root.slug ?? "";
         } else if (sourceType === "artist") {
-          console.log("Data structure for artist:", res);
           tracks = root.topTracks ?? [];
           title = root.name ?? "Nghệ sĩ mới";
           trackIds = root.trackIds ?? [];
           id = root._id ?? "";
           slug = root.slug ?? "";
         } else if (sourceType === "genre") {
-          console.log("Data structure for genre:", res);
           tracks = root.topTracks ?? [];
           title = root.name ?? "Thể loại mới";
           trackIds = root.trackIds ?? [];
@@ -89,7 +84,6 @@ export const usePlayCollection = () => {
         if (trackIds.length === 0) {
           throw new Error("Không có bài hát nào trong danh sách này.");
         }
-        console.log(tracks, title, trackIds, id, slug);
         // DISPATCH VÀO STORE VỚI ĐẦY ĐỦ SOURCE CONTEXT
         dispatch(
           setQueue({

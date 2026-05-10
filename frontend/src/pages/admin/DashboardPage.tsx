@@ -446,7 +446,6 @@ const DashboardPage = () => {
   const [range, setRange] = useState<DashboardRange>("7d");
   const { data, isLoading, isError, refetch, isRefetching, isStale } =
     useDashboardAnalytics(range);
-  console.log(data);
   if (isLoading || !data) return <DashboardSkeleton />;
 
   if (isError || !data)

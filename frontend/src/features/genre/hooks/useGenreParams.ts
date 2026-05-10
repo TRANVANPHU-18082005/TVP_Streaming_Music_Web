@@ -30,7 +30,6 @@ export const useGenreParams = () => {
   const filterParams = useMemo(() => {
     return genreAdminParamsSchema.parse(rawParams);
   }, [rawParams]);
-  console.log(DEFAULT_PARAMS, rawParams, filterParams);
   // 3. ĐỒNG BỘ URL (Self-healing): Sửa lại URL nếu user nhập sai format
   useEffect(() => {
     const isDirty = JSON.stringify(rawParams) !== JSON.stringify(filterParams);
