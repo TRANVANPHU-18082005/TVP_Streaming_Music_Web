@@ -3,8 +3,9 @@ import { io, Socket } from "socket.io-client";
 import { useAppSelector } from "@/store/hooks"; // Import từ hooks.ts như đã thống nhất
 import { ClientToServerEvents, ServerToClientEvents } from "@/types/socket";
 import { SocketContext } from "../context/SocketContext"; // Import Context từ file trên
+import { env } from "@/config/env";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:8000";
+const SOCKET_URL = env.VITE_SOCKET_URL;
 
 export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const [socket, setSocket] = useState<Socket<

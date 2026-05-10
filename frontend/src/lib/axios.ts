@@ -2,6 +2,7 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { env } from "@/config/env";
 import type { Store } from "@reduxjs/toolkit"; // Import Type
 import { LOGOUT_ACTION } from "@/store/store";
+import { handleError } from "@/utils/handleError";
 
 // Định nghĩa Interface
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
@@ -138,6 +139,7 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
       } catch (e) {
+        handleError(e, "Error checking social callback URL during 401 handling");
         // ignore
       }
       // 1. Nếu lỗi 401 đến từ chính API refresh hoặc login -> Logout luôn
