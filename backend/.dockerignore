@@ -6,3 +6,7 @@
 **/logs
 **/venv
 fly.toml
+node_modules
+dist
+.env
+.git

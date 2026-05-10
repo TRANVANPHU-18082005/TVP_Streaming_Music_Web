@@ -5,7 +5,7 @@ import compression from "compression";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import passport from "passport";
-import os from "os";
+
 import mongoose from "mongoose";
 import "./config/passport";
 import { apiLimiter } from "./middlewares/rateLimiter";
