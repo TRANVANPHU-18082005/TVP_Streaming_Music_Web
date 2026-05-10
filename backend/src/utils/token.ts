@@ -11,8 +11,8 @@ export const generateTokens = (
     expiresIn: "15m",
   });
 
-  // Nếu remember -> 30 ngày, Không -> 1 ngày
-  const refreshExpiresIn = rememberMe ? "30d" : "1d";
+  // Nếu remember -> 30 ngày, Không -> 7 ngày
+  const refreshExpiresIn = rememberMe ? "30d" : "7d";
 
   const refreshToken = jwt.sign(
     { id: userId },
@@ -29,9 +29,9 @@ export const setRefreshTokenCookie = (
   token: string,
   rememberMe: boolean = false, // <--- Thêm tham số này
 ) => {
-  // Tính mili-giây: 30 ngày hoặc 1 ngày
+  // Tính mili-giây: 30 ngày hoặc 7 ngày
   const oneDay = 24 * 60 * 60 * 1000;
-  const maxAge = rememberMe ? 30 * oneDay : oneDay;
+  const maxAge = rememberMe ? 30 * oneDay : 7 * oneDay;
   // For cross-origin OAuth flows we prefer 'none' in production (requires Secure).
   // For local development use 'lax' to be more permissive without HTTPS.
   const sameSiteOption: "lax" | "strict" | "none" =

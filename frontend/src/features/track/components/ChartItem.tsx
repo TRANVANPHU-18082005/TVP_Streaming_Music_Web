@@ -34,7 +34,7 @@ import { WaveformBars } from "@/components/MusicVisualizer";
 
 const useOverflows = (
   text: string,
-): [React.RefObject<HTMLParagraphElement | null>, boolean] => {
+): [React.RefObject<HTMLParagraphElement>, boolean] => {
   const ref = useRef<HTMLParagraphElement>(null);
   const [overflows, setOverflows] = useState(false);
 

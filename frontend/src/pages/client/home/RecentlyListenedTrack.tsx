@@ -157,7 +157,6 @@ export const RecentlyListenedTrack = () => {
     isError,
     refetch: refetchTracks,
   } = useRecentlyPlayedInfinite();
-
   const allTracks = useMemo<ITrack[]>(
     () => tracksData?.allTracks ?? [],
     [tracksData?.allTracks],
@@ -208,7 +207,7 @@ export const RecentlyListenedTrack = () => {
   // ── Loading ────────────────────────────────────────────────────────────────
   const isOffline = !useOnlineStatus();
   const hasResults = allTracks.length > 0;
-
+ 
   if (isLoadingTracks && !hasResults) {
     return (
       <section

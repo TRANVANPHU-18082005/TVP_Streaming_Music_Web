@@ -112,7 +112,9 @@ export const PlaylistCover = memo<PlaylistCoverProps>(
                 isPlaying && isLg && "saturate-[1.15] brightness-[0.88]",
               )}
               loading={isLg ? "eager" : "lazy"}
-              fetchPriority={isLg ? "high" : "auto"}
+              // `fetchPriority` is not recognized by all React versions and
+              // will produce a warning. Use a data- attribute instead.
+              data-fetchpriority={isLg ? "high" : "auto"}
               decoding="async"
             />
           ) : (

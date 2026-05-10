@@ -766,8 +766,8 @@ class TrackService {
     }
     const trackDoc = await Track.findOne({
       _id: id,
+      
     })
-      .select(TRACK_SELECT)
       .populate(TRACK_POPULATE as any)
       .lean();
 
@@ -802,7 +802,7 @@ class TrackService {
 
     const ttl = 1800 + Math.floor(Math.random() * 600);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(sanitized), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(sanitized), "EX", ttl),
     ).catch((err) => console.error("[Cache] Set Track Detail Error:", err));
 
     return sanitized;

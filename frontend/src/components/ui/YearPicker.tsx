@@ -106,7 +106,7 @@ interface YearGridProps {
   disabled: boolean;
   maxHeight: number;
   onSelect: (year: number) => void;
-  scrollRef: React.RefObject<HTMLDivElement | null>;
+  scrollRef: React.RefObject<HTMLDivElement>;
 }
 
 const YearGrid = memo(

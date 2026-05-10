@@ -44,9 +44,9 @@ export const getArtistsByAdmin = catchAsync(
 export const getArtistDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user as IUser | undefined;
-
+    const slug = req.params.slug as string;
     const albumDetailResult = await artistService.getArtistDetail(
-      req.params.slug,
+      slug,
       currentUser,
     );
     res.status(httpStatus.OK).json({
@@ -106,9 +106,9 @@ export const createArtist = catchAsync(async (req: Request, res: Response) => {
 // 7. ADMIN: UPDATE
 export const updateArtist = catchAsync(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-
+  const id = req.params.id as string;
   const result = await artistService.updateArtistByAdmin(
-    req.params.id,
+    id,
     req.body,
     files,
   );
@@ -122,7 +122,8 @@ export const updateArtist = catchAsync(async (req: Request, res: Response) => {
 
 // 8. ADMIN: TOGGLE STATUS
 export const toggleStatus = catchAsync(async (req: Request, res: Response) => {
-  const result = await artistService.toggleStatus(req.params.id);
+  const id = req.params.id as string;
+  const result = await artistService.toggleStatus(id);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -135,7 +136,8 @@ export const toggleStatus = catchAsync(async (req: Request, res: Response) => {
 
 // 9. ADMIN: DELETE
 export const deleteArtist = catchAsync(async (req: Request, res: Response) => {
-  await artistService.deleteArtist(req.params.id);
+  const id = req.params.id as string;
+  await artistService.deleteArtist(id);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -144,7 +146,8 @@ export const deleteArtist = catchAsync(async (req: Request, res: Response) => {
 });
 // 11. ADMIN: RESTORE ARTIST
 export const restoreArtist = catchAsync(async (req: Request, res: Response) => {
-  const result = await artistService.restoreArtist(req.params.id);
+  const id = req.params.id as string;
+  const result = await artistService.restoreArtist(id);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -159,7 +162,7 @@ export const getArtistTracks = catchAsync(async (req, res) => {
   const currentUser = req.user as IUser | undefined;
 
   const result = await artistService.getArtistTracks(
-    req.params.id,
+    req.params.id as string,
     query,
     currentUser,
   );

@@ -435,7 +435,7 @@ class GenreService {
 
     const ttl = 1800 + Math.floor(Math.random() * 600);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
     ).catch(console.error);
 
     return result;
@@ -631,7 +631,7 @@ class GenreService {
 
     const ttl = 900 + Math.floor(Math.random() * 120);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
     ).catch(console.error);
 
     return result;

@@ -118,8 +118,15 @@ export const ArtistDisplay = memo(
             <FeatLabel variant={variant} />
 
             {featuringArtists.map((artist, index) => (
-              <span key={artist._id} className="inline-flex items-center">
-                <ArtistChip artist={artist} isMain={false} variant={variant} />
+              <span
+                key={artist._id ?? (artist.slug as string) ?? `feat-${index}`}
+                className="inline-flex items-center"
+              >
+                <ArtistChip
+                  artist={artist}
+                  isMain={false}
+                  variant={variant}
+                />
                 {/* comma between featuring artists, never after the last */}
                 {index < featuringArtists.length - 1 && (
                   <span

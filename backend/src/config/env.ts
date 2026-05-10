@@ -6,7 +6,7 @@ dotenv.config();
 // Required in production — add keys here if your app needs them
 const requiredInProd = [
   // Core
-  "MONGO_URI_SRV",
+  "MONGO_URI",
   "JWT_SECRET",
   "JWT_REFRESH_SECRET",
   // Queue / Storage
@@ -28,7 +28,7 @@ export const config = {
   port: Number(process.env.PORT || 8000),
 
   // Mongo
-  mongoUriSrv: process.env.MONGO_URI_SRV || "",
+  mongoUriSrv: process.env.MONGO_URI || "",
   mongoUri: process.env.MONGO_URI || "",
 
   // JWT

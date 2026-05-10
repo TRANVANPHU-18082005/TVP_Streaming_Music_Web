@@ -29,8 +29,9 @@ export const getMoodVideos = catchAsync(async (req: Request, res: Response) => {
 
 export const updateMoodVideo = catchAsync(
   async (req: Request, res: Response) => {
+    const id = req.params.id as string;
     const video = await MoodVideoService.updateMoodVideo(
-      req.params.id,
+      id,
       req.body,
     );
 
@@ -44,7 +45,8 @@ export const updateMoodVideo = catchAsync(
 
 export const deleteMoodVideo = catchAsync(
   async (req: Request, res: Response) => {
-    await MoodVideoService.deleteMoodVideo(req.params.id);
+    const id = req.params.id as string;
+    await MoodVideoService.deleteMoodVideo(id);
     res.status(httpStatus.OK).json({
       success: true,
       message: "Đã xóa Mood Video",

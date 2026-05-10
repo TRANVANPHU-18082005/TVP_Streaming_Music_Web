@@ -3,6 +3,7 @@ import { RecentlyListenedTrack } from "@/pages/client/home/RecentlyListenedTrack
 import MyPlaylist from "@/pages/client/home/MyPlaylist";
 import LibrarySection from "@/pages/client/home/Librarysection";
 import Hero from "./Hero";
+import { useAppSelector } from "@/store/hooks";
 
 const FeaturedAlbums = lazy(() => import("./FeaturedAlbums"));
 const FeaturedPlaylists = lazy(() => import("./FeaturedPlaylists"));
@@ -22,12 +23,14 @@ function SectionSkeleton({ height = 48 }: { height?: number }) {
 }
 
 export function HomePage() {
+    const {user} = useAppSelector((state) => state.auth); // Ensure we have user data before showing library
+  
   return (
     <>
       <Hero />
-      <RecentlyListenedTrack />
-      <LibrarySection />
-      <MyPlaylist />
+      {user && <RecentlyListenedTrack />}
+      {user && <LibrarySection />}
+      {user && <MyPlaylist />}
 
       <Suspense fallback={<SectionSkeleton height={220} />}>
         <FeaturedAlbums />

@@ -8,6 +8,7 @@ import React, {
   useRef,
   useEffect,
   useId,
+  RefObject,
 } from "react";
 import {
   Search,
@@ -541,7 +542,7 @@ const FilterBar = ({
 // ─── Shared VideoGrid ─────────────────────────────────────────────────────────
 
 interface VideoGridProps {
-  gridRef: React.RefObject<HTMLDivElement | null>;
+  gridRef: RefObject<HTMLDivElement>;
   isLoading: boolean;
   isError: boolean;
   filteredVideos: MoodVideo[];
@@ -680,7 +681,7 @@ interface FilterVariantProps {
   totalCount: number;
   focusedIndex: number;
   setFocusedIndex: (n: number) => void;
-  gridRef: React.RefObject<HTMLDivElement | null>;
+  gridRef: React.RefObject<HTMLDivElement>;
   handleSelect: (id: string) => void;
   handleDeselect: () => void;
   handleGridKeyDown: (e: React.KeyboardEvent) => void;
@@ -971,7 +972,7 @@ interface PickerVariantLayoutProps {
   totalCount: number;
   focusedIndex: number;
   setFocusedIndex: (n: number) => void;
-  gridRef: React.RefObject<HTMLDivElement | null>;
+  gridRef: React.RefObject<HTMLDivElement>;
   handleSelect: (id: string) => void;
   handleDeselect: () => void;
   handleGridKeyDown: (e: React.KeyboardEvent) => void;

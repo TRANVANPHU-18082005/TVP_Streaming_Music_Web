@@ -358,7 +358,7 @@ class AlbumService {
     // Cache với jitter để tránh thundering herd
     const ttl = 600 + Math.floor(Math.random() * 120);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
     ).catch((err) => console.error("[Cache] SET error:", err));
 
     return result;
@@ -751,7 +751,7 @@ class AlbumService {
 
     const ttl = 1800 + Math.floor(Math.random() * 300);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
     ).catch((err) => console.error("[Cache] Set Album Tracks Error:", err));
 
     return result;

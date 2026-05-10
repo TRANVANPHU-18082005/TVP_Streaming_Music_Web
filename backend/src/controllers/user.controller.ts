@@ -11,7 +11,7 @@ export const getPublicProfile = catchAsync(
     const currentUserId = req.user ? req.user._id.toString() : undefined;
 
     const user = await UserService.getPublicProfile(
-      req.params.id,
+      req.params.id as string,
       currentUserId,
     );
 
@@ -79,7 +79,7 @@ export const createUser = catchAsync(async (req: Request, res: Response) => {
 // Thay thế cho toggleBlock cũ -> Linh hoạt hơn
 export const updateUser = catchAsync(async (req: Request, res: Response) => {
   const user = await UserService.updateUserByAdmin(
-    req.params.id,
+    req.params.id as string,
     req.body,
     req.file,
   );
@@ -93,7 +93,7 @@ export const updateUser = catchAsync(async (req: Request, res: Response) => {
 
 // 8. ADMIN: Delete User (Hard Delete & Cleanup)
 export const deleteUser = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.deleteUser(req.params.id);
+  const result = await UserService.deleteUser(req.params.id as string);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -102,7 +102,7 @@ export const deleteUser = catchAsync(async (req: Request, res: Response) => {
 });
 // Admin: Block User
 export const toggleBlock = catchAsync(async (req: Request, res: Response) => {
-  const user = await UserService.toggleBlockUser(req.params.id);
+  const user = await UserService.toggleBlockUser(req.params.id as string);
   res.json({
     success: true,
     message: user.isActive ? "Đã mở khóa tài khoản" : "Đã khóa tài khoản",

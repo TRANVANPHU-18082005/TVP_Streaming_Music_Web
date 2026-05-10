@@ -37,12 +37,12 @@ class VerificationService {
   /**
    * 2. ADMIN: LẤY DANH SÁCH YÊU CẦU
    */
-  async getRequests(status: string = "pending", page = 1, limit = 10) {
+  async getRequests(status: "pending" | "approved" | "rejected" = "pending", page = 1, limit = 10) {
     const skip = (page - 1) * limit;
     const query = { status };
 
     const [requests, total] = await Promise.all([
-      VerificationRequest.find(query)
+      VerificationRequest.find(query as any)
         .populate("user", "fullName email avatar") // Xem ai gửi
         .populate("artistId", "name coverImage") // Xem họ claim artist nào (nếu có)
         .sort({ createdAt: 1 }) // Đơn cũ nhất lên đầu

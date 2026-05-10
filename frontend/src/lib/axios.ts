@@ -78,7 +78,23 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as CustomAxiosRequestConfig;
-    if (!error.response || !originalRequest) return Promise.reject(error);
+
+    // Handle cancelled/aborted requests (e.g. React StrictMode double-mounts)
+    // Axios cancellation typically sets `error.code === 'ERR_CANCELED'` or
+    // `error.name === 'CanceledError'`. Treat these as expected and attach
+    // a flag so callers (React Query / components) can silently ignore them.
+    const anyErr = error as any;
+    if (
+      anyErr?.code === "ERR_CANCELED" ||
+      anyErr?.name === "CanceledError" ||
+      String(anyErr?.message).toLowerCase().includes("canceled") ||
+      String(anyErr?.message).toLowerCase().includes("aborted")
+    ) {
+      anyErr.isCanceled = true;
+      return Promise.reject(anyErr);
+    }
+
+    if (!originalRequest) return Promise.reject(error);
 
     const { status, data } = error.response as any;
     // ----------------------------------------------------------------
@@ -180,18 +196,16 @@ api.interceptors.response.use(
         const status = refreshError.response?.status;
 
         if (status === 400 || status === 401 || status === 403) {
-          // Lúc này mới chắc chắn là phiên đăng nhập hết hạn thật sự
-          // 1. Dọn dẹp Redux (Kích hoạt Cầu chì tổng)
+          // Phiên đăng nhập đã thực sự hết hạn hoặc refresh token không hợp lệ.
+          // Chỉ dọn dẹp state (logout). Không tự động redirect từ interceptor
+          // để tránh điều hướng bất ngờ khi app đang khởi tạo (ví dụ: trang Home).
           store?.dispatch({ type: LOGOUT_ACTION });
           setGlobalAccessToken(null);
 
-          // 2. Điều hướng kèm theo query string để trang Login biết lý do
-          // Thay vì 'locked', ta dùng 'expired'
-          if (window.location.pathname !== "/login") {
-            setTimeout(() => {
-              window.location.href = "/login?reason=session_expired";
-            }, 100);
-          }
+          // NOTE: Frontend routing should observe auth state and redirect user
+          // to the login page when appropriate (for protected routes). If you
+          // still want an automatic redirect, implement it in a top-level
+          // auth listener so navigation is handled by React Router.
         }
 
         // Nếu là lỗi 500, lỗi mạng (network error)... thì KHÔNG logout.

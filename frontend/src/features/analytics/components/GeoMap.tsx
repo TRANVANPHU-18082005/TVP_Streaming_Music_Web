@@ -1,13 +1,9 @@
 // features/analytics/components/GeoMap.tsx
 
-import React, { useMemo, memo, useState, useCallback } from "react";
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  ZoomableGroup,
-  Graticule,
-} from "react-simple-maps";
+import React, { useMemo, memo, useState, useCallback, useEffect } from "react";
+import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { scaleLinear } from "d3-scale";
 import { GeoLocation } from "@/features/analytics/types";
 import { ISO_MAPPING } from "@/utils/isoMapping";
@@ -62,6 +58,7 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
     value: 0,
   });
   const [hoveredGeo, setHoveredGeo] = useState<string | null>(null);
+  const [geoJson, setGeoJson] = useState<any | null>(null);
 
   // Build lookup map ISO2 → value
   // Trong GeoMap.tsx
@@ -96,103 +93,93 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
   const maxVal = Math.max(...(data?.map((d) => d.value) || [0]), 1);
 
   // Tooltip handlers
-  const handleMouseEnter = useCallback(
-    (geo: any, evt: React.MouseEvent<SVGPathElement>) => {
-      const rect = (
-        evt.currentTarget.closest("svg") as SVGElement
-      ).getBoundingClientRect();
-      setHoveredGeo(geo.id);
+  // Leaflet event handlers will update tooltip state
+  const handleFeatureMouseOver = useCallback(
+    (feature: any, layer: L.Layer, evt: any) => {
+      const id = feature.id || feature.properties?.ISO_A3 || feature.properties?.iso_a3;
+      setHoveredGeo(id);
+      const name = feature.properties?.name || feature.properties?.NAME || "Unknown";
+      const value = dataMap[id] || 0;
+      // use container point for tooltip offset
+      const containerPoint = evt?.containerPoint;
       setTooltip({
         visible: true,
-        x: evt.clientX - rect.left,
-        y: evt.clientY - rect.top,
-        name: geo.properties?.name || "Unknown",
-        value: dataMap[geo.id] || 0,
+        x: containerPoint ? containerPoint.x : 0,
+        y: containerPoint ? containerPoint.y : 0,
+        name,
+        value,
       });
+      // subtle highlight
+      (layer as any).setStyle?.({ weight: 0.8 });
     },
     [dataMap],
   );
 
-  const handleMouseMove = useCallback(
-    (evt: React.MouseEvent<SVGPathElement>) => {
-      const rect = (
-        evt.currentTarget.closest("svg") as SVGElement
-      ).getBoundingClientRect();
-      setTooltip((prev) => ({
-        ...prev,
-        x: evt.clientX - rect.left,
-        y: evt.clientY - rect.top,
-      }));
-    },
-    [],
-  );
+  const handleFeatureMouseMove = useCallback((evt: any) => {
+    const p = evt.containerPoint;
+    setTooltip((prev) => ({ ...prev, x: p.x, y: p.y }));
+  }, []);
 
-  const handleMouseLeave = useCallback(() => {
+  const handleFeatureMouseOut = useCallback((feature: any, layer: L.Layer) => {
     setHoveredGeo(null);
     setTooltip((prev) => ({ ...prev, visible: false }));
+    (layer as any).setStyle?.({ weight: 0.4 });
+  }, []);
+
+  useEffect(() => {
+    // load geojson
+    let cancelled = false;
+    fetch(GEO_URL)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled) setGeoJson(j);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
     <div className="relative w-full h-full select-none">
-      <ComposableMap
-        projectionConfig={{ rotate: [-10, 0, 0], scale: 155 }}
-        className="w-full h-full"
-        style={{ background: "transparent" }}
+      <MapContainer
+        center={[20, 0]}
+        zoom={2}
+        minZoom={1}
+        style={{ width: "100%", height: "100%" }}
+        worldCopyJump={false}
+        attributionControl={false}
       >
-        <ZoomableGroup
-          zoom={1}
-          minZoom={0.9}
-          maxZoom={5}
-          translateExtent={[
-            [-200, -100],
-            [1000, 600],
-          ]}
-        >
-          <Graticule
-            stroke={isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"}
-            strokeWidth={0.4}
+        {/* Use minimal basemap for context; TileLayer can be removed if undesired */}
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution="&copy; OpenStreetMap contributors"
+        />
+
+        {geoJson && (
+          <GeoJSON
+            data={geoJson}
+            style={(feature: any) => {
+              const id = feature.id || feature.properties?.ISO_A3 || feature.properties?.iso_a3 || feature.properties?.ISO_A2 || feature.properties?.iso_a2;
+              const fill = hoveredGeo === id ? colors.hover : getFill(id);
+              return {
+                color: colors.stroke,
+                weight: hoveredGeo === id ? 0.8 : 0.4,
+                fillColor: fill,
+                fillOpacity: 1,
+                dashArray: "",
+              } as any;
+            }}
+            onEachFeature={(feature: any, layer: any) => {
+              layer.on({
+                mouseover: (e: any) => handleFeatureMouseOver(feature, layer, e),
+                mousemove: (e: any) => handleFeatureMouseMove(e),
+                mouseout: () => handleFeatureMouseOut(feature, layer),
+              });
+            }}
           />
-
-          <Geographies geography={GEO_URL}>
-            {(args: any) =>
-              (args.geographies as any[]).map((geo: any) => {
-                const geoIdentifier =
-                  geo.id || geo.properties?.ISO_A3 || geo.properties?.iso_a3;
-                const isHovered = hoveredGeo === geo.id;
-                const value = dataMap[geo.id] || 0;
-
-                return (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill={isHovered ? colors.hover : getFill(geoIdentifier)}
-                    stroke={colors.stroke}
-                    strokeWidth={isHovered ? 0.8 : 0.4}
-                    onMouseEnter={(e: React.MouseEvent<SVGPathElement>) =>
-                      handleMouseEnter(geo, e)
-                    }
-                    onMouseMove={handleMouseMove}
-                    onMouseLeave={handleMouseLeave}
-                    style={{
-                      default: {
-                        outline: "none",
-                        transition: "fill 0.18s ease, stroke-width 0.12s ease",
-                        cursor: value > 0 ? "pointer" : "default",
-                        filter:
-                          isHovered && value > 0
-                            ? "brightness(1.12) drop-shadow(0 2px 6px rgba(245,158,11,0.35))"
-                            : "none",
-                      },
-                      hover: { outline: "none" },
-                      pressed: { outline: "none", fill: colors.pressed },
-                    }}
-                  />
-                );
-              })
-            }
-          </Geographies>
-        </ZoomableGroup>
-      </ComposableMap>
+        )}
+      </MapContainer>
 
       {/* ── Custom Tooltip ─────────────────────────────────────── */}
       {tooltip.visible && (

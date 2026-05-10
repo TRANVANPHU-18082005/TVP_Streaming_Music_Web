@@ -146,7 +146,7 @@ class ArtistService {
     };
     const ttl = 900 + Math.floor(Math.random() * 120);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
     ).catch((err) => console.error("[Cache] Artist Tracks SET error:", err));
 
     return result;
@@ -336,7 +336,7 @@ class ArtistService {
 
     const ttl = 900 + Math.floor(Math.random() * 300);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
     ).catch((err) => console.error("[Cache] Artist LIST SET error:", err));
 
     return result;

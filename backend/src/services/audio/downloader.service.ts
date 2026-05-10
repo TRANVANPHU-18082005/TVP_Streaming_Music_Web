@@ -50,7 +50,7 @@ export async function downloadFile(
     );
   }
 
-  const contentLength = parseInt(response.headers["content-length"] ?? "0", 10);
+  const contentLength = parseInt(String(response.headers["content-length"] ?? "0"), 10);
   if (contentLength > MAX_DOWNLOAD_SIZE) {
     throw new Error(
       `[DownloaderService] File too large: ${(contentLength / 1024 / 1024).toFixed(1)} MB (max ${MAX_DOWNLOAD_SIZE_MB} MB).`,

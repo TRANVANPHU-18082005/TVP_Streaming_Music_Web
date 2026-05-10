@@ -8,7 +8,7 @@ import { AppWithRouter } from "@/app/provider";
 injectStore(store);
 
 createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
+   
     <AppWithRouter />
-  </React.StrictMode>,
+  
 );

@@ -53,12 +53,13 @@ export const createGenre = catchAsync(async (req: Request, res: Response) => {
 });
 // 3. UPDATE GENRE (Admin)
 export const updateGenre = catchAsync(async (req: Request, res: Response) => {
+  const id = req.params.id as string;
   const result = await genreService.updateGenre(
-    req.params.id,
+    id,
     req.body,
     req.file,
   );
-  console.log(req.params.id, req.body, req.file);
+  console.log(id, req.body, req.file);
   res.status(httpStatus.OK).json({
     success: true,
     message: "Cập nhật thể loại thành công",
@@ -68,7 +69,8 @@ export const updateGenre = catchAsync(async (req: Request, res: Response) => {
 // 4. TOGGLE STATUS (Admin - Ẩn/Hiện)
 export const toggleGenreStatus = catchAsync(
   async (req: Request, res: Response) => {
-    const result = await genreService.toggleStatus(req.params.id);
+    const id = req.params.id as string;
+    const result = await genreService.toggleStatus(id);
 
     res.status(httpStatus.OK).json({
       success: true,
@@ -81,7 +83,8 @@ export const toggleGenreStatus = catchAsync(
 );
 // 5. DELETE GENRE (Admin - Xóa vĩnh viễn)
 export const deleteGenre = catchAsync(async (req: Request, res: Response) => {
-  await genreService.deleteGenre(req.params.id);
+  const id = req.params.id as string;
+  await genreService.deleteGenre(id);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -90,7 +93,8 @@ export const deleteGenre = catchAsync(async (req: Request, res: Response) => {
 });
 // Restore Genre (Admin)
 export const restoreGenre = catchAsync(async (req: Request, res: Response) => {
-  await genreService.restoreGenre(req.params.id);
+  const id = req.params.id as string;
+  await genreService.restoreGenre(id);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -101,9 +105,10 @@ export const restoreGenre = catchAsync(async (req: Request, res: Response) => {
 export const getGenreDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user as IUser | undefined;
-    console.log(req.params, req.params.slug);
+    const id = req.params.id as string;
+    console.log(req.params, id);
     const genreDetailResult = await genreService.getGenreDetail(
-      req.params.slug,
+      id,
       currentUser,
     );
 

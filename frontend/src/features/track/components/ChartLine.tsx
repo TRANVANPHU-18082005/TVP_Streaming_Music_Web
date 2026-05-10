@@ -326,8 +326,8 @@ const ChartTooltipInner = memo((props: any) => {
 
       {/* Series rows — unchanged */}
       <div className="px-3 py-3 space-y-2.5">
-        {rows.map(({ entry, track, s }: any, idx: number) => (
-          <div key={idx} className="flex items-center gap-2.5">
+        {rows.map(({ entry, track, s }: any) => (
+          <div key={track?._id ?? entry?.id ?? Math.random()} className="flex items-center gap-2.5">
             <span
               aria-hidden="true"
               className="shrink-0 w-[3px] h-8 rounded-full"
@@ -528,7 +528,7 @@ const ChartCanvas = memo(
 
     // Stable tooltip content — memoized on tracks identity
     const tooltipContent = useMemo(
-      () => (props: TooltipProps<number, string>) => (
+      () => (props: any) => (
         <ChartTooltipInner {...props} tracks={tracks} />
       ),
       [tracks],

@@ -61,9 +61,9 @@ export const getAlbumDetail = catchAsync(
   async (req: Request, res: Response) => {
     // Nếu có optionalAuth, req.user sẽ có giá trị (hoặc undefined nếu guest)
     const currentUser = req.user as IUser | undefined;
-
+    const slug = req.params.slug as string;
     const albumDetailResult = await albumService.getAlbumDetail(
-      req.params.slug,
+      slug,
       currentUser,
     );
 
@@ -77,7 +77,7 @@ export const getAlbumDetail = catchAsync(
 // 5. UPDATE ALBUM
 export const updateAlbum = catchAsync(async (req: Request, res: Response) => {
   const currentUser = req.user as IUser;
-  const id = req.params.id;
+  const id = req.params.id as string;
   const album = await albumService.updateAlbum(
     id,
     currentUser,
@@ -94,7 +94,9 @@ export const updateAlbum = catchAsync(async (req: Request, res: Response) => {
 
 // 6. DELETE ALBUM
 export const deleteAlbum = catchAsync(async (req: Request, res: Response) => {
-  await albumService.deleteAlbum(req.params.id, req.user as IUser);
+  const currentUser = req.user as IUser;
+  const id = req.params.id as string;
+  await albumService.deleteAlbum(id, currentUser);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -103,7 +105,9 @@ export const deleteAlbum = catchAsync(async (req: Request, res: Response) => {
 });
 // Restore Album (Admin)
 export const restoreAlbum = catchAsync(async (req: Request, res: Response) => {
-  await albumService.restoreAlbum(req.params.id, req.user as IUser);
+  const currentUser = req.user as IUser;
+  const id = req.params.id as string;
+  await albumService.restoreAlbum(id, currentUser);
 
   res.status(httpStatus.OK).json({
     success: true,

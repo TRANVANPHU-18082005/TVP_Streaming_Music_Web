@@ -19,6 +19,7 @@ import { APP_CONFIG } from "@/config/constants";
 import { IAlbum } from "@/features/album";
 import { IPlaylist } from "@/features/playlist";
 import { ITrack, TrackList } from "@/features/track";
+ 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -445,7 +446,6 @@ PlaylistContent.displayName = "PlaylistContent";
 
 export function LibrarySection() {
   const { data: library, isLoading, error, refetch } = useUserLibrary();
-
   const albums = useMemo(() => library?.albums ?? [], [library]);
   const playlists = useMemo(() => library?.playlists ?? [], [library]);
   const {
@@ -535,6 +535,8 @@ export function LibrarySection() {
     !totalItems &&
     !albums.length &&
     !playlists.length
+
+     
   ) {
     return null;
   }

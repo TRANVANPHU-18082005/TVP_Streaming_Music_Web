@@ -197,7 +197,7 @@ class RecommendationService {
     // ── 4. Cache & trả kết quả ────────────────────────────────────────────────
     const ttl = CACHE_TTL_BASE + Math.floor(Math.random() * CACHE_TTL_JITTER);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(mixed), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(mixed), "EX", ttl),
     ).catch(() => {});
 
     // Loại excludeTrackId khỏi kết quả cuối cùng (sau khi cache đã lưu toàn bộ)

@@ -69,7 +69,7 @@ export const getPlaylistDetail = catchAsync(
     const currentUser = req.user as IUser | undefined;
 
     const playlistDetailResult = await playlistService.getPlaylistDetail(
-      req.params.id,
+      req.params.id as string,
       currentUser,
     );
 
@@ -83,8 +83,9 @@ export const getPlaylistDetail = catchAsync(
 // 4. Update Playlist
 export const updatePlaylist = catchAsync(
   async (req: Request, res: Response) => {
+    const id = req.params.id as string;
     const result = await playlistService.updatePlaylistByAdmin(
-      req.params.id,
+      id,
       req.user as IUser,
       req.body,
       req.file,
@@ -101,7 +102,8 @@ export const updatePlaylist = catchAsync(
 // 5. Delete Playlist
 export const deletePlaylist = catchAsync(
   async (req: Request, res: Response) => {
-    await playlistService.deletePlaylist(req.params.id, req.user as IUser);
+    const id = req.params.id as string;
+    await playlistService.deletePlaylist(id, req.user as IUser);
 
     res.status(httpStatus.OK).json({
       success: true,
@@ -113,7 +115,8 @@ export const deletePlaylist = catchAsync(
 // Restore Playlist (Admin)
 export const restorePlaylist = catchAsync(
   async (req: Request, res: Response) => {
-    await playlistService.restorePlaylist(req.params.id, req.user as IUser);
+    const id = req.params.id as string;
+    await playlistService.restorePlaylist(id, req.user as IUser);
 
     res.status(httpStatus.OK).json({
       success: true,
@@ -127,7 +130,7 @@ export const addTracks = catchAsync(async (req: Request, res: Response) => {
   const { trackIds } = req.body;
 
   const result = await playlistService.addTracks(
-    req.params.id,
+    req.params.id as string,
     // Đảm bảo luôn là mảng (dù client gửi string hay array)
     Array.isArray(trackIds) ? trackIds : [trackIds],
     req.user as IUser,
@@ -144,7 +147,7 @@ export const removeTracks = catchAsync(async (req: Request, res: Response) => {
   const { trackIds } = req.body;
 
   const result = await playlistService.removeTracks(
-    req.params.id,
+    req.params.id as string,
     Array.isArray(trackIds) ? trackIds : [trackIds],
     req.user as IUser,
   );
@@ -158,10 +161,11 @@ export const removeTracks = catchAsync(async (req: Request, res: Response) => {
 // 8. Reorder Tracks
 export const reorderTracks = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
+  const idString = id as string;
   const { trackIds } = req.body; // Mảng ID đã sắp xếp từ Client gửi xuống
 
   const result = await playlistService.reorderTracks(
-    id,
+    idString,
     trackIds,
     req.user as IUser,
   );
@@ -193,7 +197,7 @@ export const editMyPlaylist = catchAsync(
   async (req: Request, res: Response) => {
     // Sử dụng service tạo nhanh: Không bắt buộc gửi Title/Visibility
     const result = await playlistService.editQuickPlaylist(
-      req.params.id,
+      req.params.id as string,
       req.user as IUser,
       req.body, // title và visibility (nếu có)
     );
@@ -208,8 +212,9 @@ export const editMyPlaylist = catchAsync(
 // 10. Toggle Playlist Visibility (Public/Private)
 export const togglePlaylistPrivacy = catchAsync(
   async (req: Request, res: Response) => {
+    const id = req.params.id as string;
     const result = await playlistService.toggleVisibility(
-      req.params.id,
+      id,
       req.user as IUser,
     );
 
@@ -243,8 +248,9 @@ export const getPlaylistTracks = catchAsync(async (req, res) => {
   const currentUser = req.user as IUser | undefined;
 
   console.log("Params" + req.params.id);
+  const id = req.params.id as string;
   const result = await playlistService.getPlaylistTracks(
-    req.params.id,
+    id,
     query,
     currentUser,
   );

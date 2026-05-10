@@ -907,7 +907,8 @@ class PlaylistService {
     // 4. Lưu Cache (Thời gian ngắn vì danh sách cá nhân hay thay đổi)
     await cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 300); // 5 phút
 
-    return result;
+    const ttl =  600 + Math.floor(Math.random() * 120);
+    await cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl);
   }
 
   // ── 12.A GET LIST BY ADMIN ──────────────────────────────────────────────────────────
@@ -1098,7 +1099,7 @@ class PlaylistService {
     const ttl = isSensitive ? 30 : 600 + Math.floor(Math.random() * 120);
 
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
     ).catch(console.error);
 
     return result;

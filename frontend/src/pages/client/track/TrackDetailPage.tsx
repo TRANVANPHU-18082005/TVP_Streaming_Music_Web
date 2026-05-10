@@ -844,12 +844,12 @@ const TrackDetailPage = () => {
                 />
               )}
 
-              {Array.isArray(track.featuringArtists) &&
+                {Array.isArray(track.featuringArtists) &&
                 track.featuringArtists.length > 0 &&
-                track.featuringArtists.map((fa, idx) =>
+                track.featuringArtists.map((fa) =>
                   typeof fa === "object" ? (
                     <TrackDetailArtistCard
-                      key={idx}
+                      key={fa._id || fa.slug}
                       artist={fa}
                       onClick={() => {
                         navigate(`/artists/${fa.slug || fa._id}`);

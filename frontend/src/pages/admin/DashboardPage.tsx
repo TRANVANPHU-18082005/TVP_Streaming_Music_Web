@@ -415,7 +415,7 @@ const UserGrowthChart = ({ data, range }: { data: any[]; range: string }) => (
               fontWeight: 600,
               padding: "10px 16px",
             }}
-            formatter={(value?: number) => [value, "New Users"]}
+            formatter={(value) => [value as string | number, "New Users"]}
             labelFormatter={(label) => new Date(label).toLocaleDateString()}
           />
           <Area
@@ -713,7 +713,7 @@ const DashboardPage = () => {
                       fontWeight: 600,
                       padding: "10px 16px",
                     }}
-                    formatter={(value?: number) => [value, "New Tracks"]}
+                    formatter={(value: any) => [value, "New Tracks"]}
                     labelFormatter={(label) =>
                       new Date(label).toLocaleDateString()
                     }

@@ -101,7 +101,9 @@ export const GenreCover = memo<GenreCoverProps>(
                 isPlaying && isLg && "saturate-[1.15] brightness-[0.88]",
               )}
               loading={isLg ? "eager" : "lazy"}
-              fetchPriority={isLg ? "high" : "auto"}
+              // `fetchPriority` is not recognized by all React versions and
+              // may trigger warnings. Use a data-attribute as a hint instead.
+              data-fetchpriority={isLg ? "high" : "auto"}
               decoding="async"
             />
           ) : (

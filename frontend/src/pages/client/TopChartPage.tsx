@@ -216,10 +216,10 @@ function usePullToRefresh(
 // ─────────────────────────────────────────────────────────────────────────────
 
 function useSticky<T extends HTMLElement>(): [
-  React.RefObject<T | null>,
+  React.RefObject<T>,
   boolean,
 ] {
-  const ref = useRef<T | null>(null);
+  const ref = useRef<T>(null!);
   const [sticky, setSticky] = useState(false);
 
   useEffect(() => {
@@ -249,8 +249,8 @@ function useSticky<T extends HTMLElement>(): [
 const PullIndicator = React.forwardRef<
   HTMLDivElement,
   {
-    textRef: React.RefObject<HTMLSpanElement | null>;
-    arrowRef: React.RefObject<HTMLSpanElement | null>;
+    textRef: React.Ref<HTMLSpanElement>;
+    arrowRef: React.Ref<HTMLSpanElement>;
   }
 >(({ textRef, arrowRef }, ref) => (
   <div

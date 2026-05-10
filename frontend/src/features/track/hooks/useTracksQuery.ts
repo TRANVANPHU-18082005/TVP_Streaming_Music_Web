@@ -54,7 +54,7 @@ export const useTopTracks = (limit = 10) => {
 export const usePublicTrackDetail = (slugOrId: string) => {
   return useQuery({
     queryKey: trackKeys.detail(slugOrId),
-    queryFn: () => trackApi.getTrackDetail(slugOrId), // Hoặc getById tùy cấu trúc Backend
+    queryFn: ({ signal }) => trackApi.getTrackDetail(slugOrId, { signal }), // pass signal for cancellation
     enabled: !!slugOrId,
     staleTime: 10 * 60 * 1000, // Chi tiết bài hát gần như không đổi, Cache 10 phút
     select: (response) => response,
@@ -104,7 +104,7 @@ export const useAdminTracks = (params: TrackFilterParams) => {
 export const useAdminTrackDetail = (id: string) => {
   return useQuery({
     queryKey: trackKeys.detail(id),
-    queryFn: () => trackApi.getTrackDetail(id),
+    queryFn: ({ signal }) => trackApi.getTrackDetail(id, { signal }),
     enabled: !!id,
 
     // 🔥 SMART POLLING: Tự cập nhật trang Detail nếu hệ thống đang encode file Audio

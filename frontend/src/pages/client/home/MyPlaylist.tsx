@@ -200,7 +200,6 @@ PlaylistScroll.displayName = "PlaylistScroll";
 // ─────────────────────────────────────────────────────────────────────────────
 export function MyPlaylist() {
   const { data: playlists, isLoading, isError, refetch } = useMyPlaylists();
-
   const playlistIds = useMemo(
     () => playlists?.map((p) => p._id) ?? [],
     [playlists],
@@ -211,6 +210,7 @@ export function MyPlaylist() {
   const isOffline = !useOnlineStatus();
 
   const renderContent = () => {
+    
     if (isLoading && !hasResults) {
       return <SkeletonGrid count={3} />;
     }
@@ -244,6 +244,7 @@ export function MyPlaylist() {
       </div>
     );
   };
+ 
   if (!isLoading && !hasResults && !isError) return null;
   return (
     <>

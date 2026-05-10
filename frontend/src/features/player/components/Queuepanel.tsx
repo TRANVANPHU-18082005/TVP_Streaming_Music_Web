@@ -280,7 +280,7 @@ interface QueueItemProps {
   isPlaying: boolean;
   onPlay: (e?: React.MouseEvent) => void;
   animate: boolean;
-  currentItemRef?: React.RefObject<HTMLDivElement | null>;
+  currentItemRef?: React.RefObject<HTMLDivElement>;
 }
 
 const QueueItem = memo(

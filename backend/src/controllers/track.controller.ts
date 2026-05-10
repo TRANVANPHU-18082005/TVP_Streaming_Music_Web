@@ -41,7 +41,7 @@ export const updateTrack = catchAsync(async (req: Request, res: Response) => {
   const body = req.body as UpdateTrackInput;
 
   const track = await trackService.updateTrack(
-    req.params.id,
+    req.params.id as string,
     req.user as IUser,
     body,
     files,
@@ -58,7 +58,7 @@ export const updateTrack = catchAsync(async (req: Request, res: Response) => {
 // 3. DELETE TRACK
 // ─────────────────────────────────────────────────────────────────────────────
 export const deleteTrack = catchAsync(async (req: Request, res: Response) => {
-  await trackService.deleteTrack(req.params.id, req.user as IUser);
+  await trackService.deleteTrack(req.params.id as string, req.user as IUser);
 
   res.status(httpStatus.OK).json({
     success: true,
@@ -83,7 +83,7 @@ export const getTracks = catchAsync(async (req: Request, res: Response) => {
 export const getTrackDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user ? (req.user as IUser) : undefined;
-    const track = await trackService.getTrackDetail(req.params.id, currentUser);
+    const track = await trackService.getTrackDetail(req.params.id as string, currentUser);
 
     res.status(httpStatus.OK).json({ success: true, data: track });
   },
@@ -94,7 +94,7 @@ export const getTrackDetail = catchAsync(
 // ─────────────────────────────────────────────────────────────────────────────
 export const changeTrackStatus = catchAsync(
   async (req: Request, res: Response) => {
-    const track = await trackService.changeTrackStatus(req.params.id, req.body);
+    const track = await trackService.changeTrackStatus(req.params.id as string, req.body);
     res.status(httpStatus.OK).json({ success: true, data: track });
   },
 );
@@ -192,7 +192,7 @@ export const bulkRetryFull = catchAsync(async (req: Request, res: Response) => {
 
 /** Retry toàn bộ pipeline (xoá HLS + lyrics → full re-process) */
 export const retryFull = catchAsync(async (req: Request, res: Response) => {
-  const track = await trackService.retryFull(req.params.id);
+  const track = await trackService.retryFull(req.params.id as string);
   res.status(httpStatus.ACCEPTED).json({
     success: true,
     message: "Full pipeline đã được queue lại.",
@@ -203,7 +203,7 @@ export const retryFull = catchAsync(async (req: Request, res: Response) => {
 /** Retry chỉ HLS transcode — lyrics và mood giữ nguyên */
 export const retryTranscode = catchAsync(
   async (req: Request, res: Response) => {
-    const track = await trackService.retryTranscode(req.params.id);
+    const track = await trackService.retryTranscode(req.params.id as string);
     res.status(httpStatus.ACCEPTED).json({
       success: true,
       message: "Transcode job đã được queue lại.",
@@ -214,7 +214,7 @@ export const retryTranscode = catchAsync(
 
 /** Retry lyrics từ đầu (LRCLIB + karaoke fallback chain) */
 export const retryLyrics = catchAsync(async (req: Request, res: Response) => {
-  const track = await trackService.retryLyrics(req.params.id);
+  const track = await trackService.retryLyrics(req.params.id as string);
   res.status(httpStatus.ACCEPTED).json({
     success: true,
     message: "Lyrics job đã được queue lại.",
@@ -228,7 +228,7 @@ export const retryLyrics = catchAsync(async (req: Request, res: Response) => {
 
 /** Retry chỉ forced alignment (karaoke) — cần plainLyrics trong DB */
 export const retryKaraoke = catchAsync(async (req: Request, res: Response) => {
-  const track = await trackService.retryKaraoke(req.params.id);
+  const track = await trackService.retryKaraoke(req.params.id as string);
   res.status(httpStatus.ACCEPTED).json({
     success: true,
     message: "Karaoke alignment job đã được queue lại.",
@@ -239,7 +239,7 @@ export const retryKaraoke = catchAsync(async (req: Request, res: Response) => {
 /** Retry mood canvas matching (tags thay đổi) */
 export const retryMoodCanvas = catchAsync(
   async (req: Request, res: Response) => {
-    const track = await trackService.retryMoodCanvas(req.params.id);
+    const track = await trackService.retryMoodCanvas(req.params.id as string);
     res.status(httpStatus.ACCEPTED).json({
       success: true,
       message: "Mood canvas job đã được queue lại.",

@@ -2,7 +2,7 @@
  * TopFeaturedTracks.tsx — Home-page chart widget (v4.0)
  */
 
-import { memo, useMemo, useCallback, useRef, useEffect } from "react";
+import React, { memo, useMemo, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   BarChart3,
@@ -346,22 +346,18 @@ UpdatingIndicator.displayName = "UpdatingIndicator";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ChartRow = memo(
-  ({
-    track,
-    index,
-    reduced,
-  }: {
+  React.forwardRef<HTMLDivElement, {
     track: RankedTrack;
     index: number;
     reduced: boolean;
-  }) => {
+  }>(function ChartRowInner({ track, index, reduced }, ref) {
     const variants = useMemo(
       () => makeRowVariants(index, reduced),
       [index, reduced],
     );
 
     return (
-      <motion.div key={track._id} {...variants}>
+      <motion.div ref={ref} key={track._id} {...variants}>
         {/* FIX #3: Score Glow bọc ngoài ChartItem */}
         <ScoreGlow score={track.score ?? 0}>
           <ChartItem
@@ -372,7 +368,7 @@ const ChartRow = memo(
         </ScoreGlow>
       </motion.div>
     );
-  },
+  }),
 );
 ChartRow.displayName = "ChartRow";
 

@@ -50,9 +50,116 @@ class AuthService {
     });
 
     // Fire & Forget email
-    sendEmail(email, "Mã xác thực", `<h1>Mã OTP: ${otp}</h1>`).catch((err) =>
-      console.error("❌ Lỗi gửi mail register:", err),
-    );
+   sendEmail(
+  email,
+  "🎵 Xác thực tài khoản MusicHub",
+  `
+  <div style="
+    background:#0f0f0f;
+    padding:40px 20px;
+    font-family:Arial,sans-serif;
+    color:#fff;
+  ">
+    <div style="
+      max-width:500px;
+      margin:auto;
+      background:#181818;
+      border-radius:20px;
+      overflow:hidden;
+      border:1px solid #2a2a2a;
+      box-shadow:0 0 30px rgba(0,255,200,0.15);
+    ">
+      
+      <div style="
+        background:linear-gradient(135deg,#00ffcc,#7c3aed);
+        padding:30px;
+        text-align:center;
+      ">
+
+        <!-- LOGO -->
+        <img
+          src="https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
+          alt="MusicHub Logo"
+          width="90"
+          style="
+            margin-bottom:16px;
+            border-radius:20px;
+          "
+        />
+
+        <h1 style="
+          margin:0;
+          font-size:32px;
+          color:white;
+        ">
+          🎧 MusicHub
+        </h1>
+
+        <p style="
+          margin-top:10px;
+          color:rgba(255,255,255,0.9);
+        ">
+          Đắm chìm trong âm nhạc
+        </p>
+      </div>
+
+      <div style="padding:35px;">
+        <h2 style="
+          margin-top:0;
+          color:#ffffff;
+          text-align:center;
+        ">
+          Mã xác thực của bạn
+        </h2>
+
+        <p style="
+          color:#b3b3b3;
+          text-align:center;
+          line-height:1.6;
+        ">
+          Sử dụng mã OTP bên dưới để hoàn tất đăng ký tài khoản.
+        </p>
+
+        <div style="
+          margin:30px auto;
+          width:fit-content;
+          background:#0f0f0f;
+          border:2px dashed #00ffcc;
+          border-radius:16px;
+          padding:20px 40px;
+        ">
+          <span style="
+            font-size:40px;
+            font-weight:bold;
+            letter-spacing:8px;
+            color:#00ffcc;
+          ">
+            ${otp}
+          </span>
+        </div>
+
+        <p style="
+          color:#777;
+          text-align:center;
+          font-size:14px;
+        ">
+          OTP sẽ hết hạn sau 5 phút.
+        </p>
+      </div>
+
+      <div style="
+        border-top:1px solid #2a2a2a;
+        padding:20px;
+        text-align:center;
+        color:#666;
+        font-size:12px;
+      ">
+        © 2026 MusicHub • Feel The Beat
+      </div>
+    </div>
+  </div>
+  `,
+);
 
     return user;
   }

@@ -34,7 +34,7 @@ export const getRequests = catchAsync(async (req: Request, res: Response) => {
 
   // Mặc định lấy danh sách 'pending'
   const result = await verificationService.getRequests(
-    (status as string) || "pending",
+    (status as "pending" | "approved" | "rejected") || "pending",
     Number(page) || 1,
     Number(limit) || 10
   );
@@ -54,7 +54,7 @@ export const reviewRequest = catchAsync(async (req: Request, res: Response) => {
   const { status, rejectReason } = req.body;
 
   const result = await verificationService.reviewRequest(
-    id,
+    id as string,
     status, // "approved" | "rejected"
     rejectReason
   );

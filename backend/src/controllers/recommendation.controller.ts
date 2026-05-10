@@ -52,9 +52,9 @@ export const getRecommendedTracks = catchAsync(
  */
 export const getSimilarTracks = catchAsync(
   async (req: Request, res: Response, _next: NextFunction) => {
-    const { id } = req.params;
     const limit = Math.min(Number(req.query.limit) || 10, 30);
 
+    const id = req.params.id as string;
     const tracks = await recommendationService.getSimilarTracks(id, {
       limit,
     });
