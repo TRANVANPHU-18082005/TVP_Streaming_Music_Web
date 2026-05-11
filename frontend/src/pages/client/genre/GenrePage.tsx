@@ -2,11 +2,15 @@ import React, { memo, useMemo } from "react";
 
 import { GenreCard } from "@/features/genre/components/GenreCard";
 import MusicResult from "@/components/ui/Result";
-import Pagination from "@/utils/pagination";
+import { PaginationStrip } from "@/utils/pagination";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import { GenreFilters } from "@/features/genre/components/GenreFilters";
 import { useGenreParams } from "@/features/genre/hooks/useGenreParams";
-import { DEFAULT_GRID_META } from "@/config/constants";
+import {
+  DEFAULT_GRID_META,
+  GRID_LAYOUT,
+  staggerDelay,
+} from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 
@@ -15,19 +19,6 @@ import { KeyboardMusic } from "lucide-react";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { Genrepageskeleton, useGenresByUserQuery } from "@/features/genre";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** 40ms/item, capped at 600ms (genre-specific cap) */
-const staggerDelay = (i: number) => Math.min(i * 40, 600);
-
-const GRID_LAYOUT = cn(
-  "grid",
-  "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7",
-  "gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12",
-);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE HERO — eyebrow (Tag) + gradient wave title + divider + stat badges
@@ -76,44 +67,6 @@ const PageHero = memo(() => (
 PageHero.displayName = "PageHero";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGINATION STRIP — single glass-frosted wrapper, no double-wrap anti-pattern
-// ─────────────────────────────────────────────────────────────────────────────
-const PaginationStrip = memo(
-  ({
-    currentPage,
-    totalPages,
-    totalItems,
-    pageSize,
-    onPageChange,
-  }: {
-    currentPage: number;
-    totalPages: number;
-    totalItems: number;
-    pageSize: number;
-    onPageChange: (page: number) => void;
-  }) => (
-    <div
-      className={cn(
-        " rounded-2xl",
-        "border border-border/50 dark:border-primary/15",
-        "shadow-brand p-4",
-        "animate-fade-up animation-fill-both",
-      )}
-      style={{ animationDelay: "80ms" }}
-    >
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={onPageChange}
-        totalItems={totalItems}
-        itemsPerPage={pageSize || DEFAULT_GRID_META.pageSize}
-      />
-    </div>
-  ),
-);
-PaginationStrip.displayName = "PaginationStrip";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // GENRE PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 const GenrePage: React.FC = () => {
@@ -158,7 +111,11 @@ const GenrePage: React.FC = () => {
   }
   // Switching
   if (isLoading && hasResults) {
-    return <WaveformLoader glass={false} text="Đang tải" />;
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <WaveformLoader glass={false} text="Đang tải" />
+      </div>
+    );
   }
   // Deep Error
   if (isError && !hasResults) {

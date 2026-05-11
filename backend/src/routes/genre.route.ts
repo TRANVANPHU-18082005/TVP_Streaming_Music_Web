@@ -21,17 +21,14 @@ import { uploadImages } from "../config/upload";
 const router = express.Router();
 
 // ==========================================
-// 🟢 PUBLIC ROUTES
+// 🟢 PUBLIC ROUTES (Static First)
 // ==========================================
 
-// 1. GET /api/genres (Lấy danh sách thể loại cho người dùng)
-router.get(
-  "/",
-  optionalAuth,
-  validate(getGenresByUserSchema),
-  genreController.getGenresByUser,
-);
-// 1. GET /api/genres (Lấy danh sách thể loại cho Admin)
+// 1. Route tĩnh hoàn toàn - Đặt lên đầu
+router.get("/tree", genreController.getTree);
+
+// 2. Route Admin (vẫn là tĩnh so với các route có tham số)
+// Lưu ý: Route này dùng protect/authorize riêng lẻ vì nó nằm trong cụm Public
 router.get(
   "/admin",
   protect,
@@ -39,9 +36,21 @@ router.get(
   validate(getGenresByAdminSchema),
   genreController.getGenresByAdmin,
 );
-// 2. GET /api/genres/tree (Lấy cây thể loại - Dành cho cả User & Admin)
-router.get("/tree", genreController.getTree);
-// 3. GET /api/genres/:id/tracks (Lấy danh sách bài hát theo thể loại)
+
+// 3. Route lấy danh sách chung
+router.get(
+  "/",
+  optionalAuth,
+  validate(getGenresByUserSchema),
+  genreController.getGenresByUser,
+);
+
+// ==========================================
+// 🟡 DYNAMIC ROUTES (Parameterized)
+// ==========================================
+
+// 4. Phải đặt route có hậu tố (/tracks) TRƯỚC route chỉ có slug
+// Nếu không, khi gọi /lofi/tracks, Express sẽ hiểu "lofi" là slug và bỏ qua phần /tracks
 router.get(
   "/:id/tracks",
   optionalAuth,
@@ -49,7 +58,8 @@ router.get(
   genreController.getGenreTracks,
 );
 
-// 4. GET /api/genres/:id (Lấy chi tiết thể loại)
+// 5. Route chi tiết (Slug) - Đặt dưới cùng của cụm GET
+// Vì :slug có thể khớp với bất kỳ chuỗi nào (kể cả "admin" hay "tree" nếu đặt sai chỗ)
 router.get(
   "/:slug",
   optionalAuth,
@@ -58,12 +68,12 @@ router.get(
 );
 
 // ==========================================
-// 🔴 ADMIN ONLY ROUTES
+// 🔴 ADMIN ONLY ROUTES (Write Operations)
 // ==========================================
+// Sử dụng middleware tập trung cho toàn bộ các route phía dưới
 router.use(protect);
-router.use(authorize("admin")); // Chặn toàn bộ bên dưới chỉ cho Admin
+router.use(authorize("admin"));
 
-// 2. POST /api/genres (Tạo thể loại mới)
 router.post(
   "/",
   uploadImages.single("image"),
@@ -71,27 +81,30 @@ router.post(
   genreController.createGenre,
 );
 
-// 3. PATCH /api/genres/:id/toggle (Bật/Tắt hiển thị thể loại)
+// Gom các route có cùng cấu trúc :id lại gần nhau
 router.patch(
   "/:id/toggle",
   validate(toggleGenreStatusSchema),
   genreController.toggleGenreStatus,
 );
 
-// 4. PATCH /api/genres/:id (Cập nhật thể loại)
+router.patch(
+  "/:id/restore",
+  validate(deleteGenreSchema),
+  genreController.restoreGenre,
+);
+
 router.patch(
   "/:id",
   uploadImages.single("image"),
   validate(updateGenreSchema),
   genreController.updateGenre,
 );
-// 5. DELETE /api/genres/:id (Xóa thể loại)
-router.delete("/:id", validate(deleteGenreSchema), genreController.deleteGenre);
-// 6. RESTORE /api/genres/:id/restore (Khôi phục soft-deleted genre)
-router.patch(
-  "/:id/restore",
-  validate(deleteGenreSchema),
-  genreController.restoreGenre,
+
+router.delete(
+  "/:id", 
+  validate(deleteGenreSchema), 
+  genreController.deleteGenre
 );
 
 export default router;

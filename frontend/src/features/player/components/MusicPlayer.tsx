@@ -3,6 +3,7 @@ import { useSelector } from "react-redux";
 import { AnimatePresence } from "framer-motion";
 import {
   selectCurrentTrack,
+  selectIsCurrentTrackReady,
   selectPlayer,
 } from "@/features/player/slice/playerSlice";
 import { useAudioPlayer } from "@/features/player/hooks/useAudioPlayer";
@@ -14,39 +15,31 @@ const FullPlayerLazy = lazy(() =>
   import("./FullPlayer").then((m) => ({ default: m.FullPlayer ?? m.default })),
 );
 import { useTrackListeners } from "../hooks/useTrackListeners";
+import MiniPlayerSkeleton from "./MiniPlayerSkeleton";
+import FullPlayerSkeleton from "./FullPlayerSkeleton";
+ 
 
 export function MusicPlayer() {
-  // selectCurrentTrack = O(1) lookup: cache[currentTrackId]
-  // Trả về null nếu chưa có metadata (loading) hoặc không có bài nào
+  // 1. Lấy trạng thái từ Store
   const currentTrack = useSelector(selectCurrentTrack);
-
-  // duration lấy từ Redux — được set bởi useAudioPlayer khi audio loadedmetadata
+  const isTrackReady = useSelector(selectIsCurrentTrackReady); // ✅ thêm
   const { isPlaying, duration } = useSelector(selectPlayer);
-
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // audioRef: gắn vào <audio> element
-  // currentTime: số giây hiện tại, cập nhật mỗi ~250ms từ requestAnimationFrame
-  // seek: fn(seconds) → set audio.currentTime + dispatch seekTo vào Redux
-  // getCurrentTime: fn() → trả về audio.currentTime trực tiếp (không qua state)
-  //   dùng cho prevTrack — cần biết đã nghe bao nhiêu giây để quyết định replay hay back
-  // events: { onTimeUpdate, onEnded, onLoadedMetadata, ... } gắn vào <audio>
+  // 2. DATA RESOLVER: Đặt lên đầu để đảm bảo metadata luôn được xử lý nếu cache miss
+  // Resolver này sẽ kích hoạt fetch nếu currentTrackId có nhưng metadata chưa có.
+  useTrackMetadataResolver();
+
+  // 3. AUDIO ENGINE: Vận hành dựa trên URL từ metadata
   const { audioRef, currentTime, seek, getCurrentTime, events } =
     useAudioPlayer();
 
-  // Global keyboard: Space = play/pause, ←→ = seek 5s, M = mute
+  // 4. UTILITY HOOKS: Điều khiển và đồng bộ
   useKeyboardControls(seek, currentTime);
-
-  // BroadcastChannel: đồng bộ play/pause giữa các tab cùng domain
   useCrossTabSync();
 
-  // Tự động fetch metadata khi cache miss:
-  //   - currentTrackId thay đổi + loadingState === "loading" → gọi trackApi.getTrackDetail
-  //   - nextTrackIdPreloaded thay đổi → preload silent
-  //   - dùng fetchingRef (Set) để không duplicate request cùng 1 ID
-  useTrackMetadataResolver();
+  // Tự động đếm lượt nghe khi track thay đổi và đang phát
   const listenCount = useTrackListeners(currentTrack?._id, isPlaying);
-  // Scroll lock khi FullPlayer mở — đặt SAU hooks để không vi phạm rules of hooks
   useEffect(() => {
     if (!isExpanded) return;
     const originalOverflow = document.body.style.overflow;
@@ -87,15 +80,21 @@ export function MusicPlayer() {
             : "visible opacity-100"
         }
       >
-        <MiniPlayer
-          isPlaying={isPlaying}
-          duration={duration}
-          track={currentTrack}
-          currentTime={currentTime}
-          getCurrentTime={getCurrentTime}
-          onSeek={seek}
-          onExpand={() => setIsExpanded(true)}
-        />
+        <AnimatePresence mode="wait">
+          {!isTrackReady ? (
+            <MiniPlayerSkeleton key="skeleton" />
+          ) : (
+            <MiniPlayer
+              isPlaying={isPlaying}
+              duration={duration}
+              track={currentTrack}
+              currentTime={currentTime}
+              getCurrentTime={getCurrentTime}
+              onSeek={seek}
+              onExpand={() => setIsExpanded(true)}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
       {/*
@@ -107,11 +106,7 @@ export function MusicPlayer() {
         {isExpanded && (
           <Suspense
             fallback={
-              <div
-                role="status"
-                aria-label="Loading player"
-                className="fixed inset-0 z-[60] flex items-center justify-center bg-background"
-              />
+               <FullPlayerSkeleton key="skeleton"  />
             }
           >
             <FullPlayerLazy

@@ -1,28 +1,23 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as FacebookStrategy } from "passport-facebook";
-import dotenv from "dotenv";
+import config from "./env";
 import AuthService from "../services/auth.service"; // Import Service chúng ta vừa viết
 import logger from "./logger";
 
-// 1. Load biến môi trường
-dotenv.config();
-
 // 2. Kiểm tra an toàn (Fail Fast)
-if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+if (!config.googleClientId || !config.googleClientSecret) {
   throw new Error(
-    "❌ Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET trong file .env",
+    "❌ Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET trong cấu hình",
   );
 }
-
 passport.use(
   new GoogleStrategy(
     {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientID: config.googleClientId,
+      clientSecret: config.googleClientSecret,
       // URL này phải khớp y hệt những gì bạn đăng ký trên Google Console
-      callbackURL:
-        process.env.GOOGLE_CALLBACK_URL || "/api/auth/google/callback",
+      callbackURL: config.googleCallbackUrl || "/api/auth/google/callback",
       passReqToCallback: true, // Để sau này có thể lấy req nếu cần
     },
     async (req, accessToken, refreshToken, profile, done) => {
@@ -47,14 +42,13 @@ passport.use(
 // Lưu ý: Vì chúng ta dùng JWT (session: false) nên không cần serializeUser/deserializeUser
 
 // Facebook Strategy (optional; enable only if env vars present)
-if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
+if (config.facebookAppId && config.facebookAppSecret) {
   passport.use(
     new FacebookStrategy(
       {
-        clientID: process.env.FACEBOOK_APP_ID,
-        clientSecret: process.env.FACEBOOK_APP_SECRET,
-        callbackURL:
-          process.env.FACEBOOK_CALLBACK_URL || "/api/auth/facebook/callback",
+        clientID: config.facebookAppId,
+        clientSecret: config.facebookAppSecret,
+        callbackURL: config.facebookCallbackUrl || "/api/auth/facebook/callback",
         profileFields: ["id", "emails", "name", "displayName", "photos"],
         passReqToCallback: true,
       },

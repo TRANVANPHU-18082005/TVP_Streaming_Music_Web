@@ -472,7 +472,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
     error: tracksError,
     refetch: refetchTracks,
   } = useArtistTracksInfinite(artist?._id);
-
+  console.log(artist, tracksData);
   const {
     togglePlayArtist,
     shuffleArtist,

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import config from "../config/env";
 import httpStatus from "http-status";
 import ApiError from "../utils/ApiError";
 import catchAsync from "../utils/catchAsync";
@@ -35,7 +36,7 @@ export const protect = catchAsync(
     }
 
     try {
-      const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+      const decoded: any = jwt.verify(token, config.jwtSecret!);
 
       const currentUser = await UserModel.findById(decoded.id).populate(
         "artistProfile"
@@ -94,7 +95,7 @@ export const optionalAuth = async (
   }
 
   try {
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+    const decoded: any = jwt.verify(token, config.jwtSecret!);
     const currentUser = await UserModel.findById(decoded.id).populate(
       "artistProfile"
     );

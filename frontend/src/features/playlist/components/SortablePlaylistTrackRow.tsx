@@ -4,7 +4,6 @@ import { GripVertical, Disc, Loader2, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { ITrack } from "@/features/track/types";
-import { toCDN } from "@/utils/track-helper";
 import { memo } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -106,7 +105,7 @@ export const SortablePlaylistTrackRow = memo(
           )}
         >
           <AvatarImage
-            src={toCDN(track.coverImage) || track.coverImage}
+            src={track.coverImage}
             alt={track.title}
             className="object-cover"
           />

@@ -243,7 +243,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
   const navigate = useNavigate();
   const isEmbedded = variant === "embedded";
   const scrollRef = useRef<HTMLDivElement>(null);
-
+  
   // ── Scroll tracking ──────────────────────────────────────────────────────
   const scrollY = useScrollY(scrollRef, !isEmbedded);
   const isScrolled = scrollY > (isEmbedded ? 130 : 260);
@@ -265,7 +265,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
     error: tracksError,
     refetch: refetchTracks,
   } = useGenreTracksInfinite(genre?._id);
-
+  console.log(genre, tracksData);
   const {
     togglePlayGenre,
     shuffleGenre,
@@ -525,7 +525,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
           )}
 
           {/* Track list */}
-          <Suspense fallback={<WaveformLoader glass={false} text="Đang tải" />}>
+          <Suspense fallback={<WaveformBars active />}>
             <LazyTrackList
               {...trackListProps}
               maxHeight="auto"
@@ -769,7 +769,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...SP_GENTLE, delay: 0.22 }}
             >
-              <Suspense fallback={<Genredetailskeleton variant="page" />}>
+              <Suspense fallback={<WaveformBars active />}>
                 <LazyTrackList
                   {...trackListProps}
                   maxHeight="auto"

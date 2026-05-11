@@ -105,10 +105,10 @@ export const restoreGenre = catchAsync(async (req: Request, res: Response) => {
 export const getGenreDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user as IUser | undefined;
-    const id = req.params.id as string;
-    console.log(req.params, id);
+    const slug = req.params.slug as string;
+    console.log(req.params, slug);
     const genreDetailResult = await genreService.getGenreDetail(
-      id,
+      slug,
       currentUser,
     );
 

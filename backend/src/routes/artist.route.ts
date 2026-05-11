@@ -19,22 +19,22 @@ import {
   updateArtistSchema,
 } from "../validations/artist.validation";
 import { uploadArtistFiles } from "../config/upload";
-import { get } from "http";
-
 const router = express.Router();
 
 // ==========================================
-// 🟢 PUBLIC ROUTES
+// 🟢 PUBLIC & SPECIAL LIST ROUTES (Static First)
 // ==========================================
 
-// 1. Lấy danh sách bởi user (Có validate filter)
+// 1. Lấy danh sách cho User
 router.get(
   "/",
   optionalAuth,
   validate(getArtistsByUserSchema),
   artistController.getArtistsByUser,
 );
-// 2. Lấy danh sách bởi admin (Có thêm filter isActive, isVerified)
+
+// 2. Lấy danh sách cho Admin
+// Phải đặt TRƯỚC /:slug để tránh "admin" bị coi là slug.
 router.get(
   "/admin",
   protect,
@@ -42,7 +42,32 @@ router.get(
   validate(getArtistsByAdminSchema),
   artistController.getArtistsByAdmin,
 );
-// 4. Lấy danh sách track của nghệ sĩ
+
+// ==========================================
+// 🔵 ME ROUTES (Profile cá nhân của Nghệ sĩ)
+// ==========================================
+// Phải đặt TRƯỚC /:slug để tránh "me" bị coi là slug.
+router.get(
+  "/me/profile", 
+  protect, 
+  authorize("artist"), 
+  artistController.getMyProfile
+);
+
+router.patch(
+  "/me/profile",
+  protect,
+  authorize("artist"),
+  uploadArtistFiles,
+  validate(updateArtistSchema),
+  artistController.updateMyProfile,
+);
+
+// ==========================================
+// 🟡 DYNAMIC GET ROUTES (Tham số :id hoặc :slug)
+// ==========================================
+
+// 3. Sub-resource (Tracks của nghệ sĩ)
 router.get(
   "/:id/tracks",
   optionalAuth,
@@ -50,7 +75,8 @@ router.get(
   artistController.getArtistTracks,
 );
 
-// 3. Lấy chi tiết nghệ sĩ
+// 4. Catch-all GET (Chi tiết nghệ sĩ)
+// Đây là "chốt chặn" cuối cùng của phương thức GET
 router.get(
   "/:slug",
   optionalAuth,
@@ -59,57 +85,44 @@ router.get(
 );
 
 // ==========================================
-// 🟠 PROTECTED ROUTES
+// 🔴 ADMIN WRITE ROUTES (Các thao tác quản trị)
 // ==========================================
 router.use(protect);
+router.use(authorize("admin"));
 
-// 5 . Lấy profile của chính nghệ sĩ đang đăng nhập
-router.get("/me/profile", authorize("artist"), artistController.getMyProfile);
-// 6. Cập nhật profile của chính nghệ sĩ đang đăng nhập
-router.patch(
-  "/me/profile",
-  authorize("artist"),
-  uploadArtistFiles, // Dùng config fields mới
-  validate(updateArtistSchema), // Tái sử dụng schema update
-  artistController.updateMyProfile,
-);
-
-// 7. Tao nghệ sĩ mới (Admin)
+// 5. Tạo nghệ sĩ mới
 router.post(
   "/",
-  authorize("admin"),
-  uploadArtistFiles, // Upload ảnh trước -> Validate Body sau
+  uploadArtistFiles,
   validate(createArtistSchema),
   artistController.createArtist,
 );
 
-// 8. Cập nhật nghệ sĩ (Admin)
+// 6. Các hành động cụ thể trên ID (Action-based)
+// Đặt TRƯỚC /:id để không bị lọt vào route update chung
+router.patch(
+  "/:id/restore",
+  validate(deleteArtistSchema),
+  artistController.restoreArtist,
+);
+
+router.patch(
+  "/:id/toggle",
+  validate(toggleArtistStatusSchema),
+  artistController.toggleStatus,
+);
+
+// 7. Route ID tổng quát (Update & Delete)
 router
   .route("/:id")
   .patch(
-    authorize("admin"),
     uploadArtistFiles,
     validate(updateArtistSchema),
     artistController.updateArtist,
   )
   .delete(
-    authorize("admin"),
     validate(deleteArtistSchema),
     artistController.deleteArtist,
   );
-// Restore Artist (Admin)
-router.patch(
-  "/:id/restore",
-  authorize("admin"),
-  validate(deleteArtistSchema),
-  artistController.restoreArtist,
-);
-// 9. Toggle Artist Status (Admin)
-router.patch(
-  "/:id/toggle",
-  authorize("admin"),
-  validate(toggleArtistStatusSchema),
-  artistController.toggleStatus,
-);
 
 export default router;

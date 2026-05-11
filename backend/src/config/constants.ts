@@ -10,8 +10,7 @@ export const APP_CONFIG = {
   MAX_PAGES: 100, // Giới hạn max page để tránh ReDoS
 } as const;
 export const TRACK_SELECT =
-  "title slug artist featuringArtists album genres coverImage duration lyricUrl bitrate description" +
-  "hlsUrl lyricType isExplicit playCount releaseDate moodVideo plainLyrics lyricPreview likeCount";
+  "title slug artist featuringArtists album genres coverImage duration lyricUrl bitrate description hlsUrl lyricType isExplicit playCount releaseDate moodVideo plainLyrics lyricPreview likeCount";
 export const TRACK_POPULATE = [
   { path: "artist", select: "name avatar slug" },
   { path: "featuringArtists", select: "name slug avatar" },

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { sleep } from "./fs.utils";
+import config from "../config/env";
 
 const DB_CONNECT_RETRIES = 3;
 const DB_RETRY_BASE_MS = 2_000;
@@ -9,7 +10,7 @@ const DB_RETRY_BASE_MS = 2_000;
  * Throws after DB_CONNECT_RETRIES failed attempts.
  */
 export async function connectWithRetry(): Promise<void> {
-  const uri = process.env.MONGO_URI;
+  const uri = config.mongoUri;
   if (!uri) throw new Error("[db.utils] MONGO_URI env var is not set.");
 
   for (let attempt = 1; attempt <= DB_CONNECT_RETRIES; attempt++) {

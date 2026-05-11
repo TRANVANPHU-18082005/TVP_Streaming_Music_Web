@@ -3,12 +3,16 @@ import { ListMusic } from "lucide-react";
 
 import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
 import MusicResult from "@/components/ui/Result";
-import Pagination from "@/utils/pagination";
+import { PaginationStrip } from "@/utils/pagination";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import PlaylistFilter from "@/features/playlist/components/PlaylistFilter";
 import { usePlaylistParams } from "@/features/playlist/hooks/usePlaylistParams";
 
-import { DEFAULT_GRID_META } from "@/config/constants";
+import {
+  DEFAULT_GRID_META,
+  GRID_LAYOUT,
+  staggerDelay,
+} from "@/config/constants";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 import { useSmartBack } from "@/hooks/useSmartBack";
@@ -18,18 +22,7 @@ import {
   usePlaylistsByUserQuery,
 } from "@/features/playlist";
 import { useSyncInteractions } from "@/features/interaction";
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** 45ms/item, capped at 700ms */
-const staggerDelay = (i: number) => Math.min(i * 45, 700);
-
-const GRID_LAYOUT = cn(
-  "grid",
-  "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7",
-  "gap-x-4 gap-y-8 sm:gap-x-5 sm:gap-y-10",
-);
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE HERO — eyebrow (ListMusic) + gradient-warm title + divider + stats
@@ -86,44 +79,6 @@ const PlaylistGrid = memo(({ children }: { children: React.ReactNode }) => (
 PlaylistGrid.displayName = "PlaylistGrid";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGINATION STRIP — single glass-frosted wrapper (no double-wrap anti-pattern)
-// ─────────────────────────────────────────────────────────────────────────────
-const PaginationStrip = memo(
-  ({
-    currentPage,
-    totalPages,
-    totalItems,
-    pageSize,
-    onPageChange,
-  }: {
-    currentPage: number;
-    totalPages: number;
-    totalItems: number;
-    pageSize: number;
-    onPageChange: (page: number) => void;
-  }) => (
-    <div
-      className={cn(
-        "rounded-2xl",
-        "border border-border/50 dark:border-primary/15",
-        "shadow-brand p-4",
-        "animate-fade-up animation-fill-both",
-      )}
-      style={{ animationDelay: "80ms" }}
-    >
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={onPageChange}
-        totalItems={totalItems}
-        itemsPerPage={pageSize || DEFAULT_GRID_META.pageSize}
-      />
-    </div>
-  ),
-);
-PaginationStrip.displayName = "PaginationStrip";
-
-// ─────────────────────────────────────────────────────────────────────────────
 // PLAYLIST PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 const PlaylistPage: React.FC = () => {
@@ -169,7 +124,7 @@ const PlaylistPage: React.FC = () => {
   const isFiltering = Boolean(filterParams.keyword);
 
   const onBack = useSmartBack();
-  const isOffline = !navigator.onLine;
+  const isOffline = !useOnlineStatus();
   // ── Error state ─────────────────────────────────────────────────────────
   // Initial Load
   if (isLoading && !hasResults) {
@@ -181,7 +136,11 @@ const PlaylistPage: React.FC = () => {
   }
   // Switching
   if (isLoading && hasResults) {
-    return <WaveformLoader glass={false} text="Đang tải" />;
+    return (
+      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+        <WaveformLoader glass={false} text="Đang tải" />
+      </div>
+    );
   }
   // Deep Error
   if (isError && !hasResults) {

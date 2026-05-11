@@ -20,7 +20,6 @@ import {
 import { deleteFolderFromB2, deleteFromB2 } from "../utils/fileCleanup";
 import { cacheRedis } from "../config/redis";
 import { notifyQueue } from "../queue/notify.queue";
-import { viewQueue } from "../queue/view.queue";
 import { CreateTrackDTO, UpdateTrackDTO } from "../dtos/track.dto";
 import { CounterTrack } from "../utils/counter";
 
@@ -42,8 +41,10 @@ import {
 } from "../utils/cacheHelper";
 import recommendationService from "./recommendation.service";
 import { parseGenreIds } from "../utils/helper";
-import { is } from "zod/v4/locales";
-import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
+ 
+import { APP_CONFIG, TRACK_POPULATE } from "../config/constants";
+import config from "../config/env";
+import { toCdnUrl } from "../utils/url.utils";
 
 type MulterS3File = Express.Multer.File & { location: string; key: string };
 
@@ -68,7 +69,7 @@ class TrackService {
 
   /** Extract B2 object key from a full URL (returns null if not matching bucket) */
   private getB2KeyFromUrl(url: string): string | null {
-    const bucket = process.env.B2_BUCKET_NAME;
+    const bucket = config.b2.bucketName;
     if (!url || !bucket || !url.includes(bucket)) return null;
     const parts = url.split(`${bucket}/`);
     return parts.length > 1 ? parts[1] : null;
@@ -121,8 +122,8 @@ class TrackService {
 
     const formatUrl = (location: string, key: string) => {
       if (location.startsWith("http")) return location;
-      const endpoint = process.env.B2_ENDPOINT?.replace(/\/$/, "");
-      const bucket = process.env.B2_BUCKET_NAME;
+      const endpoint = config.b2.endpoint?.replace(/\/$/, "");
+      const bucket = config.b2.bucketName;
       return `${endpoint}/${bucket}/${key}`;
     };
 
@@ -139,6 +140,14 @@ class TrackService {
     } else if (data.albumId) {
       const album = await Album.findById(data.albumId).lean();
       if (album) coverImageUrl = album.coverImage;
+    }
+    // Normalize coverImage to use CDN domain when available
+    if (coverImageUrl) {
+      try {
+        coverImageUrl = toCdnUrl(coverImageUrl);
+      } catch (err) {
+        // noop — keep original
+      }
     }
     let featuringArtists: Types.ObjectId[] = [];
     if (data.featuringArtistIds) {
@@ -451,7 +460,13 @@ class TrackService {
       if (coverFile) {
         const key = this.getB2KeyFromUrl(track.coverImage);
         if (key) coverToCleanup = key;
-        track.coverImage = coverFile.location;
+        let newCover = coverFile.location;
+        try {
+          newCover = toCdnUrl(newCover);
+        } catch (err) {
+          // noop — keep original
+        }
+        track.coverImage = newCover;
       }
 
       await track.save({ session });
@@ -757,7 +772,7 @@ class TrackService {
     const userRole = currentUser?.role ?? "guest";
     const cacheKey = buildCacheKey(`track:detail:${id}`, userRole, {});
     // 2. KIỂM TRA CACHE
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) {
       const track = JSON.parse(cached as string);
       // Logic phân quyền sau khi lấy từ Cache (Bảo vệ dữ liệu Private)
@@ -801,10 +816,11 @@ class TrackService {
     delete sanitized.errorReason;
 
     const ttl = 1800 + Math.floor(Math.random() * 600);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(sanitized), "EX", ttl),
-    ).catch((err) => console.error("[Cache] Set Track Detail Error:", err));
-
+    cacheRedis
+  .set(cacheKey, JSON.stringify(sanitized), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
     return sanitized;
   }
 

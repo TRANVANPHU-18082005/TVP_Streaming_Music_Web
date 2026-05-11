@@ -1,6 +1,7 @@
 import PlayLog from "../models/PlayLog";
 import Track from "../models/Track";
 import { cacheRedis } from "../config/redis";
+import { TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
 
 const CACHE_KEY = "chart:live:top100";
 const CACHE_TTL = 30;
@@ -79,8 +80,30 @@ export const getRealtimeChart = async () => {
         as: "albumDetails",
       },
     },
+    // Lookup Genre
     { $unwind: { path: "$albumDetails", preserveNullAndEmptyArrays: true } },
-
+    {
+      $lookup: {
+        from: "genres",
+        localField: "track.genres",
+        foreignField: "_id",
+        as: "genreDetails",
+      },
+    },
+    { $unwind: { path: "$genreDetails", preserveNullAndEmptyArrays: true } },
+    // Lookup MoodVideo
+    {
+      $lookup: {
+        from: "moodVideo",
+        localField: "track.moodVideo",
+        foreignField: "_id",
+        as: "moodVideoDetails",
+      },
+    },
+    {
+      $unwind: { path: "$moodVideoDetails", preserveNullAndEmptyArrays: true },
+    },
+    { $unwind: { path: "$genreDetails", preserveNullAndEmptyArrays: true } },
     // Lookup Artist
     {
       $lookup: {
@@ -113,7 +136,16 @@ export const getRealtimeChart = async () => {
         coverImage: "$track.coverImage",
         playCount: "$track.playCount",
         score: "$score",
-
+        lyricUrl: "$track.lyricUrl",
+        hlsUrl: "$track.hlsUrl",
+        bitrate: "$track.bitrate",
+        description: "$track.description",
+        lyricType: "$track.lyricType",
+        isExplicit: "$track.isExplicit",
+        releaseDate: "$track.releaseDate",
+        plainLyrics: "$track.plainLyrics",
+        lyricPreview: "$track.lyricPreview",
+        likeCount: "$track.likeCount",
         // Map lại mảng feature để lấy đúng fields cần thiết
         featuringArtists: {
           $map: {
@@ -127,13 +159,20 @@ export const getRealtimeChart = async () => {
             },
           },
         },
-
+        genres: {
+          name: "$genreDetails.name",
+          slug: "$genreDetails.slug",
+        },
         album: {
           _id: "$albumDetails._id",
           title: "$albumDetails.title",
           slug: "$albumDetails.slug",
         },
-
+        moodVideo: {
+          videoUrl: "$moodVideoDetails.videoUrl",
+          loop: "$moodVideoDetails.loop",
+          thumbnailUrl: "$moodVideoDetails.thumbnailUrl",
+        },
         artist: {
           _id: "$artistDetails._id",
           name: "$artistDetails.name",
@@ -158,14 +197,10 @@ export const getRealtimeChart = async () => {
       isPublic: true,
       status: "ready",
     })
-      // FIX #4 — Chỉ select fields cần thiết, tránh kéo plainLyrics / lyricPreview lên memory
-      .select(
-        "title slug duration coverImage hlsUrl featuringArtists playCount artist album",
-      )
       .sort({ playCount: -1 })
       .limit(needed)
-      .populate("artist", "name avatar _id slug")
-      .populate("album", "title slug _id")
+      .select(TRACK_SELECT)
+      .populate(TRACK_POPULATE as any)
       .lean();
 
     const formattedFallback = fallbackTracks.map((t: any) => ({
@@ -176,6 +211,17 @@ export const getRealtimeChart = async () => {
       coverImage: t.coverImage,
       featuringArtists: t.featuringArtists,
       playCount: t.playCount,
+      genres: t.genres,
+      lyricUrl: t.lyricUrl,
+      hlsUrl: t.hlsUrl,
+      bitrate: t.bitrate,
+      description: t.description,
+      lyricType: t.lyricType,
+      isExplicit: t.isExplicit,
+      releaseDate: t.releaseDate,
+      plainLyrics: t.plainLyrics,
+      lyricPreview: t.lyricPreview,
+      likeCount: t.likeCount,
       album: t.album
         ? { _id: t.album._id, title: t.album.title, slug: t.album.slug }
         : null,

@@ -44,7 +44,6 @@ import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 import MusicResult from "@/components/ui/Result";
-import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import { PlaylistActionBarProps } from "./components/PlaylistActionBar";
@@ -479,7 +478,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
   if (isLoading && !playlist) return <PlaylistDetailSkeleton />;
 
   // Transitional skeleton while switching playlists
-  if (isLoading) return <WaveformLoader glass={false} text="Đang tải" />;
+  if (isLoading) return <WaveformBars   active/>;
   // Check offline FIRST — no point rendering if there's no network
   if (!isOnline) {
     return (
@@ -597,7 +596,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
             )}
 
             <Suspense
-              fallback={<WaveformLoader glass={false} text="Đang tải" />}
+              fallback={<WaveformBars active/>}
             >
               <LazyTrackList {...trackListProps} />
             </Suspense>
@@ -861,7 +860,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...SP_GENTLE, delay: 0.22 }}
         >
-          <Suspense fallback={<PlaylistDetailSkeleton variant="page" />}>
+          <Suspense fallback={<WaveformBars active />}>
             <LazyTrackList
               {...trackListProps}
               maxHeight="auto"

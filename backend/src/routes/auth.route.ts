@@ -23,14 +23,38 @@ const router = express.Router();
 // ==========================================
 router.get("/google", authController.googleAuth);
 
-router.get(
-  "/google/callback",
-  passport.authenticate("google", {
-    session: false,
-    failureRedirect: `${process.env.CLIENT_URL}/login?error=auth_failed`,
-  }),
-  authController.googleCallbackHandler,
-);
+router.get("/google/callback", (req: any, res: any, next: any) => {
+  // Log incoming query for debugging (code, state, hd, authuser, etc.)
+  console.log("[DEBUG] Google callback query:", req.query);
+
+  // Use custom callback to capture passport/oAuth errors (token exchange)
+  passport.authenticate(
+    "google",
+    {
+      session: false,
+      failureRedirect: `${process.env.CLIENT_URL}/login?error=auth_failed`,
+    },
+    (err: any, user: any, info: any) => {
+      if (err) {
+        // Log detailed error info to help diagnose TokenError: Bad Request
+        console.error("[ERROR] Google auth error:", err);
+        if (err.statusCode) console.error("[ERROR] statusCode:", err.statusCode);
+        if (err.data) console.error("[ERROR] data:", err.data);
+
+        // Forward to client with generic failure (avoid leaking secrets)
+        return res.redirect(
+          `${process.env.CLIENT_URL}/login?error=auth_failed&reason=${encodeURIComponent(
+            err.message || "oauth_error",
+          )}`,
+        );
+      }
+
+      // Attach user and continue to controller handler
+      req.user = user;
+      return authController.googleCallbackHandler(req, res);
+    },
+  )(req, res, next);
+});
 
 // Facebook Social Auth
 router.get("/facebook", authController.facebookAuth);

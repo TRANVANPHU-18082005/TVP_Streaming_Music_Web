@@ -17,7 +17,6 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useSocket } from "@/hooks/useSocket";
 import { RootState } from "@/store/store";
 import { env } from "@/config/env";
-import { toCDN } from "@/utils/track-helper";
 import { ITrack } from "@/features/track";
 
 // ---------------------------------------------------------------------------
@@ -54,8 +53,15 @@ export const useAudioPlayer = () => {
   } = useAppSelector(selectPlayer);
 
   const currentTrack = useAppSelector(selectCurrentTrack);
-
   const nextTrackPreload = useAppSelector(selectNextTrack);
+  const currentTrackId = useAppSelector((s: RootState) => s.player.currentTrackId);
+  const isCurrentCached = useAppSelector((s: RootState) =>
+    Boolean(s.player.trackMetadataCache[currentTrackId ?? ""]),
+  );
+  const nextTrackId = nextTrackPreload?._id ?? null;
+  const isNextCached = useAppSelector((s: RootState) =>
+    Boolean(s.player.trackMetadataCache[nextTrackId ?? ""]),
+  );
   const user = useAppSelector((state: RootState) => state.auth.user);
   const activeQueueLen = useAppSelector(
     (s: RootState) => s.player.activeQueueIds.length,
@@ -174,11 +180,14 @@ export const useAudioPlayer = () => {
   // ==========================================================================
 
   useEffect(() => {
-    if (!currentTrack || !audioRef.current) return;
+    // If metadata isn't cached yet (we may have returned a placeholder),
+    // don't attempt to start the HLS/Audio loader — the resolver will
+    // populate the cache and re-trigger this effect.
+    if (!currentTrack || !audioRef.current || !isCurrentCached) return;
 
     const audio = audioRef.current;
     const rawSrc = currentTrack.hlsUrl || currentTrack.trackUrl;
-    const src = toCDN(rawSrc) || rawSrc;
+    const src = rawSrc;
 
     // Guard: some tracks may not have a playable URL yet. Avoid calling
     // string methods on undefined which causes runtime crash (endsWith).
@@ -254,7 +263,7 @@ export const useAudioPlayer = () => {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTrack?._id]);
+  }, [currentTrack?._id, isCurrentCached]);
   // Intentionally exclude isPlaying, dispatch — chỉ re-run khi đổi track
 
   // ==========================================================================
@@ -264,7 +273,8 @@ export const useAudioPlayer = () => {
   // ==========================================================================
 
   useEffect(() => {
-    if (!nextTrackPreload) {
+    // Only attempt to preload next track's audio if its metadata is cached.
+    if (!nextTrackPreload || !isNextCached) {
       if (preloadHlsRef.current) {
         preloadHlsRef.current.destroy();
         preloadHlsRef.current = null;
@@ -276,7 +286,7 @@ export const useAudioPlayer = () => {
     }
 
     const rawSrc = nextTrackPreload.hlsUrl || nextTrackPreload.trackUrl;
-    const src = toCDN(rawSrc) || rawSrc;
+    const src = rawSrc;
 
     // Guard against missing src for preload as well.
     if (!src) {
@@ -371,9 +381,9 @@ export const useAudioPlayer = () => {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
       artist: fullArtist,
-      artwork: [
+        artwork: [
         {
-          src: toCDN(currentTrack.coverImage) || currentTrack.coverImage,
+          src: currentTrack.coverImage,
           sizes: "512x512",
           type: "image/jpeg",
         },

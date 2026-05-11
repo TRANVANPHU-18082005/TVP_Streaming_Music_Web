@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { Response } from "express";
+import config, { isProd } from "../config/env";
 
 // 1. Hàm tạo Token (Cho phép tùy chỉnh thời gian hết hạn của Refresh Token)
 export const generateTokens = (
@@ -7,18 +8,16 @@ export const generateTokens = (
   role: string,
   rememberMe: boolean = false, // <--- Thêm tham số này
 ) => {
-  const accessToken = jwt.sign({ id: userId, role }, process.env.JWT_SECRET!, {
+  const accessToken = jwt.sign({ id: userId, role }, config.jwtSecret!, {
     expiresIn: "15m",
   });
 
   // Nếu remember -> 30 ngày, Không -> 7 ngày
   const refreshExpiresIn = rememberMe ? "30d" : "7d";
 
-  const refreshToken = jwt.sign(
-    { id: userId },
-    process.env.JWT_REFRESH_SECRET!,
-    { expiresIn: refreshExpiresIn },
-  );
+  const refreshToken = jwt.sign({ id: userId }, config.jwtRefreshSecret!, {
+    expiresIn: refreshExpiresIn,
+  });
 
   return { accessToken, refreshToken };
 };
@@ -34,12 +33,11 @@ export const setRefreshTokenCookie = (
   const maxAge = rememberMe ? 30 * oneDay : 7 * oneDay;
   // For cross-origin OAuth flows we prefer 'none' in production (requires Secure).
   // For local development use 'lax' to be more permissive without HTTPS.
-  const sameSiteOption: "lax" | "strict" | "none" =
-    process.env.NODE_ENV === "production" ? "none" : "lax";
+  const sameSiteOption: "lax" | "strict" | "none" = isProd() ? "none" : "lax";
 
   res.cookie("refreshToken", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProd(),
     sameSite: sameSiteOption,
     maxAge: maxAge, // <--- Động theo biến này
   });
@@ -47,12 +45,11 @@ export const setRefreshTokenCookie = (
 
 // Clear cookie with same attributes as setRefreshTokenCookie to ensure removal
 export const clearRefreshTokenCookie = (res: Response) => {
-  const sameSiteOption: "lax" | "strict" | "none" =
-    process.env.NODE_ENV === "production" ? "none" : "lax";
+  const sameSiteOption: "lax" | "strict" | "none" = isProd() ? "none" : "lax";
 
   res.clearCookie("refreshToken", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProd(),
     sameSite: sameSiteOption,
   });
 };

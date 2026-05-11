@@ -68,7 +68,6 @@ function ArtistSuffix({
       <Link
         to={`/artists/${mainArtist.slug}`}
         className="transition-opacity hover:opacity-100 opacity-60 hover:underline"
-        // Prevent the marquee container's click from triggering track play
         onClick={(e) => e.stopPropagation()}
       >
         {mainArtist.name}
@@ -81,15 +80,16 @@ function ArtistSuffix({
             ft.
           </span>
           {featuringArtists.map((artist, index) => (
-            <span key={artist._id} className="inline-flex items-baseline">
+            // Dùng template string cho key để đảm bảo tính duy nhất tuyệt đối
+            <span key={`feat-${artist._id}-${index}`} className="inline-flex items-baseline">
               <Link
-                to={`/artist/${artist.slug}`}
+                to={`/artists/${artist.slug}`} // Thêm chữ 's' vào artists cho đúng route
                 className="transition-opacity hover:opacity-100 opacity-40 hover:underline"
                 onClick={(e) => e.stopPropagation()}
               >
                 {artist.name}
               </Link>
-              {/* Comma separator — never after last */}
+              {/* Comma separator */}
               {index < featuringArtists.length - 1 && (
                 <span className="select-none opacity-30 mr-0.5">,</span>
               )}

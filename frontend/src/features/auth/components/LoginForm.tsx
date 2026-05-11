@@ -4,7 +4,7 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Github,
+ 
   Chrome,
   Facebook,
   Check,
@@ -18,6 +18,7 @@ import { Link } from "react-router-dom";
 // Import Hook vừa tạo
 import { useLogin } from "../hooks/useLogin";
 import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { env } from "@/config/env";
 
 // --- UI COMPONENTS (Giữ nguyên style của bạn) ---
 
@@ -384,7 +385,7 @@ export default function LoginForm() {
 
               <div className="flex gap-4">
                 <Link
-                  to={`${import.meta.env.VITE_API_URL}/auth/facebook`}
+                  to={`${env.API_URL}/auth/facebook`}
                   className="w-full"
                 >
                   <Button variant="outline" className="w-full cursor-pointer">
@@ -392,7 +393,7 @@ export default function LoginForm() {
                   </Button>
                 </Link>
                 <Link
-                  to={`${import.meta.env.VITE_API_URL}/auth/google`}
+                  to={`${env.API_URL}/auth/google`}
                   className="w-full"
                 >
                   <Button variant="outline" className="w-full cursor-pointer">

@@ -25,7 +25,6 @@ import {
 import { cacheRedis } from "../config/redis";
 import themeColorService from "./themeColor.service";
 import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
-import { da, is, vi } from "zod/v4/locales";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -876,8 +875,8 @@ class PlaylistService {
     // 1. Tạo Cache Key dựa trên User và Phân trang
     const cacheKey = `playlist:list:owner:${userId}:page:${page}:limit:${limit}`;
 
-    const cached = await cacheRedis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    if (cached) return JSON.parse(cached as string);
 
     // 2. Query thông minh: Chỉ lấy các trường cần cho UI (Thumbnail, Title, Stats)
     const playlists = await Playlist.find({
@@ -904,11 +903,14 @@ class PlaylistService {
       },
     };
 
-    // 4. Lưu Cache (Thời gian ngắn vì danh sách cá nhân hay thay đổi)
-    await cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 300); // 5 phút
+   
 
     const ttl =  600 + Math.floor(Math.random() * 120);
-    await cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl);
+    cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
   }
 
   // ── 12.A GET LIST BY ADMIN ──────────────────────────────────────────────────────────
@@ -1017,7 +1019,7 @@ class PlaylistService {
 
     const cacheKey = buildCacheKey("playlist:list", userRole, filter);
 
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const { page = 1, limit = 12, keyword, type, sort, tag } = filter;
@@ -1098,9 +1100,11 @@ class PlaylistService {
     const isSensitive = currentUserId;
     const ttl = isSensitive ? 30 : 600 + Math.floor(Math.random() * 120);
 
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
-    ).catch(console.error);
+    cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }
@@ -1114,7 +1118,7 @@ class PlaylistService {
       currentUserId,
     });
 
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const playlist = await Playlist.findOne({ _id: id, isDeleted: false })
@@ -1168,9 +1172,11 @@ class PlaylistService {
       trackIds: orderedValidTrackIds, // Mảng ID "sạch" và đúng thứ tự
     };
 
-    await withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
-    );
+   cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", 3600) // 1 giờ
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
     return result;
   }
 
@@ -1216,11 +1222,11 @@ class PlaylistService {
       page,
       limit,
     });
-    const cached = await cacheRedis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    if (cached) return JSON.parse(cached as string);
 
     // Lấy đoạn ID theo phân trang
-    const pagedTrackIds = playlist.tracks.slice(skip, skip + limit);
+    const pagedTrackIds = playlist.tracks.slice(skip, skip + Number(limit));
 
     // Truy vấn dữ liệu chi tiết
     const tracks = await Track.find({
@@ -1251,9 +1257,12 @@ class PlaylistService {
     };
 
     const ttl = 600 + Math.floor(Math.random() * 60);
-    cacheRedis
-      .set(cacheKey, JSON.stringify(result), { ex: ttl } as any)
-      .catch(console.error);
+    // SỬA THÀNH:
+  cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }

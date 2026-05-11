@@ -47,7 +47,6 @@ import type { ITrack } from "@/features/track/types";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { TrackTitleMarquee } from "./TrackTitleMarquee";
-import { toCDN } from "@/utils/track-helper";
 import { jumpToIndex, reorderQueue, selectPlayer, setIsPlaying } from "..";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -345,7 +344,7 @@ const QueueItem = memo(
           onPlay={(e) => onPlay?.(e)}
         />
         <TrackCover
-          src={toCDN(track.coverImage) || track.coverImage}
+          src={track.coverImage}
           title={track.title}
           isLoading={isLoading}
           isCurrentPlaying={isPlaying && isCurrent}
@@ -570,7 +569,7 @@ export const SortableQueueItem = memo(
           onPlay={(e) => onPlay?.(e)}
         />
         <TrackCover
-          src={toCDN(track.coverImage) || track.coverImage}
+          src={track.coverImage}
           title={track.title}
           isActive={isCurrent}
           isLoading={isLoading}

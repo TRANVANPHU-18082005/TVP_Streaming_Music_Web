@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { formatDuration, toCDN } from "@/utils/track-helper";
+import { formatDuration } from "@/utils/track-helper";
 import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import { cn } from "@/lib/utils";
 import PlayCell from "@/features/track/components/PlayCell";
@@ -87,7 +87,7 @@ const SearchArtistCard = React.memo(
     >
       <div className="relative aspect-square rounded-full overflow-hidden shadow-md dark:bg-white/5 bg-black/5">
         <ImageWithFallback
-          src={toCDN(artist.avatar)}
+          src={artist.avatar}
           alt={artist.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
@@ -122,7 +122,7 @@ const SearchAlbumCard = React.memo(
     >
       <div className="relative aspect-square rounded-xl overflow-hidden shadow-md dark:bg-white/5 bg-black/5">
         <ImageWithFallback
-          src={toCDN(album.coverImage)}
+          src={album.coverImage}
           alt={album.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
@@ -156,7 +156,7 @@ const SearchPlaylistCard = React.memo(
     >
       <div className="relative aspect-square rounded-xl overflow-hidden shadow-md dark:bg-white/5 bg-black/5">
         <ImageWithFallback
-          src={toCDN(playlist.coverImage)}
+          src={playlist.coverImage}
           alt={playlist.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
@@ -196,7 +196,7 @@ const SearchGenreCard = React.memo(
         dangerouslySetInnerHTML={{ __html: genre.highlightHtml || genre.name }}
       />
       <ImageWithFallback
-        src={toCDN(genre.image)}
+        src={genre.image}
         alt={genre.name}
         className="absolute -bottom-2 -right-4 w-24 h-24 object-cover rounded shadow-xl rotate-[25deg] transition-transform duration-500 group-hover:rotate-[20deg] group-hover:scale-110"
       />
@@ -259,7 +259,7 @@ const TrackRow = React.memo(
         </div>
 
         <LazyImage
-          src={toCDN(track.coverImage) || track.coverImage}
+          src={track.coverImage}
           alt={track.title}
           isActive={isActive}
           isCurrentPlaying={isCurrentPlaying}

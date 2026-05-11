@@ -4,3 +4,5 @@ dist
 .DS_Store
 logs
 venv
+.env.development
+.env.production

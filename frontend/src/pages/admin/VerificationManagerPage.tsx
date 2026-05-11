@@ -227,7 +227,7 @@ export const VerificationManager = () => {
           totalPages={totalPages || 1}
           onPageChange={handlePageChange}
           totalItems={totalItems}
-          itemsPerPage={APP_CONFIG.PAGINATION_LIMIT}
+          pageSize={APP_CONFIG.PAGINATION_LIMIT || 10}
         />
       )}
       {/* --- REVIEW MODAL --- */}

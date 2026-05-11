@@ -1,7 +1,15 @@
 import dotenv from "dotenv";
 
-// Load .env as early as possible
-dotenv.config();
+// Load env files based on NODE_ENV for consistent dev/prod modes
+const nodeEnv = process.env.NODE_ENV || "development";
+if (nodeEnv !== "production") {
+  // Load mode-specific first, then fallback to generic .env
+  dotenv.config({ path: `.env.${nodeEnv}` });
+  dotenv.config();
+} else {
+  // In production, assume environment provided by host/platform
+  dotenv.config({ path: `.env.production` });
+}
 
 // Required in production — add keys here if your app needs them
 const requiredInProd = [
@@ -15,7 +23,7 @@ const requiredInProd = [
   // "B2_APP_KEY",
 ];
 
-if (process.env.NODE_ENV === "production") {
+if (nodeEnv === "production") {
   const missing = requiredInProd.filter((k) => !process.env[k]);
   if (missing.length) {
     console.error("❌ Missing required env vars:", missing.join(", "));
@@ -24,11 +32,10 @@ if (process.env.NODE_ENV === "production") {
 }
 
 export const config = {
-  nodeEnv: process.env.NODE_ENV || "development",
+  nodeEnv,
   port: Number(process.env.PORT || 8000),
 
   // Mongo
-  mongoUriSrv: process.env.MONGO_URI || "",
   mongoUri: process.env.MONGO_URI || "",
 
   // JWT
@@ -37,6 +44,7 @@ export const config = {
 
   // Client
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  allowOrigins: process.env.ALLOW_ORIGINS || process.env.CLIENT_URL || (nodeEnv !== "production" ? "*" : ""),
 
   // Redis / Upstash
   upstashRedisUrl: process.env.UPSTASH_REDIS_URL || process.env.REDIS_URL || "",
@@ -61,6 +69,9 @@ export const config = {
     apiSecret: process.env.CLOUDINARY_API_SECRET || "",
   },
 
+  // CDN (optional, used in production)
+  cdnDomain: process.env.CDN_DOMAIN || "",
+
   // OAuth
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
@@ -73,18 +84,19 @@ export const config = {
   // Email
   emailUser: process.env.EMAIL_USER || "",
   emailPass: process.env.EMAIL_PASS || "",
-
-  // Worker + tools
-  workerConcurrency: Number(process.env.WORKER_CONCURRENCY ?? 2),
-  pythonBin: process.env.PYTHON_BIN || "python3",
-  forcedAlignerScript: process.env.FORCED_ALIGNER_SCRIPT || process.env.ALIGNER_SCRIPT || "",
-
   // Logging
-  logLevel: process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug"),
-  logToFile: process.env.LOG_TO_FILE === "true",
-
-  // Monitoring
-  sentryDsn: process.env.SENTRY_DSN || "",
+  logLevel: process.env.LOG_LEVEL || (nodeEnv === "production" ? "info" : "debug"),
+  logToFile: process.env.LOG_TO_FILE === "true" || nodeEnv === "production",
+  // Worker
+  workerConcurrency: Number(process.env.WORKER_CONCURRENCY || 5),
+  // CORS
+  allowedOrigins: (process.env.ALLOW_ORIGINS || process.env.CLIENT_URL || (nodeEnv !== "production" ? "*" : ""))
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
 };
 
 export default config;
+
+export const isDev = () => config.nodeEnv !== "production";
+export const isProd = () => config.nodeEnv === "production";

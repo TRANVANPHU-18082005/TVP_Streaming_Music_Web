@@ -5,7 +5,7 @@ import { ClientToServerEvents, ServerToClientEvents } from "@/types/socket";
 import { SocketContext } from "../context/SocketContext"; // Import Context từ file trên
 import { env } from "@/config/env";
 
-const SOCKET_URL = env.VITE_SOCKET_URL;
+const SOCKET_URL = env.SOCKET_URL;
 
 export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const [socket, setSocket] = useState<Socket<

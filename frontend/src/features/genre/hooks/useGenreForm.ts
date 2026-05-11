@@ -12,6 +12,7 @@ import { buildGenrePayload } from "../utils/payloadBuilder";
 import { IGenre } from "../types";
 import { env } from "@/config/env";
 import { toast } from "sonner";
+import { handleError } from "@/utils/handleError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -148,6 +149,7 @@ export const useGenreForm = <TMode extends "create" | "edit">({
           toast.info("Không có thay đổi để lưu.");
         } catch (e) {
           /* ignore toast errors */
+          handleError(e, "Toast error"); // Log nếu toast bị lỗi (như khi gọi trong test environment) nhưng không block flow chính
         }
         return;
       }

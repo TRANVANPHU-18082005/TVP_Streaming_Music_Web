@@ -2,7 +2,6 @@ import React, { memo, useMemo } from "react";
 import { motion, AnimatePresence, PanInfo, Variants } from "framer-motion";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { toCDN } from "@/utils/track-helper";
 import { SP, SheetBackdrop, HandleBar } from "../sheetPrimitives";
 import { useIsLiked } from "@/features/interaction/hooks/useIsLiked";
 import { Heart, ListPlus } from "lucide-react";
@@ -25,7 +24,7 @@ const TrackPreviewRow = memo(({ track }: { track: ITrack }) => {
   return (
     <div className="flex items-center gap-3 px-5 py-3 border-b border-border/[0.06]">
       <ImageWithFallback
-        src={toCDN(track.coverImage)}
+        src={track.coverImage}
         alt={track.title}
         className="w-12 h-12 rounded-xl object-cover ring-1 ring-border shrink-0"
       />

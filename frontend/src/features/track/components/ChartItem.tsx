@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
-import { fmtCount, formatDuration, toCDN } from "@/utils/track-helper";
+import { fmtCount, formatDuration } from "@/utils/track-helper";
 import { useAppDispatch } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
 import { handleError } from "@/utils/handleError";
@@ -312,7 +312,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
   const { currentTrackId, isPlaying } = useSelector(selectPlayer);
 
   const [isLoadingPlay, setIsLoadingPlay] = useState(false);
-
+  console.log(track);
   const isCurrentTrack = currentTrackId === track._id;
   const isActivePlaying = isCurrentTrack && isPlaying;
   const isActive = isCurrentTrack;
@@ -340,10 +340,9 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         dispatch(
           setQueue({
             trackIds: [track._id],
-            initialMetadata: [],
+            initialMetadata: [track], // Chèn data trả từ search.service.ts
             startIndex: 0,
             isShuffling: false,
-
             source: {
               id: track._id,
               type: "chart",
@@ -457,7 +456,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         )}
       >
         <ImageWithFallback
-          src={toCDN(track.coverImage) || track.coverImage}
+          src={track.coverImage}
           alt={track.title}
           className="size-full object-cover"
         />

@@ -3,6 +3,7 @@ import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 import logger from "../config/logger";
 import { clearRefreshTokenCookie } from "../utils/token";
+import { isDev } from "../config/env";
 
 export const errorHandler = (
   err: any,
@@ -25,11 +26,11 @@ export const errorHandler = (
     code: statusCode,
     errorCode: errorCode, // <-- Trả về cho Frontend dùng (quan trọng)
     message,
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+    ...(isDev() && { stack: err.stack }),
   };
 
   // Log lỗi ra console nếu là dev
-  if (process.env.NODE_ENV === "development") {
+  if (isDev()) {
     logger.error("💥 ERROR:", err);
   }
 

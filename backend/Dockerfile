@@ -1,34 +1,25 @@
-# --- STAGE 1: Build (Máy trạm để lắp ráp) ---
 FROM node:18-bullseye-slim AS builder
 WORKDIR /app
 
-# Copy file định nghĩa thư viện
+# Install full dependencies and build
 COPY package*.json ./
-# Cài ĐẦY ĐỦ thư viện (bao gồm cả TypeScript) để build
-RUN npm install
-
-# Copy toàn bộ code vào máy ảo build
+RUN npm ci
 COPY . .
-# Chuyển code TS sang JS (tạo ra thư mục dist)
 RUN npm run build
 
-# --- STAGE 2: Run (Máy thật để chạy - Siêu nhẹ) ---
-FROM node:18-bullseye-slim
+FROM node:18-bullseye-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Quan trọng: Cài chứng chỉ bảo mật để gọi API/DB bên ngoài mượt mà
+# Cài chứng chỉ bảo mật
 RUN apt-get update && apt-get install -y ca-certificates --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-# Chỉ cài đặt thư viện cần thiết để CHẠY (bỏ qua TypeScript rác)
+# Install only production deps
 COPY package*.json ./
 RUN npm ci --production
 
-# Lấy folder 'dist' đã build xong ở Stage 1 sang Stage 2
+# Copy built artifacts
 COPY --from=builder /app/dist ./dist
 
-# Mở cổng 8000 (khớp với fly.toml)
 EXPOSE 8000
-
-# Lệnh khởi chạy server chính thức
 CMD ["node", "dist/index.js"]

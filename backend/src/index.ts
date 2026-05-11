@@ -1,78 +1,62 @@
-// src/index.ts
-// Load + validate environment early
-import "./config/env";
-
+import config from "./config/env";
 import http from "http";
-import mongoose from "mongoose";
-import app from "./app";
-// 🔥 FIX 2: Import đúng 2 ống Redis và hàm connect
-import { connectRedis, cacheRedis, queueRedis } from "./config/redis";
-import { bootstrapCounters } from "./utils/counter";
-import { initSocket } from "./socket";
-import { initCronJobs } from "./cron";
-import { scheduleExternalHealthJob } from "./queue/external.queue";
-import { startViewWorker } from "./workers/view.worker";
-import { closeInteractionWorker } from "./workers/interaction.worker";
-import { closeInteractionQueue } from "./queue/interaction.queue";
+import { createApp } from "./app";
+import { connectRedis } from "./config/redis";
+import { connectWithRetry } from "./utils/db.utils";
+import crypto from 'node:crypto';
+if (typeof global.crypto === 'undefined') {
+  // @ts-ignore
+  global.crypto = crypto;
+}
+const startServer = () => {
+  const PORT = config.port || 8000;
+  const app = createApp();
+  const server = http.createServer(app);
 
-const startServer = async () => {
-  try {
-    // 1. Kết nối DB & Redis trước (Cơ sở hạ tầng)
-    await connectRedis();
-    await mongoose.connect(process.env.MONGO_URI as string);
-    console.log("✅ Databases & Redis connected");
+  // ✅ MỞ CỔNG NGAY LẬP TỨC
+  server.listen(Number(PORT), "0.0.0.0", async () => {
+    console.log(`🚀 API Server is ONLINE at port ${PORT}`);
 
-    // 2. Đồng bộ logic nghiệp vụ
-    await bootstrapCounters();
+    // Sau khi online, chạy các kết nối ngầm
+    try {
+      console.log("📡 Connecting to DB & Redis in background...");
+      await connectRedis();
+      await connectWithRetry();
+      console.log("✅ All infrastructures connected!");
 
-    // 3. Tạo HTTP Server & Socket.IO
-    const server = http.createServer(app);
-    initSocket(server);
-    initCronJobs();
-
-    // 4. Khởi chạy Server TRƯỚC khi khởi chạy Workers
-    // Việc này giúp Fly.io nhận diện app "Pass Health Check" nhanh nhất
-    const PORT = process.env.PORT || 8000;
-    server.listen(PORT, () => {
-      console.log(`🚀 API Server running on port ${PORT}`);
-      
-      // 5. Sau khi server đã lắng nghe, mới kích hoạt các Workers/Jobs
-      scheduleExternalHealthJob();
-      startViewWorker();
-      console.log("👷 Background Workers activated");
-    });
-
-    // 6. Graceful Shutdown (Tối ưu đóng song song)
-    const exitHandler = async () => {
-      console.log("🛑 Starting Graceful Shutdown...");
-      if (server) {
-        server.close(async () => {
-          try {
-            // Đóng tất cả kết nối cùng lúc để kịp thời gian của Fly.io
-            await Promise.all([
-              closeInteractionWorker(),
-              closeInteractionQueue(),
-              mongoose.disconnect(),
-              cacheRedis.quit(),
-              queueRedis.quit()
-            ]);
-            console.log("🔌 All connections closed safely");
-            process.exit(0);
-          } catch (err) {
-            console.error("❌ Error during shutdown:", err);
-            process.exit(1);
-          }
-        });
+      // Mount heavy routes only after infra ready
+      try {
+        const routesModule = await import("./routes");
+        const routes = routesModule.default || routesModule;
+        app.use("/api", routes);
+        console.log("🔌 API routes mounted");
+      } catch (err) {
+        console.error("⚠️ Failed to mount routes:", err);
       }
-    };
 
-    process.on("SIGTERM", exitHandler);
-    process.on("SIGINT", exitHandler);
+      // Initialize modules that require infra
+      const { bootstrapCounters } = await import("./utils/counter");
+      const { initSocket } = await import("./socket");
+      const { initCronJobs } = await import("./cron");
+      const analytics = await import("./services/analytics.service");
 
-  } catch (error) {
-    console.error("❌ Server startup failed:", error);
-    process.exit(1);
-  }
+      if (analytics && typeof analytics.default?.init === "function") {
+        try {
+          await analytics.default.init();
+          console.log("⚙️ Analytics initialized");
+        } catch (err) {
+          console.error("⚠️ Analytics init failed:", err);
+        }
+      }
+
+      initSocket(server);
+      initCronJobs();
+      await bootstrapCounters();
+      console.log("👷 System fully ready!");
+    } catch (err) {
+      console.error("❌ Background startup error:", err);
+    }
+  });
 };
 
 startServer();

@@ -275,7 +275,7 @@ class AlbumService {
     );
     const cacheKey = buildCacheKey("album:list", userRole, cleanFilter);
 
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const {
@@ -357,9 +357,11 @@ class AlbumService {
 
     // Cache với jitter để tránh thundering herd
     const ttl = 600 + Math.floor(Math.random() * 120);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
-    ).catch((err) => console.error("[Cache] SET error:", err));
+    cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }
@@ -626,7 +628,7 @@ class AlbumService {
     const cacheKey = buildCacheKey(`album:detail:${slug}`, userRole, {});
 
     // 1. Check Cache
-    const cachedData = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      const cachedData = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cachedData) {
       const parsed = JSON.parse(cachedData as string);
       // Nếu cache là private, check quyền ngay
@@ -663,10 +665,11 @@ class AlbumService {
       trackIds: tracks.map((t) => t._id),
     };
 
-    // 5. Lưu Cache (Chỉ lưu nếu hợp lệ)
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
-    ).catch(console.error);
+    cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }
@@ -714,7 +717,7 @@ class AlbumService {
       limit,
     });
 
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -750,10 +753,12 @@ class AlbumService {
     };
 
     const ttl = 1800 + Math.floor(Math.random() * 300);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
-    ).catch((err) => console.error("[Cache] Set Album Tracks Error:", err));
-
+    cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
+    
     return result;
   }
   // ── 8. TOGGLE ALBUM PUBLICITY ─────────────────────────────────────────

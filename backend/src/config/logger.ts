@@ -1,4 +1,5 @@
 import winston from "winston";
+import { isProd } from "./env";
 
 const logger = winston.createLogger({
   level: "info",
@@ -16,7 +17,7 @@ const logger = winston.createLogger({
 });
 
 // Nếu không phải production thì in ra console có màu mè cho dễ nhìn
-if (process.env.NODE_ENV === "production") {
+if (isProd()) {
   // In production, also emit logs to stdout/stderr in JSON for log collectors
   logger.add(
     new winston.transports.Console({

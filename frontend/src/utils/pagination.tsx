@@ -1,66 +1,4 @@
-/**
- * Pagination.tsx — Premium pagination bar for data tables and catalog pages
- *
- * Design System: Soundwave (Obsidian Luxury / Neural Audio)
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * ARCHITECTURE
- *   Pagination (orchestrator)
- *   ├── ProgressBar      — reading-position indicator (memoized)
- *   ├── StatsLabel       — "X–Y / Total items" with per-page selector
- *   ├── PageNav          — prev/next/first/last + numbered page buttons
- *   │   └── PageButton   — individual page number button (memoized)
- *   └── JumpForm         — "Go to page" input + submit
- *
- * KEY IMPROVEMENTS OVER ORIGINAL
- *
- * DESIGN SYSTEM ALIGNMENT
- *   The original used an inline `<style>` block with completely custom CSS
- *   variables (`--pg-bg`, `--pg-accent`, etc.) that DUPLICATE the Soundwave
- *   token system (`--background`, `--primary`, `--muted-foreground`, etc.).
- *   This means:
- *     1. Theme switching (dark/light) requires updating TWO token systems.
- *     2. Any Soundwave color change doesn't propagate to pagination.
- *     3. The `--pg-accent` in dark mode (#7c6af7) and light (#e8622a) are
- *        hardcoded — they'll diverge from the brand color over time.
- *
- *   REFACTOR: Entire inline CSS eliminated. All styling uses Tailwind
- *   utility classes that reference Soundwave CSS variables. Theme switching
- *   is automatic — the component inherits from the design system.
- *
- * PERFORMANCE
- *   • `handlePageChange` wrapped in useCallback — was recreated on every
- *     render, causing all page buttons to receive new onClick references.
- *   • `handleJump` wrapped in useCallback.
- *   • `PageButton` extracted as memo'd component — in a list of 7+ page
- *     buttons, only the previously-active and newly-active buttons re-render
- *     on page change. Original: all buttons re-rendered.
- *   • `ProgressBar` memo'd — re-renders only when `progressPercent` changes.
- *   • `StatsLabel` memo'd — re-renders only when stats change.
- *   • `ripplePage` state: the original used `setTimeout(400)` to clear it.
- *     Replaced with `onAnimationEnd` on the page button — fires exactly when
- *     the ripple CSS animation ends, not 400ms later regardless.
- *   • `pageNumbers` useMemo: deps are `[currentPage, totalPages]` — correct.
- *     The `pages.includes(i)` check inside the loop was O(n) — replaced
- *     with a `Set` for O(1) membership testing.
- *
- * ACCESSIBILITY
- *   • `<nav aria-label="Pagination navigation">` landmark.
- *   • All buttons: `aria-label`, `aria-disabled`, `aria-current="page"`.
- *   • Progress bar: `aria-hidden="true"` (decorative).
- *   • Mobile indicator: `aria-live="polite"`.
- *   • Jump input: `aria-label`, `aria-describedby` linking to validation hint.
- *   • Stats: `aria-label` on the stats region.
- *   • Per-page select: `aria-label`.
- *   • Ellipsis spans: `aria-hidden="true"`.
- *
- * RESPONSIVENESS
- *   • Mobile (<sm): Stats + nav stacked vertically, edge buttons hidden.
- *   • Tablet (<md): Edge buttons (first/last page) hidden.
- *   • Desktop: Full layout.
- *   • "Go to" label hidden on very small screens (<xs).
- *   • Page numbers hidden on mobile, replaced by "X / Y" mobile indicator.
- */
+
 
 import React, {
   useMemo,
@@ -78,6 +16,7 @@ import {
   CornerDownRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DEFAULT_GRID_META } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -647,4 +586,39 @@ const Pagination = ({
   );
 };
 
-export default Pagination;
+
+export const PaginationStrip = memo(
+  ({
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    onPageChange,
+  }: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+  }) => (
+    <div
+      className={cn(
+        "rounded-2xl",
+        "border border-border/50 dark:border-primary/15",
+        "shadow-brand p-4",
+        "animate-fade-up animation-fill-both",
+      )}
+      style={{ animationDelay: "80ms" }}
+    >
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        totalItems={totalItems}
+        itemsPerPage={pageSize || DEFAULT_GRID_META.pageSize}
+      />
+    </div>
+  ),
+);
+PaginationStrip.displayName = "PaginationStrip";
+export default PaginationStrip;

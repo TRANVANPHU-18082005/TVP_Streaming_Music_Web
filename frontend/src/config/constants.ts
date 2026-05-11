@@ -1,5 +1,7 @@
 // src/config/constants.ts
 
+import { cn } from "@/components/ui/utils";
+
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: "accessToken",
   REFRESH_TOKEN: "refreshToken",
@@ -107,3 +109,11 @@ export const MENU_ITEM_CLS =
   "transition-colors duration-100 outline-none";
 
 export const ICON_CLS = "size-4 shrink-0 text-[hsl(var(--muted-foreground))]";
+/** Module-scoped grid constant — zero allocation per render */
+// Cùng với hàm staggerDelay, đây là 2 hằng số được chia sẻ giữa nhiều trang có layout lưới (Albums, Artists, Genres) để đảm bảo nhất quán và tối ưu hiệu suất (zero allocation).
+export const GRID_LAYOUT = cn(
+  "grid",
+  "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7",
+  "gap-x-4 gap-y-8 sm:gap-x-5 sm:gap-y-10",
+);
+export const staggerDelay = (i: number) => Math.min(i * 45, 700);

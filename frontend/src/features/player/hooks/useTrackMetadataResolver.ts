@@ -146,39 +146,33 @@ export function useTrackMetadataResolver(): void {
 
   useEffect(() => {
     if (!currentTrackId) return;
-    if (loadingState !== "loading") return;
     if (cacheRef.current[currentTrackId]) return;
 
     // If there's already a live request for this ID, don't duplicate it.
-    // (Can happen if loadingState flickers while currentTrackId stays the same.)
     if (inFlightRef.current.has(currentTrackId)) return;
 
     const controller = new AbortController();
     inFlightRef.current.set(currentTrackId, controller);
 
-    fetchWithRetry(currentTrackId, controller.signal, /* isCritical */ true)
+    // Treat the fetch as "critical" only when the player explicitly marked
+    // the state as "loading". Otherwise fetch in background without forcing
+    // UI state transitions on permanent failure.
+    const isCritical = loadingState === "loading";
+
+    fetchWithRetry(currentTrackId, controller.signal, isCritical)
       .catch((err) => {
-        // fetchWithRetry swallows AbortError internally; anything surfacing
-        // here is truly unexpected — log it so it's visible in production.
         if (!isAbortError(err)) {
           console.error("[TrackMetadataResolver] Unexpected error:", err);
         }
       })
       .finally(() => {
-        // Always clean up inFlight tracking once the request is settled,
-        // *including* when it was aborted — the AbortController is spent.
         if (inFlightRef.current.get(currentTrackId) === controller) {
           inFlightRef.current.delete(currentTrackId);
         }
       });
 
     return () => {
-      // Hard-cancel the HTTP request; fetchWithRetry will detect the abort
-      // signal and stop without dispatching stale data.
       controller.abort();
-      // Note: we do NOT delete from inFlightRef here. The .finally() above
-      // handles cleanup after the request actually settles, preventing a race
-      // where a new effect fires before the old one's finally runs.
     };
   }, [currentTrackId, loadingState, fetchWithRetry]);
 

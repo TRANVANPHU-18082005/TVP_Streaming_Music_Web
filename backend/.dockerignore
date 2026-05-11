@@ -1,12 +1,17 @@
-# flyctl launch added from .gitignore
-**/node_modules
-**/dist
-**/.env
-**/.DS_Store
-**/logs
-**/venv
-fly.toml
+
 node_modules
 dist
+logs
+tmp
 .env
+.env.*
+.vscode
 .git
+.gitignore
+.DS_Store
+coverage
+npm-debug.log
+pnpm-lock.yaml
+yarn.lock
+.idea
+ 

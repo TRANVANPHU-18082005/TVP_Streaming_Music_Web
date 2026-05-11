@@ -22,7 +22,6 @@ import {
 import { cacheRedis } from "../config/redis";
 import escapeStringRegexp from "escape-string-regexp";
 import themeColorService from "./themeColor.service";
-import { is } from "zod/v4/locales";
 import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -369,7 +368,7 @@ class GenreService {
     );
     const cacheKey = buildCacheKey("genre:list", userRole, cleanFilter);
 
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const {
@@ -434,9 +433,11 @@ class GenreService {
     };
 
     const ttl = 1800 + Math.floor(Math.random() * 600);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
-    ).catch(console.error);
+  cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }
@@ -531,7 +532,7 @@ class GenreService {
     const userRole = currentUser?.role ?? "guest";
     const cacheKey = buildCacheKey(`genre:detail:${slug}`, userRole, {});
 
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     // 1. Tìm Genre chính
@@ -579,9 +580,11 @@ class GenreService {
     };
 
     // 3. Lưu Cache với cơ chế "Fire-and-forget" để không block client
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
-    ).catch((err) => console.error("Redis Set Error:", err));
+   cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }
@@ -597,7 +600,7 @@ class GenreService {
       userRole || "guest",
       { page, limit },
     );
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const trackQuery: Record<string, any> = {
@@ -630,10 +633,11 @@ class GenreService {
     };
 
     const ttl = 900 + Math.floor(Math.random() * 120);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
-    ).catch(console.error);
-
+    cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
     return result;
   }
 

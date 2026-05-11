@@ -57,10 +57,29 @@ export function extractRelativePath(
  * Build CDN/storage base URL from env — uses CLOUDFLARE_DOMAIN in prod,
  * B2_ENDPOINT otherwise. Trailing slashes stripped.
  */
+import config from "../config/env";
+
 export function buildBaseUrl(): string {
-  const isProd = process.env.NODE_ENV === "production";
-  const envKey = isProd ? "CLOUDFLARE_DOMAIN" : "B2_ENDPOINT";
-  const raw = process.env[envKey];
-  if (!raw) throw new Error(`[buildBaseUrl] Missing env var: ${envKey}`);
+  // const isProd = config.nodeEnv === "production";
+  // const raw = isProd ? config.cdnDomain || config.b2.endpoint : config.b2.endpoint;
+  const raw = config.cdnDomain || config.b2.endpoint;
+  if (!raw) throw new Error(`[buildBaseUrl] Missing configuration for CDN/B2 endpoint`);
   return raw.replace(/\/+$/, "");
+}
+
+/**
+ * Given a full B2/S3 URL (or any URL that contains the bucket path),
+ * return a CDN-backed URL when `config.cdnDomain` is configured.
+ * Falls back to the original input on failure.
+ */
+export function toCdnUrl(fileUrl: string): string {
+  try {
+    const bucket = config.b2.bucketName;
+    if (!bucket) return fileUrl;
+    const rel = extractRelativePath(fileUrl, bucket);
+    const base = buildBaseUrl();
+    return `${base}/${bucket}/${rel}`;
+  } catch (err) {
+    return fileUrl;
+  }
 }

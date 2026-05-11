@@ -1,5 +1,6 @@
 import winston from "winston";
 import path from "path";
+import config, { isProd } from "../config/env";
 
 // ============================================================
 // CONSTANTS
@@ -8,8 +9,8 @@ import path from "path";
 const { combine, timestamp, errors, json, colorize, printf } = winston.format;
 
 const LOG_DIR = path.resolve(process.cwd(), "logs");
-const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const LOG_LEVEL = process.env.LOG_LEVEL || (IS_PRODUCTION ? "info" : "debug");
+const IS_PRODUCTION = isProd();
+const LOG_LEVEL = config.logLevel || (IS_PRODUCTION ? "info" : "debug");
 
 // ============================================================
 // CUSTOM FORMATS
@@ -66,7 +67,7 @@ const transports: winston.transport[] = [
 ];
 
 // --- 2. File transports (chỉ bật ở production hoặc khi có LOG_TO_FILE) ---
-if (IS_PRODUCTION || process.env.LOG_TO_FILE === "true") {
+if (IS_PRODUCTION || config.logToFile) {
   // Tất cả logs từ level "info" trở lên
   transports.push(
     new winston.transports.File({

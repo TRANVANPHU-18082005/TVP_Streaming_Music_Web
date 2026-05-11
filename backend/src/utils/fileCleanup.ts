@@ -4,6 +4,7 @@ import {
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { cloudinary, s3 } from "../config/storage";
+import config from "../config/env";
 
 // 1. CLOUDINARY CLEANUP
 export const deleteFromCloudinary = async (publicIdOrUrl: string) => {
@@ -36,7 +37,7 @@ export const deleteFromB2 = async (key: string) => {
   if (!key) return;
   try {
     const command = new DeleteObjectCommand({
-      Bucket: process.env.B2_BUCKET_NAME,
+      Bucket: config.b2.bucketName,
       Key: key,
     });
     await s3.send(command);
@@ -55,7 +56,7 @@ export const deleteFolderFromB2 = async (prefix: string) => {
 
     do {
       const listCommand = new ListObjectsV2Command({
-        Bucket: process.env.B2_BUCKET_NAME,
+        Bucket: config.b2.bucketName,
         Prefix: folderPrefix,
         ContinuationToken: continuationToken,
       });
@@ -64,7 +65,7 @@ export const deleteFolderFromB2 = async (prefix: string) => {
       if (!listResult.Contents || listResult.Contents.length === 0) break;
 
       const deleteCommand = new DeleteObjectsCommand({
-        Bucket: process.env.B2_BUCKET_NAME,
+        Bucket: config.b2.bucketName,
         Delete: {
           Objects: listResult.Contents.map((obj) => ({ Key: obj.Key })),
           Quiet: true,

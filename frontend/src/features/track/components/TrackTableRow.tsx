@@ -40,7 +40,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { formatDuration, STATUS_CONFIG, toCDN } from "@/utils/track-helper";
+import { formatDuration, STATUS_CONFIG } from "@/utils/track-helper";
 import { toast } from "sonner";
 import { ITrack } from "@/features/track/types";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
@@ -409,7 +409,7 @@ export const TrackTableRow = memo(
         <TableCell className="py-2.5 pl-2">
           <div className="flex items-center gap-3 min-w-0">
             <TrackCover
-              src={toCDN(track.coverImage) || track.coverImage}
+              src={track.coverImage}
               title={track.title}
               isActive={isActive}
               isPlaying={isPlaying}

@@ -11,7 +11,7 @@ import { Activity, Globe, WifiOff } from "lucide-react";
 
 const AnalyticPage = () => {
   const { data: realtimeData, loading, isConnected } = useRealtimeStats();
-
+  console.log("Realtime Data:", realtimeData, "Loading:", loading, "Connected:", isConnected);
   if (loading) return <DashboardSkeleton />;
 
   return (

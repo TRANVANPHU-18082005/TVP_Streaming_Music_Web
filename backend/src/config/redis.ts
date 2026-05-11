@@ -13,7 +13,9 @@ const getTlsConfig = (url: string) => {
 // =========================================================
 // 1. CACHE REDIS (Dùng cho API - Kết nối Upstash)
 // =========================================================
-const cacheUrl = process.env.UPSTASH_REDIS_URL || "redis://localhost:6379";
+import config from "./env";
+
+const cacheUrl = config.upstashRedisUrl || process.env.UPSTASH_REDIS_URL || "redis://localhost:6379";
 
 export const cacheRedis = new Redis(cacheUrl, {
   lazyConnect: true,
@@ -33,7 +35,7 @@ cacheRedis.on("error", (err) =>
 // =========================================================
 // 2. QUEUE REDIS (Dùng cho BullMQ - Kết nối Redis Cloud)
 // =========================================================
-const queueUrl = process.env.QUEUE_REDIS_URL || "redis://localhost:6380";
+const queueUrl = config.queueRedisUrl || process.env.QUEUE_REDIS_URL || "redis://localhost:6380";
 
 export const queueRedis = new Redis(queueUrl, {
   lazyConnect: true,

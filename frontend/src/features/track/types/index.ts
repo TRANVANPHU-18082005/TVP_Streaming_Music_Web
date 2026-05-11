@@ -70,29 +70,7 @@ export interface ITrack {
 }
 
 // 3. Chart Interfaces (Giữ nguyên cấu trúc nhưng đồng bộ technical fields)
-export interface IChartItem {
-  _id: string;
-  title: string;
-  slug: string;
-  duration: number;
-  coverImage: string;
-  hlsUrl?: string;
-  playCount: number;
-  score: number;
-  artist: {
-    _id: string;
-    name: string;
-    avatar: string;
-    slug: string;
-  };
-  album?: {
-    _id: string;
-    title: string;
-    slug: string;
-  };
-  featuringArtists: IArtist[];
-  moodVideo?: string | null; // Cho phép hiển thị Canvas ngay trên Chart
-}
+
 
 export interface IChartResponse {
   success: boolean;
@@ -121,14 +99,16 @@ export interface IChartDataPoint {
 }
 
 // 3. ChartTrack dùng cho UI (thêm các field tính toán hạng)
-export interface ChartTrack extends IChartItem {
+export interface ChartTrack extends ITrack {
   rank?: number;
   lastRank?: number;
+  score: number;
+
 }
 
 // 4. Cấu trúc Data từ API
 export interface IRealtimeChartData {
-  items: IChartItem[];
+  items: ChartTrack[];
   chart: IChartDataPoint[];
   lastUpdatedAt?: string; // Đưa vào đây luôn cho đồng bộ
 }

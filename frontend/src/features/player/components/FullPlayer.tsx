@@ -58,7 +58,7 @@ import { EyeViewBadge } from "@/components/ui/LiveViewBadge";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { useSleepTimer } from "@/features/player/sleepTimer/SleepTimerProvider";
-import { formatMs, toCDN } from "@/utils/track-helper";
+import { formatMs } from "@/utils/track-helper";
 
 // Lazy-loaded views to keep initial bundle small and improve responsiveness
 const MoodFocusViewLazy = lazy(() =>
@@ -1102,10 +1102,7 @@ const SwipeableViews = memo(
                 />
               )}
             </AnimatePresence>
-            <VinylDisk
-              src={toCDN(track.coverImage) || track.coverImage}
-              isPlaying={isPlaying}
-            />
+            <VinylDisk src={track.coverImage} isPlaying={isPlaying} />
           </motion.div>
         )}
 
@@ -1238,7 +1235,7 @@ const TrackInfoRow = memo(
       {size === "sm" && (
         <div className="size-10 rounded-xl overflow-hidden shrink-0 ring-1 ring-border">
           <ImageWithFallback
-            src={toCDN(track.coverImage)}
+            src={track.coverImage}
             alt=""
             className="size-full object-cover"
           />
@@ -1336,7 +1333,7 @@ const FullPlayerComponent = ({
   // Lazy fetch: chỉ fetch khi user vào tab Lyrics hoặc Mood
   const lyricsEnabled = currentView === "lyrics" || currentView === "mood";
   const rawLyricSrc = track.lyricUrl;
-  const LyricSrc = toCDN(rawLyricSrc) || rawLyricSrc;
+  const LyricSrc = rawLyricSrc;
   const { lyrics, loading } = useLyrics(LyricSrc, lyricsEnabled);
 
   // Lazy mount: khi chuyển view, thêm vào Set (không bao giờ unmount)
@@ -1421,7 +1418,7 @@ const FullPlayerComponent = ({
       aria-label={`Now playing: ${track.title}`}
     >
       <PlayerBackground
-        coverImage={toCDN(track.coverImage) || track.coverImage}
+        coverImage={track.coverImage}
         dominantColor="primary"
         focusMode={focusMode}
         isPlaying={isPlaying}

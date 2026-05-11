@@ -15,7 +15,6 @@ import { ITrack } from "@/features/track";
 import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
 
 import { TrackTitleMarquee } from "./TrackTitleMarquee";
-import { toCDN } from "@/utils/track-helper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -490,7 +489,7 @@ const TrackInfo = memo(
         onFocus={() => onPrefetch?.()}
       >
         <VinylArtwork
-          src={toCDN(track.coverImage) || track.coverImage}
+          src={track.coverImage}
           alt={`${track.title} album art`}
           isPlaying={isPlaying}
         />

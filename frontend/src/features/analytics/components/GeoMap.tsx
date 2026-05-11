@@ -7,9 +7,9 @@ import "leaflet/dist/leaflet.css";
 import { scaleLinear } from "d3-scale";
 import { GeoLocation } from "@/features/analytics/types";
 import { ISO_MAPPING } from "@/utils/isoMapping";
-
-const GEO_URL = "/world-countries.json";
-
+import { feature } from "topojson-client";
+const GEO_URL = "../../../../public/world-countries.json";
+console.log("GEO_URL:", GEO_URL);
 /* ── Color ramp — dùng brand token từ design system ─────────────
    Light: gray-200 → brand-500 (violet-indigo)
    Dark:  brand-800 (very dark) → brand-500 (luminous violet)
@@ -59,7 +59,7 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
   });
   const [hoveredGeo, setHoveredGeo] = useState<string | null>(null);
   const [geoJson, setGeoJson] = useState<any | null>(null);
-
+  console.log(geoJson,data);
   // Build lookup map ISO2 → value
   // Trong GeoMap.tsx
   const dataMap = useMemo(() => {
@@ -96,9 +96,11 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
   // Leaflet event handlers will update tooltip state
   const handleFeatureMouseOver = useCallback(
     (feature: any, layer: L.Layer, evt: any) => {
-      const id = feature.id || feature.properties?.ISO_A3 || feature.properties?.iso_a3;
+      const id =
+        feature.id || feature.properties?.ISO_A3 || feature.properties?.iso_a3;
       setHoveredGeo(id);
-      const name = feature.properties?.name || feature.properties?.NAME || "Unknown";
+      const name =
+        feature.properties?.name || feature.properties?.NAME || "Unknown";
       const value = dataMap[id] || 0;
       // use container point for tooltip offset
       const containerPoint = evt?.containerPoint;
@@ -127,14 +129,29 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
   }, []);
 
   useEffect(() => {
-    // load geojson
     let cancelled = false;
+
     fetch(GEO_URL)
-      .then((r) => r.json())
-      .then((j) => {
-        if (!cancelled) setGeoJson(j);
+      .then((r) => {
+        if (!r.ok) {
+          throw new Error(`HTTP ${r.status}`);
+        }
+
+        return r.json();
       })
-      .catch(() => {});
+      .then((topology) => {
+        const objectKey = Object.keys(topology.objects)[0];
+
+        const geo = feature(topology, topology.objects[objectKey]);
+
+        if (!cancelled) {
+          setGeoJson(geo);
+        }
+      })
+      .catch((err) => {
+        console.error("GeoJSON load failed:", err);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -160,7 +177,12 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
           <GeoJSON
             data={geoJson}
             style={(feature: any) => {
-              const id = feature.id || feature.properties?.ISO_A3 || feature.properties?.iso_a3 || feature.properties?.ISO_A2 || feature.properties?.iso_a2;
+              const id =
+                feature.id ||
+                feature.properties?.ISO_A3 ||
+                feature.properties?.iso_a3 ||
+                feature.properties?.ISO_A2 ||
+                feature.properties?.iso_a2;
               const fill = hoveredGeo === id ? colors.hover : getFill(id);
               return {
                 color: colors.stroke,
@@ -172,7 +194,8 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
             }}
             onEachFeature={(feature: any, layer: any) => {
               layer.on({
-                mouseover: (e: any) => handleFeatureMouseOver(feature, layer, e),
+                mouseover: (e: any) =>
+                  handleFeatureMouseOver(feature, layer, e),
                 mousemove: (e: any) => handleFeatureMouseMove(e),
                 mouseout: () => handleFeatureMouseOut(feature, layer),
               });

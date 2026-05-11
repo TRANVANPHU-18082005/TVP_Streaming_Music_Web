@@ -21,11 +21,12 @@ import {
 } from "../validations/album.validation";
 
 const router = express.Router();
+
 // ==========================================
-// 🟢 STATIC ROUTES (Phải đặt TRƯỚC các route có tham số :id)
+// 🟢 PUBLIC & READ ROUTES (Static & List)
 // ==========================================
 
-// 1. Get Albums (Public & Optional Auth)
+// 1. Get Albums List (Dành cho User)
 router.get(
   "/",
   optionalAuth,
@@ -33,7 +34,8 @@ router.get(
   albumController.getAlbumsByUser,
 );
 
-// 2. Get Albums (Admin) - Đặt TRƯỚC /:id để không bị nhầm admin là một slug/id
+// 2. Get Albums List (Dành cho Admin)
+// Phải nằm TRƯỚC /:slug để tránh "admin" bị coi là một slug.
 router.get(
   "/admin",
   protect,
@@ -43,16 +45,20 @@ router.get(
 );
 
 // ==========================================
-// 🔵 DYNAMIC ROUTES (Các route chứa tham số :id)
+// 🟡 DYNAMIC ROUTES (Parameterized)
 // ==========================================
-// 4. Get Album Tracks
+
+// 3. Sub-resource route (Phức tạp hơn)
+// Luôn đặt các route có hậu tố như /tracks lên trước route đơn lẻ /:slug
 router.get(
   "/:id/tracks",
   optionalAuth,
   validate(getAlbumTracksSchema),
   albumController.getAlbumTracks,
 );
-// 3. Get Album Detail
+
+// 4. Resource Detail (Đơn lẻ - Catch-all cho GET)
+// Đây là "phễu" cuối cùng của phương thức GET.
 router.get(
   "/:slug",
   optionalAuth,
@@ -61,12 +67,12 @@ router.get(
 );
 
 // ==========================================
-// 🔴 PROTECTED ACTIONS (Cần đăng nhập)
+// 🔴 PROTECTED ACTIONS (Cần Token)
 // ==========================================
 
-router.use(protect); // Từ đây trở xuống tất cả đều cần Token
+router.use(protect); // Middleware chặn mọi request không có Token từ đây trở xuống
 
-// 5. Create Album
+// 5. Create Album (POST /)
 router.post(
   "/",
   authorize("artist", "admin"),
@@ -75,7 +81,24 @@ router.post(
   albumController.createAlbum,
 );
 
-// 6. Update Album
+// 6. Restore Album (Admin - Cụ thể hơn nên đặt trên)
+router.patch(
+  "/:id/restore",
+  authorize("admin"),
+  validate(deleteAlbumSchema),
+  albumController.restoreAlbum,
+);
+
+// 7. Toggle Public Status (Action cụ thể)
+router.patch(
+  "/:id/toggle-public",
+  authorize("artist", "admin"),
+  validate(toggleAlbumPublicSchema),
+  albumController.toggleAlbumPublic,
+);
+
+// 8. Update Album (Tổng quát cho PATCH)
+// Đặt dưới các PATCH có hậu tố cụ thể để tránh xung đột
 router.patch(
   "/:id",
   authorize("artist", "admin"),
@@ -84,28 +107,12 @@ router.patch(
   albumController.updateAlbum,
 );
 
-// 7. Toggle Public Status (Nên đặt trước Delete để đồng nhất)
-router.patch(
-  "/:id/toggle-public",
-  authorize("artist", "admin"),
-  validate(toggleAlbumPublicSchema),
-  albumController.toggleAlbumPublic,
-);
-
-// 8. Delete Album
+// 9. Delete Album
 router.delete(
   "/:id",
   authorize("artist", "admin"),
   validate(deleteAlbumSchema),
   albumController.deleteAlbum,
-);
-
-// 9. Restore Album (Admin)
-router.patch(
-  "/:id/restore",
-  authorize("admin"),
-  validate(deleteAlbumSchema),
-  albumController.restoreAlbum,
 );
 
 export default router;

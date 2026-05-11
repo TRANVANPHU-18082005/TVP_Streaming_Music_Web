@@ -33,7 +33,7 @@ import { useTitleStyle } from "@/hooks/useTitleStyle";
 import { ITrack } from "@/features/track/types";
 import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
 import { buildPaletteWithColor, getThemePrimary } from "@/utils/color";
-import { formatDuration, toCDN } from "@/utils/track-helper";
+import { formatDuration } from "@/utils/track-helper";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import PlayCell from "@/features/track/components/PlayCell";
 import LazyImage from "@/features/track/components/LazyImage";
@@ -176,7 +176,7 @@ const TrackRow = memo(
 
         {/* Cover */}
         <LazyImage
-          src={toCDN(item.coverImage) || item.coverImage}
+          src={item.coverImage}
           alt={item.title}
           isActive={isActive}
           isCurrentPlaying={isPlaying}
@@ -258,7 +258,7 @@ const ArtistMeta = memo<{
           size === "sm" ? "size-[18px]" : "size-6",
         )}
       >
-        <AvatarImage src={toCDN(artistAvatar)} />
+        <AvatarImage src={artistAvatar} />
         <AvatarFallback className="text-[8px] font-black bg-primary/20 text-primary">
           {artistName?.[0] ?? "U"}
         </AvatarFallback>
@@ -365,7 +365,7 @@ const TrackDetailAlbumCard = React.memo(
     >
       <div className="relative aspect-square rounded-xl overflow-hidden shadow-md dark:bg-white/5 bg-black/5">
         <ImageWithFallback
-          src={toCDN(album.coverImage)}
+          src={album.coverImage}
           alt={album.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
@@ -396,7 +396,7 @@ const TrackDetailArtistCard = React.memo(
     >
       <div className="relative aspect-square rounded-full overflow-hidden shadow-md dark:bg-white/5 bg-black/5">
         <ImageWithFallback
-          src={toCDN(artist.avatar)}
+          src={artist.avatar}
           alt={artist.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
@@ -590,7 +590,7 @@ const TrackDetailPage = () => {
             }}
           >
             <ImageWithFallback
-              src={toCDN(track.coverImage)}
+              src={track.coverImage}
               alt={track.title}
               className={cn(
                 "w-full h-full object-cover transition-transform duration-700 ease-out",
@@ -757,7 +757,7 @@ const TrackDetailPage = () => {
                   )}
                 >
                   <ImageWithFallback
-                    src={toCDN(track.coverImage)}
+                    src={track.coverImage}
                     className="size-full object-cover"
                   />
                 </div>

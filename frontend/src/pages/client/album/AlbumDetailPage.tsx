@@ -27,7 +27,6 @@ import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 import MusicResult from "@/components/ui/Result";
-import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import { AlbumActionBarProps } from "./components/AlbumActionBar";
@@ -366,7 +365,7 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
   if (isLoading && !album) return <AlbumDetailSkeleton />;
 
   // Transition between albums
-  if (isLoading) return <WaveformLoader glass={false} text="Đang tải" />;
+  if (isLoading) return <WaveformBars active />;
 
   // Offline — shown before data error so the message is meaningful
   if (!isOnline) {
@@ -502,7 +501,7 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
             className="mb-5"
           />
 
-          <Suspense fallback={<WaveformLoader glass={false} text="Đang tải" />}>
+          <Suspense fallback={<WaveformBars active />}>
             <LazyTrackList
               {...trackListProps}
               maxHeight="auto"
@@ -715,7 +714,7 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...SP_GENTLE, delay: 0.22 }}
         >
-          <Suspense fallback={<AlbumDetailSkeleton variant="page" />}>
+          <Suspense fallback={<WaveformBars active />}>
             <LazyTrackList
               {...trackListProps}
               maxHeight="auto"

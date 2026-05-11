@@ -4,26 +4,24 @@ import { CloudinaryStorage } from "multer-storage-cloudinary";
 import multerS3 from "multer-s3";
 import path from "path";
 import slugify from "slugify";
-import dotenv from "dotenv";
-
-dotenv.config();
+import config from "./env";
 
 // ========================================================================
 // 1. KHỞI TẠO CLIENT
 // ========================================================================
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: config.cloudinary.name,
+  api_key: config.cloudinary.apiKey,
+  api_secret: config.cloudinary.apiSecret,
 });
 
 const s3 = new S3Client({
-  endpoint: process.env.B2_ENDPOINT,
-  region: process.env.B2_REGION || "us-west-004",
+  endpoint: config.b2.endpoint,
+  region: config.b2.region || "us-west-004",
   credentials: {
-    accessKeyId: process.env.B2_KEY_ID as string,
-    secretAccessKey: process.env.B2_APP_KEY as string,
+    accessKeyId: config.b2.keyId as string,
+    secretAccessKey: config.b2.appKey as string,
   },
   forcePathStyle: false,
 });
@@ -106,7 +104,7 @@ const cloudinaryVideoStorage = new CloudinaryStorage({
 
 const b2Storage = multerS3({
   s3: s3,
-  bucket: process.env.B2_BUCKET_NAME as string,
+  bucket: config.b2.bucketName as string,
   contentType: multerS3.AUTO_CONTENT_TYPE,
   acl: "public-read",
   metadata: (req, file, cb) => {

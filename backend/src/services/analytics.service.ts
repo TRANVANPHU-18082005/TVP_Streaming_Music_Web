@@ -78,19 +78,21 @@ class AnalyticsService {
   private geoBuffer = new Map<string, number>();
 
   private isFlushing = false;
-  private flushTimer: NodeJS.Timeout | null = null;
+  private flushTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    this.startFlushLoop();
-    this.registerShutdownHandlers(); // FIX D: graceful shutdown
+    // Do NOT start timers or register shutdown handlers at import time.
+    // Initialization that depends on infra readiness should call `init()`.
   }
 
   // ── FLUSH LOOP ─────────────────────────────────────────────────────────────
 
   private startFlushLoop() {
-    this.flushTimer = setInterval(() => this.flushData(), FLUSH_INTERVAL);
+    const t = setInterval(() => this.flushData(), FLUSH_INTERVAL);
     // unref() để timer không giữ process sống khi không còn event nào khác
-    this.flushTimer.unref();
+    // use local const `t` to narrow type (avoid property union narrowing issues)
+    if (typeof (t as any).unref === "function") (t as any).unref();
+    this.flushTimer = t;
   }
 
   // ── PUBLIC API ──────────────────────────────────────────────────────────────
@@ -357,6 +359,12 @@ class AnalyticsService {
     await this.flushData();
   }
 
+  /** Initialize runtime behavior (timers, shutdown handlers). Call after infra ready */
+  async init(): Promise<void> {
+    this.startFlushLoop();
+    this.registerShutdownHandlers();
+  }
+
   // ── FIX D: GRACEFUL SHUTDOWN ───────────────────────────────────────────────
 
   /**
@@ -367,8 +375,10 @@ class AnalyticsService {
     const shutdown = async (signal: string) => {
       console.log(`[Analytics] ${signal} received — flushing buffer...`);
 
-      if (this.flushTimer) {
-        clearInterval(this.flushTimer);
+      // copy to local variable to narrow union type before passing to clearInterval
+      const timer = this.flushTimer;
+      if (timer) {
+        clearInterval(timer as any);
         this.flushTimer = null;
       }
 

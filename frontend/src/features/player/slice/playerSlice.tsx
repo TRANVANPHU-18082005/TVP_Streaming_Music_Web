@@ -251,18 +251,12 @@ const playerSlice = createSlice({
       let targetTrackId: string | null = null;
       let targetIndex = 0;
 
-      if (state.isShuffling) {
-        /**
-         * Nếu là Shuffle:
-         * - Nếu startIndex > 0 (user chọn 1 bài cụ thể): Lấy bài đó làm gốc.
-         * - Nếu startIndex <= 0 (user bấm nút Shuffle tổng): Chọn 1 bài ngẫu nhiên hoàn toàn.
-         */
-        const randomIndex =
-          startIndex > 0
-            ? startIndex
-            : Math.floor(Math.random() * trackIds.length);
+      // playerSlice.ts — setQueue reducer
 
-        targetTrackId = trackIds[randomIndex] ?? null;
+      if (state.isShuffling) {
+        // ✅ startIndex giờ luôn là index tường minh từ caller
+        // Không còn logic "startIndex > 0 ? startIndex : random" gây surprise
+        targetTrackId = trackIds[startIndex] ?? null;
 
         if (targetTrackId) {
           state.activeQueueIds = smartShuffleIds(
@@ -270,14 +264,11 @@ const playerSlice = createSlice({
             targetTrackId,
             state.trackMetadataCache,
           );
-          targetIndex = 0; // Trong mảng đã shuffle, bài mục tiêu luôn ở đầu
+          targetIndex = 0; // Target luôn ở đầu sau shuffle
         } else {
-          state.activeQueueIds = trackIds;
+          state.activeQueueIds = [...trackIds];
         }
       } else {
-        /**
-         * Nếu không Shuffle: Phát bình thường theo thứ tự Album/Playlist
-         */
         targetIndex =
           startIndex >= 0 && startIndex < trackIds.length ? startIndex : 0;
         targetTrackId = trackIds[targetIndex] ?? null;
@@ -634,7 +625,67 @@ export const selectPlayer = (state: RootState) => state.player;
 export const selectCurrentTrack = createSelector(
   (state: RootState) => state.player.currentTrackId,
   (state: RootState) => state.player.trackMetadataCache,
-  (id, cache): ITrack | null => (id ? (cache[id] ?? null) : null),
+  (id, cache): ITrack | null => {
+    if (!id) return null;
+    if (cache[id]) return cache[id];
+    // Return a safe minimal placeholder so UI mounts the player immediately
+    // while `useTrackMetadataResolver` fetches full metadata.
+    const minimal: ITrack = {
+      _id: id,
+      title: "",
+      slug: "",
+      artist: {
+        _id: "",
+        name: "",
+        slug: "",
+        aliases: [],
+        nationality: "",
+        images: [],
+        themeColor: "",
+        totalTracks: 0,
+        totalAlbums: 0,
+        totalFollowers: 0,
+        playCount: 0,
+        monthlyListeners: 0,
+        isVerified: false,
+        isActive: false,
+        isDeleted: false,
+        createdAt: "",
+        updatedAt: "",
+      },
+      featuringArtists: [],
+      genres: [],
+      uploader: "",
+      trackUrl: "",
+      hlsUrl: undefined,
+      coverImage: "",
+      lyricType: "none",
+      lyricUrl: undefined,
+      lyricPreview: [],
+      plainLyrics: undefined,
+      moodVideo: undefined,
+      trackNumber: 0,
+      diskNumber: 0,
+      releaseDate: new Date(0),
+      isExplicit: false,
+      copyright: undefined,
+      isrc: undefined,
+      tags: [],
+      duration: 0,
+      fileSize: 0,
+      format: "",
+      bitrate: 0,
+      playCount: 0,
+      likeCount: 0,
+      status: "pending",
+      isPublic: false,
+      isDeleted: false,
+      createdAt: "",
+      updatedAt: "",
+    };
+
+    return minimal;
+  },
 );
 
 /**
@@ -646,7 +697,12 @@ export const selectNextTrack = createSelector(
   (state: RootState) => state.player.trackMetadataCache,
   (id, cache): ITrack | null => (id ? (cache[id] ?? null) : null),
 );
-
+/** True khi currentTrack có đủ metadata thực (không phải placeholder) */
+export const selectIsCurrentTrackReady = createSelector(
+  (state: RootState) => state.player.currentTrackId,
+  (state: RootState) => state.player.trackMetadataCache,
+  (id, cache): boolean => Boolean(id && cache[id]?.trackUrl), // trackUrl là dấu hiệu "real metadata"
+);
 /** Kiểm tra nhanh metadata của một trackId có trong cache chưa. */
 export const selectIsTrackCached =
   (trackId: string) =>

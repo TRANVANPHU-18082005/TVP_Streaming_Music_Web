@@ -8,7 +8,7 @@ import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
 import dotenv from "dotenv";
-
+import config from "../config/env";
 import { queueRedis, cacheRedis } from "../config/redis";
 import Track from "../models/Track";
 import Artist from "../models/Artist";
@@ -37,6 +37,7 @@ import { buildFinalLyricResult } from "../services/lyrics/lyric-builder.service"
 import { uploadConcurrently } from "../services/upload/b2-upload.service";
 import { invalidateTrackCache } from "../utils/cacheHelper";
 import MoodVideoService from "../services/moodVideo.service";
+import { toCdnUrl } from "../utils/url.utils";
 
 const ffprobeStatic = require("ffprobe-static");
 dotenv.config();
@@ -53,7 +54,7 @@ if (!ffprobeStatic?.path)
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 console.log("✅ Worker Engine: FFmpeg & FFprobe are ready.");
 
-const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 2);
+const WORKER_CONCURRENCY = Number(config.workerConcurrency ?? 2);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP RUNNERS — mỗi function = 1 tác vụ độc lập, tái sử dụng được
@@ -108,7 +109,7 @@ const worker = new Worker<ProcessTrackJobData>(
     if (!fileUrl || typeof fileUrl !== "string")
       throw new Error("[Worker] Invalid: fileUrl");
 
-    const bucketName = process.env.B2_BUCKET_NAME?.trim();
+    const bucketName = config.b2.bucketName?.trim();
     if (!bucketName)
       throw new Error("[Worker] Missing env var: B2_BUCKET_NAME");
 
@@ -333,7 +334,7 @@ const worker = new Worker<ProcessTrackJobData>(
       };
 
       if (doTranscode) {
-        dbUpdate.hlsUrl = hlsUrl;
+        dbUpdate.hlsUrl = toCdnUrl(hlsUrl);
         dbUpdate.duration = meta.duration;
         dbUpdate.bitrate = meta.bitrate;
         dbUpdate.fileSize = originalSize + generatedBytes;
@@ -341,7 +342,7 @@ const worker = new Worker<ProcessTrackJobData>(
 
       if (doLyrics || doKaraokeOnly) {
         if (finalLyricType) dbUpdate.lyricType = finalLyricType;
-        if (finalLyricUrl) dbUpdate.lyricUrl = finalLyricUrl;
+        if (finalLyricUrl) dbUpdate.lyricUrl = toCdnUrl(finalLyricUrl);
         if (finalLyricPreview) dbUpdate.lyricPreview = finalLyricPreview;
         if (finalPlainLyrics) dbUpdate.plainLyrics = finalPlainLyrics;
       }

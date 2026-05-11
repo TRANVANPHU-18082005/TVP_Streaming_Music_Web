@@ -3,7 +3,6 @@ import React, { useMemo, memo, useCallback, lazy, Suspense } from "react";
 import { History } from "lucide-react";
 
 import MusicResult from "@/components/ui/Result";
-import Pagination from "@/utils/pagination";
 
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
@@ -20,13 +19,7 @@ const TrackListModule = import("@/features/track/components/TrackList");
 const TrackListLazy = lazy(() =>
   TrackListModule.then((m) => ({ default: m.TrackList })),
 );
-/** Module-scoped grid constant — zero allocation per render */
-const GRID_LAYOUT = cn(
-  "grid",
-  "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7",
-  "gap-x-4 gap-y-8 sm:gap-x-5 sm:gap-y-10",
-);
-
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE HERO — section header matching FeaturedAlbums pattern
 // Eyebrow + gradient title + divider-glow + stat badges
@@ -82,93 +75,10 @@ const PageHero = memo(() => (
 ));
 PageHero.displayName = "PageHero";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ALBUM GRID WRAPPER — memo'd, stable identity across data transitions
-// ─────────────────────────────────────────────────────────────────────────────
-const AlbumGrid = memo(({ children }: { children: React.ReactNode }) => (
-  <div className={GRID_LAYOUT}>{children}</div>
-));
-AlbumGrid.displayName = "AlbumGrid";
+ 
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PAGINATION STRIP — glass-frosted panel, single wrapper (v3.2 had double)
-// ─────────────────────────────────────────────────────────────────────────────
-const PaginationStrip = memo(
-  ({
-    currentPage,
-    totalPages,
-    totalItems,
-    pageSize,
-    onPageChange,
-  }: {
-    currentPage: number;
-    totalPages: number;
-    totalItems: number;
-    pageSize: number;
-    onPageChange: (page: number) => void;
-  }) => (
-    <div
-      className={cn(
-        "rounded-2xl",
-        "border border-border/50 dark:border-primary/15",
-        "shadow-brand p-4",
-        "animate-fade-up animation-fill-both",
-      )}
-      style={{ animationDelay: "80ms" }}
-    >
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={onPageChange}
-        totalItems={totalItems}
-        itemsPerPage={pageSize || APP_CONFIG.PAGINATION_LIMIT}
-      />
-    </div>
-  ),
-);
-PaginationStrip.displayName = "PaginationStrip";
-const SkeletonGrid = memo(({ count }: { count: number }) => (
-  <div
-    className="flex flex-col gap-1"
-    role="status"
-    aria-label="Đang tải bảng xếp hạng"
-    aria-busy="true"
-  >
-    {Array.from({ length: count }, (_, i) => (
-      <div
-        key={i}
-        className="flex items-center gap-3 px-3 py-3 rounded-xl"
-        style={{ animationDelay: `${i * 50}ms` }}
-        aria-hidden="true"
-      >
-        {/* Rank column — w-[52px] matches ChartItem */}
-        <div className="w-[52px] shrink-0 flex flex-col items-center gap-1.5">
-          <div className="skeleton w-5 h-3 rounded-full" />
-          <div className="skeleton w-6 h-2.5 rounded-full" />
-        </div>
-        {/* Cover art — matches ChartItem size-[44px] sm:size-[48px] */}
-        <div className="skeleton skeleton-cover w-11 h-11 sm:w-12 sm:h-12 shrink-0" />
-        {/* Track info */}
-        <div className="flex-1 space-y-2 min-w-0">
-          <div
-            className="skeleton h-3.5 rounded-full"
-            style={{ width: `${40 + (i % 3) * 12}%` }}
-          />
-          <div
-            className="skeleton h-3 rounded-full"
-            style={{ width: `${24 + (i % 4) * 8}%` }}
-          />
-        </div>
-        {/* Duration — hidden on mobile */}
-        <div className="skeleton w-9 h-3 rounded-full hidden sm:block" />
-        {/* Play count — hidden on mobile/tablet */}
-        <div className="skeleton w-14 h-3 rounded-full hidden md:block" />
-      </div>
-    ))}
-  </div>
-));
-SkeletonGrid.displayName = "SkeletonGrid";
-
+  
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALBUM PAGE
 // ─────────────────────────────────────────────────────────────────────────────

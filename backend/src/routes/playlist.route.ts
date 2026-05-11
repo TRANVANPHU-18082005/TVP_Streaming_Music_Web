@@ -28,10 +28,11 @@ import {
 const router = express.Router();
 
 // ==========================================
-// 🟢 STATIC ROUTES (Phải để trên đầu)
+// 🟢 STATIC GET ROUTES (Phải ưu tiên tuyệt đối)
 // ==========================================
 
-// 1. Get My Playlists (Sidebar/Profile) - Cần protect
+// 1. Get My Playlists (Siderbar)
+// Đặt trên cùng để "me" không bị nhầm là :id
 router.get(
   "/me",
   protect,
@@ -39,15 +40,7 @@ router.get(
   playlistController.getMyPlaylists,
 );
 
-// 2. Quick Create Playlist (Spotify Style)
-router.post(
-  "/me",
-  protect,
-  validate(createQuickPlaylistSchema),
-  playlistController.createMyPlaylist,
-);
-
-// 3. Admin Get All Playlists (Filter/Search)
+// 2. Admin Get All
 router.get(
   "/admin",
   protect,
@@ -56,7 +49,7 @@ router.get(
   playlistController.getPlaylistsByAdmin,
 );
 
-// 4. Public Get Playlists (Filter/Search)
+// 3. Public Get List
 router.get(
   "/",
   optionalAuth,
@@ -64,29 +57,12 @@ router.get(
   playlistController.getPlaylistsByUser,
 );
 
-// 5. Create System Playlist (Admin)
-router.post(
-  "/",
-  protect,
-  authorize("admin"),
-  uploadImages.single("coverImage"),
-  validate(createPlaylistSchema),
-  playlistController.createPlaylist,
-);
-
 // ==========================================
-// 🔵 DYNAMIC ROUTES (Các route chứa tham số :id)
+// 🔵 DYNAMIC GET ROUTES (Tham số :id)
 // ==========================================
 
-// 6. Get Detail (Public/Optional Auth)
-router.get(
-  "/:id",
-  optionalAuth,
-  validate(getPlaylistDetailSchema),
-  playlistController.getPlaylistDetail,
-);
-
-// 7. Get Tracks (Phân trang/Filter)
+// 4. Get Tracks (Sub-resource)
+// Nên để các route có hậu tố /tracks lên trước route detail đơn lẻ
 router.get(
   "/:id/tracks",
   optionalAuth,
@@ -94,45 +70,69 @@ router.get(
   playlistController.getPlaylistTracks,
 );
 
-// --- Các thao tác thay đổi dữ liệu bên dưới cần Protect ---
+// 5. Get Detail (Generic Resource)
+router.get(
+  "/:id",
+  optionalAuth,
+  validate(getPlaylistDetailSchema),
+  playlistController.getPlaylistDetail,
+);
+
+// ==========================================
+// 🔴 MUTATION ROUTES (Cần Protect)
+// ==========================================
 router.use(protect);
 
-// 8. Edit Quick Playlist (Chỉ đổi title/visibility)
+// --- Cụm route "ME" (Thao tác nhanh của User) ---
+
+// 6. Quick Create
+router.post(
+  "/me",
+  validate(createQuickPlaylistSchema),
+  playlistController.createMyPlaylist,
+);
+
+// 7. Edit Quick Playlist
 router.put(
   "/me/:id",
   validate(updateQuickPlaylistSchema),
   playlistController.editMyPlaylist,
 );
 
-// 9. Add Tracks
+// --- Cụm route "RESOURCE" (Thao tác chi tiết) ---
+
+// 8. Create System Playlist (Admin)
 router.post(
-  "/:id/tracks",
-  validate(addTracksToPlaylistSchema),
-  playlistController.addTracks,
+  "/",
+  authorize("admin"),
+  uploadImages.single("coverImage"),
+  validate(createPlaylistSchema),
+  playlistController.createPlaylist,
 );
 
-// 10. Remove Tracks
-router.delete(
-  "/:id/tracks",
-  validate(removeTracksFromPlaylistSchema),
-  playlistController.removeTracks,
+// 9. Track Management (POST/PUT/DELETE trên sub-resource)
+router.post("/:id/tracks", validate(addTracksToPlaylistSchema), playlistController.addTracks);
+router.put("/:id/tracks", validate(reorderPlaylistTracksSchema), playlistController.reorderTracks);
+router.delete("/:id/tracks", validate(removeTracksFromPlaylistSchema), playlistController.removeTracks);
+
+// --- Cụm PATCH (Quan trọng: Action-specific đặt TRƯỚC Generic) ---
+
+// 10. Restore (Admin) - Phải đặt TRƯỚC PATCH /:id
+router.patch(
+  "/:id/restore",
+  authorize("admin"),
+  validate(deletePlaylistSchema),
+  playlistController.restorePlaylist,
 );
 
-// 11. Reorder Tracks
-router.put(
-  "/:id/tracks",
-  validate(reorderPlaylistTracksSchema),
-  playlistController.reorderTracks,
-);
-
-// 12. Toggle Privacy
+// 11. Toggle Privacy - Phải đặt TRƯỚC PATCH /:id
 router.patch(
   "/:id/toggle-visibility",
   validate(togglePlaylistVisibilitySchema),
   playlistController.togglePlaylistPrivacy,
 );
 
-// 13. Admin/Owner Update (Full Update với file)
+// 12. Generic Update (Full update) - Đặt CUỐI CÙNG của PATCH
 router.patch(
   "/:id",
   uploadImages.single("coverImage"),
@@ -140,19 +140,11 @@ router.patch(
   playlistController.updatePlaylist,
 );
 
-// 14. Delete Playlist
+// 13. Delete
 router.delete(
   "/:id",
   validate(deletePlaylistSchema),
   playlistController.deletePlaylist,
-);
-
-// 15. Restore Playlist (Admin)
-router.patch(
-  "/:id/restore",
-  authorize("admin"),
-  validate(deletePlaylistSchema),
-  playlistController.restorePlaylist,
 );
 
 export default router;

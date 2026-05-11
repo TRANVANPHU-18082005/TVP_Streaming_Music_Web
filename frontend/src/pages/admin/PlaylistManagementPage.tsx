@@ -201,7 +201,7 @@ const PlaylistManagementPage = () => {
             totalPages={meta.totalPages}
             onPageChange={handlePageChange}
             totalItems={meta.totalItems}
-            itemsPerPage={meta.pageSize || APP_CONFIG.PAGINATION_LIMIT}
+            pageSize={meta.pageSize || APP_CONFIG.PAGINATION_LIMIT}
           />
         </div>
       )}

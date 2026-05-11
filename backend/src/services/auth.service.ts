@@ -4,6 +4,7 @@ import httpStatus from "http-status";
 import { generateTokens } from "../utils/token";
 import { sendEmail } from "../utils/sendEmail";
 import jwt from "jsonwebtoken";
+import config from "../config/env";
 import { generateUniqueSlug } from "../utils/slug";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -254,10 +255,7 @@ class AuthService {
       throw new ApiError(httpStatus.UNAUTHORIZED, "Không có token");
 
     try {
-      const decoded: any = jwt.verify(
-        cookieToken,
-        process.env.JWT_REFRESH_SECRET!,
-      );
+      const decoded: any = jwt.verify(cookieToken, config.jwtRefreshSecret!);
 
       const user = await User.findById(decoded.id).select(
         "+refreshToken +isActive +role",

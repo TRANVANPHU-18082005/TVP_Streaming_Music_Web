@@ -51,7 +51,7 @@ import { SortablePlaylistTrackRow } from "@/features/playlist/components/Sortabl
 import { ModalTrackFilter } from "@/features/track/components/ModalTrackFilter";
 import { ITrack } from "@/features/track/types";
 import { usePublicTracks } from "@/features/track/hooks/useTracksQuery";
-import { toCDN } from "@/utils/track-helper";
+
 import { TrackFilterParams } from "@/features/track";
 import { APP_CONFIG } from "@/config/constants";
 
@@ -208,10 +208,7 @@ const DragPreviewCard = ({ track }: { track: ITrack }) => (
       </svg>
     </div>
     <Avatar className="size-10 rounded-xl border border-border/50">
-      <AvatarImage
-        src={toCDN(track.coverImage) || track.coverImage}
-        className="object-cover"
-      />
+      <AvatarImage src={track.coverImage} className="object-cover" />
       <AvatarFallback className="bg-muted rounded-xl">
         <Disc className="size-4 opacity-40" />
       </AvatarFallback>
@@ -259,11 +256,7 @@ const AddTrackRow = memo(
     >
       {/* Cover */}
       <Avatar className="size-10 rounded-xl flex-shrink-0 border border-border/50 shadow-sm group-hover:shadow-md transition-shadow">
-        <AvatarImage
-          src={toCDN(track.coverImage) || track.coverImage}
-          alt={track.title}
-          className="object-cover"
-        />
+        <AvatarImage src={track.coverImage} alt={track.title} className="object-cover" />
         <AvatarFallback className="bg-muted rounded-xl">
           <Disc className="size-4 opacity-30" />
         </AvatarFallback>
@@ -876,7 +869,7 @@ export const EditPlaylistTracksModal: React.FC<
                           {/* Cover */}
                           <Avatar className="size-10 rounded-xl flex-shrink-0 border border-border/50 shadow-sm">
                             <AvatarImage
-                              src={toCDN(track.coverImage) || track.coverImage}
+                              src={track.coverImage}
                               alt={track.title}
                               className="object-cover"
                             />

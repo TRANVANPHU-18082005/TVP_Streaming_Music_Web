@@ -3,8 +3,10 @@ import { useAppDispatch } from "@/store/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { setQueue, setIsPlaying, QueueSourceType } from "../slice/playerSlice";
+import trackApi from "@/features/track/api/trackApi";
 import { ITrack } from "@/features/track/types";
 import { handleError } from "@/utils/handleError";
+import { env } from "@/config/env";
 
 interface PlayOptions {
   queryKey: readonly any[];
@@ -84,24 +86,58 @@ export const usePlayCollection = () => {
         if (trackIds.length === 0) {
           throw new Error("Không có bài hát nào trong danh sách này.");
         }
-        // DISPATCH VÀO STORE VỚI ĐẦY ĐỦ SOURCE CONTEXT
+        let effectiveStartIndex = Math.max(
+          0,
+          Math.min(startIndex, trackIds.length - 1),
+        );
+
+        if (shuffle && startIndex <= 0) {
+          // User bấm shuffle tổng → random TẠI ĐÂY, không để reducer tự random
+          effectiveStartIndex = Math.floor(Math.random() * trackIds.length);
+        }
+
+        // ✅ FIX 2: Luôn đảm bảo start track có metadata TRƯỚC khi dispatch
+        // Dù là shuffle hay không, track bắt đầu phải có đủ data
+        const targetId = trackIds[effectiveStartIndex];
+        if (targetId && !tracks.some((t) => t?._id === targetId)) {
+          try {
+            const resp = await trackApi.getTrackDetail(targetId, {
+              signal: abortControllerRef.current?.signal,
+            });
+            const fetched = resp?.data ?? resp;
+            if (fetched?._id) {
+              tracks = [...tracks, fetched];
+            }
+          } catch (err) {
+            if (env.NODE_ENV === "development") {
+              console.warn(
+                "[usePlayCollection] Prefetch start track failed:",
+                err,
+              );
+            }
+            // Non-fatal: useTrackMetadataResolver sẽ retry
+          }
+        }
+
         dispatch(
           setQueue({
             trackIds,
-            // Nếu là bài hát (object) thì nạp vào cache, nếu là string ID thì bỏ qua
             initialMetadata: tracks,
-            startIndex,
-            isShuffling: shuffle, // 🔥 Truyền trạng thái shuffle vào Reducer
+            startIndex: effectiveStartIndex, // ✅ Luôn là index tường minh, đã pre-computed
+            isShuffling: shuffle,
             source: {
-              id: id,
+              id,
               type: sourceType,
               title: collectionName || title,
-              // Tự động thêm chữ 's' vào sourceType để match với route (ví dụ: /albums/, /playlists/)
-              url: `/${sourceType}s/${sourceType === "playlist" ? id : slug}`,
+              url: `/${sourceType}/${slug || id}`,
             },
           }),
         );
 
+        // Start playback after queue is seeded. If prefetch succeeded the
+        // player will have metadata immediately; otherwise the resolver will
+        // fetch it in background and the player will transition out of
+        // loading once metadata arrives.
         dispatch(setIsPlaying(true));
         toast.success(`Đang phát: ${title}`, { id: toastId });
 

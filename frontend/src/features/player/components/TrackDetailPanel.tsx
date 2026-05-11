@@ -31,7 +31,6 @@ import { MarqueeText } from "./MarqueeText";
 import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { useContextSheet } from "@/app/provider/SheetProvider";
-import { toCDN } from "@/utils/track-helper";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "..";
 import { handleError } from "@/utils/handleError";
@@ -193,7 +192,7 @@ const TrackRow = memo(
         </div>
 
         <LazyImage
-          src={toCDN(item.coverImage) || item.coverImage}
+          src={item.coverImage}
           alt={item.title}
           isActive={isActive}
           isCurrentPlaying={isPlaying}
@@ -314,7 +313,7 @@ const TrackInfoSection = memo(({ track }: { track: ITrack }) => {
       <div className="flex items-center gap-3 px-1 py-2 mb-1">
         <div className="size-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-[var(--fp-border)] shadow-lg">
           <ImageWithFallback
-            src={toCDN(track.coverImage) || track.coverImage}
+            src={track.coverImage}
             alt=""
             className="size-full object-cover"
           />
@@ -618,7 +617,7 @@ export const TrackDetailPanel = memo(
           dispatch(
             setQueue({
               trackIds: [track._id],
-              initialMetadata: [track], // Chèn data trả từ search.service.ts
+              initialMetadata: [track], 
               startIndex: 0,
               isShuffling: false,
               source: {

@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { formatDuration, toCDN } from "@/utils/track-helper";
+import { formatDuration } from "@/utils/track-helper";
 import { ITrack } from "@/features/track/types";
 import { useAdminTracks } from "@/features/track/hooks/useTracksQuery";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
@@ -206,11 +206,9 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
 
                           {/* Track Image */}
                           <div className="relative size-10 rounded overflow-hidden bg-muted shrink-0 border border-border">
-                            {track.coverImage ? (
+                              {track.coverImage ? (
                               <ImageWithFallback
-                                src={
-                                  toCDN(track.coverImage) || track.coverImage
-                                }
+                                src={track.coverImage}
                                 alt=""
                                 className="w-full h-full object-cover"
                               />

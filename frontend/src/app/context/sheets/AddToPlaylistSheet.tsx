@@ -15,7 +15,6 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { toCDN } from "@/utils/track-helper";
 import { SP, SheetBackdrop, HandleBar } from "../sheetPrimitives";
 import { toast } from "sonner";
 import {
@@ -512,7 +511,7 @@ export const AddToPlaylistSheet = memo(
                 >
                   {tracks && tracks.length > 0 ? (
                     <ImageWithFallback
-                      src={toCDN(tracks[0].coverImage)}
+                      src={tracks[0].coverImage}
                       alt={tracks[0].title}
                       className="w-8 h-8 rounded-lg object-cover shrink-0 ring-1 ring-border"
                     />

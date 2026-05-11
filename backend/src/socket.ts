@@ -6,6 +6,7 @@ import analyticsService from "./services/analytics.service";
 import { getRealtimeChart } from "./services/chart.service";
 import { viewQueue } from "./queue/view.queue";
 import { cacheRedis } from "./config/redis";
+import config from "./config/env";
 import { PlayInteraction } from "./types/interaction.type";
 
 let io: Server;
@@ -37,7 +38,7 @@ export const getIO = (): Server => {
 
 export const initSocket = (httpServer: HttpServer): Server => {
   io = new Server(httpServer, {
-    cors: { origin: process.env.ALLOW_ORIGINS?.split(",") || [], methods: ["GET", "POST"], credentials: true, },
+    cors: { origin: config.allowedOrigins || [], methods: ["GET", "POST"], credentials: true },
     pingTimeout: 60_000,
     transports: ["websocket", "polling"],
   });

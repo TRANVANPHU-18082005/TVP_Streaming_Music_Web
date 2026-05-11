@@ -1,14 +1,11 @@
 import { v2 as cloudinary } from "cloudinary";
-import dotenv from "dotenv";
-
-// Load biến môi trường nếu chưa load ở server.ts
-dotenv.config();
+import config from "../config/env";
 
 // Cấu hình Cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: config.cloudinary.name,
+  api_key: config.cloudinary.apiKey,
+  api_secret: config.cloudinary.apiSecret,
 });
 
 /**

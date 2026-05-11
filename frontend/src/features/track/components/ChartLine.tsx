@@ -39,7 +39,6 @@ import { ChartTrack, IChartDataPoint } from "@/features/track/types";
 import { RadioLoader } from "@/components/ui/MusicLoadingEffects";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { toCDN } from "@/utils/track-helper";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -335,7 +334,7 @@ const ChartTooltipInner = memo((props: any) => {
             />
             <div className="w-8 h-8 rounded-lg overflow-hidden border border-border/60 shrink-0">
               <ImageWithFallback
-                src={toCDN(track.coverImage) || track.coverImage}
+                src={track.coverImage}
                 alt=""
                 aria-hidden="true"
                 className="w-full h-full object-cover"
@@ -429,7 +428,7 @@ const TrackLegendCard = memo(
         </span>
         <div className="relative shrink-0 w-9 h-9 rounded-lg overflow-hidden border border-border/60 shadow-sm">
           <ImageWithFallback
-            src={toCDN(track.coverImage) || track.coverImage}
+            src={track.coverImage}
             alt={track.title}
             className="w-full h-full object-cover"
             loading="lazy"

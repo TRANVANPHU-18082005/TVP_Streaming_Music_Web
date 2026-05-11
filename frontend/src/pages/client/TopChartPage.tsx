@@ -48,7 +48,6 @@ import { useNavigate } from "react-router-dom";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { toCDN } from "@/utils/track-helper";
 import { IChartDataPoint } from "@/features/track";
 import { useSyncInteractions } from "@/features/interaction";
 
@@ -325,7 +324,7 @@ const LeaderAvatars = memo(({ tracks }: { tracks: RankedTrack[] }) => {
               style={{ borderColor: `hsl(var(${RANK_STYLES[i].token}))` }}
             >
               <ImageWithFallback
-                src={toCDN(t.coverImage) || t.coverImage}
+                src={t.coverImage}
                 alt={`#${i + 1}: ${t.title}`}
                 loading="lazy"
                 decoding="async"

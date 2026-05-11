@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Radio, Music, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { toCDN } from "@/utils/track-helper";
-import { IChartItem } from "@/features/track";
+import { ChartTrack } from "@/features/track";
 
 // ─── Rank medal colors (dùng wave tokens từ design system) ───────
 const RANK_STYLES = [
@@ -23,7 +22,7 @@ const TrackRow = ({
   index,
   maxScore,
 }: {
-  item: IChartItem;
+  item: ChartTrack;
   index: number;
   maxScore: number;
 }) => {
@@ -54,7 +53,7 @@ const TrackRow = ({
       {/* Cover art */}
       <div className="relative size-10 rounded-xl overflow-hidden shrink-0 border border-border/20 shadow-card">
         <ImageWithFallback
-          src={toCDN(item.coverImage)}
+          src={item.coverImage}
           alt={item.title}
           className="img-cover transition-transform duration-300 group-hover:scale-110"
           loading="lazy"
@@ -104,7 +103,7 @@ const NowListeningRow = ({
   item,
   index,
 }: {
-  item: IChartItem;
+  item: ChartTrack;
   index: number;
 }) => (
   <motion.div
@@ -118,7 +117,7 @@ const NowListeningRow = ({
     {/* Cover */}
     <div className="size-9 rounded-xl overflow-hidden shrink-0 border border-border/20 shadow-card">
       <ImageWithFallback
-        src={toCDN(item.coverImage)}
+        src={item.coverImage}
         alt={item.title}
         className="img-cover transition-transform duration-300 group-hover:scale-110"
         loading="lazy"
@@ -191,20 +190,28 @@ const SectionHeader = ({
 );
 
 // ─── Empty state ─────────────────────────────────────────────────
-const EmptyState = ({
-  icon: Icon,
-  label,
-}: {
-  icon: React.ElementType;
-  label: string;
-}) => (
-  <div className="flex flex-col items-center justify-center h-full min-h-[120px] gap-2 text-muted-foreground">
+const EmptyState = React.forwardRef<
+  HTMLDivElement,
+  {
+    icon: React.ElementType;
+    label: string;
+  }
+>(({ icon: Icon, label }, ref) => (
+  <div
+    ref={ref}
+    className="flex flex-col items-center justify-center h-full min-h-[120px] gap-2 text-muted-foreground"
+  >
     <div className="p-3 rounded-2xl bg-muted/40">
       <Icon size={22} className="opacity-30" />
     </div>
-    <span className="text-xs font-medium opacity-60">{label}</span>
+
+    <span className="text-xs font-medium opacity-60">
+      {label}
+    </span>
   </div>
-);
+));
+
+EmptyState.displayName = "EmptyState";
 
 // ─── Tab toggle (mobile only) ─────────────────────────────────────
 type TabKey = "trending" | "live";
@@ -250,8 +257,8 @@ const TabToggle = ({
 
 // ─── Main component ───────────────────────────────────────────────
 interface TrendingTracksProps {
-  trendingData: IChartItem[];
-  nowListeningData: IChartItem[];
+  trendingData: ChartTrack[];
+  nowListeningData: ChartTrack[];
 }
 
 const TrendingTracks = ({

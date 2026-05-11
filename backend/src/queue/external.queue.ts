@@ -16,15 +16,16 @@ import axios from "axios";
 import { v2 as cloudinary } from "cloudinary";
 import { cacheRedis } from "../config/redis";
 import { getB2Health } from "../config/b2";
+import config from "../config/env";
 import { systemHealthQueue } from "./systemHealth.queue";
 
 const CACHE_KEY = "dashboard:system_health_external";
 const CACHE_TTL = 3600; // 1 tiếng (safety net nếu cron chết)
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: config.cloudinary.name,
+  api_key: config.cloudinary.apiKey,
+  api_secret: config.cloudinary.apiSecret,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,11 +51,10 @@ export async function fetchAndCacheExternalHealth(): Promise<void> {
 
     // B. Upstash Redis Quota
     (async () => {
-      if (!process.env.UPSTASH_DB_ID || !process.env.UPSTASH_API_KEY)
-        return null;
+      if (!config.upstashDbId || !config.upstashApiKey) return null;
       const res = await axios.get(
-        `https://api.upstash.com/v2/redis/databases/${process.env.UPSTASH_DB_ID}`,
-        { headers: { Authorization: `Bearer ${process.env.UPSTASH_API_KEY}` } },
+        `https://api.upstash.com/v2/redis/databases/${config.upstashDbId}`,
+        { headers: { Authorization: `Bearer ${config.upstashApiKey}` } },
       );
       return {
         dailyRequests: res.data.daily_request_count,

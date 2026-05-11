@@ -5,7 +5,6 @@ import Artist, { IArtist } from "../models/Artist";
 import User, { IUser } from "../models/User";
 import Album from "../models/Album";
 import Track from "../models/Track";
-import Follow from "../models/Follow";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 
@@ -53,7 +52,7 @@ class ArtistService {
     const cacheKey = buildCacheKey(`artist:detail:${slug}`, userRole, {});
 
     // 2. Thử lấy từ cache
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     // 3. Query Database
@@ -96,9 +95,11 @@ class ArtistService {
     };
 
     // 4. Lưu Cache (TTL 1 giờ)
-    await withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", 3600),
-    ).catch((err) => console.error("Redis Set Error:", err));
+   cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }
@@ -114,8 +115,8 @@ class ArtistService {
       userRole || "guest",
       { page, limit },
     );
-    const cached = await cacheRedis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    if (cached) return JSON.parse(cached as string);
 
     const trackQuery: Record<string, any> = {
       $or: [{ artist: artistId }, { featuringArtists: artistId }],
@@ -145,9 +146,11 @@ class ArtistService {
       },
     };
     const ttl = 900 + Math.floor(Math.random() * 120);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
-    ).catch((err) => console.error("[Cache] Artist Tracks SET error:", err));
+   cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }
@@ -258,7 +261,7 @@ class ArtistService {
     );
     const cacheKey = buildCacheKey("artist:list", userRole, cleanFilter);
 
-    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const {
@@ -335,9 +338,11 @@ class ArtistService {
     };
 
     const ttl = 900 + Math.floor(Math.random() * 300);
-    withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
-    ).catch((err) => console.error("[Cache] Artist LIST SET error:", err));
+  cacheRedis
+  .set(cacheKey, JSON.stringify(result), "EX", ttl)
+  .catch((err) => {
+    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+  });
 
     return result;
   }

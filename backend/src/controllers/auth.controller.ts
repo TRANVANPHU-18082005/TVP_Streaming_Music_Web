@@ -10,6 +10,7 @@ import {
   clearRefreshTokenCookie,
 } from "../utils/token";
 import logger from "../config/logger";
+import config from "../config/env";
 import { IUser } from "../models/User";
 
 // 1. Google Auth (Start)
@@ -23,7 +24,7 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
   const user: any = req.user;
 
   if (!user) {
-    return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
+    return res.redirect(`${config.clientUrl}/login?error=auth_failed`);
   }
 
   const { accessToken, refreshToken } = generateTokens(
@@ -36,7 +37,7 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
   setRefreshTokenCookie(res, refreshToken);
   logger.info(`Set refresh cookie for user=${user._id}`);
 
-  res.redirect(`${process.env.CLIENT_URL}/auth/google?token=${accessToken}`);
+  res.redirect(`${config.clientUrl}/auth/google?token=${accessToken}`);
 };
 
 // Facebook Auth (Start)
@@ -50,7 +51,7 @@ export const facebookCallbackHandler = async (req: Request, res: Response) => {
   const user: any = req.user;
 
   if (!user) {
-    return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
+    return res.redirect(`${config.clientUrl}/login?error=auth_failed`);
   }
 
   const { accessToken, refreshToken } = generateTokens(
@@ -63,7 +64,7 @@ export const facebookCallbackHandler = async (req: Request, res: Response) => {
   setRefreshTokenCookie(res, refreshToken);
   logger.info(`Set refresh cookie for user=${user._id}`);
 
-  res.redirect(`${process.env.CLIENT_URL}/auth/facebook?token=${accessToken}`);
+  res.redirect(`${config.clientUrl}/auth/facebook?token=${accessToken}`);
 };
 
 // 3. Register
@@ -192,10 +193,7 @@ export const logout = catchAsync(async (req: Request, res: Response) => {
     const cookieToken = req.cookies?.refreshToken;
     if (cookieToken) {
       try {
-        const decoded: any = jwt.verify(
-          cookieToken,
-          process.env.JWT_REFRESH_SECRET!,
-        );
+        const decoded: any = jwt.verify(cookieToken, config.jwtRefreshSecret!);
         const cookieUserId = decoded?.id;
         if (cookieUserId) await AuthService.logout(cookieUserId);
       } catch (err) {

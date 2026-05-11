@@ -5,19 +5,17 @@ import { Request, Response, NextFunction } from "express";
  * - Enforces that requests originate from configured CLIENT_URL(s)
  * - Only active in production to avoid developer friction
  */
+import config from "../config/env";
+
 export const requireSameOrigin = (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   // Only enforce in production
-  if (process.env.NODE_ENV !== "production") return next();
+  if (!config || config.nodeEnv !== "production") return next();
 
-  const raw = process.env.CLIENT_URL || "";
-  const allowed = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const allowed = config.allowedOrigins || [];
 
   const originHeader = req.get("origin") || req.get("referer");
   if (!originHeader) {

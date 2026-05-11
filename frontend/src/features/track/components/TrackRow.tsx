@@ -1,7 +1,7 @@
 import React, { memo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { formatDuration, toCDN } from "@/utils/track-helper";
+import { formatDuration } from "@/utils/track-helper";
 import { ITrack } from "@/features/track/types";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { TrackTitleMarquee } from "@/features/player/components/TrackTitleMarquee";
@@ -87,7 +87,7 @@ export const TrackRow = memo(
     const center = (
       <>
         <LazyImage
-          src={toCDN(track.coverImage) || track.coverImage}
+          src={track.coverImage}
           alt={track.title}
           isActive={isActive}
           isLoading={isGlobalLoading}

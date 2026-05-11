@@ -4,12 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "cross-env NODE_ENV=development nodemon src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "seed": "ts-node src/scripts/seed.ts",
-    "dev:worker": "ts-node src/workers/processTrack.worker.ts",
-    "start:worker": "node dist/workers/processTrack.worker.js",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "seed": "cross-env NODE_ENV=development ts-node src/scripts/seed.ts",
+    "dev:worker": "cross-env NODE_ENV=development ts-node src/workers/processTrack.worker.ts",
+    "start:worker": "cross-env NODE_ENV=production node dist/workers/processTrack.worker.js",
     "type-check": "tsc --noEmit"
   },
   "repository": {
@@ -19,6 +19,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+  "node": ">=22.0.0"
+},
   "bugs": {
     "url": "https://github.com/PhuTran2005/TVP_music_Backend/issues"
   },
@@ -36,10 +39,11 @@
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "cross-env": "^10.1.0",
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.19",
     "dotenv": "^17.2.3",
-    "escape-string-regexp": "^5.0.0",
+    "escape-string-regexp": "^4.0.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.3.1",
     "ffmpeg-static": "^5.3.0",

@@ -9,13 +9,13 @@ import {
   postProcessKaraoke,
   validateKaraoke,
 } from "../../utils/karaoke.postprocess";
+import config from "../../config/env";
 
 // 1. Xác định đường dẫn script với cơ chế Fallback
 // 1. Xác định đường dẫn script với cơ chế Fallback
 const getAlignerScriptPath = (): string => {
   // Phú kiểm tra cả 2 tên biến cho chắc ăn
-  const envPath =
-    process.env.FORCED_ALIGNER_SCRIPT || process.env.ALIGNER_SCRIPT;
+  const envPath = process.env.ALIGNER_SCRIPT|| "ALIGNER_PATH";
 
   if (envPath) {
     return path.resolve(envPath);
@@ -35,7 +35,7 @@ if (!fs.existsSync(ALIGNER_SCRIPT)) {
 } else {
   console.log(`[Aligner] ✅ Aligner script located at: ${ALIGNER_SCRIPT}`);
 }
-const PYTHON_BIN = process.env.PYTHON_BIN ?? "python3";
+const PYTHON_BIN =  "python3";
 const ALIGNER_TIMEOUT_MS = 10 * 60_000; // 10 min
 
 /**
