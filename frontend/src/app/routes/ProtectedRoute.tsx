@@ -31,7 +31,7 @@ const ProtectedRoute: React.FC<{ requiredRole?: string }> = ({
           action={{
             label: "Đăng nhập",
             icon: LogInIcon,
-            onClick: () => {},
+            onClick: () => {navigate("/login")},
             variant: "primary",
           }}
         />

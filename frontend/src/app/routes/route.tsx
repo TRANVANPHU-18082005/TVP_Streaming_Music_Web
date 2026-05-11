@@ -21,6 +21,7 @@ import {
   SettingPage,
   SettingsPage,
   TopChartPage,
+  TrackDetailPage,
   TrackManagementPage,
   UsersManagementPage,
 } from "@/pages";
@@ -66,6 +67,10 @@ export const router = createBrowserRouter([
           ...artistRoutes,
           ...albumRoutes,
           ...becomeArtistRoutes,
+          {
+            path: CLIENT_PATHS.TRACK_DETAIL(":id"),
+            element: <TrackDetailPage />,
+          },
           // Protected Routes
           {
             element: <ProtectedRoute />,

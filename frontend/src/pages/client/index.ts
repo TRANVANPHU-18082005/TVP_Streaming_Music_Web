@@ -9,3 +9,4 @@ export * from "./album";
 export * from "./artist";
 export * from "./playlists";
 export * from "./home";
+export * from "./track";
