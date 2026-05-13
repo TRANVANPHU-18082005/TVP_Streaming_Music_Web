@@ -15,9 +15,9 @@ export async function fetchLyrics(
     syncedLines: [],
     plainLyrics: "",
   };
-  trackTitle = "NUNA";
-  artistName = "队长";
-  duration = undefined;
+  // trackTitle = "NUNA";
+  // artistName = "队长";
+  // duration = undefined;
 
   console.log(trackTitle, artistName, duration);
   try {

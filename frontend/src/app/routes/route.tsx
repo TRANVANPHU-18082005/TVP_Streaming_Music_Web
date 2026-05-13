@@ -18,7 +18,6 @@ import {
   PlaylistManagementPage,
   ProfilePage,
   SearchPage,
-  SettingPage,
   SettingsPage,
   TopChartPage,
   TrackDetailPage,
@@ -71,6 +70,8 @@ export const router = createBrowserRouter([
             path: CLIENT_PATHS.TRACK_DETAIL(":id"),
             element: <TrackDetailPage />,
           },
+          { path: CLIENT_PATHS.SETTINGS, element: <SettingsPage /> },
+
           // Protected Routes
           {
             element: <ProtectedRoute />,
@@ -82,7 +83,6 @@ export const router = createBrowserRouter([
               // },
               ...trackRoutes,
 
-              { path: CLIENT_PATHS.SETTINGS, element: <SettingsPage /> },
               ...protectedAuthRoutes,
             ],
           },
@@ -130,7 +130,7 @@ export const router = createBrowserRouter([
               },
               {
                 path: ADMIN_PATHS.SETTINGS,
-                element: <SettingPage />,
+                element: <SettingsPage />,
               },
               {
                 path: ADMIN_PATHS.PLAYLISTS,

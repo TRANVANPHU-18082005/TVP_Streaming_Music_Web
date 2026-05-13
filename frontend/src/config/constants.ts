@@ -17,6 +17,7 @@ export const APP_CONFIG = {
   UPLOAD_MAX_SIZE: 50 * 1024 * 1024, // 50MB
   API_TIMEOUT: 10000,
   VIRTUALIZER_LIMIT: 50,
+  MAX_LIMIT: 1000,
 } as const;
 
 export const DEFAULT_GRID_META = {

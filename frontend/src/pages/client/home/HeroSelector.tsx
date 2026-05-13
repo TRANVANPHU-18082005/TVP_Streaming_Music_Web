@@ -84,11 +84,11 @@ interface TypeOption {
 }
 
 const TYPE_OPTIONS: TypeOption[] = [
-  { key: "album", label: "Album", labelShort: "Album", Icon: Disc3 },
-  { key: "artist", label: "Nghệ sĩ", labelShort: "NS", Icon: User },
-  { key: "playlist", label: "Playlist", labelShort: "PL", Icon: List },
-  { key: "genre", label: "Thể loại", labelShort: "TL", Icon: Hash },
-  { key: "track", label: "Bài hát", labelShort: "BH", Icon: Music2 },
+  { key: "album", label: "Album", labelShort: "", Icon: Disc3 },
+  { key: "artist", label: "Nghệ sĩ", labelShort: "", Icon: User },
+  { key: "playlist", label: "Playlist", labelShort: "", Icon: List },
+  { key: "genre", label: "Thể loại", labelShort: "", Icon: Hash },
+  { key: "track", label: "Bài hát", labelShort: "", Icon: Music2 },
 ];
 
 const PERSIST_KEY = "hero:type";

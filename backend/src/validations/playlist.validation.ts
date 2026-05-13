@@ -172,7 +172,7 @@ export const getPlaylistsByUserSchema = z.object({
         .number()
         .int()
         .min(1)
-        .max(APP_CONFIG.MAX_PAGES)
+        .max(APP_CONFIG.MAX_LIMIT, "Limit too high")
         .default(APP_CONFIG.GRID_LIMIT),
 
       keyword: z.preprocess(

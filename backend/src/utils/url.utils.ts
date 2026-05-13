@@ -63,7 +63,8 @@ export function buildBaseUrl(): string {
   // const isProd = config.nodeEnv === "production";
   // const raw = isProd ? config.cdnDomain || config.b2.endpoint : config.b2.endpoint;
   const raw = config.cdnDomain || config.b2.endpoint;
-  if (!raw) throw new Error(`[buildBaseUrl] Missing configuration for CDN/B2 endpoint`);
+  if (!raw)
+    throw new Error(`[buildBaseUrl] Missing configuration for CDN/B2 endpoint`);
   return raw.replace(/\/+$/, "");
 }
 
@@ -74,11 +75,12 @@ export function buildBaseUrl(): string {
  */
 export function toCdnUrl(fileUrl: string): string {
   try {
-    const bucket = config.b2.bucketName;
+    const bucket = "tvp-music-hls";
     if (!bucket) return fileUrl;
     const rel = extractRelativePath(fileUrl, bucket);
     const base = buildBaseUrl();
-    return `${base}/${bucket}/${rel}`;
+    // return `${base}/${bucket}/${rel}`;
+    return `${base}/file/${bucket}/${rel}`;
   } catch (err) {
     return fileUrl;
   }
