@@ -43,7 +43,8 @@ export const getRealtimeChart = async () => {
       },
     },
 
-    { $sort: { score: -1 } },
+    // Sửa lại trong pipeline Aggregation
+    { $sort: { score: -1, "track.playCount": -1, _id: 1 } },
 
     // FIX #1 — Lấy buffer 150 để sau khi lọc bài rác vẫn đủ 100 bài
     { $limit: 150 },

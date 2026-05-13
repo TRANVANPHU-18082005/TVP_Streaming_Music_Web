@@ -60,6 +60,19 @@ import { ITrack } from "@/features/track/types";
 import { usePublicTracks } from "@/features/track/hooks/useTracksQuery";
 import { TrackFilterParams } from "@/features/track";
 import { APP_CONFIG } from "@/config/constants";
+import {
+  selectPlayer,
+  setIsPlaying,
+  setQueue,
+} from "@/features/player/slice/playerSlice";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { handleError } from "@/utils/handleError";
+import LazyImage from "@/features/track/components/LazyImage";
+import { useSelector } from "react-redux";
+import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
+import { prefersReducedMotion } from "framer-motion";
+import { Link } from "react-router-dom";
+import { TrackTitleMarquee } from "@/features/player/components/TrackTitleMarquee";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -230,7 +243,10 @@ interface AddTrackRowProps {
   isAdded: boolean;
   isThisMutating: boolean;
   isAnyMutating: boolean;
+  isPlaying: boolean;
+  isActive: boolean;
   onAdd: (id: string) => void;
+  onPlay: (track: ITrack) => void;
 }
 
 const AddTrackRow = memo(
@@ -239,11 +255,16 @@ const AddTrackRow = memo(
     index,
     isAdded,
     isThisMutating,
+    isPlaying,
+    isActive,
     isAnyMutating,
+    onPlay,
     onAdd,
   }: AddTrackRowProps) => {
     const disabled = isAdded || isThisMutating || isAnyMutating;
-
+    const { loadingState } = useSelector(selectPlayer);
+    const isGlobalLoading =
+      loadingState === "loading" || loadingState === "buffering";
     return (
       <div
         style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
@@ -257,32 +278,58 @@ const AddTrackRow = memo(
         )}
       >
         {/* Cover — fixed width, never shrinks */}
-        <Avatar className="size-10 rounded-xl shrink-0 border border-border/50 shadow-sm group-hover:shadow-md transition-shadow">
-          <AvatarImage
-            src={track.coverImage}
-            alt={track.title}
-            className="object-cover"
-          />
-          <AvatarFallback className="bg-muted rounded-xl">
-            <Disc className="size-4 opacity-30" />
-          </AvatarFallback>
-        </Avatar>
+        <LazyImage
+          src={track.coverImage}
+          alt={track.title}
+          isActive={isActive}
+          isLoading={isGlobalLoading}
+          isCurrentPlaying={isPlaying && isActive}
+          onClick={() => onPlay(track)}
+        />
 
         {/* Info — takes all remaining space, truncates text */}
         <div className="min-w-0 flex-1 overflow-hidden max-w-55 md:max-w-none">
-          <p
-            className={cn(
-              "text-[13px] font-semibold truncate leading-snug transition-colors",
-              isAdded
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-foreground group-hover:text-primary",
-            )}
-          >
-            {track.title}
-          </p>
-          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-            {track.artist?.name}
-          </p>
+          {isActive ? (
+            <TrackTitleMarquee
+              id={track._id}
+              title={track.title}
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="text-sm"
+              artistClassName="text-xs"
+            />
+          ) : (
+            <>
+              <Link
+                to={`/tracks/${track._id}`}
+                title={track.title}
+                className={cn(
+                  "block max-w-full truncate",
+                  "text-sm font-medium leading-snug mb-0.5",
+                  "text-foreground/90",
+                  "group-hover:text-foreground",
+                  prefersReducedMotion ? "" : "transition-colors duration-100",
+                )}
+              >
+                {track.title}
+              </Link>
+
+              <div className="min-w-0 overflow-hidden">
+                <ArtistDisplay
+                  mainArtist={track.artist}
+                  featuringArtists={track.featuringArtists}
+                  className={cn(
+                    "block truncate",
+                    "text-xs text-muted-foreground/55",
+                    "hover:text-foreground/70 hover:underline underline-offset-2",
+                    prefersReducedMotion
+                      ? ""
+                      : "transition-colors duration-100",
+                  )}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/*
@@ -335,6 +382,9 @@ AddTrackRow.displayName = "AddTrackRow";
 interface ManageTrackRowProps {
   track: ITrack;
   index: number;
+  isActive: boolean;
+  isPlaying: boolean;
+  onPlay: (track: ITrack) => void;
   isRemoving: boolean;
   isAnyMutating: boolean;
   onRemove: (id: string) => void;
@@ -342,76 +392,118 @@ interface ManageTrackRowProps {
 
 const ManageTrackRow = memo(
   ({
+    isActive,
+    isPlaying,
+    onPlay,
     track,
     index,
     isRemoving,
     isAnyMutating,
     onRemove,
-  }: ManageTrackRowProps) => (
-    <div
-      style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
-      className={cn(
-        "w-full flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all duration-200 group overflow-hidden",
-        "animate-in fade-in slide-in-from-bottom-1",
-        "bg-card border-border/40 hover:border-destructive/20",
-      )}
-    >
-      <span className="w-5 text-center text-[10px] font-mono font-bold text-muted-foreground/40 shrink-0 tabular-nums">
-        {String(index + 1).padStart(2, "0")}
-      </span>
+  }: ManageTrackRowProps) => {
+    const { loadingState } = useSelector(selectPlayer);
+    const isGlobalLoading =
+      loadingState === "loading" || loadingState === "buffering";
 
-      <Avatar className="size-10 rounded-xl shrink-0 border border-border/50 shadow-sm">
-        <AvatarImage
-          src={track.coverImage}
-          alt={track.title}
-          className="object-cover"
-        />
-        <AvatarFallback className="bg-muted rounded-xl">
-          <Disc className="size-4 opacity-30" />
-        </AvatarFallback>
-      </Avatar>
-
-      <div className="min-w-0 flex-1 overflow-hidden">
-        <p className="text-[13px] font-semibold truncate text-foreground leading-snug">
-          {track.title}
-        </p>
-        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-          {track.artist?.name}
-        </p>
-      </div>
-
-      {/* Same padding-trick touch target as AddTrackRow */}
-      <button
-        type="button"
-        disabled={isRemoving || isAnyMutating}
-        onClick={() => onRemove(track._id)}
-        aria-label={`Xóa "${track.title}"`}
+    return (
+      <div
+        style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
         className={cn(
-          "shrink-0 flex items-center justify-center rounded-full",
-          "transition-all duration-150 outline-none",
-          "focus-visible:ring-2 focus-visible:ring-destructive/50",
-          "size-8 p-[6px] -m-[3px]",
-          isRemoving
-            ? "cursor-wait text-muted-foreground/30"
-            : [
-                "text-muted-foreground/40",
-                "hover:text-destructive hover:bg-destructive/10 active:scale-90",
-                // Always visible on mobile (no hover), hidden on md until hover
-                "opacity-100 md:opacity-0 group-hover:opacity-100",
-                isAnyMutating &&
-                  !isRemoving &&
-                  "opacity-30 cursor-not-allowed pointer-events-none",
-              ],
+          "w-full flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all duration-200 group overflow-hidden",
+          "animate-in fade-in slide-in-from-bottom-1",
+          "bg-card border-border/40 hover:border-destructive/20",
         )}
       >
-        {isRemoving ? (
-          <Loader2 className="size-full animate-spin" />
-        ) : (
-          <Trash2 className="size-full" />
-        )}
-      </button>
-    </div>
-  ),
+        <span className="w-5 text-center text-[10px] font-mono font-bold text-muted-foreground/40 shrink-0 tabular-nums">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+
+        <LazyImage
+          src={track.coverImage}
+          alt={track.title}
+          isActive={isActive}
+          isLoading={isGlobalLoading}
+          isCurrentPlaying={isPlaying && isActive}
+          onClick={() => onPlay(track)}
+        />
+
+        <div className="min-w-0 flex-1 overflow-hidden max-w-50 md:max-w-none">
+          {isActive ? (
+            <TrackTitleMarquee
+              id={track._id}
+              title={track.title}
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="text-sm"
+              artistClassName="text-xs"
+            />
+          ) : (
+            <>
+              <Link
+                to={`/tracks/${track._id}`}
+                title={track.title}
+                className={cn(
+                  "block max-w-full truncate",
+                  "text-sm font-medium leading-snug mb-0.5",
+                  "text-foreground/90",
+                  "group-hover:text-foreground",
+                  prefersReducedMotion ? "" : "transition-colors duration-100",
+                )}
+              >
+                {track.title}
+              </Link>
+
+              <div className="min-w-0 overflow-hidden">
+                <ArtistDisplay
+                  mainArtist={track.artist}
+                  featuringArtists={track.featuringArtists}
+                  className={cn(
+                    "block truncate",
+                    "text-xs text-muted-foreground/55",
+                    "hover:text-foreground/70 hover:underline underline-offset-2",
+                    prefersReducedMotion
+                      ? ""
+                      : "transition-colors duration-100",
+                  )}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Same padding-trick touch target as AddTrackRow */}
+        <button
+          type="button"
+          disabled={isRemoving || isAnyMutating}
+          onClick={() => onRemove(track._id)}
+          aria-label={`Xóa "${track.title}"`}
+          className={cn(
+            "shrink-0 flex items-center justify-center rounded-full",
+            "transition-all duration-150 outline-none",
+            "focus-visible:ring-2 focus-visible:ring-destructive/50",
+            "size-8 p-[6px] -m-[3px]",
+            isRemoving
+              ? "cursor-wait text-muted-foreground/30"
+              : [
+                  "text-muted-foreground/40",
+                  "hover:text-destructive hover:bg-destructive/10 active:scale-90",
+                  // Always visible on mobile (no hover), hidden on md until hover
+                  "opacity-100 md:opacity-0 group-hover:opacity-100",
+                  isAnyMutating &&
+                    !isRemoving &&
+                    "opacity-30 cursor-not-allowed pointer-events-none",
+                ],
+          )}
+        >
+          {isRemoving ? (
+            <Loader2 className="size-full animate-spin" />
+          ) : (
+            <Trash2 className="size-full" />
+          )}
+        </button>
+      </div>
+    );
+  },
 );
 ManageTrackRow.displayName = "ManageTrackRow";
 
@@ -596,7 +688,31 @@ export const EditPlaylistTracksModal: React.FC<
       },
     });
   }, [playlistId, addableTracks, addTracks, addToMutating]);
-
+  const { currentTrackId, isPlaying: isGlobalPlaying } =
+    useAppSelector(selectPlayer);
+  const dispatch = useAppDispatch();
+  const handlePlayTrack = useCallback(
+    async (t: ITrack) => {
+      if (currentTrackId === t._id) {
+        dispatch(setIsPlaying(!isGlobalPlaying));
+        return;
+      }
+      try {
+        dispatch(
+          setQueue({
+            trackIds: [t._id],
+            initialMetadata: [t],
+            startIndex: 0,
+            isShuffling: false,
+            source: { id: t._id, type: "single", title: t.title, url: "" },
+          }),
+        );
+      } catch (err) {
+        handleError(err, "Không thể phát bài hát này");
+      }
+    },
+    [currentTrackId, isGlobalPlaying, dispatch],
+  );
   const handleRemoveTrack = useCallback(
     (trackId: string) => {
       if (!playlistId) return;
@@ -766,7 +882,7 @@ export const EditPlaylistTracksModal: React.FC<
         <div className="flex-1 overflow-hidden relative flex flex-col min-h-0">
           {/* === TAB: ADD === */}
           {activeTab === "add" && (
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 ">
               <div className="p-4 sm:p-5 space-y-2.5 pb-6">
                 {/* Summary bar */}
                 <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-border/40 bg-card/60">
@@ -809,9 +925,14 @@ export const EditPlaylistTracksModal: React.FC<
                     description="Thử tìm kiếm với tên ca sĩ hoặc bài hát khác."
                   />
                 ) : (
-                  <div className="space-y-2 overflow-y-scroll h-[400px] overflow-x-scroll">
+                  <div className="space-y-2 overflow-y-scroll h-[200px] scrollbar-thin">
                     {searchResults.map((track, idx) => (
                       <AddTrackRow
+                        isActive={currentTrackId === track._id}
+                        isPlaying={
+                          isGlobalPlaying && currentTrackId === track._id
+                        }
+                        onPlay={handlePlayTrack}
                         key={track._id}
                         track={track}
                         index={idx}
@@ -884,9 +1005,14 @@ export const EditPlaylistTracksModal: React.FC<
                         items={orderedTracks.map((t) => t._id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        <div className="space-y-2">
+                        <div className="space-y-2 overflow-y-scroll h-[350px] scrollbar-thin">
                           {orderedTracks.map((track, idx) => (
                             <SortablePlaylistTrackRow
+                              onPlay={handlePlayTrack}
+                              isActive={currentTrackId === track._id}
+                              isPlaying={
+                                isGlobalPlaying && currentTrackId === track._id
+                              }
                               key={track._id}
                               track={track}
                               index={idx}
@@ -950,9 +1076,14 @@ export const EditPlaylistTracksModal: React.FC<
                     />
                   )
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-2 overflow-y-scroll h-[300px] scrollbar-thin">
                     {currentTracks.map((track: ITrack, i: number) => (
                       <ManageTrackRow
+                        isActive={currentTrackId === track._id}
+                        isPlaying={
+                          isGlobalPlaying && currentTrackId === track._id
+                        }
+                        onPlay={handlePlayTrack}
                         key={track._id}
                         track={track}
                         index={i}

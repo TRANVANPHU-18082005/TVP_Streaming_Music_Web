@@ -15,8 +15,8 @@ export async function fetchLyrics(
     syncedLines: [],
     plainLyrics: "",
   };
-  // trackTitle = "NUNA";
-  // artistName = "队长";
+  // trackTitle = "Buồn Của Anh | K-ICM x Đạt G x Masew";
+  // artistName = "DatG Music";
   // duration = undefined;
 
   console.log(trackTitle, artistName, duration);

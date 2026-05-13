@@ -1,16 +1,25 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Disc, Loader2, Trash2 } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { GripVertical, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ITrack } from "@/features/track/types";
 import { memo } from "react";
+import LazyImage from "@/features/track/components/LazyImage";
+import { selectPlayer } from "@/features/player/slice/playerSlice";
+import { useSelector } from "react-redux";
+import { prefersReducedMotion } from "@/utils/playerLayout";
+import { ArtistDisplay } from "@/features/artist/components/ArtistDisplay";
+import { Link } from "react-router-dom";
+import { TrackTitleMarquee } from "@/features/player/components/TrackTitleMarquee";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SortablePlaylistTrackRowProps {
   track: ITrack;
   index: number;
+  isActive: boolean;
+  isPlaying: boolean;
+  onPlay?: (track: ITrack) => void;
   onRemove?: (id: string) => void;
   /** true khi đang xử lý xóa track này */
   isRemoving?: boolean;
@@ -23,7 +32,10 @@ interface SortablePlaylistTrackRowProps {
 export const SortablePlaylistTrackRow = memo(
   ({
     track,
+    isActive,
+    isPlaying,
     index,
+    onPlay,
     onRemove,
     isRemoving = false,
     showIndex = true,
@@ -36,6 +48,9 @@ export const SortablePlaylistTrackRow = memo(
       transition,
       isDragging,
     } = useSortable({ id: track._id });
+    const { loadingState } = useSelector(selectPlayer);
+    const isGlobalLoading =
+      loadingState === "loading" || loadingState === "buffering";
 
     const style = {
       transform: CSS.Transform.toString(transform),
@@ -49,7 +64,7 @@ export const SortablePlaylistTrackRow = memo(
         ref={setNodeRef}
         style={style}
         className={cn(
-          "group flex items-center gap-2.5 pl-2 pr-3 py-2 rounded-2xl border transition-all duration-200 select-none",
+          "max-h-50 group flex items-center gap-2.5 pl-2 pr-3 py-2 rounded-2xl border transition-all duration-200 select-none",
           isDragging
             ? [
                 "bg-background border-primary/60",
@@ -98,35 +113,58 @@ export const SortablePlaylistTrackRow = memo(
         )}
 
         {/* ── Avatar ── */}
-        <Avatar
-          className={cn(
-            "size-10 rounded-xl flex-shrink-0 border border-border/50 transition-all duration-200",
-            isDragging ? "shadow-md" : "shadow-sm group-hover:shadow-md",
-          )}
-        >
-          <AvatarImage
-            src={track.coverImage}
-            alt={track.title}
-            className="object-cover"
-          />
-          <AvatarFallback className="bg-muted text-muted-foreground/50 rounded-xl">
-            <Disc className="size-4 opacity-40" />
-          </AvatarFallback>
-        </Avatar>
+        <LazyImage
+          src={track.coverImage}
+          alt={track.title}
+          isActive={isActive}
+          isLoading={isGlobalLoading}
+          isCurrentPlaying={isPlaying && isActive}
+          onClick={() => onPlay && onPlay(track)}
+        />
 
         {/* ── Track info ── */}
-        <div className="min-w-0 flex-1">
-          <p
-            className={cn(
-              "text-[13px] font-semibold truncate leading-snug transition-colors",
-              isDragging ? "text-primary" : "text-foreground",
-            )}
-          >
-            {track.title}
-          </p>
-          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-            {track.artist?.name ?? "Unknown Artist"}
-          </p>
+        <div className="min-w-0 flex-1 overflow-hidden max-w-55 md:max-w-none">
+          {isActive ? (
+            <TrackTitleMarquee
+              id={track._id}
+              title={track.title}
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="text-sm"
+              artistClassName="text-xs"
+            />
+          ) : (
+            <>
+              <Link
+                to={`/tracks/${track._id}`}
+                title={track.title}
+                className={cn(
+                  "block max-w-full truncate",
+                  "text-sm font-medium leading-snug mb-0.5",
+                  "text-foreground/90",
+                  "group-hover:text-foreground",
+                  prefersReducedMotion ? "" : "transition-colors duration-100",
+                )}
+              >
+                {track.title}
+              </Link>
+
+              <div className="min-w-0 overflow-hidden">
+                <ArtistDisplay
+                  mainArtist={track.artist}
+                  featuringArtists={track.featuringArtists}
+                  className={cn(
+                    "block truncate",
+                    "text-xs text-muted-foreground/55",
+                    "hover:text-foreground/70 hover:underline underline-offset-2",
+                    prefersReducedMotion
+                      ? ""
+                      : "transition-colors duration-100",
+                  )}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── Remove button (optional) ── */}

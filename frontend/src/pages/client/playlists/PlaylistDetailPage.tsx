@@ -478,7 +478,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
   if (isLoading && !playlist) return <PlaylistDetailSkeleton />;
 
   // Transitional skeleton while switching playlists
-  if (isLoading) return <WaveformBars   active/>;
+  if (isLoading) return <WaveformBars active />;
   // Check offline FIRST — no point rendering if there's no network
   if (!isOnline) {
     return (
@@ -595,9 +595,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
               </p>
             )}
 
-            <Suspense
-              fallback={<WaveformBars active/>}
-            >
+            <Suspense fallback={<WaveformBars active />}>
               <LazyTrackList {...trackListProps} />
             </Suspense>
           </div>
@@ -784,7 +782,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
         {/* ── Sticky action bar ── */}
         <div
           className={cn(
-            "sticky z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-8",
+            "sticky z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-8 overflow-x-scroll scrollbar-thin",
             "flex items-center justify-between gap-4",
             "transition-[background,box-shadow,border-color] duration-300",
             "top-[var(--navbar-height,64px)]",

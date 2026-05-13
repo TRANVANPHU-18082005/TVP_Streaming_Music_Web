@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PlaylistLikeButton } from "@/features/interaction/components/LikeButton";
-import type { IPlaylist, IPlaylistDetail } from "@/features/playlist/types";
+import type { IPlaylistDetail } from "@/features/playlist/types";
 
 type Palette = {
   hex: string;
