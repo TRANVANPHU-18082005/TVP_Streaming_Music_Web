@@ -110,6 +110,15 @@ const artistApi = {
     return response.data;
   },
 
+  // 13. USER METHODS - Lấy danh sách nghệ sĩ mà user đang follow (có phân trang)
+  getMyFollowedArtists: async (params: ArtistFilterParams) => {
+    const response = await api.get<ApiResponse<PagedResponse<IArtist>>>(
+      "/artists/me/following",
+      { params },
+    );
+    return response.data;
+  },
+
   // 11. ARTIST METHODS (Artist Portal) - Cập nhật thông tin profile của chính mình
   updateMyProfile: async (formData: FormData) => {
     const response = await api.patch<ApiResponse<IArtist>>(

@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import {
   CollectionPlaybackReturn,
   useCollectionPlayback,
-} from "./Usecollectionplayback";
+} from "./useCollectionplayback";
 
 import { IGenre, genreKeys } from "@/features/genre";
 import genreApi from "@/features/genre/api/genreApi";

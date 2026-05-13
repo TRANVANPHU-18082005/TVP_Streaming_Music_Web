@@ -1,7 +1,8 @@
 // src/features/notification/hooks/useNotifications.ts
-import notifyApi from "@/features/notification/api/notifyApi";
-import { notificationKeys } from "@/features/notification/utils/notificationKeys";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { notificationKeys } from "../utils/notificationKeys";
+import notifyApi from "../api/notifyApi";
 
 export const useNotifications = () => {
   const queryClient = useQueryClient();

@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   upsertMetadataCache,
   setLoadingState,
+  hasPlayableUrl,
 } from "@/features/player/slice/playerSlice";
 import trackApi from "@/features/track/api/trackApi";
 
@@ -91,7 +92,7 @@ export function useTrackMetadataResolver(): void {
       for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
         // Abort or cache hit → bail out early
         if (signal.aborted) return;
-        if (cacheRef.current[trackId]) return;
+        if (hasPlayableUrl(cacheRef.current[trackId])) return;
 
         try {
           const track = await trackApi.getTrackDetail(trackId, { signal });
@@ -146,7 +147,7 @@ export function useTrackMetadataResolver(): void {
 
   useEffect(() => {
     if (!currentTrackId) return;
-    if (cacheRef.current[currentTrackId]) return;
+    if (hasPlayableUrl(cacheRef.current[currentTrackId])) return;
 
     // If there's already a live request for this ID, don't duplicate it.
     if (inFlightRef.current.has(currentTrackId)) return;
@@ -180,7 +181,7 @@ export function useTrackMetadataResolver(): void {
 
   useEffect(() => {
     if (!nextTrackId) return;
-    if (cacheRef.current[nextTrackId]) return;
+    if (hasPlayableUrl(cacheRef.current[nextTrackId])) return;
     if (inFlightRef.current.has(nextTrackId)) return;
 
     const controller = new AbortController();

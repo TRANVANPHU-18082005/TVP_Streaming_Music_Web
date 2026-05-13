@@ -7,5 +7,7 @@ const router = Router();
 
 router.get("/", protect, notifyController.getHistory);
 router.patch("/mark-read", protect, notifyController.markRead);
+router.patch("/read-all", protect, notifyController.markRead);
+router.patch("/:id/read", protect, notifyController.markOneRead);
 
 export default router;

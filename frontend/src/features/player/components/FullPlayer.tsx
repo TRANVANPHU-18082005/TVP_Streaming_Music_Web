@@ -59,6 +59,7 @@ import { useContextSheet } from "@/app/provider/SheetProvider";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { useSleepTimer } from "@/features/player/sleepTimer/SleepTimerProvider";
 import { formatMs } from "@/utils/track-helper";
+import FullPlayerSkeleton from "./FullPlayerSkeleton";
 
 // Lazy-loaded views to keep initial bundle small and improve responsiveness
 const MoodFocusViewLazy = lazy(() =>
@@ -1279,6 +1280,7 @@ export interface FullPlayerProps {
   track: ITrack;
   listenCount: number;
   duration: number;
+  isLoading: boolean;
   onSeek: (time: number) => void;
   onCollapse: () => void;
   getCurrentTime: () => number;
@@ -1289,6 +1291,7 @@ const FullPlayerComponent = ({
   track,
   duration,
   listenCount,
+  isLoading,
   onSeek,
   onCollapse,
   getCurrentTime,
@@ -1397,7 +1400,9 @@ const FullPlayerComponent = ({
   const toggleQueue = useCallback(() => setShowQueue((v) => !v), []);
   const toggleFocus = useCallback(() => setFocusMode((v) => !v), []);
   const isArtwork = currentView === "artwork";
-
+  if (isLoading){
+    return <FullPlayerSkeleton key="skeleton" />
+  }
   return (
     <motion.div
       className="fp-enter fp-surface fixed inset-0 z-[60] flex flex-col h-dvh overflow-hidden select-none bg-background isolate"

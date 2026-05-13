@@ -15,6 +15,7 @@ import { ITrack } from "@/features/track";
 import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
 
 import { TrackTitleMarquee } from "./TrackTitleMarquee";
+import { MiniPlayerSkeleton } from "./MiniPlayerSkeleton";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -26,6 +27,7 @@ export interface MiniPlayerProps {
   currentTime: number;
   isPlaying: boolean;
   duration: number;
+  isLoading: boolean;
   onExpand: () => void;
   /** Direct accessor — bypasses React state for smooth progress updates */
   getCurrentTime: () => number;
@@ -391,11 +393,12 @@ interface VinylArtworkProps {
   alt: string;
   isPlaying: boolean;
   size?: number;
+  onExpand?: () => void;
 }
 
 const VinylArtwork = memo(
-  ({ src, alt, isPlaying, size = 40 }: VinylArtworkProps) => (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
+  ({ src, alt, isPlaying, size = 40, onExpand }: VinylArtworkProps) => (
+    <div className="relative shrink-0" style={{ width: size, height: size }} onClick={onExpand} role="button" tabIndex={0} aria-label="Expand player">
       {/* Pulsing ring — Framer, isolated in this subtree */}
       <motion.div
         className="absolute rounded-full border"
@@ -480,7 +483,7 @@ const TrackInfo = memo(
     return (
       <div
         className="flex items-center gap-2.5 flex-1 md:w-[32%] md:flex-none min-w-0 cursor-pointer group"
-        onClick={onExpand}
+       
         role="button"
         tabIndex={0}
         aria-label={`${track.title} by ${track.artist?.name}. Click to expand player.`}
@@ -492,6 +495,7 @@ const TrackInfo = memo(
           src={track.coverImage}
           alt={`${track.title} album art`}
           isPlaying={isPlaying}
+           onExpand={onExpand}
         />
         <div
           className="min-w-0 flex flex-col gap-0.5"
@@ -633,6 +637,7 @@ export const MiniPlayer = memo(
   ({
     track,
     currentTime,
+    isLoading,
     duration,
     isPlaying,
     onExpand,
@@ -666,7 +671,10 @@ export const MiniPlayer = memo(
       },
       [dispatch],
     );
-
+    if (isLoading) {
+      // Show skeleton when loading — avoids flash of empty player with spinner
+      return <MiniPlayerSkeleton onExpand={onExpand} key="skeleton"/>;
+    }
     return (
       <div
         className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none md:pointer-events-auto"

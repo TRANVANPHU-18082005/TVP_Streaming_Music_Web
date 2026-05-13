@@ -9,7 +9,7 @@ import artistApi from "@/features/artist/api/artistApi";
 import {
   CollectionPlaybackReturn,
   useCollectionPlayback,
-} from "./Usecollectionplayback";
+} from "./useCollectionplayback";
 
 export interface UseArtistPlaybackReturn {
   togglePlayArtist: CollectionPlaybackReturn["togglePlay"];

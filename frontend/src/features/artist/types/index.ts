@@ -27,7 +27,7 @@ export interface IArtist {
 
   bio?: string;
   avatar?: string;
-  coverImage?: string;
+  coverImage: string;
   images: string[]; // Gallery ảnh nghệ sĩ
   themeColor: string; // Dùng cho Background Gradient ở trang Artist Detail
 

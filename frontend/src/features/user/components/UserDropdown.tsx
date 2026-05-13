@@ -9,13 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitialsTextAvartar } from "@/utils/genTextAvartar";
-import {
-  ChartColumn,
-  LogOut,
-  Settings,
-  User as UserIcon,
-  CreditCard,
-} from "lucide-react";
+import { ChartColumn, LogOut, User as UserIcon } from "lucide-react";
 
 // Nếu bạn không muốn dùng framer-motion có thể bỏ qua,
 // nhưng để UX "sướng" hơn thì giữ lại animation nhấn nhẹ này.
@@ -72,18 +66,6 @@ export const UserDropdown = ({ user }: UserDropdownProps) => {
             <UserIcon className="mr-2 size-4" />
             <span>Hồ sơ cá nhân</span>
             <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem onClick={() => navigate("/settings")}>
-            <Settings className="mr-2 size-4" />
-            <span>Cài đặt</span>
-            <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
-          </DropdownMenuItem>
-
-          {/* Ví dụ thêm mục nâng cao nếu cần */}
-          <DropdownMenuItem onClick={() => navigate("/billing")}>
-            <CreditCard className="mr-2 size-4" />
-            <span>Gói dịch vụ</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
 

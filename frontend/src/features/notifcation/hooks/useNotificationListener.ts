@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { notificationKeys } from "@/features/notification/utils/notificationKeys";
+import { notificationKeys } from "../utils/notificationKeys";
 
 export const useNotificationListener = () => {
   const { socket, isConnected } = useSocket();

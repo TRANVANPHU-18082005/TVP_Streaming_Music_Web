@@ -7,7 +7,7 @@ import { useMemo } from "react";
 import {
   CollectionPlaybackReturn,
   useCollectionPlayback,
-} from "./Usecollectionplayback";
+} from "./useCollectionplayback";
 
 import albumApi from "@/features/album/api/albumApi";
 import { albumKeys, IAlbum } from "@/features/album";

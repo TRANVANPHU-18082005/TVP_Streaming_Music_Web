@@ -2,8 +2,8 @@
 import { Bell } from "lucide-react";
 import { useNotificationListener } from "../hooks/useNotificationListener";
 import { useState } from "react";
-import { NotificationList } from "@/features/notification/components/NotificationList";
-import { useNotifications } from "@/features/notification/hooks/useNotifications";
+import { useNotifications } from "../hooks/useNotifications";
+import NotificationList from "./NotificationList";
 
 export const NotificationBell = () => {
   useNotificationListener(); // Kích hoạt lắng nghe real-time

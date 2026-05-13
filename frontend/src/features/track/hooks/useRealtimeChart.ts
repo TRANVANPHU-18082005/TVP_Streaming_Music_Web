@@ -116,10 +116,8 @@ export const useRealtimeChart = () => {
   const updateChartCache = useCallback(
     (payload: any) => {
       queryClient.setQueryData(["live-chart"], (old: any) => {
-        if (!old) return old;
-
-        const oldItems = extractItems(old.data);
-        const oldChart = extractChart(old.data);
+        const oldItems = extractItems(old?.data ?? {});
+        const oldChart = extractChart(old?.data ?? {});
         const newItems = extractItems(payload);
         const newChart = Array.isArray(payload)
           ? oldChart
@@ -129,12 +127,23 @@ export const useRealtimeChart = () => {
         const finalItems = isItemsSame ? oldItems : newItems;
 
         // Chỉ update snapshot thứ hạng CŨ nếu danh sách có sự thay đổi
-        if (!isItemsSame) {
+        if (!isItemsSame && oldItems.length > 0) {
           const snapshot: Record<string, number> = {};
           oldItems.forEach((t, i) => {
             snapshot[t._id] = i + 1;
           });
           prevRankMapRef.current = snapshot;
+        }
+
+        // Nếu chưa có cache (old falsy), tạo initial shape từ payload
+        if (!old) {
+          return {
+            data: {
+              items: finalItems,
+              chart: newChart,
+              lastUpdatedAt: payload?.lastUpdatedAt ?? null,
+            },
+          };
         }
 
         return {

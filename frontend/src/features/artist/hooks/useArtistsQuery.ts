@@ -141,3 +141,20 @@ export const useMyArtistProfile = () => {
     select: (response) => response.data,
   });
 };
+
+/**
+ * Hook lấy danh sách Nghệ sĩ mà user đang follow
+ */
+export const useMyFollowedArtists = (params: ArtistFilterParams) => {
+  return useQuery({
+    queryKey: artistKeys.following(params),
+    queryFn: () => artistApi.getMyFollowedArtists(params),
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 5,
+    select: (response) => ({
+      artists: response.data.data,
+      meta: response.data.meta,
+      isEmpty: response.data.data.length === 0,
+    }),
+  });
+};

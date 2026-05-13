@@ -15,9 +15,8 @@ const FullPlayerLazy = lazy(() =>
   import("./FullPlayer").then((m) => ({ default: m.FullPlayer ?? m.default })),
 );
 import { useTrackListeners } from "../hooks/useTrackListeners";
-import MiniPlayerSkeleton from "./MiniPlayerSkeleton";
-import FullPlayerSkeleton from "./FullPlayerSkeleton";
- 
+
+import { WaveformBars } from "@/components/MusicVisualizer";
 
 export function MusicPlayer() {
   // 1. Lấy trạng thái từ Store
@@ -81,19 +80,17 @@ export function MusicPlayer() {
         }
       >
         <AnimatePresence mode="wait">
-          {!isTrackReady ? (
-            <MiniPlayerSkeleton key="skeleton" />
-          ) : (
-            <MiniPlayer
-              isPlaying={isPlaying}
-              duration={duration}
-              track={currentTrack}
-              currentTime={currentTime}
-              getCurrentTime={getCurrentTime}
-              onSeek={seek}
-              onExpand={() => setIsExpanded(true)}
-            />
-          )}
+          <MiniPlayer
+            key="mini-player"
+            isLoading={!isTrackReady}
+            isPlaying={isPlaying}
+            duration={duration}
+            track={currentTrack}
+            currentTime={currentTime}
+            getCurrentTime={getCurrentTime}
+            onSeek={seek}
+            onExpand={() => setIsExpanded(true)}
+          />
         </AnimatePresence>
       </div>
 
@@ -104,14 +101,11 @@ export function MusicPlayer() {
       */}
       <AnimatePresence>
         {isExpanded && (
-          <Suspense
-            fallback={
-               <FullPlayerSkeleton key="skeleton"  />
-            }
-          >
+          <Suspense fallback={<WaveformBars active />}>
             <FullPlayerLazy
               listenCount={listenCount}
               isPlaying={isPlaying}
+              isLoading={!isTrackReady}
               key="full-player"
               track={currentTrack}
               duration={duration}

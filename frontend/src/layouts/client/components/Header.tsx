@@ -23,6 +23,7 @@ import {
   ChartBar,
   Mic2,
   type LucideIcon,
+  Settings,
 } from "lucide-react";
 import {
   motion,
@@ -97,6 +98,12 @@ const NAV_ITEMS: readonly NavItemDef[] = [
     shortLabel: "TL",
     icon: KeyboardMusic,
     path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.GENRES}`,
+  },
+  {
+    label: "Cài đặt",
+    shortLabel: "ST",
+    icon: Settings,
+    path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.SETTINGS}`,
   },
 ] as const;
 

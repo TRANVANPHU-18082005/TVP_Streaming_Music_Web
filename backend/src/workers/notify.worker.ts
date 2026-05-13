@@ -8,35 +8,61 @@ export const startNotificationWorker = () => {
   new Worker(
     "notification-delivery",
     async (job) => {
-      const { artistId, trackId, trackTitle, artistName, followerIds } =
-        job.data;
-
-      // Chia nhỏ followerIds thành từng cụm (batch) 500 người để tránh quá tải DB
-      const BATCH_SIZE = 500;
       const io = getIO();
 
-      for (let i = 0; i < followerIds.length; i += BATCH_SIZE) {
-        const batch = followerIds.slice(i, i + BATCH_SIZE);
+      // Support two job shapes:
+      // 1) { recipientIds, senderId, type, relatedId, message, link }
+      // 2) legacy track job: { artistId, trackId, trackTitle, artistName, followerIds }
+      const data: any = job.data || {};
+      const recipients: string[] = data.recipientIds || data.followerIds || [];
 
-        // 1. Bulk Insert vào MongoDB (Nhanh nhất)
-        const notifications = batch.map((uid: string) => ({
-          recipientId: uid,
-          senderId: artistId,
-          relatedId: trackId,
-          type: "NEW_TRACK",
-          message: `${artistName} vừa phát hành bài hát mới: ${trackTitle}`,
-          link: `/track/${trackId}`,
-        }));
+      if (!recipients || recipients.length === 0) return;
 
-        await Notification.insertMany(notifications);
+      const BATCH_SIZE = 500;
 
-        // 2. Bắn Real-time qua Socket.io
-        batch.forEach((uid: string) => {
-          io.to(uid).emit("notification_received", {
-            type: "NEW_TRACK",
-            message: `${artistName} vừa ra bài mới!`,
-            trackId,
-          });
+      for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+        const batch = recipients.slice(i, i + BATCH_SIZE);
+
+        const notifications = batch.map((uid: string) => {
+          // Determine message and type
+          const isLegacyTrack = Boolean(data.trackId || data.trackTitle);
+          const type = data.type || (isLegacyTrack ? "NEW_RELEASE" : "SYSTEM");
+          const message =
+            data.message ||
+            (isLegacyTrack
+              ? `${data.artistName} vừa phát hành bài hát mới: ${data.trackTitle}`
+              : "Bạn có thông báo mới");
+          const link =
+            data.link || (isLegacyTrack ? `/track/${data.trackId}` : undefined);
+
+          return {
+            recipientId: uid,
+            senderId: data.senderId || data.artistId,
+            relatedId: data.relatedId || data.trackId,
+            type,
+            message,
+            link,
+          };
+        });
+
+        // Bulk insert and get inserted docs to emit with ids
+        const inserted = await Notification.insertMany(notifications);
+
+        // Emit real-time events
+        inserted.forEach((doc: any) => {
+          try {
+            io.to(doc.recipientId.toString()).emit("notification_received", {
+              id: doc._id,
+              type: doc.type,
+              message: doc.message,
+              link: doc.link,
+              isRead: doc.isRead,
+              createdAt: doc.createdAt,
+            });
+          } catch (err) {
+            // ignore per-user emit errors
+            console.error("[NotifyWorker] emit error:", err);
+          }
         });
       }
     },

@@ -35,7 +35,14 @@ export const REGEX = {
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   PHONE: /(84|0[3|5|7|8|9])+([0-9]{8})\b/,
 };
-
+export const DEAFULT_APP = {
+  IMG_URL:
+    "https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png",
+  COVER_URL:
+    "https://res.cloudinary.com/dzcmadjl1/image/upload/v1700000000/default_cover.png",
+  MOOD_VIDEO_DEFAULT_VALUES:
+    "https://res.cloudinary.com/dc5rfjnn5/video/upload/v1776787911/mood_videos/mood-1776787906294.mp4",
+};
 export interface Country {
   label: string;
   value: string;

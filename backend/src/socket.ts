@@ -38,7 +38,11 @@ export const getIO = (): Server => {
 
 export const initSocket = (httpServer: HttpServer): Server => {
   io = new Server(httpServer, {
-    cors: { origin: config.allowedOrigins || [], methods: ["GET", "POST"], credentials: true },
+    cors: {
+      origin: config.allowedOrigins || [],
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
     pingTimeout: 60_000,
     transports: ["websocket", "polling"],
   });

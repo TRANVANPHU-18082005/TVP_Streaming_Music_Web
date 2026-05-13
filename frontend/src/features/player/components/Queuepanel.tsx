@@ -249,9 +249,9 @@ const TrackCover = memo(
           {isLoading ? (
             <Loader2 className="size-4 text-foreground animate-spin" />
           ) : isCurrentPlaying ? (
-            <Pause className="size-4 text-foreground fill-foreground" />
+            <Pause className="size-4 text-white fill-white" />
           ) : (
-            <Play className="size-4 text-foreground fill-foreground ml-0.5" />
+            <Play className="size-4 text-white fill-white ml-0.5" />
           )}
         </AnimatePresence>
       </motion.div>

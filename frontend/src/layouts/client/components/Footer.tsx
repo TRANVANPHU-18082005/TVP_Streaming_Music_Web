@@ -64,18 +64,18 @@ export function Footer() {
             </h4>
             <ul className="space-y-3.5 text-sm text-muted-foreground">
               {[
-                "New Releases",
-                "Top Charts",
-                "Genres",
-                "Radio",
-                "Podcasts",
+                { name: "Featured Albums", path: "/albums" },
+                { name: "Featured Playlists", path: "/playlists" },
+                { name: "Featured Artists", path: "/artists" },
+                { name: "Trending Genres", path: "/genres" },
+                { name: "Top Charts", path: "/chart-top" },
               ].map((item) => (
-                <li key={item}>
+                <li key={item.name}>
                   <Link
-                    to="#"
+                    to={item.path}
                     className="hover:text-primary hover:underline hover:underline-offset-4 transition-all duration-200 block w-fit"
                   >
-                    {item}
+                    {item.name}
                   </Link>
                 </li>
               ))}
@@ -88,18 +88,18 @@ export function Footer() {
             </h4>
             <ul className="space-y-3.5 text-sm text-muted-foreground">
               {[
-                "Help Center",
-                "Contact Us",
-                "Privacy Policy",
-                "Terms of Service",
-                "Community Guidelines",
+                { name: "Help Center", path: "/help" },
+                { name: "Contact Us", path: "/contact" },
+                { name: "Privacy Policy", path: "/privacy" },
+                { name: "Terms of Service", path: "/terms" },
+                { name: "Community Guidelines", path: "/guidelines" },
               ].map((item) => (
-                <li key={item}>
+                <li key={item.name}>
                   <Link
-                    to="#"
+                    to={item.path}
                     className="hover:text-primary hover:underline hover:underline-offset-4 transition-all duration-200 block w-fit"
                   >
-                    {item}
+                    {item.name}
                   </Link>
                 </li>
               ))}

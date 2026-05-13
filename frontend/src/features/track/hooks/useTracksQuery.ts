@@ -3,6 +3,7 @@ import trackApi from "../api/trackApi";
 import { trackKeys } from "../utils/trackKeys";
 import type { ITrack } from "../types";
 import { TrackFilterParams } from "../schemas/track.schema";
+import { APP_CONFIG } from "@/config/constants";
 
 // ============================================================================
 // PHẦN A: PUBLIC QUERIES (Dành cho Người dùng cuối - Client)
@@ -118,6 +119,26 @@ export const useAdminTrackDetail = (id: string) => {
     },
 
     select: (response) => response,
+  });
+};
+/**
+ * Hook lấy danh sách Playlist Nổi bật (Hệ thống tạo / Curated)
+ * Dùng cho Trang Chủ
+ */
+export const useFeaturedTracks = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
+  const params: TrackFilterParams = {
+    limit,
+    sort: "popular",
+    status: "ready",
+    isPublic: true,
+    isDeleted: false,
+  };
+
+  return useQuery({
+    queryKey: trackKeys.list(params),
+    queryFn: () => trackApi.getTracks(params),
+    staleTime: 1000 * 60 * 15, // Playlist hệ thống ít đổi, cache 15 phút
+    select: (response) => response.data.data as ITrack[],
   });
 };
 // ============================================================================

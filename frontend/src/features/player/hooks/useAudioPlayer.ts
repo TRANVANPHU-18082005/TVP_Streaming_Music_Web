@@ -11,6 +11,7 @@ import {
   nextTrack,
   prevTrack,
   appendQueueIds,
+  hasPlayableUrl,
 } from "@/features/player/slice/playerSlice";
 import trackApi from "@/features/track/api/trackApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -54,13 +55,15 @@ export const useAudioPlayer = () => {
 
   const currentTrack = useAppSelector(selectCurrentTrack);
   const nextTrackPreload = useAppSelector(selectNextTrack);
-  const currentTrackId = useAppSelector((s: RootState) => s.player.currentTrackId);
+  const currentTrackId = useAppSelector(
+    (s: RootState) => s.player.currentTrackId,
+  );
   const isCurrentCached = useAppSelector((s: RootState) =>
-    Boolean(s.player.trackMetadataCache[currentTrackId ?? ""]),
+    hasPlayableUrl(s.player.trackMetadataCache[currentTrackId ?? ""]),
   );
   const nextTrackId = nextTrackPreload?._id ?? null;
   const isNextCached = useAppSelector((s: RootState) =>
-    Boolean(s.player.trackMetadataCache[nextTrackId ?? ""]),
+    hasPlayableUrl(s.player.trackMetadataCache[nextTrackId ?? ""]),
   );
   const user = useAppSelector((state: RootState) => state.auth.user);
   const activeQueueLen = useAppSelector(
@@ -381,7 +384,7 @@ export const useAudioPlayer = () => {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
       artist: fullArtist,
-        artwork: [
+      artwork: [
         {
           src: currentTrack.coverImage,
           sizes: "512x512",

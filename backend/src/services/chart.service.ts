@@ -104,6 +104,32 @@ export const getRealtimeChart = async () => {
       $unwind: { path: "$moodVideoDetails", preserveNullAndEmptyArrays: true },
     },
     { $unwind: { path: "$genreDetails", preserveNullAndEmptyArrays: true } },
+    // Deduplicate documents that may have been multiplied by $unwind on array lookups
+    // (e.g. multiple genres / featuring artists). We keep the first appearance per track._id
+    {
+      $group: {
+        _id: "$track._id",
+        score: { $first: "$score" },
+        track: { $first: "$track" },
+        albumDetails: { $first: "$albumDetails" },
+        genreDetails: { $first: "$genreDetails" },
+        moodVideoDetails: { $first: "$moodVideoDetails" },
+        artistDetails: { $first: "$artistDetails" },
+        featuringDetails: { $first: "$featuringDetails" },
+      },
+    },
+    // Restore shape expected by subsequent stages (project uses fields under track/artistDetails/...)
+    {
+      $addFields: {
+        track: "$track",
+        albumDetails: "$albumDetails",
+        genreDetails: "$genreDetails",
+        moodVideoDetails: "$moodVideoDetails",
+        artistDetails: "$artistDetails",
+        featuringDetails: "$featuringDetails",
+        score: "$score",
+      },
+    },
     // Lookup Artist
     {
       $lookup: {

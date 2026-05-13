@@ -284,10 +284,15 @@ const playerSlice = createSlice({
       state.lastSeekTime = Date.now();
 
       // Xác định trạng thái load (Nếu có trong cache thì buffer ngay, ko thì chờ loading)
-      state.loadingState =
-        targetTrackId && state.trackMetadataCache[targetTrackId]
-          ? "buffering"
-          : "loading";
+      // @fix: dùng hasPlayableUrl thay vì chỉ check existence
+      // Tránh case initialMetadata chứa partial track (không có URL) nhưng
+      // vẫn bị coi là "đủ" → loadingState = "buffering" giả → resolver không fetch
+      const cachedTrack = targetTrackId
+        ? state.trackMetadataCache[targetTrackId]
+        : undefined;
+      state.loadingState = hasPlayableUrl(cachedTrack)
+        ? "buffering"
+        : "loading";
 
       // 5. Cập nhật bài preload cho tính năng Gapless
       state.nextTrackIdPreloaded = resolveNextPreload(
@@ -307,9 +312,10 @@ const playerSlice = createSlice({
       for (const track of action.payload) {
         state.trackMetadataCache[track._id] = track;
       }
+      // @fix: upgrade chỉ khi track có URL thực — không upgrade khi partial metadata
       if (
         state.currentTrackId &&
-        state.trackMetadataCache[state.currentTrackId] &&
+        hasPlayableUrl(state.trackMetadataCache[state.currentTrackId]) &&
         state.loadingState === "loading"
       ) {
         state.loadingState = "buffering";
@@ -641,6 +647,7 @@ export const selectCurrentTrack = createSelector(
         aliases: [],
         nationality: "",
         images: [],
+        coverImage: "",
         themeColor: "",
         totalTracks: 0,
         totalAlbums: 0,
@@ -687,7 +694,16 @@ export const selectCurrentTrack = createSelector(
     return minimal;
   },
 );
-
+// ============================================================================
+// 1b. HELPER: hasPlayableUrl  ← THÊM MỚI
+// ============================================================================
+/**
+ * Single source of truth cho "track có đủ metadata để phát không".
+ * Check cả trackUrl (MP3/AAC) lẫn hlsUrl (HLS) — bất kỳ một trong hai là đủ.
+ * Dùng nhất quán ở MỌI chỗ trong slice & selectors.
+ */
+export const hasPlayableUrl = (track: ITrack | undefined | null): boolean =>
+  Boolean(track && (track.hlsUrl || track.trackUrl));
 /**
  * Trả về ITrack của bài kế tiếp đã preload.
  * @fix Memoized bằng createSelector.
@@ -698,10 +714,11 @@ export const selectNextTrack = createSelector(
   (id, cache): ITrack | null => (id ? (cache[id] ?? null) : null),
 );
 /** True khi currentTrack có đủ metadata thực (không phải placeholder) */
+
 export const selectIsCurrentTrackReady = createSelector(
   (state: RootState) => state.player.currentTrackId,
   (state: RootState) => state.player.trackMetadataCache,
-  (id, cache): boolean => Boolean(id && cache[id]?.trackUrl), // trackUrl là dấu hiệu "real metadata"
+  (id, cache): boolean => hasPlayableUrl(id ? cache[id] : null),
 );
 /** Kiểm tra nhanh metadata của một trackId có trong cache chưa. */
 export const selectIsTrackCached =

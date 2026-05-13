@@ -12,4 +12,6 @@ export const artistKeys = {
   tracks: () => [...artistKeys.all, "tracks"] as const,
   trackList: (idOrSlug: string, params: { page?: number; limit?: number }) =>
     [...artistKeys.tracks(), idOrSlug, { params }] as const,
+  following: (params: ArtistAdminFilterParams) =>
+    [...artistKeys.lists(), "following", { params }] as const,
 };

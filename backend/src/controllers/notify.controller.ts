@@ -18,6 +18,15 @@ class NotifyController {
     await notifyService.markAsRead((req as any).user._id);
     return res.json({ success: true, message: "Đã đọc tất cả" });
   }
+
+  async markOneRead(req: Request, res: Response) {
+    const id = req.params.id as string;
+    await notifyService.markOneRead(id, (req as any).user._id);
+    return res.json({
+      success: true,
+      message: "Đã đánh dấu 1 thông báo là đã đọc",
+    });
+  }
 }
 
 export default new NotifyController();

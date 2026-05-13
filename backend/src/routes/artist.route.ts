@@ -48,10 +48,17 @@ router.get(
 // ==========================================
 // Phải đặt TRƯỚC /:slug để tránh "me" bị coi là slug.
 router.get(
-  "/me/profile", 
-  protect, 
-  authorize("artist"), 
-  artistController.getMyProfile
+  "/me/profile",
+  protect,
+  authorize("artist"),
+  artistController.getMyProfile,
+);
+
+router.get(
+  "/me/following",
+  protect,
+  validate(getArtistsByUserSchema),
+  artistController.getMyFollowedArtists,
 );
 
 router.patch(
@@ -120,9 +127,6 @@ router
     validate(updateArtistSchema),
     artistController.updateArtist,
   )
-  .delete(
-    validate(deleteArtistSchema),
-    artistController.deleteArtist,
-  );
+  .delete(validate(deleteArtistSchema), artistController.deleteArtist);
 
 export default router;

@@ -25,6 +25,20 @@ export const getArtistsByUser = catchAsync(
     });
   },
 );
+
+// 12. ME: Danh sách nghệ sĩ mà user đang follow
+export const getMyFollowedArtists = catchAsync(
+  async (req: Request, res: Response) => {
+    const query = req.query as unknown as ArtistUserFilterInput;
+    const currentUser = req.user as IUser | undefined;
+    const result = await artistService.getMyFollowedArtists(query, currentUser);
+    console.log(currentUser);
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: result,
+    });
+  },
+);
 // 2. PUBLIC: GET LIST BY ADMIN
 export const getArtistsByAdmin = catchAsync(
   async (req: Request, res: Response) => {
@@ -107,11 +121,7 @@ export const createArtist = catchAsync(async (req: Request, res: Response) => {
 export const updateArtist = catchAsync(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   const id = req.params.id as string;
-  const result = await artistService.updateArtistByAdmin(
-    id,
-    req.body,
-    files,
-  );
+  const result = await artistService.updateArtistByAdmin(id, req.body, files);
 
   res.status(httpStatus.OK).json({
     success: true,

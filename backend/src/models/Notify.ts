@@ -4,7 +4,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface INotify extends Document {
   recipientId: mongoose.Types.ObjectId;
   senderId: mongoose.Types.ObjectId;
-  type: "NEW_TRACK" | "SYSTEM" | "LIKE_TRACK";
+  type: "LIKE" | "FOLLOW" | "SYSTEM" | "NEW_RELEASE" | string;
   relatedId?: mongoose.Types.ObjectId;
   message: string;
   isRead: boolean;
@@ -23,8 +23,15 @@ const NotifySchema = new Schema(
     senderId: { type: Schema.Types.ObjectId, ref: "Artist", required: true },
     type: {
       type: String,
-      enum: ["NEW_TRACK", "SYSTEM", "LIKE_TRACK"],
-      default: "NEW_TRACK",
+      enum: [
+        "LIKE",
+        "FOLLOW",
+        "SYSTEM",
+        "NEW_RELEASE",
+        "NEW_TRACK",
+        "LIKE_TRACK",
+      ],
+      default: "SYSTEM",
     },
     relatedId: { type: Schema.Types.ObjectId },
     message: { type: String, required: true },

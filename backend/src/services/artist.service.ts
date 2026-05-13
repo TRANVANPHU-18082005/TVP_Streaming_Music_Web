@@ -5,6 +5,7 @@ import Artist, { IArtist } from "../models/Artist";
 import User, { IUser } from "../models/User";
 import Album from "../models/Album";
 import Track from "../models/Track";
+import Follow from "../models/Follow";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 
@@ -52,7 +53,7 @@ class ArtistService {
     const cacheKey = buildCacheKey(`artist:detail:${slug}`, userRole, {});
 
     // 2. Thử lấy từ cache
-      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     // 3. Query Database
@@ -95,11 +96,14 @@ class ArtistService {
     };
 
     // 4. Lưu Cache (TTL 1 giờ)
-   cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+    cacheRedis
+      .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
+      .catch((err) => {
+        console.error(
+          `[Redis Error] Failed to set cache for ${cacheKey}:`,
+          err.message,
+        );
+      });
 
     return result;
   }
@@ -146,11 +150,12 @@ class ArtistService {
       },
     };
     const ttl = 900 + Math.floor(Math.random() * 120);
-   cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+    cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl).catch((err) => {
+      console.error(
+        `[Redis Error] Failed to set cache for ${cacheKey}:`,
+        err.message,
+      );
+    });
 
     return result;
   }
@@ -338,11 +343,69 @@ class ArtistService {
     };
 
     const ttl = 900 + Math.floor(Math.random() * 300);
-  cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+    cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl).catch((err) => {
+      console.error(
+        `[Redis Error] Failed to set cache for ${cacheKey}:`,
+        err.message,
+      );
+    });
+
+    return result;
+  }
+
+  // ── 6. GET ARTISTS FOLLOWED BY CURRENT USER ─────────────────────────────
+  async getMyFollowedArtists(
+    queryInput: ArtistUserFilterInput,
+    currentUser?: IUser,
+  ) {
+    if (!currentUser) {
+      // Should be protected by middleware, but guard here as well
+      throw new ApiError(httpStatus.UNAUTHORIZED, "Vui lòng đăng nhập");
+    }
+
+    const { page = 1, limit = APP_CONFIG.GRID_LIMIT } = queryInput;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // 1. Query Follow collection to get total and paginated artist IDs
+    const followerId = currentUser._id;
+    const [total, follows] = await Promise.all([
+      Follow.countDocuments({ followerId }),
+      Follow.find({ followerId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .select("artistId createdAt")
+        .lean(),
+    ]);
+
+    const artistIds = follows.map((f: any) => f.artistId);
+
+    // 2. Fetch artist documents and preserve follow-order
+    const artists = await Artist.find({
+      _id: { $in: artistIds },
+      isActive: true,
+      isDeleted: false,
+    })
+      .lean()
+      .exec();
+
+    // Preserve ordering from follows (newest follow first)
+    const artistMap: Record<string, any> = {};
+    artists.forEach((a: any) => (artistMap[String(a._id)] = a));
+    const ordered = artistIds
+      .map((id: any) => artistMap[String(id)])
+      .filter(Boolean);
+
+    const result = {
+      data: ordered,
+      meta: {
+        totalItems: Number(total),
+        page: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(Number(total) / Number(limit)),
+        hasNextPage: skip + Number(limit) < Number(total),
+      },
+    };
 
     return result;
   }

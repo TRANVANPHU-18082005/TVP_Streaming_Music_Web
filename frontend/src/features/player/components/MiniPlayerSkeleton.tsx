@@ -218,10 +218,12 @@ SkeletonMobileControls.displayName = "SkeletonMobileControls";
 export interface MiniPlayerSkeletonProps {
   /** When false, component renders nothing — lets parent toggle with AnimatePresence */
   visible?: boolean;
+  /** Callback function to handle expand action */
+  onExpand?: () => void;
 }
 
 export const MiniPlayerSkeleton = memo(
-  ({ visible = true }: MiniPlayerSkeletonProps) => {
+  ({ visible = true, onExpand }: MiniPlayerSkeletonProps) => {
     if (!visible) return null;
 
     return (
@@ -240,6 +242,7 @@ export const MiniPlayerSkeleton = memo(
           role="status"
           aria-label="Đang tải trình phát nhạc"
           aria-busy="true"
+          onClick={onExpand}
         >
           <motion.div
             initial={PLAYER_INITIAL}

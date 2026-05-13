@@ -3,8 +3,8 @@ import http from "http";
 import { createApp } from "./app";
 import { connectRedis } from "./config/redis";
 import { connectWithRetry } from "./utils/db.utils";
-import crypto from 'node:crypto';
-if (typeof global.crypto === 'undefined') {
+import crypto from "node:crypto";
+if (typeof global.crypto === "undefined") {
   // @ts-ignore
   global.crypto = crypto;
 }
@@ -52,6 +52,26 @@ const startServer = () => {
       initSocket(server);
       initCronJobs();
       await bootstrapCounters();
+      // Start background workers that depend on Redis / DB
+      try {
+        const interactionModule = await import("./workers/interaction.worker");
+        if (interactionModule && interactionModule.interactionWorker) {
+          console.log("🔧 Interaction worker loaded");
+        }
+      } catch (err) {
+        console.error("⚠️ Failed to load interaction worker:", err);
+      }
+
+      try {
+        const viewModule = await import("./workers/view.worker");
+        if (viewModule && typeof viewModule.startViewWorker === "function") {
+          viewModule.startViewWorker();
+          console.log("🔧 View worker started");
+        }
+      } catch (err) {
+        console.error("⚠️ Failed to start view worker:", err);
+      }
+
       console.log("👷 System fully ready!");
     } catch (err) {
       console.error("❌ Background startup error:", err);

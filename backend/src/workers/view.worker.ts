@@ -4,6 +4,7 @@ import PlayLog from "../models/PlayLog";
 import DailyStats from "../models/DailyStats";
 import mongoose from "mongoose";
 import recommendationService from "../services/recommendation.service";
+import logger from "../utils/logger";
 
 // Định nghĩa Interface cho Job Data để chặt chẽ về Type
 interface ILogListenJob {
@@ -29,6 +30,9 @@ export const startViewWorker = () => {
 
         try {
           // 2. TẠO CÁC PROMISE XỬ LÝ SONG SONG
+          logger.info(
+            `[SyncView] Scheduled view sync job: trackId=${trackId}, userId=${userId}, ip=${ip}, timestamp=${timestamp}`,
+          );
 
           // Task A: Ghi Log thô (Audit Trail)
           const logPromise = PlayLog.create({
