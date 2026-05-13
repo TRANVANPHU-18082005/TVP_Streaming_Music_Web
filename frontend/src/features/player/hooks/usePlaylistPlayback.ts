@@ -7,7 +7,7 @@ import { useMemo } from "react";
 import {
   CollectionPlaybackReturn,
   useCollectionPlayback,
-} from "./useCollectionplayback";
+} from "./useCollectionPlayback";
 
 import { IPlaylist, playlistKeys } from "@/features/playlist";
 import playlistApi from "@/features/playlist/api/playlistApi";
