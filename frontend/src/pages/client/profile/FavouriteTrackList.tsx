@@ -73,7 +73,7 @@ const FavouriteTrackList = memo(() => {
     <TrackList
       {...trackListProps}
       moodColor="var(--primary)"
-      maxHeight={200}
+      maxHeight={400}
       skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
       staggerAnimation={true}
     />
