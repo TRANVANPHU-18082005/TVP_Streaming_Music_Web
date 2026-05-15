@@ -15,8 +15,8 @@ export async function fetchLyrics(
     syncedLines: [],
     plainLyrics: "",
   };
-  // trackTitle = "Buồn Của Anh | K-ICM x Đạt G x Masew";
-  // artistName = "DatG Music";
+  // trackTitle = "HÔN LỄ CỦA EM";
+  // artistName = "Trọng Nhân, Tiểu Mỹ";
   // duration = undefined;
 
   console.log(trackTitle, artistName, duration);
