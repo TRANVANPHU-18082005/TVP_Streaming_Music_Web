@@ -68,8 +68,28 @@ const trackApi = {
 
   // Top 100 realtime chart
   getRealtimeChart: async () => {
-    const { data } = await api.get<IChartResponse>(
-      "/tracks/charts/realtime",
+    const { data } = await api.get<IChartResponse>("/tracks/charts/realtime");
+    return data;
+  },
+
+  // Top Hot Today (paged)
+  getTopHotTracksToday: async (
+    params: { page?: number; limit?: number } = {},
+  ) => {
+    const { data } = await api.get<ApiResponse<PagedResponse<ITrack>>>(
+      "/tracks/top/hot-today",
+      { params },
+    );
+    return data;
+  },
+
+  // Top Favourite Tracks (paged)
+  getTopFavouriteTracks: async (
+    params: { page?: number; limit?: number } = {},
+  ) => {
+    const { data } = await api.get<ApiResponse<PagedResponse<ITrack>>>(
+      "/tracks/top/favourite",
+      { params },
     );
     return data;
   },

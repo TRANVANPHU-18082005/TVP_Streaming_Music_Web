@@ -27,6 +27,7 @@ import {
   TrendingUp,
   Shield,
   Headphones,
+  Users,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,6 +42,10 @@ import PlaylistCardSkeleton from "@/features/playlist/components/PlaylistCardSke
 import MusicResult from "@/components/ui/Result";
 import { IPlaylist, useMyPlaylists } from "@/features/playlist";
 import { IAlbum, PublicAlbumCard } from "@/features/album";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { IArtist, useMyFollowedArtists } from "@/features/artist";
+import CardSkeleton from "@/components/ui/CardSkeleton";
+import { APP_CONFIG } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
@@ -71,6 +76,10 @@ const FavouriteTrackList = lazy(() => import("./profile/FavouriteTrackList"));
 // Lazy-load heavy playlist card to reduce initial bundle
 const PublicPlaylistCard = lazy(
   () => import("@/features/playlist/components/PublicPlaylistCard"),
+);
+// Lazy-load public artist card
+const PublicArtistCard = lazy(
+  () => import("@/features/artist/components/PublicArtistCard"),
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,7 +112,7 @@ AmbientBackground.displayName = "AmbientBackground";
 const HeroBackdrop = memo(({ src }: { src?: string }) => (
   <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
     {src && (
-      <img
+      <ImageWithFallback
         src={src}
         alt=""
         className="w-full h-full object-cover opacity-[0.15] blur-[60px] scale-110 saturate-[1.4]"
@@ -312,6 +321,7 @@ const ProfilePage = () => {
   const overviewRef = useRef<HTMLDivElement | null>(null);
   const playlistsRef = useRef<HTMLDivElement | null>(null);
   const libraryRef = useRef<HTMLDivElement | null>(null);
+  const artistsRef = useRef<HTMLDivElement | null>(null);
 
   // Read query params / location state to allow deep-linking into tabs/sections
   const [searchParams] = useSearchParams();
@@ -322,6 +332,12 @@ const ProfilePage = () => {
     useProfileDashboard();
   const { data: myPlaylists, isLoading: isMyPlaylistsLoading } =
     useMyPlaylists();
+  const { data: followedArtists, isLoading: isFollowedArtistsLoading } =
+    useMyFollowedArtists({});
+  const followedArtistsList = useMemo(
+    () => followedArtists?.artists || [],
+    [followedArtists],
+  );
   // Normalize playlists: ensure we have a flat array and guard against unexpected shapes
   const myPlaylistsNormalized = useMemo(() => {
     if (!myPlaylists) return [] as IPlaylist[];
@@ -351,7 +367,10 @@ const ProfilePage = () => {
   );
 
   // Tab direction handling for animated slide transitions
-  const tabOrder = useMemo(() => ["overview", "playlists", "library"], []);
+  const tabOrder = useMemo(
+    () => ["overview", "playlists", "followed-artists", "library"],
+    [],
+  );
   const prevTabRef = useRef<string>(activeTab);
   const [direction, setDirection] = useState<number>(1);
 
@@ -391,6 +410,8 @@ const ProfilePage = () => {
         scrollTo === "myplaylist"
       ) {
         el = playlistsRef.current;
+      } else if (t === "followed-artists" || scrollTo === "followed-artists") {
+        el = artistsRef.current;
       } else if (
         t === "library" ||
         (scrollTo &&
@@ -426,11 +447,12 @@ const ProfilePage = () => {
   const tabCounts = useMemo(
     () => ({
       playlists: myPlaylistsNormalized.length ?? 0,
+      followedArtists: followedArtistsList.length ?? 0,
       likedTracks: dashboard?.library?.tracks?.length ?? 0,
       likedAlbums: dashboard?.library?.albums?.length ?? 0,
       likedPlaylists: dashboard?.library?.playlists?.length ?? 0,
     }),
-    [dashboard, myPlaylistsNormalized],
+    [dashboard, myPlaylistsNormalized, followedArtistsList],
   );
 
   const statsMax = useMemo(
@@ -439,6 +461,7 @@ const ProfilePage = () => {
         tabCounts.likedTracks,
         tabCounts.playlists,
         tabCounts.likedAlbums,
+        tabCounts.followedArtists,
         1,
       ),
     [tabCounts],
@@ -458,6 +481,12 @@ const ProfilePage = () => {
         label: "Playlist",
         value: tabCounts.playlists,
         color: "hsl(var(--wave-2))",
+      },
+      {
+        icon: Users,
+        label: "Nghệ sĩ theo dõi",
+        value: tabCounts.followedArtists,
+        color: "hsl(var(--wave-3))",
       },
       {
         icon: Disc,
@@ -531,13 +560,7 @@ const ProfilePage = () => {
                 >
                   {user?.fullName}
                 </h1>
-                <p className="text-sm text-muted-foreground/70 font-medium">
-                  <span>{tabCounts.likedTracks} bài đã thích</span>
-                  <span className="mx-2 opacity-40">·</span>
-                  <span>{tabCounts.playlists} playlist</span>
-                  <span className="mx-2 opacity-40">·</span>
-                  <span>{tabCounts.likedAlbums} album đã lưu</span>
-                </p>
+
                 {user?.bio && (
                   <p className="text-sm text-muted-foreground/55 italic max-w-md hidden md:block line-clamp-1">
                     {user.bio}
@@ -545,28 +568,12 @@ const ProfilePage = () => {
                 )}
               </motion.div>
             </div>
-
-            {/* Edit CTA */}
-            <motion.div
-              className="shrink-0 self-start md:self-end"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4, ease: EASE_EXPO, delay: 0.15 }}
-            >
-              <button
-                type="button"
-                className="btn-secondary btn-lg gap-2 rounded-full"
-              >
-                <Edit className="size-4" aria-hidden="true" />
-                Chỉnh sửa
-              </button>
-            </motion.div>
           </div>
         </div>
       </section>
 
       {/* Divider */}
-      <div className="section-container">
+      <div className="section-container mt-0 mb-8">
         <div className="divider-fade" />
       </div>
 
@@ -574,12 +581,17 @@ const ProfilePage = () => {
       <div className="section-container mt-0">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Tab rail */}
-          <div className="sticky top-0 z-40 py-0 bg-background/90 backdrop-blur-2xl border-b border-border/30">
+          <div className="sticky top-0 z-40 py-0 bg-background/90 backdrop-blur-2xl border-b border-border/30 overflow-x-scroll md:overflow-x-hidden scrollbar-thin">
             <TabsList className="bg-transparent w-full justify-start rounded-none h-auto p-0 gap-0">
               {(
                 [
                   { value: "overview", label: "Tổng quan", icon: BarChart3 },
                   { value: "playlists", label: "Playlist", icon: ListMusic },
+                  {
+                    value: "followed-artists",
+                    label: "Nghệ sĩ theo dõi",
+                    icon: Users,
+                  },
                   { value: "library", label: "Bộ sưu tập", icon: Disc3 },
                 ] as const
               ).map(({ value, label, icon: Icon }) => (
@@ -872,6 +884,70 @@ const ProfilePage = () => {
                                 }}
                               >
                                 <PublicPlaylistCard playlist={p} />
+                              </motion.div>
+                            ),
+                          )
+                        )}
+                      </Suspense>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+              {/* ══ FOLLOWED ARTISTS ═══════════════════════════════════════════ */}
+              {activeTab === "followed-artists" && (
+                <motion.div
+                  ref={playlistsRef}
+                  tabIndex={-1}
+                  key="followed-artists"
+                  variants={slideVariants}
+                  custom={direction}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="space-y-7"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-overline text-muted-foreground/50 mb-1">
+                        Bộ sưu tập
+                      </p>
+                      <h2 className="text-display-lg text-foreground">
+                        Nghệ sĩ theo dõi
+                      </h2>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+                    {isFollowedArtistsLoading ? (
+                      // show skeletons while fetching user's playlists
+                      <CardSkeleton count={APP_CONFIG.GRID_LIMIT} />
+                    ) : (
+                      <Suspense
+                        fallback={
+                          <CardSkeleton count={APP_CONFIG.GRID_LIMIT} />
+                        }
+                      >
+                        {!followedArtistsList.length ? (
+                          <MusicResult
+                            variant="empty-playlists"
+                            title="Chưa có playlists"
+                            description="Tạo playlist đầu tiên để bắt đầu."
+                          />
+                        ) : (
+                          followedArtistsList.map(
+                            (artist: IArtist, i: number) => (
+                              <motion.div
+                                key={artist._id}
+                                // avoid starting hidden due to nested AnimatePresence/tab transitions
+                                initial={false}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{
+                                  duration: 0.38,
+                                  ease: EASE_EXPO,
+                                  delay: Math.min(i * 45, 500),
+                                }}
+                              >
+                                <PublicArtistCard artist={artist} />
                               </motion.div>
                             ),
                           )

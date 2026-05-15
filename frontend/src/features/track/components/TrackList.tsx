@@ -533,7 +533,7 @@ export const TrackList = memo(
     onTrackPlay,
     onContextMenu,
     className,
-    moodColor = "",
+    moodColor = "hsl(var(--primary))",
     showHeader = true,
     skeletonCount = 10,
     maxHeight = "auto",
@@ -863,7 +863,7 @@ export const TrackList = memo(
         style={
           {
             animationDelay: "80ms",
-            "--local-shadow-color": moodColor || "var(--primary)",
+            "--local-shadow-color": moodColor || "hsl(var(--primary))",
           } as React.CSSProperties
         }
         role="grid"

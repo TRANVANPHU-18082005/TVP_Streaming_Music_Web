@@ -26,7 +26,6 @@ import {
   useGenreDetailQuery,
   useGenreTracksInfinite,
 } from "@/features/genre/hooks/useGenresQuery";
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useGenrePlayback } from "@/features/player/hooks/useGenrePlayback";
 import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
@@ -243,7 +242,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
   const navigate = useNavigate();
   const isEmbedded = variant === "embedded";
   const scrollRef = useRef<HTMLDivElement>(null);
-  
+
   // ── Scroll tracking ──────────────────────────────────────────────────────
   const scrollY = useScrollY(scrollRef, !isEmbedded);
   const isScrolled = scrollY > (isEmbedded ? 130 : 260);
@@ -288,14 +287,6 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
 
   // totalItems: prefer genre's authoritative count
   const totalItems = genre?.trackIds.length ?? tracksData?.totalItems ?? 0;
-
-  // Sync interactions only when tracks are loaded
-  useSyncInteractionsPaged(
-    tracksData?.allTracks,
-    "like",
-    "track",
-    !isLoadingTracks && !!genre?._id,
-  );
 
   // Palette: only recompute when color changes
   const palette = useMemo(

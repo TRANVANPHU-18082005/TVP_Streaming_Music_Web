@@ -508,9 +508,6 @@ function TabBar({
                 <span className="hidden xs:hidden sm:inline leading-none whitespace-nowrap">
                   {opt.label}
                 </span>
-                <span className="inline sm:hidden leading-none text-xs">
-                  {opt.labelShort}
-                </span>
               </span>
             </button>
           );

@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { AnimatePresence } from "framer-motion";
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useRecentlyPlayedInfinite } from "@/features/profile/hooks/useProfileQuery";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { ITrack } from "@/features/track";
@@ -19,7 +18,7 @@ const TrackListModule = import("@/features/track/components/TrackList");
 const TrackListLazy = lazy(() =>
   TrackListModule.then((m) => ({ default: m.TrackList })),
 );
- 
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE HERO — section header matching FeaturedAlbums pattern
 // Eyebrow + gradient title + divider-glow + stat badges
@@ -75,10 +74,6 @@ const PageHero = memo(() => (
 ));
 PageHero.displayName = "PageHero";
 
- 
-
-  
- 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALBUM PAGE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -104,10 +99,6 @@ const TrackHistoryPage: React.FC = () => {
   );
   const TrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
   /** Read prefers-reduced-motion once at orchestrator level, pass down */
-
-  const syncEnabled = useMemo(() => !isLoadingTracks, [isLoadingTracks]);
-
-  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", syncEnabled);
 
   /** Stable retry — prevents ErrorState from re-rendering on unrelated state */
   const handleRetry = useCallback(() => refetchTracks?.(), [refetchTracks]);

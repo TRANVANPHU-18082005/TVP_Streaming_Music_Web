@@ -83,7 +83,10 @@ export const getTracks = catchAsync(async (req: Request, res: Response) => {
 export const getTrackDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user ? (req.user as IUser) : undefined;
-    const track = await trackService.getTrackDetail(req.params.id as string, currentUser);
+    const track = await trackService.getTrackDetail(
+      req.params.id as string,
+      currentUser,
+    );
 
     res.status(httpStatus.OK).json({ success: true, data: track });
   },
@@ -94,7 +97,10 @@ export const getTrackDetail = catchAsync(
 // ─────────────────────────────────────────────────────────────────────────────
 export const changeTrackStatus = catchAsync(
   async (req: Request, res: Response) => {
-    const track = await trackService.changeTrackStatus(req.params.id as string, req.body);
+    const track = await trackService.changeTrackStatus(
+      req.params.id as string,
+      req.body,
+    );
     res.status(httpStatus.OK).json({ success: true, data: track });
   },
 );
@@ -255,3 +261,19 @@ export const getTopChart = catchAsync(async (req: Request, res: Response) => {
   const data = await getRealtimeChart();
   res.status(httpStatus.OK).json({ success: true, data });
 });
+
+export const getTopHotTracksToday = catchAsync(
+  async (req: Request, res: Response) => {
+    const filters = req.query as any;
+    const result = await trackService.getTopHotTracksToday(filters);
+    res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);
+
+export const getTopFavouriteTracks = catchAsync(
+  async (req: Request, res: Response) => {
+    const filters = req.query as any;
+    const result = await trackService.getTopFavouriteTracks(filters);
+    res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);

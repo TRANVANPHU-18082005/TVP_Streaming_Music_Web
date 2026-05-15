@@ -1,9 +1,9 @@
 import { memo, useMemo } from "react";
 import { useFavouriteTracksInfinite } from "@/features/profile/hooks/useProfileQuery";
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { APP_CONFIG } from "@/config/constants";
 import { MusicResult } from "@/components/ui/Result";
 import { ITrack, TrackList } from "@/features/track";
+import { QueueSourceType } from "@/features/player/slice/playerSlice";
 
 const FavouriteTrackList = memo(() => {
   const {
@@ -29,8 +29,6 @@ const FavouriteTrackList = memo(() => {
     [allTracks],
   );
 
-  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", !isLoading);
-
   const trackListProps = useMemo(
     () => ({
       allTrackIds,
@@ -42,6 +40,11 @@ const FavouriteTrackList = memo(() => {
       hasNextPage: hasNextPage ?? false,
       onFetchNextPage: fetchNextPage,
       onRetry: refetch,
+      source: {
+        id: "library_favourite_tracks",
+        type: "likedTracks" as QueueSourceType,
+        title: "Yêu thích",
+      },
     }),
     [
       allTrackIds,

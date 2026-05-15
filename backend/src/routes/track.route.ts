@@ -18,7 +18,7 @@ import {
   getTracksSchema,
   changeStatusSchema,
   bulkUpdateTracksSchema,
- 
+  getTopTracksSchema,
   getTrackDetailSchema,
   processTrackSchema,
   deleteTrackSchema,
@@ -33,6 +33,19 @@ const router = express.Router();
 
 // 1. Static Paths - Phải đặt trên cùng
 router.get("/charts/realtime", trackController.getTopChart);
+router.get(
+  "/top/hot-today",
+  optionalAuth,
+  validate(getTopTracksSchema),
+  trackController.getTopHotTracksToday,
+);
+
+router.get(
+  "/top/favourite",
+  optionalAuth,
+  validate(getTopTracksSchema),
+  trackController.getTopFavouriteTracks,
+);
 
 // 2. Recommendations - Đặt trước /:id
 router.get(
@@ -43,7 +56,12 @@ router.get(
 
 // 3. List Tracks
 // Lưu ý: Nếu bạn muốn User chưa login vẫn xem được list thì dùng optionalAuth
-router.get("/", optionalAuth, validate(getTracksSchema), trackController.getTracks);
+router.get(
+  "/",
+  optionalAuth,
+  validate(getTracksSchema),
+  trackController.getTracks,
+);
 
 // ==========================================
 // 🔵 DYNAMIC GET ROUTES (Tham số :id)
@@ -77,11 +95,36 @@ router.patch(
 );
 
 // Group các route retry bulk cho gọn
-router.post("/bulk/retry/transcode", authorize("admin"), validate(processTrackBulkSchema), trackController.bulkRetryTranscode);
-router.post("/bulk/retry/lyrics", authorize("admin"), validate(processTrackBulkSchema), trackController.bulkRetryLyrics);
-router.post("/bulk/retry/karaoke", authorize("admin"), validate(processTrackBulkSchema), trackController.bulkRetryKaraoke);
-router.post("/bulk/retry/mood", authorize("admin"), validate(processTrackBulkSchema), trackController.bulkRetryMood);
-router.post("/bulk/retry/full", authorize("admin"), validate(processTrackBulkSchema), trackController.bulkRetryFull);
+router.post(
+  "/bulk/retry/transcode",
+  authorize("admin"),
+  validate(processTrackBulkSchema),
+  trackController.bulkRetryTranscode,
+);
+router.post(
+  "/bulk/retry/lyrics",
+  authorize("admin"),
+  validate(processTrackBulkSchema),
+  trackController.bulkRetryLyrics,
+);
+router.post(
+  "/bulk/retry/karaoke",
+  authorize("admin"),
+  validate(processTrackBulkSchema),
+  trackController.bulkRetryKaraoke,
+);
+router.post(
+  "/bulk/retry/mood",
+  authorize("admin"),
+  validate(processTrackBulkSchema),
+  trackController.bulkRetryMood,
+);
+router.post(
+  "/bulk/retry/full",
+  authorize("admin"),
+  validate(processTrackBulkSchema),
+  trackController.bulkRetryFull,
+);
 
 // --- 2. SINGLE RESOURCE ACTIONS ---
 
@@ -104,11 +147,36 @@ router.patch(
 
 // --- 3. RETRY OPERATIONS (Single ID) ---
 
-router.post("/:id/retry/full", authorize("admin"), validate(processTrackSchema), trackController.retryFull);
-router.post("/:id/retry/transcode", authorize("admin"), validate(processTrackSchema), trackController.retryTranscode);
-router.post("/:id/retry/lyrics", authorize("admin"), validate(processTrackSchema), trackController.retryLyrics);
-router.post("/:id/retry/karaoke", authorize("admin"), validate(processTrackSchema), trackController.retryKaraoke);
-router.post("/:id/retry/mood", authorize("admin"), validate(processTrackSchema), trackController.retryMoodCanvas);
+router.post(
+  "/:id/retry/full",
+  authorize("admin"),
+  validate(processTrackSchema),
+  trackController.retryFull,
+);
+router.post(
+  "/:id/retry/transcode",
+  authorize("admin"),
+  validate(processTrackSchema),
+  trackController.retryTranscode,
+);
+router.post(
+  "/:id/retry/lyrics",
+  authorize("admin"),
+  validate(processTrackSchema),
+  trackController.retryLyrics,
+);
+router.post(
+  "/:id/retry/karaoke",
+  authorize("admin"),
+  validate(processTrackSchema),
+  trackController.retryKaraoke,
+);
+router.post(
+  "/:id/retry/mood",
+  authorize("admin"),
+  validate(processTrackSchema),
+  trackController.retryMoodCanvas,
+);
 
 // --- 4. UPDATE & DELETE (Generic ID) ---
 

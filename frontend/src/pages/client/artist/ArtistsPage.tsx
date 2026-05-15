@@ -137,9 +137,7 @@ const ArtistPage: React.FC = () => {
     );
   }
 
-
-
-  if (isError || !hasResults) {
+  if (isError && !hasResults) {
     return (
       <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
         <MusicResult variant="error" onRetry={refetch} />

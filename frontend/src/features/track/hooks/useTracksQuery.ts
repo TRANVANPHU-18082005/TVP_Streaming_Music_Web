@@ -1,4 +1,8 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  useInfiniteQuery,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import trackApi from "../api/trackApi";
 import { trackKeys } from "../utils/trackKeys";
 import type { ITrack } from "../types";
@@ -139,6 +143,78 @@ export const useFeaturedTracks = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
     queryFn: () => trackApi.getTracks(params),
     staleTime: 1000 * 60 * 15, // Playlist hệ thống ít đổi, cache 15 phút
     select: (response) => response.data.data as ITrack[],
+  });
+};
+
+/**
+ * Infinite query: Top Hot Tracks Today (paged)
+ */
+export const useTopHotTracksInfinite = (limit = APP_CONFIG.HOME_PAGE_LIMIT) => {
+  return useInfiniteQuery({
+    queryKey: trackKeys.topHotToday({ limit }),
+    queryFn: async ({ pageParam = 1 }) => {
+      // 1. Phải gọi đúng API
+      return trackApi.getTopHotTracksToday({
+        page: pageParam,
+        limit,
+      });
+    },
+    initialPageParam: 1,
+
+    // 2. Fix đường dẫn lấy Meta: response (ApiResponse) -> data (PagedResponse) -> meta
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.data.meta;
+      return page < totalPages ? page + 1 : undefined;
+    },
+
+    placeholderData: (previousData) => previousData,
+
+    // 3. Fix Select: Truy cập đúng cấu trúc ApiResponse -> PagedResponse -> data (mảng tracks)
+    // Lưu ý: Trong ApiResponse của bạn, mảng tracks nằm trong field 'data' của PagedResponse
+    select: (data) => ({
+      allTracks: data.pages.flatMap((page) => page.data.data), // Phẳng hóa mảng ITrack
+      totalItems: data.pages[0]?.data.meta.totalItems ?? 0,
+      meta: data.pages[data.pages.length - 1]?.data.meta,
+    }),
+
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
+/**
+ * Infinite query: Top Favourite Tracks (paged)
+ */
+export const useTopFavouriteTracksInfinite = (
+  limit = APP_CONFIG.HOME_PAGE_LIMIT,
+) => {
+  return useInfiniteQuery({
+    queryKey: trackKeys.topFavourite({ limit }),
+    queryFn: async ({ pageParam = 1 }) => {
+      // 1. Phải gọi đúng API
+      return trackApi.getTopFavouriteTracks({
+        page: pageParam,
+        limit,
+      });
+    },
+    initialPageParam: 1,
+
+    // 2. Fix đường dẫn lấy Meta: response (ApiResponse) -> data (PagedResponse) -> meta
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.data.meta;
+      return page < totalPages ? page + 1 : undefined;
+    },
+
+    placeholderData: (previousData) => previousData,
+
+    // 3. Fix Select: Truy cập đúng cấu trúc ApiResponse -> PagedResponse -> data (mảng tracks)
+    // Lưu ý: Trong ApiResponse của bạn, mảng tracks nằm trong field 'data' của PagedResponse
+    select: (data) => ({
+      allTracks: data.pages.flatMap((page) => page.data.data), // Phẳng hóa mảng ITrack
+      totalItems: data.pages[0]?.data.meta.totalItems ?? 0,
+      meta: data.pages[data.pages.length - 1]?.data.meta,
+    }),
+
+    staleTime: 5 * 60 * 1000,
   });
 };
 // ============================================================================

@@ -208,3 +208,13 @@ export type ProcessTrackBulkInput = z.infer<
   typeof processTrackBulkSchema
 >["body"];
 export type TrackFilterInput = z.infer<typeof getTracksSchema>["query"];
+
+// --- 10. GET TOP TRACKS (Hot Today / Favourite) ---
+export const getTopTracksSchema = z.object({
+  query: z.object({
+    page: z.coerce.number().int().min(1).max(APP_CONFIG.MAX_PAGES).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  }),
+});
+
+export type TopTrackFilterInput = z.infer<typeof getTopTracksSchema>["query"];

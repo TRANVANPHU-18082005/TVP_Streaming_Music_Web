@@ -72,7 +72,6 @@ import {
 } from "@/features/artist/hooks/useArtistsQuery";
 
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useArtistPlayback } from "@/features/player/hooks/useArtistPlayback";
 import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
@@ -496,12 +495,6 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
     [artist?._id],
   );
   useSyncInteractions(artistIds, "follow", "artist", !!artist?._id);
-  useSyncInteractionsPaged(
-    tracksData?.allTracks,
-    "like",
-    "track",
-    !isLoadingTracks && !!artist?._id,
-  );
 
   // ── Palette ───────────────────────────────────────────────────────────────
   /** buildPalette is only called when themeColor changes */

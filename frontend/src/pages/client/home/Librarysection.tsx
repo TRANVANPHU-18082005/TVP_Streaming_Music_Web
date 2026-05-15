@@ -1,4 +1,4 @@
-import { memo, useState, useMemo } from "react";
+import { memo, useState, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AudioLines, DiscAlbum, ListMusic, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -19,7 +19,8 @@ import { APP_CONFIG } from "@/config/constants";
 import { IAlbum } from "@/features/album";
 import { IPlaylist } from "@/features/playlist";
 import { ITrack, TrackList } from "@/features/track";
- 
+import { useTabSwipe } from "@/hooks/Usetabswipe";
+import { QueueSourceType } from "@/features/player/slice/playerSlice";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -70,18 +71,25 @@ const TABS: TabConfig[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ANIMATION VARIANTS
+// ANIMATION VARIANTS (direction-aware)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const tabContentVariants = {
-  initial: { opacity: 0, y: 8 },
+const makeTabVariants = (direction: number) => ({
+  initial: {
+    opacity: 0,
+    x: direction * 44,
+  },
   animate: {
     opacity: 1,
-    y: 0,
-    transition: { duration: 0.26, ease: EASE_EXPO },
+    x: 0,
+    transition: { duration: 0.28, ease: EASE_EXPO },
   },
-  exit: { opacity: 0, y: -6, transition: { duration: 0.18, ease: EASE_EXPO } },
-};
+  exit: {
+    opacity: 0,
+    x: direction * -28,
+    transition: { duration: 0.18, ease: EASE_EXPO },
+  },
+});
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20, scale: 0.96 },
@@ -145,7 +153,6 @@ const ChipTab = memo(
           isActive ? { background: waveColor } : { background: "transparent" }
         }
       >
-        {/* Active indicator background */}
         {isActive && (
           <motion.span
             layoutId="chip-active"
@@ -160,7 +167,6 @@ const ChipTab = memo(
           {tab.label}
         </span>
 
-        {/* Unread dot — visible only when inactive and has data */}
         {!isActive && hasData && (
           <span
             className="relative z-[1] size-1.5 rounded-full shrink-0"
@@ -172,6 +178,59 @@ const ChipTab = memo(
   },
 );
 ChipTab.displayName = "ChipTab";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SWIPE DOTS (mobile indicator)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SwipeDots = memo(
+  ({
+    tabs,
+    activeTab,
+    hasDataMap,
+    onDotClick,
+  }: {
+    tabs: TabConfig[];
+    activeTab: LibraryTab;
+    hasDataMap: Record<LibraryTab, boolean>;
+    onDotClick: (tab: LibraryTab) => void;
+  }) => {
+    const visibleTabs = tabs.filter((t) => hasDataMap[t.id]);
+    if (visibleTabs.length < 2) return null;
+
+    return (
+      <div
+        className="flex items-center justify-center gap-2 mt-5 sm:hidden"
+        role="presentation"
+        aria-hidden="true"
+      >
+        {visibleTabs.map((tab) => {
+          const isActive = tab.id === activeTab;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onDotClick(tab.id)}
+              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-full"
+              tabIndex={-1}
+            >
+              <motion.span
+                className="block rounded-full"
+                animate={{
+                  width: isActive ? 20 : 6,
+                  height: 6,
+                  opacity: isActive ? 1 : 0.35,
+                  background: `hsl(var(${tab.wave}))`,
+                }}
+                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              />
+            </button>
+          );
+        })}
+      </div>
+    );
+  },
+);
+SwipeDots.displayName = "SwipeDots";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION HEADER
@@ -202,10 +261,9 @@ const LibraryHeader = memo(
 
     return (
       <div className="flex flex-col gap-4 mb-7 sm:mb-8">
-        {/* Top row: title + view-all */}
+        {/* Top row */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1.5">
-            {/* Eyebrow — single, not repeated per type */}
             <div className="flex items-center gap-2">
               <div
                 className="flex items-center justify-center size-6 rounded-md transition-colors duration-300"
@@ -245,7 +303,6 @@ const LibraryHeader = memo(
             </h2>
           </div>
 
-          {/* View all — updates per active tab */}
           <Link
             to={activeConfig.viewAllHref}
             aria-label={activeConfig.viewAllLabel}
@@ -356,7 +413,6 @@ GridSkeleton.displayName = "GridSkeleton";
 
 const AlbumContent = memo(({ albums }: { albums: IAlbum[] }) => (
   <div className="relative">
-    {/* Mobile */}
     <div className="lg:hidden scroll-overflow-mask -mx-4 px-4" role="list">
       <HorizontalScroll>
         {albums.map((album, i) => (
@@ -376,7 +432,6 @@ const AlbumContent = memo(({ albums }: { albums: IAlbum[] }) => (
         ))}
       </HorizontalScroll>
     </div>
-    {/* Desktop */}
     <motion.div
       variants={containerVariants}
       initial="hidden"
@@ -401,7 +456,6 @@ AlbumContent.displayName = "AlbumContent";
 
 const PlaylistContent = memo(({ playlists }: { playlists: IPlaylist[] }) => (
   <div className="relative">
-    {/* Mobile */}
     <div className="lg:hidden scroll-overflow-mask -mx-4 px-4" role="list">
       <HorizontalScroll>
         {playlists.map((pl, i) => (
@@ -421,7 +475,6 @@ const PlaylistContent = memo(({ playlists }: { playlists: IPlaylist[] }) => (
         ))}
       </HorizontalScroll>
     </div>
-    {/* Desktop */}
     <motion.div
       variants={containerVariants}
       initial="hidden"
@@ -448,15 +501,14 @@ export function LibrarySection() {
   const { data: library, isLoading, error, refetch } = useUserLibrary();
   const albums = useMemo(() => library?.albums ?? [], [library]);
   const playlists = useMemo(() => library?.playlists ?? [], [library]);
+
   const {
     data: tracksData,
     isLoading: isLoadingTracks,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
+
     error: tracksError,
     refetch: refetchTracks,
-  } = useFavouriteTracksInfinite();
+  } = useFavouriteTracksInfinite(APP_CONFIG.PAGINATION_LIMIT);
 
   const allTracks = useMemo<ITrack[]>(
     () => tracksData?.allTracks ?? [],
@@ -475,10 +527,15 @@ export function LibrarySection() {
       totalItems,
       isLoading: isLoadingTracks,
       error: tracksError as Error | null,
-      isFetchingNextPage,
-      hasNextPage: hasNextPage ?? false,
-      onFetchNextPage: fetchNextPage,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      onFetchNextPage: () => {},
       onRetry: refetchTracks,
+      source: {
+        id: "library_favourite_tracks",
+        type: "likedTracks" as QueueSourceType,
+        title: "Yêu thích",
+      },
     }),
     [
       TrackIds,
@@ -486,13 +543,12 @@ export function LibrarySection() {
       totalItems,
       isLoadingTracks,
       tracksError,
-      isFetchingNextPage,
-      hasNextPage,
-      fetchNextPage,
       refetchTracks,
     ],
   );
-  // Determine initial tab: first one that has data
+
+  // ── Tab state ────────────────────────────────────────────────────────────
+
   const initialTab = useMemo<LibraryTab>(() => {
     if (totalItems) return "tracks";
     if (albums.length) return "albums";
@@ -502,7 +558,10 @@ export function LibrarySection() {
 
   const [activeTab, setActiveTab] = useState<LibraryTab>(initialTab);
 
-  // Auto-switch away from an empty tab when data arrives
+  // Direction: 1 = forward (left swipe → next tab), -1 = backward (right swipe → prev tab)
+  const [swipeDirection, setSwipeDirection] = useState<1 | -1>(1);
+
+  // Auto-switch away from empty tabs when data loads
   const resolvedTab = useMemo<LibraryTab>(() => {
     if (
       activeTab === "tracks" &&
@@ -524,10 +583,68 @@ export function LibrarySection() {
       return totalItems ? "tracks" : "albums";
     return activeTab;
   }, [activeTab, totalItems, albums.length, playlists.length]);
+
   const isOffline = !useOnlineStatus();
   const activeTabConfig = TABS.find((t) => t.id === resolvedTab)!;
 
-  // ── Nothing to show ───────────────────────────────────────────────────────
+  // ── Visible tabs list (tabs that have data) ──────────────────────────────
+  const hasDataMap = useMemo<Record<LibraryTab, boolean>>(
+    () => ({
+      tracks: totalItems > 0,
+      albums: albums.length > 0,
+      playlists: playlists.length > 0,
+    }),
+    [totalItems, albums.length, playlists.length],
+  );
+
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => hasDataMap[t.id]),
+    [hasDataMap],
+  );
+
+  // ── Edge detection for rubber-band ──────────────────────────────────────
+  const currentIndex = visibleTabs.findIndex((t) => t.id === resolvedTab);
+  const atStart = currentIndex <= 0;
+  const atEnd = currentIndex >= visibleTabs.length - 1;
+
+  // ── Navigate with direction tracking ────────────────────────────────────
+
+  const navigateToTab = useCallback(
+    (tab: LibraryTab, direction?: 1 | -1) => {
+      if (tab === resolvedTab) return;
+
+      const currentIdx = visibleTabs.findIndex((t) => t.id === resolvedTab);
+      const nextIdx = visibleTabs.findIndex((t) => t.id === tab);
+
+      const dir = direction ?? (nextIdx > currentIdx ? 1 : -1);
+      setSwipeDirection(dir);
+      setActiveTab(tab);
+    },
+    [resolvedTab, visibleTabs],
+  );
+
+  // ── Swipe handler ────────────────────────────────────────────────────────
+
+  const handleSwipe = useCallback(
+    (direction: 1 | -1) => {
+      const idx = visibleTabs.findIndex((t) => t.id === resolvedTab);
+      const nextIdx = idx + direction;
+      if (nextIdx < 0 || nextIdx >= visibleTabs.length) return;
+      const nextTab = visibleTabs[nextIdx].id;
+      setSwipeDirection(direction);
+      setActiveTab(nextTab);
+    },
+    [resolvedTab, visibleTabs],
+  );
+
+  const { containerRef, dragX, onTouchStart, onTouchEnd } = useTabSwipe({
+    onSwipe: handleSwipe,
+    enabled: !isOffline,
+    atStart,
+    atEnd,
+  });
+
+  // ── Nothing to show ──────────────────────────────────────────────────────
   if (
     !isLoading &&
     !isLoadingTracks &&
@@ -535,17 +652,16 @@ export function LibrarySection() {
     !totalItems &&
     !albums.length &&
     !playlists.length
-
-     
   ) {
     return null;
   }
 
-  // ── Render tab content ────────────────────────────────────────────────────
+  // ── Tab content ──────────────────────────────────────────────────────────
   const renderContent = () => {
     if (isLoading || isLoadingTracks) {
       return resolvedTab === "tracks" ? <TrackSkeleton /> : <GridSkeleton />;
     }
+
     if (isOffline) {
       return (
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
@@ -553,22 +669,20 @@ export function LibrarySection() {
         </div>
       );
     }
-    // ✅ ĐOẠN CODE ĐÚNG:
+
     if (resolvedTab === "tracks") {
       if (tracksError && allTracks.length <= 0)
         return (
-          <>
-            <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-              <MusicResult variant="error" onRetry={refetch} />
-            </div>
-          </>
+          <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+            <MusicResult variant="error" onRetry={refetchTracks} />
+          </div>
         );
       return (
         <TrackList
           {...trackListProps}
           maxHeight={400}
           moodColor={`var(${activeTabConfig.wave})`}
-          skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
+          skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
           staggerAnimation={true}
         />
       );
@@ -577,11 +691,9 @@ export function LibrarySection() {
     if (resolvedTab === "albums") {
       if (error && albums.length <= 0)
         return (
-          <>
-            <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-              <MusicResult variant="error" onRetry={refetch} />
-            </div>
-          </>
+          <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+            <MusicResult variant="error" onRetry={refetch} />
+          </div>
         );
       return albums.length === 0 ? (
         <MusicResult
@@ -592,14 +704,13 @@ export function LibrarySection() {
         <AlbumContent albums={albums} />
       );
     }
+
     if (resolvedTab === "playlists") {
       if (error && playlists.length <= 0)
         return (
-          <>
-            <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-              <MusicResult variant="error" onRetry={refetch} />
-            </div>
-          </>
+          <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
+            <MusicResult variant="error" onRetry={refetch} />
+          </div>
         );
       return playlists.length === 0 ? (
         <MusicResult
@@ -611,6 +722,8 @@ export function LibrarySection() {
       );
     }
   };
+
+  const tabVariants = makeTabVariants(swipeDirection);
 
   return (
     <>
@@ -633,7 +746,6 @@ export function LibrarySection() {
         className="section-block section-block--alt relative overflow-hidden transition-colors duration-300"
         aria-labelledby="library-section-heading"
       >
-        {/* Ambient — key forces remount on tab change so orb color updates */}
         <SectionAmbient
           key={resolvedTab}
           style={
@@ -652,24 +764,44 @@ export function LibrarySection() {
             hasTracks={totalItems > 0}
             hasAlbums={albums.length > 0}
             hasPlaylists={playlists.length > 0}
-            onTabChange={setActiveTab}
+            onTabChange={(tab) => navigateToTab(tab)}
           />
 
-          {/* Tab panels */}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={resolvedTab}
-              role="tabpanel"
-              id={`library-panel-${resolvedTab}`}
-              aria-labelledby={`library-tab-${resolvedTab}`}
-              variants={tabContentVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-            >
-              {renderContent()}
-            </motion.div>
-          </AnimatePresence>
+          {/*
+           * Swipe container — ref passed to the hook so we can attach a
+           * non-passive touchmove listener that can call preventDefault().
+           * React's synthetic onTouchStart / onTouchEnd handle the rest.
+           */}
+          <div
+            ref={containerRef}
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={resolvedTab}
+                role="tabpanel"
+                id={`library-panel-${resolvedTab}`}
+                aria-labelledby={`library-tab-${resolvedTab}`}
+                // dragX drives live finger-follow; tab variants handle enter/exit
+                style={{ x: dragX }}
+                variants={tabVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+              >
+                {renderContent()}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Mobile swipe dots indicator */}
+          <SwipeDots
+            tabs={TABS}
+            activeTab={resolvedTab}
+            hasDataMap={hasDataMap}
+            onDotClick={(tab) => navigateToTab(tab)}
+          />
         </div>
       </section>
     </>

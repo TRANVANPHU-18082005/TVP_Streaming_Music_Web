@@ -1,5 +1,5 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import React, { memo, useState, useCallback } from "react";
+import { AnimatePresence, motion, prefersReducedMotion } from "framer-motion";
 import {
   Play,
   Pause,
@@ -9,12 +9,11 @@ import {
   Minus,
   Sparkles,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 
 import { cn } from "@/lib/utils";
 
-import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
 import { fmtCount, formatDuration } from "@/utils/track-helper";
 import { useAppDispatch } from "@/store/hooks";
@@ -23,36 +22,8 @@ import { handleError } from "@/utils/handleError";
 import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { TrackTitleMarquee } from "@/features/player/components/TrackTitleMarquee";
-import { WaveformBars } from "@/components/MusicVisualizer";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// useOverflows — measures whether text overflows its container
-// Returns true only when the element's scrollWidth > clientWidth.
-// Re-checks on window resize via ResizeObserver.
-// Prevents MarqueeText from animating short titles unnecessarily.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const useOverflows = (
-  text: string,
-): [React.RefObject<HTMLParagraphElement>, boolean] => {
-  const ref = useRef<HTMLParagraphElement>(null);
-  const [overflows, setOverflows] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const check = () => setOverflows(el.scrollWidth > el.clientWidth);
-    check();
-
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-    // Re-run when the text itself changes (e.g. track swap)
-  }, [text]);
-
-  return [ref, overflows];
-};
+import { EqualizerBars } from "@/components/MusicVisualizer";
+import LazyImage from "./LazyImage";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RANK CONFIG
@@ -312,16 +283,16 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
   const { currentTrackId, isPlaying } = useSelector(selectPlayer);
 
   const [isLoadingPlay, setIsLoadingPlay] = useState(false);
-  console.log(track);
   const isCurrentTrack = currentTrackId === track._id;
   const isActivePlaying = isCurrentTrack && isPlaying;
-  const isActive = isCurrentTrack;
+
   const cfg = getRankCfg(rank);
   const isTop3 = rank <= 3;
   const rowBg = isActivePlaying ? cfg.rowActive : cfg.rowIdle;
+  const { loadingState } = useSelector(selectPlayer);
 
-  // MarqueeText overflow gate — only scroll when title genuinely overflows
-  const [titleRef] = useOverflows(track.title);
+  const isGlobalLoading =
+    loadingState === "loading" || loadingState === "buffering";
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handlePlayPause = useCallback(
@@ -357,14 +328,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         setIsLoadingPlay(false);
       }
     },
-    [
-      isCurrentTrack,
-      isPlaying,
-      isLoadingPlay,
-      track._id,
-      track.title,
-      dispatch,
-    ],
+    [isLoadingPlay, isCurrentTrack, dispatch, isPlaying, track],
   );
 
   const handleGoToAlbum = useCallback(
@@ -393,10 +357,9 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
       tabIndex={0}
       aria-label={`${isActivePlaying ? "Tạm dừng" : "Phát"}: ${track.title} – ${track.artist?.name ?? "Ẩn danh"}`}
       aria-pressed={isActivePlaying}
-      onClick={handlePlayPause}
       onKeyDown={handleKeyDown}
       className={cn(
-        "group relative flex items-center rounded-xl cursor-pointer select-none",
+        "group relative flex items-center rounded-xl cursor-pointer select-none gap-1.5 md:gap-3",
         "overflow-hidden transition-colors duration-150 outline-none",
         "focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring)/0.5)] focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         rowBg,
@@ -408,7 +371,7 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         <div
           aria-hidden="true"
           className={cn(
-            "absolute inset-0 pointer-events-none bg-gradient-to-r rounded-xl",
+            "absolute inset-0 pointer-events-none bg-linear-to-r rounded-xl",
             cfg.shimmer,
           )}
         />
@@ -420,13 +383,13 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
           className={cn(
             "flex items-center justify-center w-[22px] h-[26px]",
             "leading-none tabular-nums transition-all duration-200",
-            !isCurrentTrack && cfg.numSize,
-            !isCurrentTrack && cfg.numColor,
-            !isCurrentTrack && cfg.numGlow,
+            !isActivePlaying && cfg.numSize,
+            !isActivePlaying && cfg.numColor,
+            !isActivePlaying && cfg.numGlow,
           )}
         >
-          {isCurrentTrack ? (
-            <WaveformBars active={isActivePlaying} color="primary" />
+          {isActivePlaying ? (
+            <EqualizerBars active color="primary" bars={3} />
           ) : (
             rank
           )}
@@ -435,49 +398,17 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         <RankBadge trend={track.trend} rankDelta={track.rankDelta} />
       </div>
 
-      {/* ── COVER ── */}
-      <div
-        style={{
-          transition: "box-shadow 0.2s ease",
-          boxShadow: isActive
-            ? "0 0 0 1.5px hsl(var(--primary)/0.8), 0 0 16px hsl(var(--primary)/0.2)"
-            : "none",
-        }}
-        className={cn(
-          "relative shrink-0 rounded-lg overflow-hidden mr-3",
-          "ring-1 ring-black/[0.06] dark:ring-white/[0.06]",
-          "shadow-sm group-hover:shadow-md",
-          "transition-[transform,box-shadow] duration-300 ease-out",
-          isTop3
-            ? "size-[52px] sm:size-[56px] group-hover:scale-[1.035]"
-            : "size-[44px] sm:size-[48px]",
-          isActivePlaying &&
-            "ring-primary/40 [box-shadow:0_0_12px_hsl(var(--primary)/0.28)]",
-        )}
-      >
-        <ImageWithFallback
-          src={track.coverImage}
-          alt={track.title}
-          className="size-full object-cover"
-        />
-        <CoverOverlay
-          isLoading={isLoadingPlay}
-          isActivePlaying={isActivePlaying}
-        />
-      </div>
+      <LazyImage
+        src={track.coverImage}
+        alt={track.title}
+        isActive={isCurrentTrack}
+        isLoading={isGlobalLoading}
+        isCurrentPlaying={isActivePlaying}
+        onClick={handlePlayPause}
+      />
 
-      {/* ── TITLE + ARTIST ── */}
-      <div className="relative z-10 flex-1 min-w-0 py-2.5 pr-2">
-        <p
-          ref={titleRef}
-          className="absolute invisible whitespace-nowrap pointer-events-none"
-          aria-hidden="true"
-        >
-          {track.title}
-        </p>
-
-        {/* HIỂN THỊ THỰC TẾ */}
-        {isActive ? (
+      <div className="min-w-0 flex-1 overflow-hidden">
+        {isCurrentTrack ? (
           <TrackTitleMarquee
             id={track._id}
             title={track.title}
@@ -487,27 +418,35 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
             artistClassName="text-xs"
           />
         ) : (
-          <p
-            title={track.title}
-            className={cn(
-              "truncate text-sm font-medium leading-snug mb-0.5 transition-colors duration-150",
-              "text-foreground",
-            )}
-          >
-            {track.title}
-          </p>
-        )}
+          <>
+            <Link
+              to={`/tracks/${track._id}`}
+              title={track.title}
+              className={cn(
+                "block max-w-full truncate",
+                "text-sm font-medium leading-snug mb-0.5",
+                "text-foreground/90",
+                "group-hover:text-foreground",
+                prefersReducedMotion ? "" : "transition-colors duration-100",
+              )}
+            >
+              {track.title}
+            </Link>
 
-        {/* Artist name — FIX B4: was missing entirely */}
-        <div className="min-w-0 truncate text-xs">
-          {!isActive && (
-            <ArtistDisplay
-              mainArtist={track.artist}
-              featuringArtists={track.featuringArtists}
-              className="hover:text-[hsl(var(--foreground))] hover:underline underline-offset-2 transition-colors duration-150 text-track-meta"
-            />
-          )}
-        </div>
+            <div className="min-w-0 overflow-hidden">
+              <ArtistDisplay
+                mainArtist={track.artist}
+                featuringArtists={track.featuringArtists}
+                className={cn(
+                  "block truncate",
+                  "text-xs text-muted-foreground/55",
+                  "hover:text-foreground/70 hover:underline underline-offset-2",
+                  prefersReducedMotion ? "" : "transition-colors duration-100",
+                )}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── ALBUM (lg+ column) ── */}
@@ -530,12 +469,22 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
       ) : (
         <div
           aria-hidden="true"
-          className="hidden lg:block w-[172px] xl:w-[208px] shrink-0"
+          className="hidden lg:block w-[150] xl:w-50 shrink-0"
         />
       )}
 
+      {/* Actions — slides in on hover */}
+      <div
+        className={cn(
+          "flex items-center gap-3 pl-2",
+          "transition-[opacity,transform] duration-200 ease-out",
+          "group-hover:opacity-0 group-hover:translate-x-1 group-hover:pointer-events-none min-w-5 md:min-w-10",
+        )}
+      >
+        <TrackLikeButton id={track._id} />
+      </div>
       {/* ── META + ACTIONS ── */}
-      <div className="relative z-10 flex items-center pr-3 shrink-0 gap-1 overflow-hidden min-w-[80px] sm:min-w-[112px]">
+      <div className="relative z-10 flex items-center pr-2 shrink-0 gap-1 overflow-hidden min-w-12.5 md:min-w-30">
         {/* Meta — fades on hover */}
         <div
           aria-hidden="true"
@@ -553,19 +502,6 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
           <span className="text-[12px] font-mono tabular-nums w-9 text-right text-muted-foreground/38 leading-none">
             {formatDuration(track.duration)}
           </span>
-        </div>
-
-        {/* Actions — slides in on hover */}
-        <div
-          className={cn(
-            "absolute right-10 flex items-center gap-1",
-            "opacity-0 translate-x-2",
-            "group-hover:opacity-100 group-hover:translate-x-0",
-            "transition-[opacity,transform] duration-200 ease-out",
-            "pointer-events-none group-hover:pointer-events-auto",
-          )}
-        >
-          <TrackLikeButton id={track._id} />
         </div>
       </div>
     </div>

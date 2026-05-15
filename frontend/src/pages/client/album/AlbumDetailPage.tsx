@@ -20,7 +20,6 @@ import {
   useAlbumTracksInfinite,
 } from "@/features/album/hooks/useAlbumsQuery";
 
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { useAlbumPlayback } from "@/features/player/hooks/useAlbumPlayback";
 import { formatDuration } from "@/utils/track-helper";
 import { buildPalette } from "@/utils/color";
@@ -259,9 +258,6 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
 
   const albumIds = useMemo(() => (album?._id ? [album._id] : []), [album?._id]);
   useSyncInteractions(albumIds, "like", "album", !!album?._id);
-
-  const syncEnabled = !isLoadingTracks && !!album?._id;
-  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", syncEnabled);
 
   const palette = useMemo(
     () => buildPalette(album?.themeColor ?? "#5b21b6"),

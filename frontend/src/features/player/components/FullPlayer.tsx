@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type Dispatch,
   type SetStateAction,
+  useMemo,
 } from "react";
 import {
   motion,
@@ -60,6 +61,7 @@ import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { useSleepTimer } from "@/features/player/sleepTimer/SleepTimerProvider";
 import { formatMs } from "@/utils/track-helper";
 import FullPlayerSkeleton from "./FullPlayerSkeleton";
+import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 
 // Lazy-loaded views to keep initial bundle small and improve responsiveness
 const MoodFocusViewLazy = lazy(() =>
@@ -1305,7 +1307,8 @@ const FullPlayerComponent = ({
   const [mountedViews, setMountedViews] = useState<Set<PlayerView>>(
     () => new Set<PlayerView>(["artwork"]),
   );
-  console.log(track);
+  const trackIds = useMemo(() => (track?._id ? [track._id] : []), [track?._id]);
+  useSyncInteractions(trackIds, "like", "track", !!track?._id);
   const phase = usePhase();
   useViewportHeight();
   // LOCAL currentTime: poll via getCurrentTime() so parent time ticks

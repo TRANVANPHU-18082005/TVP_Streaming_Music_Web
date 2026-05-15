@@ -37,7 +37,6 @@ import {
 } from "@/features/playlist/hooks/usePlaylistsQuery";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 import PlaylistDetailSkeleton from "@/features/playlist/components/PlaylistDetailSkeleton";
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { usePlaylistPlayback } from "@/features/player/hooks/usePlaylistPlayback";
 import { formatDuration } from "@/utils/track-helper";
 import { buildPalette } from "@/utils/color";
@@ -319,12 +318,6 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
     [playlist?._id],
   );
   useSyncInteractions(playlistIds, "like", "playlist", !!playlist?._id);
-  useSyncInteractionsPaged(
-    allTracks,
-    "like",
-    "track",
-    !isLoadingTracks && !!playlist?._id,
-  );
 
   const { className: titleCls, style: titleStyle } = useTitleStyle(
     playlist?.title ?? "",

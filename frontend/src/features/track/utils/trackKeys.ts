@@ -21,4 +21,8 @@ export const trackKeys = {
 
   similar: (slug: string, params: { limit: number }) =>
     [...trackKeys.all, "similar", slug, params] as const,
+  topHotToday: (params: { page?: number; limit?: number }) =>
+    [...trackKeys.all, "topHotToday", params] as const,
+  topFavourite: (params: { page?: number; limit?: number }) =>
+    [...trackKeys.all, "topFavourite", params] as const,
 };

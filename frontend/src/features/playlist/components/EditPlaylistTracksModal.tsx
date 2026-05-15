@@ -337,7 +337,7 @@ const AddTrackRow = memo(
         </div>
 
         {/* Info — flex-1 + min-w-0 is the only constraint needed */}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-hidden max-w-55 md:max-w-none">
           <TrackInfo track={track} isActive={isActive} />
         </div>
 
@@ -434,7 +434,7 @@ const ManageTrackRow = memo(
         </div>
 
         {/* Info */}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-hidden max-w-50 md:max-w-none">
           <TrackInfo track={track} isActive={isActive} />
         </div>
 

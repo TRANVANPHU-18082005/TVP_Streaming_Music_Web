@@ -1,7 +1,6 @@
 import { memo, useMemo } from "react";
 import { History } from "lucide-react";
 import { useRecentlyPlayedInfinite } from "@/features/profile/hooks/useProfileQuery";
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { APP_CONFIG } from "@/config/constants";
 import { ITrack, TrackList } from "@/features/track";
 import { QueueSourceType } from "@/features/player/slice/playerSlice";
@@ -10,12 +9,9 @@ const RecentlyPlayedTrackList = memo(() => {
   const {
     data: tracksData,
     isLoading,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
     error,
     refetch,
-  } = useRecentlyPlayedInfinite();
+  } = useRecentlyPlayedInfinite(APP_CONFIG.PAGINATION_LIMIT);
 
   const allTracks = useMemo(
     () => tracksData?.allTracks ?? [],
@@ -30,8 +26,6 @@ const RecentlyPlayedTrackList = memo(() => {
     [allTracks],
   );
 
-  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", !isLoading);
-
   const trackListProps = useMemo(
     () => ({
       allTrackIds,
@@ -39,9 +33,9 @@ const RecentlyPlayedTrackList = memo(() => {
       totalItems,
       isLoading,
       error: error as Error | null,
-      isFetchingNextPage,
-      hasNextPage: hasNextPage ?? false,
-      onFetchNextPage: fetchNextPage,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      onFetchNextPage: () => {},
       onRetry: refetch,
       source: {
         id: "recently-played",
@@ -50,17 +44,7 @@ const RecentlyPlayedTrackList = memo(() => {
         url: `/tracks/history`,
       },
     }),
-    [
-      allTrackIds,
-      allTracks,
-      totalItems,
-      isLoading,
-      error,
-      isFetchingNextPage,
-      hasNextPage,
-      fetchNextPage,
-      refetch,
-    ],
+    [allTrackIds, allTracks, totalItems, isLoading, error, refetch],
   );
 
   if (!isLoading && totalItems === 0) {

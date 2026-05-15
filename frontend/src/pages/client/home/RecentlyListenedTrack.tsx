@@ -6,7 +6,6 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { useRecentlyPlayedInfinite } from "@/features/profile/hooks/useProfileQuery";
-import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 import { CLIENT_PATHS } from "@/config/paths";
 import MusicResult from "../../../components/ui/Result";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
@@ -150,13 +149,10 @@ export const RecentlyListenedTrack = () => {
   const {
     data: tracksData,
     isLoading: isLoadingTracks,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
     error: tracksError,
     isError,
     refetch: refetchTracks,
-  } = useRecentlyPlayedInfinite();
+  } = useRecentlyPlayedInfinite(APP_CONFIG.PAGINATION_LIMIT);
   const allTracks = useMemo<ITrack[]>(
     () => tracksData?.allTracks ?? [],
     [tracksData?.allTracks],
@@ -168,10 +164,6 @@ export const RecentlyListenedTrack = () => {
   const TrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
   /** Read prefers-reduced-motion once at orchestrator level, pass down */
 
-  const syncEnabled = useMemo(() => !isLoadingTracks, [isLoadingTracks]);
-
-  useSyncInteractionsPaged(tracksData?.allTracks, "like", "track", syncEnabled);
-
   /** Stable retry — prevents ErrorState from re-rendering on unrelated state */
   const handleRetry = useCallback(() => refetchTracks?.(), [refetchTracks]);
   const trackListProps = useMemo(
@@ -181,9 +173,9 @@ export const RecentlyListenedTrack = () => {
       totalItems,
       isLoading: isLoadingTracks,
       error: tracksError as Error | null,
-      isFetchingNextPage,
-      hasNextPage: hasNextPage ?? false,
-      onFetchNextPage: fetchNextPage,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      onFetchNextPage: () => {},
       onRetry: refetchTracks,
       source: {
         id: "recently-played",
@@ -198,16 +190,13 @@ export const RecentlyListenedTrack = () => {
       totalItems,
       isLoadingTracks,
       tracksError,
-      isFetchingNextPage,
-      hasNextPage,
-      fetchNextPage,
       refetchTracks,
     ],
   );
   // ── Loading ────────────────────────────────────────────────────────────────
   const isOffline = !useOnlineStatus();
   const hasResults = allTracks.length > 0;
- 
+
   if (isLoadingTracks && !hasResults) {
     return (
       <section
@@ -275,38 +264,7 @@ export const RecentlyListenedTrack = () => {
 
   // ── Populated / Empty ──────────────────────────────────────────────────────
   if (!isLoadingTracks && (!allTracks || totalItems === 0)) return null;
-  // return (
-  //   <section
-  //     className="section-block section-block--alt"
-  //     aria-labelledby="top-featured-tracks-heading"
-  //   >
-  //     <div className="section-container">
-  //       <div
-  //         className="hidden lg:block h-px mb-8"
-  //         style={{
-  //           background: `linear-gradient(
-  //             to right,
-  //             transparent,
-  //             hsl(var(--wave-2) / 0.3) 30%,
-  //             hsl(var(--wave-2) / 0.3) 70%,
-  //             transparent
-  //           )`,
-  //           boxShadow: "0 0 8px hsl(var(--wave-2) / 0.1)",
-  //         }}
-  //       />
-  //       <ChartHeader viewAllHref="/charts" />
-  //       <AnimatePresence mode="wait">
-  //         <motion.div key="error" {...slideUpVariants}>
-  //           <MusicResult
-  //             variant="empty-tracks"
-  //             description="Lịch sử nghe nhạc hiện đang trống"
-  //           />
-  //         </motion.div>
-  //       </AnimatePresence>
-  //     </div>
-  //   </section>
-  // );
-  // Offline
+
   if (isOffline) {
     return (
       <section
@@ -365,15 +323,22 @@ export const RecentlyListenedTrack = () => {
           <ChartHeader viewAllHref={CLIENT_PATHS.TRACK_HISTORY} />
 
           {/* Track list + live-update overlay */}
+          {/* Track list + live-update overlay */}
           <div className="relative">
             <AnimatePresence mode="popLayout" initial={false}>
-              <TrackList
-                {...trackListProps}
-                maxHeight={400} // page tự scroll, không giới hạn height
-                moodColor={`var(--wave-2)`}
-                skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
-                staggerAnimation={true}
-              />
+              {/* Bọc motion.div vào đây để nhận ref */}
+              <motion.div
+                key="recently-played-container" // Cần có key để AnimatePresence nhận diện
+                layout // Giúp các bài hát bên dưới tự động nhảy lên mượt mà
+              >
+                <TrackList
+                  {...trackListProps}
+                  maxHeight={400}
+                  moodColor={`var(--wave-2)`}
+                  skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
+                  staggerAnimation={true}
+                />
+              </motion.div>
             </AnimatePresence>
           </div>
         </div>

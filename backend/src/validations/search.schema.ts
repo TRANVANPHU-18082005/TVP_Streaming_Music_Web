@@ -8,7 +8,6 @@ export const searchSchema = z.object({
       .trim()
       .min(1, "Từ khóa tìm kiếm không được để trống")
       .max(100, "Từ khóa quá dài")
-      .regex(/^[\p{L}\p{N}\s\-&]+$/u, "Từ khóa không hợp lệ")
       .refine((val) => /[\p{L}\p{N}]/u.test(val), {
         message: "Từ khóa phải chứa chữ hoặc số",
       }),
@@ -23,7 +22,6 @@ export const suggestSchema = z.object({
       .trim()
       .min(1, "Từ khóa tìm kiếm không được để trống")
       .max(100, "Từ khóa quá dài")
-      .regex(/^[\p{L}\p{N}\s\-&]+$/u, "Từ khóa không hợp lệ")
       .refine((val) => /[\p{L}\p{N}]/u.test(val), {
         message: "Từ khóa phải chứa chữ hoặc số",
       }),
