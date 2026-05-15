@@ -12,6 +12,7 @@ import {
   prevTrack,
   appendQueueIds,
   hasPlayableUrl,
+  setCurrentSource,
 } from "@/features/player/slice/playerSlice";
 import trackApi from "@/features/track/api/trackApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -477,6 +478,14 @@ export const useAudioPlayer = () => {
           if (ids.length > 0) {
             // Append recommended IDs and immediately advance to the next track
             dispatch(appendQueueIds(ids));
+            dispatch(
+              setCurrentSource({
+                type: "suggestions",
+                id: currentTrack._id,
+                title: "Autoplay Suggestions",
+                url: `/tracks/${currentTrack._id}`,
+              }),
+            );
             dispatch(nextTrack());
             return;
           }

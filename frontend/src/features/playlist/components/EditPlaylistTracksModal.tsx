@@ -24,7 +24,7 @@ import {
   Undo2,
   AlertCircle,
 } from "lucide-react";
-
+import Pagination from "@/utils/pagination";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -99,13 +99,14 @@ const UndoToast = memo(({ message, onUndo, onDismiss }: UndoToastProps) => {
   }, [onDismiss]);
 
   return (
-    <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 animate-in slide-in-from-bottom-3 fade-in duration-200 pointer-events-auto">
-      <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-foreground text-background shadow-2xl text-sm font-medium whitespace-nowrap">
-        <span className="truncate max-w-[160px] sm:max-w-xs">{message}</span>
+    // fixed position inside modal — bottom-4 + safe area on iOS
+    <div className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-30 animate-in slide-in-from-bottom-3 fade-in duration-200 pointer-events-auto w-[calc(100%-2rem)] max-w-sm">
+      <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-foreground text-background shadow-2xl text-sm font-medium">
+        <span className="flex-1 truncate text-[13px]">{message}</span>
         <button
           type="button"
           onClick={onUndo}
-          className="flex items-center gap-1.5 text-primary font-bold hover:opacity-80 transition-opacity shrink-0"
+          className="flex items-center gap-1.5 text-primary font-bold hover:opacity-80 transition-opacity shrink-0 text-[13px]"
         >
           <Undo2 className="size-3.5" />
           Hoàn tác
@@ -114,7 +115,7 @@ const UndoToast = memo(({ message, onUndo, onDismiss }: UndoToastProps) => {
           type="button"
           onClick={onDismiss}
           aria-label="Đóng thông báo"
-          className="text-background/50 hover:text-background transition-colors shrink-0"
+          className="text-background/40 hover:text-background transition-colors shrink-0 ml-0.5"
         >
           <X className="size-3.5" />
         </button>
@@ -144,16 +145,16 @@ const ConfirmDialog = memo(
     onConfirm,
     onCancel,
   }: ConfirmDialogProps) => (
-    <div className="absolute inset-0 z-40 flex items-center justify-center p-6 bg-background/80 backdrop-blur-sm rounded-[inherit] animate-in fade-in duration-150">
-      <div className="w-full max-w-sm bg-card border border-border/60 rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+    <div className="absolute inset-0 z-40 flex items-center justify-center p-5 bg-background/80 backdrop-blur-sm rounded-[inherit] animate-in fade-in duration-150">
+      <div className="w-full max-w-xs bg-card border border-border/60 rounded-2xl shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200">
         <div className="flex gap-3">
-          <div className="size-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
-            <AlertCircle className="size-5 text-destructive" />
+          <div className="size-9 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
+            <AlertCircle className="size-4.5 text-destructive" />
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-sm text-foreground">{message}</p>
+            <p className="font-bold text-[14px] text-foreground">{message}</p>
             {description && (
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
                 {description}
               </p>
             )}
@@ -165,7 +166,7 @@ const ConfirmDialog = memo(
             variant="ghost"
             size="sm"
             onClick={onCancel}
-            className="h-10 px-4 rounded-xl"
+            className="h-9 px-4 rounded-xl text-sm"
           >
             Huỷ
           </Button>
@@ -174,7 +175,7 @@ const ConfirmDialog = memo(
             size="sm"
             variant={isDestructive ? "destructive" : "default"}
             onClick={onConfirm}
-            className="h-10 px-4 rounded-xl font-bold"
+            className="h-9 px-4 rounded-xl text-sm font-bold"
           >
             {confirmLabel}
           </Button>
@@ -187,19 +188,20 @@ ConfirmDialog.displayName = "ConfirmDialog";
 
 // ─── Skeleton ──────────────────────────────────────────────────────────────
 
-const TrackListSkeleton = ({ count = 5 }: { count?: number }) => (
-  <div className="space-y-2.5">
+const TrackListSkeleton = ({ count = 6 }: { count?: number }) => (
+  <div className="space-y-2">
     {Array.from({ length: count }).map((_, i) => (
       <div
         key={i}
-        style={{ animationDelay: `${i * 60}ms` }}
-        className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border/30 animate-pulse"
+        style={{ animationDelay: `${i * 50}ms` }}
+        className="flex items-center gap-3 p-2.5 rounded-2xl bg-card border border-border/30 animate-pulse"
       >
         <div className="size-10 rounded-xl bg-muted/50 shrink-0" />
-        <div className="flex-1 space-y-2">
-          <div className="h-3 w-2/3 bg-muted/50 rounded-full" />
-          <div className="h-2.5 w-1/3 bg-muted/30 rounded-full" />
+        <div className="flex-1 space-y-1.5 min-w-0">
+          <div className="h-3 w-3/5 bg-muted/50 rounded-full" />
+          <div className="h-2.5 w-2/5 bg-muted/30 rounded-full" />
         </div>
+        <div className="size-7 rounded-full bg-muted/30 shrink-0" />
       </div>
     ))}
   </div>
@@ -208,8 +210,8 @@ const TrackListSkeleton = ({ count = 5 }: { count?: number }) => (
 // ─── Drag Preview Card ─────────────────────────────────────────────────────
 
 const DragPreviewCard = ({ track }: { track: ITrack }) => (
-  <div className="flex items-center gap-3 px-3 py-2.5 rounded-2xl border border-primary/50 bg-background shadow-2xl ring-1 ring-primary/20 cursor-grabbing opacity-95">
-    <div className="size-8 flex items-center justify-center text-primary shrink-0">
+  <div className="flex items-center gap-3 px-3 py-2.5 rounded-2xl border border-primary/50 bg-background/95 shadow-2xl ring-1 ring-primary/20 cursor-grabbing">
+    <div className="size-8 flex items-center justify-center text-primary/60 shrink-0">
       <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
         {[5, 12, 19].flatMap((cy) =>
           [9, 15].map((cx) => (
@@ -234,6 +236,51 @@ const DragPreviewCard = ({ track }: { track: ITrack }) => (
     </div>
   </div>
 );
+
+// ─── Shared Track Info Cell ────────────────────────────────────────────────
+// Reusable block to avoid duplicating Link + ArtistDisplay logic
+
+const TrackInfo = memo(
+  ({ track, isActive }: { track: ITrack; isActive: boolean }) => {
+    if (isActive) {
+      return (
+        <TrackTitleMarquee
+          id={track._id}
+          title={track.title}
+          mainArtist={track.artist}
+          featuringArtists={track.featuringArtists}
+          className="text-[13px]"
+          artistClassName="text-xs"
+        />
+      );
+    }
+    return (
+      <>
+        <Link
+          to={`/tracks/${track._id}`}
+          title={track.title}
+          className={cn(
+            "block truncate text-[13px] font-semibold leading-snug mb-0.5",
+            "text-foreground/90 hover:text-foreground",
+            prefersReducedMotion ? "" : "transition-colors duration-100",
+          )}
+        >
+          {track.title}
+        </Link>
+        <ArtistDisplay
+          mainArtist={track.artist}
+          featuringArtists={track.featuringArtists}
+          className={cn(
+            "block truncate text-[11px] text-muted-foreground/55",
+            "hover:text-muted-foreground/80 hover:underline underline-offset-2",
+            prefersReducedMotion ? "" : "transition-colors duration-100",
+          )}
+        />
+      </>
+    );
+  },
+);
+TrackInfo.displayName = "TrackInfo";
 
 // ─── Add Track Row ─────────────────────────────────────────────────────────
 
@@ -265,79 +312,36 @@ const AddTrackRow = memo(
     const { loadingState } = useSelector(selectPlayer);
     const isGlobalLoading =
       loadingState === "loading" || loadingState === "buffering";
+
     return (
       <div
-        style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
+        style={{ animationDelay: `${Math.min(index * 20, 200)}ms` }}
         className={cn(
-          // w-full + overflow-hidden prevent flex blowout on narrow screens
-          "w-full flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all duration-200 group overflow-hidden",
+          "flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all duration-200 group",
           "animate-in fade-in slide-in-from-bottom-1",
           isAdded
             ? "bg-emerald-500/5 border-emerald-500/15"
             : "bg-card border-border/40 hover:border-primary/25 hover:shadow-sm",
         )}
       >
-        {/* Cover — fixed width, never shrinks */}
-        <LazyImage
-          src={track.coverImage}
-          alt={track.title}
-          isActive={isActive}
-          isLoading={isGlobalLoading}
-          isCurrentPlaying={isPlaying && isActive}
-          onClick={() => onPlay(track)}
-        />
-
-        {/* Info — takes all remaining space, truncates text */}
-        <div className="min-w-0 flex-1 overflow-hidden max-w-55 md:max-w-none">
-          {isActive ? (
-            <TrackTitleMarquee
-              id={track._id}
-              title={track.title}
-              mainArtist={track.artist}
-              featuringArtists={track.featuringArtists}
-              className="text-sm"
-              artistClassName="text-xs"
-            />
-          ) : (
-            <>
-              <Link
-                to={`/tracks/${track._id}`}
-                title={track.title}
-                className={cn(
-                  "block max-w-full truncate",
-                  "text-sm font-medium leading-snug mb-0.5",
-                  "text-foreground/90",
-                  "group-hover:text-foreground",
-                  prefersReducedMotion ? "" : "transition-colors duration-100",
-                )}
-              >
-                {track.title}
-              </Link>
-
-              <div className="min-w-0 overflow-hidden">
-                <ArtistDisplay
-                  mainArtist={track.artist}
-                  featuringArtists={track.featuringArtists}
-                  className={cn(
-                    "block truncate",
-                    "text-xs text-muted-foreground/55",
-                    "hover:text-foreground/70 hover:underline underline-offset-2",
-                    prefersReducedMotion
-                      ? ""
-                      : "transition-colors duration-100",
-                  )}
-                />
-              </div>
-            </>
-          )}
+        {/* Cover */}
+        <div className="shrink-0">
+          <LazyImage
+            src={track.coverImage}
+            alt={track.title}
+            isActive={isActive}
+            isLoading={isGlobalLoading}
+            isCurrentPlaying={isPlaying && isActive}
+            onClick={() => onPlay(track)}
+          />
         </div>
 
-        {/*
-         * Touch target = 44×44px via padding trick:
-         * Visual button is size-8 (32px), but -m-1 + p-1 extends
-         * the tappable area to 40px without affecting flex layout.
-         * shrink-0 ensures it never gets squeezed by the info column.
-         */}
+        {/* Info — flex-1 + min-w-0 is the only constraint needed */}
+        <div className="min-w-0 flex-1">
+          <TrackInfo track={track} isActive={isActive} />
+        </div>
+
+        {/* Add button — 44×44 touch area via padding trick */}
         <button
           type="button"
           disabled={disabled}
@@ -349,15 +353,13 @@ const AddTrackRow = memo(
             "shrink-0 flex items-center justify-center rounded-full",
             "transition-all duration-150 outline-none",
             "focus-visible:ring-2 focus-visible:ring-primary/50",
-            // 44px tappable zone without altering flex width:
-            // visual 32px + 6px padding each side = 44px hit area
             "size-8 p-[6px] -m-[3px]",
             isAdded
               ? "text-emerald-500 cursor-default"
               : [
                   "border border-border/50 bg-background shadow-sm",
-                  "hover:bg-primary hover:text-primary-foreground hover:border-primary hover:shadow-md hover:scale-110",
-                  "active:scale-90",
+                  "hover:bg-primary hover:text-primary-foreground hover:border-primary",
+                  "hover:shadow-md hover:scale-110 active:scale-90",
                   disabled &&
                     "opacity-40 cursor-not-allowed pointer-events-none",
                 ],
@@ -407,71 +409,36 @@ const ManageTrackRow = memo(
 
     return (
       <div
-        style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
+        style={{ animationDelay: `${Math.min(index * 20, 200)}ms` }}
         className={cn(
-          "w-full flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all duration-200 group overflow-hidden",
+          "flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all duration-200 group",
           "animate-in fade-in slide-in-from-bottom-1",
-          "bg-card border-border/40 hover:border-destructive/20",
+          "bg-card border-border/40 hover:border-destructive/15",
         )}
       >
-        <span className="w-5 text-center text-[10px] font-mono font-bold text-muted-foreground/40 shrink-0 tabular-nums">
+        {/* Index number */}
+        <span className="w-5 text-center text-[10px] font-mono font-bold text-muted-foreground/35 shrink-0 tabular-nums select-none">
           {String(index + 1).padStart(2, "0")}
         </span>
 
-        <LazyImage
-          src={track.coverImage}
-          alt={track.title}
-          isActive={isActive}
-          isLoading={isGlobalLoading}
-          isCurrentPlaying={isPlaying && isActive}
-          onClick={() => onPlay(track)}
-        />
-
-        <div className="min-w-0 flex-1 overflow-hidden max-w-50 md:max-w-none">
-          {isActive ? (
-            <TrackTitleMarquee
-              id={track._id}
-              title={track.title}
-              mainArtist={track.artist}
-              featuringArtists={track.featuringArtists}
-              className="text-sm"
-              artistClassName="text-xs"
-            />
-          ) : (
-            <>
-              <Link
-                to={`/tracks/${track._id}`}
-                title={track.title}
-                className={cn(
-                  "block max-w-full truncate",
-                  "text-sm font-medium leading-snug mb-0.5",
-                  "text-foreground/90",
-                  "group-hover:text-foreground",
-                  prefersReducedMotion ? "" : "transition-colors duration-100",
-                )}
-              >
-                {track.title}
-              </Link>
-
-              <div className="min-w-0 overflow-hidden">
-                <ArtistDisplay
-                  mainArtist={track.artist}
-                  featuringArtists={track.featuringArtists}
-                  className={cn(
-                    "block truncate",
-                    "text-xs text-muted-foreground/55",
-                    "hover:text-foreground/70 hover:underline underline-offset-2",
-                    prefersReducedMotion
-                      ? ""
-                      : "transition-colors duration-100",
-                  )}
-                />
-              </div>
-            </>
-          )}
+        {/* Cover */}
+        <div className="shrink-0">
+          <LazyImage
+            src={track.coverImage}
+            alt={track.title}
+            isActive={isActive}
+            isLoading={isGlobalLoading}
+            isCurrentPlaying={isPlaying && isActive}
+            onClick={() => onPlay(track)}
+          />
         </div>
 
-        {/* Same padding-trick touch target as AddTrackRow */}
+        {/* Info */}
+        <div className="min-w-0 flex-1">
+          <TrackInfo track={track} isActive={isActive} />
+        </div>
+
+        {/* Remove button */}
         <button
           type="button"
           disabled={isRemoving || isAnyMutating}
@@ -486,9 +453,9 @@ const ManageTrackRow = memo(
               ? "cursor-wait text-muted-foreground/30"
               : [
                   "text-muted-foreground/40",
+                  // Always visible on touch devices, subtle on desktop until hover
+                  "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
                   "hover:text-destructive hover:bg-destructive/10 active:scale-90",
-                  // Always visible on mobile (no hover), hidden on md until hover
-                  "opacity-100 md:opacity-0 group-hover:opacity-100",
                   isAnyMutating &&
                     !isRemoving &&
                     "opacity-30 cursor-not-allowed pointer-events-none",
@@ -506,6 +473,20 @@ const ManageTrackRow = memo(
   },
 );
 ManageTrackRow.displayName = "ManageTrackRow";
+
+// ─── Summary Bar ──────────────────────────────────────────────────────────
+// Sticky info + action row used in Add and Manage tabs
+
+interface SummaryBarProps {
+  left: React.ReactNode;
+  right: React.ReactNode;
+}
+const SummaryBar = ({ left, right }: SummaryBarProps) => (
+  <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm">
+    <div className="min-w-0">{left}</div>
+    <div className="shrink-0">{right}</div>
+  </div>
+);
 
 // ─── Main Modal ────────────────────────────────────────────────────────────
 
@@ -532,10 +513,7 @@ export const EditPlaylistTracksModal: React.FC<
     onUndo: () => void;
   } | null>(null);
 
-  // Track IDs currently mid-mutation — cleared once server responds
   const [mutatingIds, setMutatingIds] = useState<Set<string>>(new Set());
-
-  // DnD reorder state
   const [orderedTracks, setOrderedTracks] = useState<ITrack[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -552,7 +530,7 @@ export const EditPlaylistTracksModal: React.FC<
   );
 
   const { data: tracksData, isLoading: isLoadingTracks } =
-    usePlaylistTracksInfinite(playlistId, APP_CONFIG.VIRTUALIZER_LIMIT);
+    usePlaylistTracksInfinite(playlistId, APP_CONFIG.MAX_LIMIT);
 
   const { addTracks, removeTracks, reorderTracks, isTrackMutating } =
     usePlaylistMutations();
@@ -562,6 +540,7 @@ export const EditPlaylistTracksModal: React.FC<
     () => searchRes?.tracks ?? [],
     [searchRes?.tracks],
   );
+  const meta = useMemo(() => searchRes?.meta, [searchRes?.meta]);
 
   const currentTracks = useMemo<ITrack[]>(
     () => tracksData?.allTracks ?? [],
@@ -573,7 +552,6 @@ export const EditPlaylistTracksModal: React.FC<
     [currentTracks],
   );
 
-  // Only tracks not yet in playlist — drives the "add N bài" button count
   const addableTracks = useMemo(
     () => searchResults.filter((t) => !existingTrackIds.has(t._id)),
     [searchResults, existingTrackIds],
@@ -583,31 +561,31 @@ export const EditPlaylistTracksModal: React.FC<
   const isBulkMutating =
     mutatingIds.has("bulk-add") || mutatingIds.has("bulk-remove");
 
-  // ── Sync orderedTracks from server (only when not dirty) ──────────────
+  // ── Sync orderedTracks ─────────────────────────────────────────────────
   useEffect(() => {
     if (isDirty) return;
     const source = tracksData?.allTracks ?? [];
-    if (source.length === 0) return; // wait for data
-
+    if (source.length === 0) return;
     const idOrder = playlist?.trackIds ?? source.map((t: ITrack) => t._id);
     const map = new Map(source.map((t: ITrack) => [t._id, t]));
     const ordered = idOrder
       .map((id: string) => map.get(id))
       .filter(Boolean) as ITrack[];
-
     setOrderedTracks(ordered.length > 0 ? ordered : source);
   }, [tracksData?.allTracks, playlist?.trackIds, isDirty]);
 
-  // ── Clear mutatingIds once server says mutation is done ────────────────
+  // ── Clear mutatingIds after mutation settles ───────────────────────────
   const prevMutating = useRef(isTrackMutating);
+  const onPageChange = useCallback(
+    (page: number) => setTrackParams((prev) => ({ ...prev, page })),
+    [],
+  );
   useEffect(() => {
-    if (prevMutating.current && !isTrackMutating) {
-      setMutatingIds(new Set());
-    }
+    if (prevMutating.current && !isTrackMutating) setMutatingIds(new Set());
     prevMutating.current = isTrackMutating;
   }, [isTrackMutating]);
 
-  // ── Lock body scroll on open ───────────────────────────────────────────
+  // ── Lock body scroll ───────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
     const prev = document.body.style.overflow;
@@ -646,9 +624,10 @@ export const EditPlaylistTracksModal: React.FC<
     [activeDragId, orderedTracks],
   );
 
-  const handleDragStart = useCallback((e: DragStartEvent) => {
-    setActiveDragId(String(e.active.id));
-  }, []);
+  const handleDragStart = useCallback(
+    (e: DragStartEvent) => setActiveDragId(String(e.active.id)),
+    [],
+  );
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveDragId(null);
@@ -688,9 +667,11 @@ export const EditPlaylistTracksModal: React.FC<
       },
     });
   }, [playlistId, addableTracks, addTracks, addToMutating]);
+
   const { currentTrackId, isPlaying: isGlobalPlaying } =
     useAppSelector(selectPlayer);
   const dispatch = useAppDispatch();
+
   const handlePlayTrack = useCallback(
     async (t: ITrack) => {
       if (currentTrackId === t._id) {
@@ -713,6 +694,7 @@ export const EditPlaylistTracksModal: React.FC<
     },
     [currentTrackId, isGlobalPlaying, dispatch],
   );
+
   const handleRemoveTrack = useCallback(
     (trackId: string) => {
       if (!playlistId) return;
@@ -770,17 +752,24 @@ export const EditPlaylistTracksModal: React.FC<
 
   // ── Tab config ─────────────────────────────────────────────────────────
   const tabs = [
-    { val: "add" as TabKey, icon: Plus, label: "Thêm nhạc" },
+    {
+      val: "add" as TabKey,
+      icon: Plus,
+      label: "Thêm nhạc",
+      shortLabel: "Thêm",
+    },
     {
       val: "reorder" as TabKey,
       icon: MoveVertical,
       label: "Sắp xếp",
+      shortLabel: "Xếp",
       badge: isDirty ? "●" : undefined,
     },
     {
       val: "manage" as TabKey,
       icon: Settings2,
       label: "Đã lưu",
+      shortLabel: "Đã lưu",
       badge:
         currentTracks.length > 0 ? String(currentTracks.length) : undefined,
     },
@@ -795,69 +784,81 @@ export const EditPlaylistTracksModal: React.FC<
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
         aria-hidden="true"
         onClick={handleClose}
       />
 
-      {/* Modal shell */}
-      <div className="relative z-[101] w-full max-w-2xl flex flex-col h-[100dvh] sm:h-[88vh] sm:max-h-[740px] rounded-t-[28px] sm:rounded-3xl overflow-hidden bg-background border border-border/40 shadow-2xl animate-in slide-in-from-bottom-8 sm:zoom-in-95 duration-300">
-        {/* ── HEADER ─────────────────────────────────────────────────── */}
-        <div className="shrink-0 px-5 sm:px-6 py-4 border-b border-border/40 flex items-center gap-3 bg-background/95 backdrop-blur-md z-10">
-          <div className="size-10 bg-primary/10 rounded-2xl flex items-center justify-center border border-primary/15 shrink-0">
-            <ListMusic className="size-5 text-primary" />
+      {/* ── Modal shell ─────────────────────────────────────────────────
+          On mobile  : full-height sheet from bottom (100dvh)
+          On sm+     : centered card, max 740px tall
+          flex-col + overflow-hidden is the key — each section controls
+          its own scroll, no fixed-height inner divs needed.
+      */}
+      <div className="relative z-[101] w-full max-w-2xl flex flex-col h-[100dvh] sm:h-[88vh] sm:max-h-[740px] rounded-t-[28px] sm:rounded-3xl bg-background border border-border/30 shadow-2xl animate-in slide-in-from-bottom-8 sm:zoom-in-95 duration-300 overflow-hidden">
+        {/* ── HEADER ──────────────────────────────────────────────────── */}
+        <div className="shrink-0 px-4 sm:px-6 py-3.5 sm:py-4 border-b border-border/40 flex items-center gap-3 bg-background/95 backdrop-blur-md z-10">
+          {/* Drag handle (mobile only) */}
+          <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-border/60 sm:hidden" />
+
+          <div className="size-9 sm:size-10 bg-primary/10 rounded-2xl flex items-center justify-center border border-primary/15 shrink-0">
+            <ListMusic className="size-4 sm:size-5 text-primary" />
           </div>
+
           <div className="min-w-0 flex-1">
-            <h2 className="font-bold text-base sm:text-lg text-foreground tracking-tight truncate leading-tight">
+            <h2 className="font-bold text-[15px] sm:text-[17px] text-foreground tracking-tight truncate leading-tight">
               Quản lý Bài hát
             </h2>
-            <p className="text-[12px] text-muted-foreground truncate">
+            <p className="text-[11px] sm:text-[12px] text-muted-foreground truncate mt-0.5">
               {isLoadingPlaylist
                 ? "Đang tải..."
                 : (playlist?.title ?? "Playlist")}
             </p>
           </div>
+
           <Button
             type="button"
             variant="ghost"
             size="icon"
             onClick={handleClose}
             aria-label="Đóng"
-            className="rounded-full size-10 text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
+            className="rounded-full size-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
           >
-            <X className="size-4.5" />
+            <X className="size-4" />
           </Button>
         </div>
 
-        {/* ── TABS ───────────────────────────────────────────────────── */}
-        <div className="shrink-0 px-5 sm:px-6 pt-4 pb-3 border-b border-border/30 bg-card/50 z-10 space-y-3">
+        {/* ── TABS + FILTER ────────────────────────────────────────────── */}
+        <div className="shrink-0 px-4 sm:px-6 pt-3 pb-3 border-b border-border/30 bg-card/40 z-10 space-y-3">
           <Tabs
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as TabKey)}
           >
-            <TabsList className="w-full h-11 bg-muted/40 p-1 grid grid-cols-3 rounded-2xl">
+            <TabsList className="w-full h-10 sm:h-11 bg-muted/40 p-1 grid grid-cols-3 rounded-2xl">
               {tabs.map((item) => (
                 <TabsTrigger
                   key={item.val}
                   value={item.val}
                   className={cn(
-                    "flex items-center justify-center gap-1.5 h-full rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all",
+                    "flex items-center justify-center gap-1.5 h-full rounded-xl transition-all",
+                    "text-[11px] sm:text-[12px] font-bold uppercase tracking-wide",
                     "data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
                     "text-muted-foreground",
                   )}
                 >
                   <item.icon className="size-3.5 shrink-0" />
-                  {/* Show label on sm+ only */}
+                  {/* shortLabel on mobile, full label on sm+ */}
+                  <span className="sm:hidden">{item.shortLabel}</span>
                   <span className="hidden sm:inline truncate">
                     {item.label}
                   </span>
                   {"badge" in item && item.badge && (
                     <span
                       className={cn(
-                        "inline-flex items-center justify-center rounded-full text-[9px] font-black leading-none px-1.5 py-0.5 min-w-[18px]",
+                        "inline-flex items-center justify-center rounded-full leading-none",
                         item.badge === "●"
-                          ? "text-primary"
-                          : "bg-primary/15 text-primary",
+                          ? "text-primary text-[14px] -mt-0.5"
+                          : "bg-primary/15 text-primary text-[9px] font-black px-1.5 py-0.5 min-w-[18px]",
                       )}
                     >
                       {item.badge}
@@ -868,8 +869,9 @@ export const EditPlaylistTracksModal: React.FC<
             </TabsList>
           </Tabs>
 
+          {/* Filter only shown in Add tab */}
           {activeTab === "add" && (
-            <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="animate-in fade-in slide-in-from-top-1 duration-200">
               <ModalTrackFilter
                 params={trackParams}
                 onChange={setTrackParams}
@@ -878,44 +880,53 @@ export const EditPlaylistTracksModal: React.FC<
           )}
         </div>
 
-        {/* ── CONTENT ────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-hidden relative flex flex-col min-h-0">
-          {/* === TAB: ADD === */}
+        {/* ── CONTENT AREA ─────────────────────────────────────────────
+            flex-1 + min-h-0 lets this section grow to fill remaining space.
+            Each tab wraps its list in a single ScrollArea — no nested
+            overflow divs with fixed heights.
+        */}
+        <div className="flex-1 min-h-0 relative flex flex-col">
+          {/* ══ TAB: ADD ══════════════════════════════════════════════ */}
           {activeTab === "add" && (
-            <ScrollArea className="flex-1 ">
-              <div className="p-4 sm:p-5 space-y-2.5 pb-6">
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="px-4 sm:px-5 pt-3 pb-6 space-y-2.5">
                 {/* Summary bar */}
-                <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-border/40 bg-card/60">
-                  <div>
-                    <p className="text-[13px] font-bold text-foreground">
-                      {searchResults.length} kết quả
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {currentTracks.length} bài đã có trong playlist
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={
-                      addableTracks.length === 0 ||
-                      isBulkMutating ||
-                      isTrackMutating
-                    }
-                    onClick={handleAddAllVisible}
-                    className="h-10 px-4 rounded-xl text-xs font-bold shrink-0"
-                  >
-                    {mutatingIds.has("bulk-add") ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : addableTracks.length > 0 ? (
-                      `Thêm ${addableTracks.length} bài`
-                    ) : (
-                      "Không còn bài mới"
-                    )}
-                  </Button>
-                </div>
+                <SummaryBar
+                  left={
+                    <>
+                      <p className="text-[13px] font-bold text-foreground">
+                        {searchResults.length} kết quả
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {currentTracks.length} bài đã có trong playlist
+                      </p>
+                    </>
+                  }
+                  right={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={
+                        addableTracks.length === 0 ||
+                        isBulkMutating ||
+                        isTrackMutating
+                      }
+                      onClick={handleAddAllVisible}
+                      className="h-9 px-3.5 rounded-xl text-xs font-bold"
+                    >
+                      {mutatingIds.has("bulk-add") ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : addableTracks.length > 0 ? (
+                        `+ ${addableTracks.length} bài`
+                      ) : (
+                        "Đã có tất cả"
+                      )}
+                    </Button>
+                  }
+                />
 
+                {/* Track list */}
                 {isSearching ? (
                   <TrackListSkeleton />
                 ) : searchResults.length === 0 ? (
@@ -925,32 +936,45 @@ export const EditPlaylistTracksModal: React.FC<
                     description="Thử tìm kiếm với tên ca sĩ hoặc bài hát khác."
                   />
                 ) : (
-                  <div className="space-y-2 overflow-y-scroll h-[200px] scrollbar-thin">
+                  <div className="space-y-1.5">
                     {searchResults.map((track, idx) => (
                       <AddTrackRow
+                        key={track._id}
+                        track={track}
+                        index={idx}
                         isActive={currentTrackId === track._id}
                         isPlaying={
                           isGlobalPlaying && currentTrackId === track._id
                         }
-                        onPlay={handlePlayTrack}
-                        key={track._id}
-                        track={track}
-                        index={idx}
                         isAdded={existingTrackIds.has(track._id)}
                         isThisMutating={
                           mutatingIds.has(track._id) && isTrackMutating
                         }
                         isAnyMutating={isTrackMutating}
+                        onPlay={handlePlayTrack}
                         onAdd={handleAddTrack}
                       />
                     ))}
+                  </div>
+                )}
+
+                {/* Pagination */}
+                {!isSearching && searchResults.length > 0 && (
+                  <div className="pt-1">
+                    <Pagination
+                      currentPage={meta?.page || 1}
+                      totalPages={meta?.totalPages || 1}
+                      onPageChange={onPageChange}
+                      totalItems={meta?.totalItems || 0}
+                      pageSize={meta?.pageSize || APP_CONFIG.PAGINATION_LIMIT}
+                    />
                   </div>
                 )}
               </div>
             </ScrollArea>
           )}
 
-          {/* === TAB: REORDER === */}
+          {/* ══ TAB: REORDER ══════════════════════════════════════════ */}
           {activeTab === "reorder" && (
             <DndContext
               sensors={sensors}
@@ -958,14 +982,15 @@ export const EditPlaylistTracksModal: React.FC<
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             >
-              <ScrollArea className="flex-1">
-                <div className="p-4 sm:p-5 space-y-2.5 pb-6">
+              <ScrollArea className="flex-1 min-h-0">
+                <div className="px-4 sm:px-5 pt-3 pb-6 space-y-2.5">
                   {isLoadingContent ? (
                     <TrackListSkeleton />
                   ) : orderedTracks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 gap-4 text-muted-foreground animate-in fade-in">
-                      <div className="size-16 rounded-full bg-card border border-dashed border-border flex items-center justify-center">
-                        <Music4 className="size-8 opacity-20" />
+                    // Empty state — centered vertically using min-h trick
+                    <div className="flex flex-col items-center justify-center py-16 gap-4 text-muted-foreground animate-in fade-in">
+                      <div className="size-14 rounded-full bg-card border border-dashed border-border flex items-center justify-center">
+                        <Music4 className="size-7 opacity-20" />
                       </div>
                       <p className="text-sm font-bold">Playlist đang trống</p>
                       <Button
@@ -979,11 +1004,12 @@ export const EditPlaylistTracksModal: React.FC<
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center justify-between gap-2.5 px-4 py-2.5 rounded-2xl border border-border/30 bg-card/40 text-[12px] text-muted-foreground">
+                      {/* Drag hint bar */}
+                      <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl border border-border/30 bg-card/50 text-[11px] sm:text-[12px] text-muted-foreground">
                         <div className="flex items-center gap-2">
-                          <MoveVertical className="size-3.5 shrink-0 opacity-60" />
+                          <MoveVertical className="size-3.5 shrink-0 opacity-50" />
                           <span>
-                            Kéo thả để sắp xếp — nhấn{" "}
+                            Kéo thả để sắp xếp.{" "}
                             <strong className="text-foreground">
                               Lưu thứ tự
                             </strong>{" "}
@@ -994,7 +1020,7 @@ export const EditPlaylistTracksModal: React.FC<
                           <button
                             type="button"
                             onClick={handleDiscardReorder}
-                            className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors shrink-0"
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors shrink-0 ml-2"
                           >
                             Hoàn tác
                           </button>
@@ -1005,17 +1031,17 @@ export const EditPlaylistTracksModal: React.FC<
                         items={orderedTracks.map((t) => t._id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        <div className="space-y-2 overflow-y-scroll h-[350px] scrollbar-thin">
+                        <div className="space-y-1.5">
                           {orderedTracks.map((track, idx) => (
                             <SortablePlaylistTrackRow
+                              key={track._id}
+                              track={track}
+                              index={idx}
                               onPlay={handlePlayTrack}
                               isActive={currentTrackId === track._id}
                               isPlaying={
                                 isGlobalPlaying && currentTrackId === track._id
                               }
-                              key={track._id}
-                              track={track}
-                              index={idx}
                             />
                           ))}
                         </div>
@@ -1031,38 +1057,42 @@ export const EditPlaylistTracksModal: React.FC<
             </DndContext>
           )}
 
-          {/* === TAB: MANAGE === */}
+          {/* ══ TAB: MANAGE ═══════════════════════════════════════════ */}
           {activeTab === "manage" && (
-            <ScrollArea className="flex-1">
-              <div className="p-4 sm:p-5 space-y-2.5 pb-6">
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="px-4 sm:px-5 pt-3 pb-6 space-y-2.5">
                 {currentTracks.length > 0 && (
-                  <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-border/40 bg-card/60">
-                    <div>
-                      <p className="text-[13px] font-bold text-foreground">
-                        {currentTracks.length} bài hát
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Xóa từng bài hoặc xóa toàn bộ playlist.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={isBulkMutating || isTrackMutating}
-                      onClick={handleRemoveAll}
-                      className="h-10 px-4 rounded-xl text-xs font-bold text-destructive hover:bg-destructive/10 shrink-0"
-                    >
-                      {mutatingIds.has("bulk-remove") ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <>
-                          <Trash2 className="size-3.5 mr-1.5" />
-                          Xóa tất cả
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  <SummaryBar
+                    left={
+                      <>
+                        <p className="text-[13px] font-bold text-foreground">
+                          {currentTracks.length} bài hát
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Nhấn ⏐ để xóa từng bài.
+                        </p>
+                      </>
+                    }
+                    right={
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={isBulkMutating || isTrackMutating}
+                        onClick={handleRemoveAll}
+                        className="h-9 px-3 rounded-xl text-xs font-bold text-destructive hover:bg-destructive/10"
+                      >
+                        {mutatingIds.has("bulk-remove") ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <>
+                            <Trash2 className="size-3.5 mr-1" />
+                            Xóa tất cả
+                          </>
+                        )}
+                      </Button>
+                    }
+                  />
                 )}
 
                 {currentTracks.length === 0 ? (
@@ -1076,21 +1106,21 @@ export const EditPlaylistTracksModal: React.FC<
                     />
                   )
                 ) : (
-                  <div className="space-y-2 overflow-y-scroll h-[300px] scrollbar-thin">
+                  <div className="space-y-1.5">
                     {currentTracks.map((track: ITrack, i: number) => (
                       <ManageTrackRow
+                        key={track._id}
+                        track={track}
+                        index={i}
                         isActive={currentTrackId === track._id}
                         isPlaying={
                           isGlobalPlaying && currentTrackId === track._id
                         }
-                        onPlay={handlePlayTrack}
-                        key={track._id}
-                        track={track}
-                        index={i}
                         isRemoving={
                           mutatingIds.has(track._id) && isTrackMutating
                         }
                         isAnyMutating={isTrackMutating}
+                        onPlay={handlePlayTrack}
                         onRemove={handleRemoveTrack}
                       />
                     ))}
@@ -1121,23 +1151,39 @@ export const EditPlaylistTracksModal: React.FC<
           )}
         </div>
 
-        {/* ── FOOTER ─────────────────────────────────────────────────── */}
-        {/* pb-safe handles iPhone home indicator */}
-        <div className="shrink-0 px-5 sm:px-6 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] border-t border-border/40 bg-background/95 backdrop-blur-md flex items-center justify-between gap-3 z-20">
-          <p className="hidden sm:block text-[11px] text-muted-foreground font-medium truncate">
+        {/* ── FOOTER ──────────────────────────────────────────────────── */}
+        {/* pb-safe: handles iPhone home indicator */}
+        <div
+          className={cn(
+            "shrink-0 px-4 sm:px-6 py-3",
+            "pb-[calc(0.75rem+env(safe-area-inset-bottom))]",
+            "border-t border-border/40 bg-background/95 backdrop-blur-md",
+            "flex items-center justify-between gap-3 z-20",
+          )}
+        >
+          {/* Hint text — two lines on mobile, one on sm+ */}
+          <p className="text-[11px] text-muted-foreground font-medium min-w-0 flex-1 hidden sm:block truncate">
             {activeTab === "reorder"
               ? isDirty
-                ? "Có thay đổi chưa lưu. Nhấn Lưu thứ tự để áp dụng."
+                ? "Có thay đổi chưa lưu — nhấn Lưu thứ tự để áp dụng."
                 : "Kéo thả để sắp xếp, sau đó nhấn Lưu thứ tự."
               : "Thay đổi được đồng bộ tự động."}
           </p>
-          <div className="flex gap-2 ml-auto">
+
+          {/* Mobile: show dirty indicator instead of full hint */}
+          {activeTab === "reorder" && isDirty && (
+            <p className="text-[11px] text-amber-500 font-bold sm:hidden flex-1 min-w-0 truncate">
+              Chưa lưu
+            </p>
+          )}
+
+          <div className="flex gap-2 ml-auto shrink-0">
             <Button
               type="button"
               variant="ghost"
               onClick={handleClose}
               disabled={isTrackMutating}
-              className="h-10 px-4 rounded-xl text-sm font-semibold text-muted-foreground hover:text-foreground"
+              className="h-9 px-3.5 rounded-xl text-sm font-semibold text-muted-foreground hover:text-foreground"
             >
               Đóng
             </Button>
@@ -1147,12 +1193,12 @@ export const EditPlaylistTracksModal: React.FC<
                 type="button"
                 onClick={handleSaveOrder}
                 disabled={isTrackMutating}
-                className="h-10 px-5 rounded-xl text-sm font-bold shadow-sm animate-in zoom-in-95 duration-200"
+                className="h-9 px-4 rounded-xl text-sm font-bold shadow-sm animate-in zoom-in-95 duration-200"
               >
                 {isTrackMutating ? (
-                  <Loader2 className="size-3.5 animate-spin mr-2" />
+                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
                 ) : (
-                  <Save className="size-3.5 mr-2" />
+                  <Save className="size-3.5 mr-1.5" />
                 )}
                 Lưu thứ tự
               </Button>

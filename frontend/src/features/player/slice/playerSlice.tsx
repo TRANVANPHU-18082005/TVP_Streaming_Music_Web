@@ -301,6 +301,9 @@ const playerSlice = createSlice({
         state.repeatMode,
       );
     },
+    setCurrentSource: (state, action: PayloadAction<QueueSource>) => {
+      state.currentSource = action.payload;
+    },
     /**
      * Thêm metadata vào cache theo batch (lazy loading khi Virtual Scroll).
      * Gọi khi Infinite Query trả về trang mới hoặc getTrackDetail thành công.
@@ -601,6 +604,7 @@ const playerSlice = createSlice({
 
 export const {
   setQueue,
+  setCurrentSource,
   upsertMetadataCache,
   appendQueueIds,
   removeFromQueue,

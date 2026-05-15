@@ -28,6 +28,7 @@
  * - Grain opacity 0.028, frequency thấp hơn — film texture nhẹ nhàng
  */
 
+import { DEAFULT_APP } from "@/config/constants";
 import {
   useRef,
   useEffect,
@@ -37,7 +38,6 @@ import {
   useReducer,
   useState,
 } from "react";
-import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CSS — synchronous inject
@@ -337,13 +337,13 @@ export interface VideoMoodEngineProps {
 
 export const VideoMoodEngine = memo(
   ({
-    src,
+    src = DEAFULT_APP.MOOD_VIDEO_DEFAULT_VALUES,
     isPlaying,
     accentColor = "primary",
     blur = 0,
   }: VideoMoodEngineProps) => {
     const [slots, dispatch] = useReducer(slotReducer, {
-      a: src,
+      a: src ?? DEAFULT_APP.MOOD_VIDEO_DEFAULT_VALUES,
       b: undefined,
       active: "a",
       aReady: false,
@@ -380,9 +380,6 @@ export const VideoMoodEngine = memo(
       }),
       [accentColor],
     );
-
-    if (!src)
-      return <WaveformLoader glass={false} text="Content unavailable" />;
 
     return (
       <div className="vme-container">
