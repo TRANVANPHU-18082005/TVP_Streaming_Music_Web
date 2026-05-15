@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useMemo, useCallback, memo } from "react";
 import { VideoMoodEngine } from "./VideoMoodEngine";
 import { MoodLyricLine, type MoodWord } from "./MoodLyricLine";
 import { ITrack } from "@/features/track";
+import { DEAFULT_APP } from "@/config/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES — compatible với IKaraokeLine / ILyricSyncLine từ @/features
@@ -280,7 +281,9 @@ export const MoodFocusView = memo(
       >
         {/* LAYER 1 — Video background */}
         <VideoMoodEngine
-          src={track.moodVideo?.videoUrl}
+          src={
+            track.moodVideo?.videoUrl ?? DEAFULT_APP.MOOD_VIDEO_DEFAULT_VALUES
+          }
           isPlaying={isPlaying}
           accentColor={accentColor}
           opacity={0.78}

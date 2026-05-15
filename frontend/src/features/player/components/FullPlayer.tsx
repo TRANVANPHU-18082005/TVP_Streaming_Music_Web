@@ -1400,8 +1400,8 @@ const FullPlayerComponent = ({
   const toggleQueue = useCallback(() => setShowQueue((v) => !v), []);
   const toggleFocus = useCallback(() => setFocusMode((v) => !v), []);
   const isArtwork = currentView === "artwork";
-  if (isLoading){
-    return <FullPlayerSkeleton key="skeleton" />
+  if (isLoading) {
+    return <FullPlayerSkeleton key="skeleton" />;
   }
   return (
     <motion.div
@@ -1441,7 +1441,7 @@ const FullPlayerComponent = ({
         {/* ── LEFT PANEL ── */}
         <div className="flex flex-col flex-1 min-h-0 lg:flex-initial lg:w-[50%] xl:w-[55%]">
           {/* Fix: ViewHeader chỉ render 1 instance duy nhất */}
-          {(currentView !== "mood" || !track.moodVideo) && !showQueue && (
+          {currentView !== "mood" && !showQueue && (
             <ViewHeader
               track={track}
               handleMoreOptions={(e: React.MouseEvent) => {

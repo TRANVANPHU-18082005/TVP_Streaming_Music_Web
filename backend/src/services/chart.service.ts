@@ -230,40 +230,7 @@ export const getRealtimeChart = async () => {
       .populate(TRACK_POPULATE as any)
       .lean();
 
-    const formattedFallback = fallbackTracks.map((t: any) => ({
-      _id: t._id,
-      title: t.title,
-      slug: t.slug,
-      duration: t.duration,
-      coverImage: t.coverImage,
-      featuringArtists: t.featuringArtists,
-      playCount: t.playCount,
-      genres: t.genres,
-      lyricUrl: t.lyricUrl,
-      hlsUrl: t.hlsUrl,
-      bitrate: t.bitrate,
-      description: t.description,
-      lyricType: t.lyricType,
-      isExplicit: t.isExplicit,
-      releaseDate: t.releaseDate,
-      plainLyrics: t.plainLyrics,
-      lyricPreview: t.lyricPreview,
-      likeCount: t.likeCount,
-      album: t.album
-        ? { _id: t.album._id, title: t.album.title, slug: t.album.slug }
-        : null,
-      artist: t.artist
-        ? {
-            _id: t.artist._id,
-            name: t.artist.name,
-            avatar: t.artist.avatar,
-            slug: t.artist.slug,
-          }
-        : null,
-      score: 0,
-    }));
-
-    finalTracks = [...finalTracks, ...formattedFallback];
+    finalTracks = [...finalTracks, ...fallbackTracks];
   }
 
   // 4. Chart data cho Top 3

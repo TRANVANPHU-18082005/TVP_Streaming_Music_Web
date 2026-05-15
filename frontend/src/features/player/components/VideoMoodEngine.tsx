@@ -1,34 +1,3 @@
-/**
- * VideoMoodEngine.tsx — Production v4.0 — Cinema Edition
- * ─────────────────────────────────────────────────────────────────────────────
- * CINEMA GOALS:
- * - Video fills viewport với object-fit: cover + aspect preservation
- * - Ken Burns chạy trên video element (GPU compositor layer riêng biệt)
- * - Crossfade 1.1s CSS — không Framer JS overhead
- * - Không flash black khi src thay đổi (loading overlay + aReady guard)
- * - Mobile Safari canplay fallback (canplaythrough không fire khi đã buffered)
- *
- * PERF v3 → v4:
- * PERF-1  Slot wrapper 112% width/height gây layout overflow artifact
- *         Fix: slot `inset: 0`, container `overflow: hidden`, KB trên video element
- *
- * PERF-2  `onCanPlayThrough` không fire trên iOS khi video buffered trước
- *         Fix: listen `onCanPlay` + `onCanPlayThrough` + readyState >= 3 guard
- *
- * PERF-3  Ken Burns scale artifact — video scale 1→1.08 từ natural size → crop edge
- *         Fix: base scale 1.04, KB range 1.04→1.10 — luôn fill, không thấy edge
- *
- * PERF-4  Initial render flash black vì aReady=false nhưng không có overlay
- *         Fix: loading overlay visible cho đến khi firstReady=true
- *
- * CINEMA UX:
- * - Brightness 0.58, contrast 1.14, saturation 0.82 — deep cinematic tone
- * - Vignette ellipse mạnh ở corners, open center
- * - Bottom scrim 280px với gradient dài hơn cho lyric readability
- * - Grain opacity 0.028, frequency thấp hơn — film texture nhẹ nhàng
- */
-
-import { DEAFULT_APP } from "@/config/constants";
 import {
   useRef,
   useEffect,
@@ -337,13 +306,13 @@ export interface VideoMoodEngineProps {
 
 export const VideoMoodEngine = memo(
   ({
-    src = DEAFULT_APP.MOOD_VIDEO_DEFAULT_VALUES,
+    src,
     isPlaying,
     accentColor = "primary",
     blur = 0,
   }: VideoMoodEngineProps) => {
     const [slots, dispatch] = useReducer(slotReducer, {
-      a: src ?? DEAFULT_APP.MOOD_VIDEO_DEFAULT_VALUES,
+      a: src,
       b: undefined,
       active: "a",
       aReady: false,

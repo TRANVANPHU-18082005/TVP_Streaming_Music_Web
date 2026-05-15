@@ -335,7 +335,7 @@ const TopResultCard = React.memo(
         navigate(`/playlists/${item.slug}`);
       }
       if (type === "track") {
-        navigate(`/tracks/${item.slug}`);
+        navigate(`/tracks/${item._id}`);
       }
       if (type === "genre") {
         navigate(`/genres/${item.slug}`);
