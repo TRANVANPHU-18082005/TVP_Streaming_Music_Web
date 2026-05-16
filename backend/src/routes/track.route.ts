@@ -37,14 +37,14 @@ router.get(
   "/top/hot-today",
   optionalAuth,
   validate(getTopTracksSchema),
-  trackController.getTopHotTracksToday,
+  recommendationController.getTopHotTracksToday,
 );
 
 router.get(
   "/top/favourite",
   optionalAuth,
   validate(getTopTracksSchema),
-  trackController.getTopFavouriteTracks,
+  recommendationController.getTopFavouriteTracks,
 );
 
 // 2. Recommendations - Đặt trước /:id

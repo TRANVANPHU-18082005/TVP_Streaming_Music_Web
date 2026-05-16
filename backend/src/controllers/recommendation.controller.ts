@@ -68,3 +68,18 @@ export const getSimilarTracks = catchAsync(
     });
   },
 );
+export const getTopHotTracksToday = catchAsync(
+  async (req: Request, res: Response) => {
+    const filters = req.query as any;
+    const result = await recommendationService.getTopHotTracksToday(filters);
+    res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);
+
+export const getTopFavouriteTracks = catchAsync(
+  async (req: Request, res: Response) => {
+    const filters = req.query as any;
+    const result = await recommendationService.getTopFavouriteTracks(filters);
+    res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);

@@ -31,6 +31,7 @@ const SADD_BATCH_SIZE = 1_000;
 const WAIT_FOR_CACHE_MS = 2_000;
 const SPAM_WINDOW_SEC = 5;
 const SPAM_MAX_COUNT = 12;
+const FAV_KEY = "chart:favourites";
 
 // Centralized Key Management
 const Keys = {
@@ -41,6 +42,45 @@ const Keys = {
 };
 
 class InteractionService {
+  /**
+   * Gọi khi user LIKE một track.
+   * Tăng score của track trong FAV_KEY lên 1.
+   *
+   * @example
+   * // Trong like.service.ts hoặc like.controller.ts:
+   * await Like.create({ userId, targetId: trackId, targetType: "track" });
+   * await onTrackLiked(trackId);
+   */
+  async onTrackLiked(trackId: string): Promise<void> {
+    try {
+      await cacheRedis.zincrby(FAV_KEY, 1, trackId);
+    } catch (err) {
+      // Không throw — Redis fail không được block business logic
+      console.error("[Chart] onTrackLiked Redis error:", err);
+    }
+  }
+
+  /**
+   * Gọi khi user UNLIKE một track.
+   * Giảm score xuống 1. Nếu score ≤ 0 thì xóa khỏi set (dọn rác).
+   *
+   * @example
+   * // Trong like.service.ts hoặc like.controller.ts:
+   * await Like.deleteOne({ userId, targetId: trackId, targetType: "track" });
+   * await onTrackUnliked(trackId);
+   */
+  async onTrackUnliked(trackId: string): Promise<void> {
+    try {
+      const newScore = await cacheRedis.zincrby(FAV_KEY, -1, trackId);
+      // Dọn sạch entry có điểm âm hoặc bằng 0 để tránh rác trong sorted set
+      if (parseFloat(newScore) <= 0) {
+        await cacheRedis.zrem(FAV_KEY, trackId);
+      }
+    } catch (err) {
+      console.error("[Chart] onTrackUnliked Redis error:", err);
+    }
+  }
+
   /**
    * 🚀 TOGGLE LIKE (Generic cho Track, Album, Playlist)
    */
@@ -62,7 +102,11 @@ class InteractionService {
 
     const isLiked = results[0][1] === 1;
     const newStatus = !isLiked;
-
+    if (newStatus) {
+      await this.onTrackLiked(targetId);
+    } else {
+      await this.onTrackUnliked(targetId);
+    }
     // 3. Optimistic Update: Cập nhật Cache ngay lập tức để trả về Client
     if (newStatus) await cacheRedis.sadd(key, targetId);
     else await cacheRedis.srem(key, targetId);

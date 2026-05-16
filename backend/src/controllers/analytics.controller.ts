@@ -68,11 +68,13 @@ class AnalyticsController {
       const userId = req.user._id;
 
       // Chạy song song 3 tác vụ nặng để giảm latency
-      const [summary, topTracks, recentPlayed] = await Promise.all([
-        analyticsService.getUserMusicSummary(userId),
-        analyticsService.getUserTopTracks(userId, 5),
-        analyticsService.getRecentPlayed(userId, 10),
-      ]);
+      const [summary, topTracks, recentPlayed, userTopTracks] =
+        await Promise.all([
+          analyticsService.getUserMusicSummary(userId),
+          analyticsService.getUserTopTracks(userId, 5),
+          analyticsService.getRecentPlayed(userId, 10),
+          analyticsService.getUserTopTracks(userId, 5), // Có thể thêm nếu muốn
+        ]);
 
       return res.status(200).json({
         success: true,
@@ -80,6 +82,7 @@ class AnalyticsController {
           summary, // { totalPlays, artistCount, totalMinutes }
           topTracks, // Top 5 bài nghe nhiều nhất
           recentPlayed, // 10 bài nghe gần đây nhất (không trùng)
+          userTopTracks, // Top 5 bài yêu thích nhất của user (dựa trên lượt like)
         },
       });
     } catch (error) {

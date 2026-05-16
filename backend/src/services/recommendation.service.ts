@@ -36,6 +36,23 @@ const DISCOVERY_RATIO = 0.2;
 const CACHE_TTL_BASE = 3600;
 const CACHE_TTL_JITTER = 600;
 
+const HOT_TODAY_KEY = "chart:hot:today";
+
+/** TTL rebuild HOT_TODAY_KEY — 60s là đủ tươi, tránh ZUNIONSTORE liên tục */
+const HOT_TODAY_TTL = 60;
+
+/**
+ * Persistent sorted set cho lượt thích.
+ * Được cập nhật real-time bởi onTrackLiked / onTrackUnliked.
+ * KHÔNG set TTL — tồn tại vĩnh viễn, chỉ thay đổi khi có like/unlike.
+ */
+const FAV_KEY = "chart:favourites";
+
+/** Cache hydrated track data để tránh query DB lặp lại */
+const HYDRATE_TTL = 30; // giây
+
+/** Tối đa số bài lấy từ Redis trước khi cần fallback DB */
+const REDIS_POOL_LIMIT = 1000;
 interface RecommendOptions {
   limit?: number;
   /** Nếu cung cấp, sẽ loại bài này khỏi danh sách (vd: bài đang phát) */
@@ -653,6 +670,321 @@ class RecommendationService {
       .sort((a, b) => b[1] - a[1])
       .slice(0, n)
       .map(([key]) => key);
+  }
+  /**
+   * Lấy chi tiết track theo danh sách ID, có cache Redis 30s.
+   * Giữ nguyên thứ tự của pageIds (quan trọng cho ranking).
+   *
+   * Tại sao cache theo pageIds?
+   *  - Trang 1 với limit 20 sẽ được 100 user xem → chỉ 1 DB query / 30s.
+   *  - Key ngắn, không va chạm giữa các page vì ID set khác nhau.
+   */
+  async hydratePagedTracks(pageIds: string[]): Promise<any[]> {
+    if (pageIds.length === 0) return [];
+
+    // Cache key: sort để cùng tập ID dù thứ tự khác vẫn hit cache,
+    // nhưng sau đó vẫn sắp xếp lại theo pageIds gốc.
+    const cacheKey = `track:hydrated:${[...pageIds].sort().join(",")}`;
+
+    try {
+      const cached = await cacheRedis.get(cacheKey);
+      if (cached) {
+        const cachedData: any[] = JSON.parse(cached);
+        // Sắp xếp lại theo thứ tự pageIds (ranking order)
+        return pageIds
+          .map((id) => cachedData.find((t) => t._id?.toString() === id))
+          .filter(Boolean);
+      }
+    } catch {
+      /* cache miss — fall through to DB */
+    }
+
+    const data = await Track.find({ _id: { $in: pageIds } })
+      .populate(TRACK_POPULATE as any)
+      .select(TRACK_SELECT)
+      .lean();
+
+    // Sắp xếp theo thứ tự ranking (không phải thứ tự DB trả về)
+    const sorted = pageIds
+      .map((id) => data.find((t: any) => t._id?.toString() === id))
+      .filter(Boolean);
+
+    // Lưu cache — không block nếu Redis lỗi
+    cacheRedis
+      .setex(cacheKey, HYDRATE_TTL, JSON.stringify(sorted))
+      .catch(() => {});
+
+    return sorted;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 1. GET TOP HOT TRACKS TODAY
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Lấy danh sách bài hát hot nhất hôm nay, có phân trang.
+   *
+   * LUỒNG XỬ LÝ (Fast → Slow):
+   *
+   * ① Redis HOT_TODAY_KEY còn sống (TTL chưa hết)?
+   *    └─ YES → ZREVRANGE để lấy IDs theo ranking → hydratePagedTracks → done
+   *    └─ NO  → ZUNIONSTORE rebuild từ hourly trending keys của analyticsService
+   *
+   * ② Hourly keys tồn tại (analyticsService đã flush ít nhất 1 lần)?
+   *    └─ YES → rebuild HOT_TODAY_KEY → về ①
+   *    └─ NO  → Cold start: PlayLog aggregate → seed HOT_TODAY_KEY → về ①
+   *
+   * ③ Vẫn chưa đủ bài cho trang yêu cầu?
+   *    └─ Fallback: Track.find sorted by playCount → ghép vào cuối list
+   *
+   * TẠI SAO DÙNG analyticsService's trending keys?
+   *  - analyticsService flush mỗi 10s → data luôn tươi
+   *  - ZUNIONSTORE O(N log N) trên Redis, nhanh hơn MongoDB aggregate rất nhiều
+   *  - Không cần dedup unique listener ở đây (đó là việc của chart:live:top100)
+   *    vì "hot today" chỉ cần trending score, không cần anti-cheat strictness
+   *
+   * @param filter - { page?: number, limit?: number }
+   */
+  async getTopHotTracksToday(filter: any) {
+    const { page = 1, limit = 20 } = filter;
+    const page_ = Number(page);
+    const limit_ = Number(limit);
+    const skip = (page_ - 1) * limit_;
+    const totalNeeded = skip + limit_;
+
+    try {
+      // ── BƯỚC 1: Rebuild HOT_TODAY_KEY nếu cần ──────────────────────────────
+
+      const hotKeyExists = await cacheRedis.exists(HOT_TODAY_KEY);
+
+      if (!hotKeyExists) {
+        // Lấy tất cả hourly trending keys của hôm nay từ analyticsService
+        // Format: trending:YYYY-MM-DD:HH  (UTC giờ server, nhất quán với analyticsService)
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const currentHour = now.getHours();
+
+        const todayHourKeys = Array.from(
+          { length: currentHour + 1 },
+          (_, h) => `trending:${dateStr}:${h.toString().padStart(2, "0")}`,
+        );
+
+        // Kiểm tra xem có hourly key nào thực sự tồn tại không
+        // (tránh ZUNIONSTORE với keys rỗng gây lỗi trên một số Redis versions)
+        const existingKeys = (
+          await Promise.all(
+            todayHourKeys.map((k) =>
+              cacheRedis.exists(k).then((e) => (e ? k : null)),
+            ),
+          )
+        ).filter(Boolean) as string[];
+
+        if (existingKeys.length > 0) {
+          // ZUNIONSTORE: gộp tất cả hourly view scores thành daily hot score
+          // Weighted UNION (mặc định weight=1) → bài nào nghe nhiều giờ, nhiều lượt đều được cộng
+          await (cacheRedis as any).zunionstore(
+            HOT_TODAY_KEY,
+            existingKeys.length,
+            ...existingKeys,
+          );
+          await cacheRedis.expire(HOT_TODAY_KEY, HOT_TODAY_TTL);
+        } else {
+          // ── BƯỚC 2: Cold start — analyticsService chưa kịp flush ─────────
+          // Fallback về PlayLog aggregate (giống logic cũ nhưng chỉ chạy 1 lần)
+          // Sau đó seed ngược lên Redis để các lần sau không cần query DB nữa
+          const start = new Date();
+          start.setHours(0, 0, 0, 0);
+
+          const hotTrackLogs = await PlayLog.aggregate([
+            { $match: { listenedAt: { $gte: start } } },
+            {
+              $project: {
+                trackId: 1,
+                listener: { $ifNull: ["$userId", "$ip"] },
+              },
+            },
+            {
+              $group: {
+                _id: { trackId: "$trackId", listener: "$listener" },
+              },
+            },
+            { $group: { _id: "$_id.trackId", score: { $sum: 1 } } },
+            { $sort: { score: -1 } },
+            { $limit: REDIS_POOL_LIMIT },
+          ]);
+
+          if (hotTrackLogs.length > 0) {
+            // Seed HOT_TODAY_KEY với unique-listener scores từ DB
+            const pipeline = cacheRedis.pipeline();
+            hotTrackLogs.forEach((t) =>
+              pipeline.zadd(HOT_TODAY_KEY, t.score, t._id.toString()),
+            );
+            pipeline.expire(HOT_TODAY_KEY, HOT_TODAY_TTL);
+            await pipeline.exec();
+          }
+        }
+      }
+
+      // ── BƯỚC 3: Đọc IDs từ Redis (O(log N + M)) ───────────────────────────
+
+      const totalFromRedis = await cacheRedis.zcard(HOT_TODAY_KEY);
+      let hotIds: string[] =
+        totalFromRedis > 0
+          ? await cacheRedis.zrevrange(HOT_TODAY_KEY, 0, REDIS_POOL_LIMIT - 1)
+          : [];
+
+      // ── BƯỚC 4: Fallback nếu chưa đủ bài cho trang yêu cầu ───────────────
+
+      if (hotIds.length < totalNeeded) {
+        const extra = await Track.find({
+          _id: { $nin: hotIds },
+          isDeleted: { $ne: true },
+          isPublic: true,
+          status: "ready",
+        })
+          .sort({ playCount: -1 })
+          .limit(totalNeeded - hotIds.length)
+          .select("_id")
+          .lean();
+
+        hotIds = [...hotIds, ...extra.map((t: any) => t._id.toString())];
+      }
+
+      // ── BƯỚC 5: Phân trang + Hydrate ──────────────────────────────────────
+
+      const pageIds = hotIds.slice(skip, skip + limit_);
+      const data = await this.hydratePagedTracks(pageIds);
+
+      const totalItems = Math.max(totalFromRedis, hotIds.length);
+
+      return {
+        data,
+        meta: {
+          totalItems,
+          page: page_,
+          pageSize: limit_,
+          totalPages: Math.ceil(totalItems / limit_),
+          hasNextPage: totalNeeded < totalItems,
+        },
+      };
+    } catch (error) {
+      console.error("[Chart] Error in getTopHotTracksToday:", error);
+      throw error;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 2. GET TOP FAVOURITE TRACKS
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Lấy danh sách bài hát được yêu thích nhiều nhất, có phân trang.
+   *
+   * LUỒNG XỬ LÝ (Fast → Slow):
+   *
+   * ① chart:favourites tồn tại trong Redis?
+   *    └─ YES → ZREVRANGE → hydratePagedTracks → done (P99 < 5ms)
+   *    └─ NO  → Cold start: Like aggregate → seed chart:favourites → về ①
+   *
+   * ② Vẫn chưa đủ bài?
+   *    └─ Track.find sorted by likeCount → ghép vào cuối
+   *
+   * TẠI SAO KHÔNG SET TTL CHO FAV_KEY?
+   *  - chart:favourites được cập nhật real-time bởi onTrackLiked / onTrackUnliked
+   *  - Set TTL sẽ làm mất thông tin, gây cold start không cần thiết
+   *  - Nếu Redis restart → cold start 1 lần từ Like aggregate → tự heal
+   *
+   * INVARIANT: FAV_KEY luôn nhất quán với Like collection vì mọi like/unlike
+   * đều gọi onTrackLiked / onTrackUnliked (xem phần cuối file).
+   *
+   * @param filter - { page?: number, limit?: number }
+   */
+  async getTopFavouriteTracks(filter: any) {
+    const { page = 1, limit = 20 } = filter;
+    const page_ = Number(page);
+    const limit_ = Number(limit);
+    const skip = (page_ - 1) * limit_;
+    const totalNeeded = skip + limit_;
+
+    try {
+      // ── BƯỚC 1: Kiểm tra Redis ─────────────────────────────────────────────
+
+      const totalFromRedis = await cacheRedis.zcard(FAV_KEY);
+      let favIds: string[] =
+        totalFromRedis > 0
+          ? await cacheRedis.zrevrange(FAV_KEY, 0, REDIS_POOL_LIMIT - 1)
+          : [];
+
+      // ── BƯỚC 2: Cold start — seed từ Like collection ──────────────────────
+
+      if (favIds.length === 0) {
+        const favLogs = await Like.aggregate([
+          { $match: { targetType: "track" } },
+          { $group: { _id: "$targetId", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: REDIS_POOL_LIMIT },
+        ]);
+
+        if (favLogs.length > 0) {
+          // Seed FAV_KEY — pipeline để atomic và nhanh nhất có thể
+          const pipeline = cacheRedis.pipeline();
+          favLogs.forEach((l) =>
+            pipeline.zadd(FAV_KEY, l.count, l._id.toString()),
+          );
+          await pipeline.exec();
+
+          favIds = favLogs.map((l) => l._id.toString());
+        }
+      }
+
+      // ── BƯỚC 3: Fallback nếu chưa đủ bài cho trang yêu cầu ───────────────
+
+      if (favIds.length < totalNeeded) {
+        const extra = await Track.find({
+          _id: { $nin: favIds },
+          isDeleted: { $ne: true },
+          isPublic: true,
+          status: "ready",
+        })
+          .sort({ likeCount: -1 })
+          .limit(totalNeeded - favIds.length)
+          .select("_id")
+          .lean();
+
+        favIds = [...favIds, ...extra.map((t: any) => t._id.toString())];
+      }
+
+      // ── BƯỚC 4: Phân trang + Hydrate ──────────────────────────────────────
+
+      const pageIds = favIds.slice(skip, skip + limit_);
+      const data = await this.hydratePagedTracks(pageIds);
+
+      const totalItems = Math.max(totalFromRedis, favIds.length);
+
+      return {
+        data,
+        meta: {
+          totalItems,
+          page: page_,
+          pageSize: limit_,
+          totalPages: Math.ceil(totalItems / limit_),
+          hasNextPage: totalNeeded < totalItems,
+        },
+      };
+    } catch (error) {
+      console.error("[Chart] Error in getTopFavouriteTracks:", error);
+      // Trả về trang trống thay vì crash app
+      return {
+        data: [],
+        meta: {
+          totalItems: 0,
+          page: page_,
+          pageSize: limit_,
+          totalPages: 0,
+          hasNextPage: false,
+        },
+      };
+    }
   }
 }
 

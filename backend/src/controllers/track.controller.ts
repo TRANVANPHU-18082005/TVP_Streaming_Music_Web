@@ -261,19 +261,3 @@ export const getTopChart = catchAsync(async (req: Request, res: Response) => {
   const data = await getRealtimeChart();
   res.status(httpStatus.OK).json({ success: true, data });
 });
-
-export const getTopHotTracksToday = catchAsync(
-  async (req: Request, res: Response) => {
-    const filters = req.query as any;
-    const result = await trackService.getTopHotTracksToday(filters);
-    res.status(httpStatus.OK).json({ success: true, data: result });
-  },
-);
-
-export const getTopFavouriteTracks = catchAsync(
-  async (req: Request, res: Response) => {
-    const filters = req.query as any;
-    const result = await trackService.getTopFavouriteTracks(filters);
-    res.status(httpStatus.OK).json({ success: true, data: result });
-  },
-);
