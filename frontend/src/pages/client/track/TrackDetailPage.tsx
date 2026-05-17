@@ -705,7 +705,11 @@ const TrackDetailPage = () => {
               )}
             </button>
             <div className="rounded-full flex items-center justify-center border border-border/50 size-10 bg-background/30 backdrop-blur-sm hover:bg-muted/60 transition-all">
-              <TrackLikeButton id={track._id} />
+              <TrackLikeButton
+                id={track._id}
+                showCount
+                likeCount={track.likeCount}
+              />
             </div>
 
             <button
@@ -844,7 +848,7 @@ const TrackDetailPage = () => {
                 />
               )}
 
-                {Array.isArray(track.featuringArtists) &&
+              {Array.isArray(track.featuringArtists) &&
                 track.featuringArtists.length > 0 &&
                 track.featuringArtists.map((fa) =>
                   typeof fa === "object" ? (
@@ -939,7 +943,8 @@ const RecommendedSection = memo(
       isLoading,
       error,
     } = useRecommendedTracks(APP_CONFIG.SELECTOR_LIMIT, excludeTrackId);
-
+    const trackIds = useMemo(() => tracks?.map((t) => t._id) ?? [], [tracks]);
+    useSyncInteractions(trackIds, "like", "track", !isLoading); // Ensure we have the latest likes in this section
     const handleMoreOptions = useCallback(
       (t: ITrack) => openTrackSheet(t),
       [openTrackSheet],
@@ -1002,7 +1007,8 @@ const SimilarSection = memo(
       isLoading,
       error,
     } = useSimilarTracks(trackId!, APP_CONFIG.SELECTOR_LIMIT);
-
+    const trackIds = useMemo(() => tracks?.map((t) => t._id) ?? [], [tracks]);
+    useSyncInteractions(trackIds, "like", "track", !isLoading); // Ensure we have the latest likes in this section
     const handleMoreOptions = useCallback(
       (t: ITrack) => openTrackSheet(t),
       [openTrackSheet],

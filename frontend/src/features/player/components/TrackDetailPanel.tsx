@@ -35,6 +35,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "..";
 import { handleError } from "@/utils/handleError";
 import { APP_CONFIG } from "@/config/constants";
+import { useSyncInteractions } from "@/features/interaction";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPRING PRESETS — module scope, no alloc per render
@@ -373,6 +374,8 @@ const RecommendedSection = memo(
       error,
       isFetching,
     } = useRecommendedTracks(APP_CONFIG.SELECTOR_LIMIT, excludeTrackId);
+    const trackIds = useMemo(() => tracks?.map((t) => t._id) ?? [], [tracks]);
+    useSyncInteractions(trackIds, "like", "track", !isLoading); // Ensure we have the latest likes in this section
     const openSheet = useCallback(
       (type: "playlist" | "track", t: ITrack) => {
         if (type === "track") openTrackSheet(t);
@@ -446,7 +449,8 @@ const SimilarSection = memo(({ trackId, onPlay }: TrackSectionProps) => {
     isLoading,
     error,
   } = useSimilarTracks(trackId!, APP_CONFIG.SELECTOR_LIMIT);
-
+  const trackIds = useMemo(() => tracks?.map((t) => t._id) ?? [], [tracks]);
+  useSyncInteractions(trackIds, "like", "track", !isLoading); // Ensure we have the latest likes in this section
   const openSheet = useCallback(
     (type: "playlist" | "options", t: ITrack) => {
       if (type === "options") openTrackSheet(t);
@@ -617,7 +621,7 @@ export const TrackDetailPanel = memo(
           dispatch(
             setQueue({
               trackIds: [track._id],
-              initialMetadata: [track], 
+              initialMetadata: [track],
               startIndex: 0,
               isShuffling: false,
               source: {

@@ -165,12 +165,12 @@ export const TrackRowShell = ({
         {album}
       </TableCell>
 
-      <TableCell className="py-0 pr-1 w-10" role="gridcell">
-        {hasHovered && actions}
-      </TableCell>
-
       <TableCell className="py-0 pr-3" role="gridcell" data-no-row-click="">
         <div className="flex items-center justify-end">{duration}</div>
+      </TableCell>
+
+      <TableCell className="py-0 w-10 pr-3" role="gridcell">
+        {actions}
       </TableCell>
     </TableRow>
   );

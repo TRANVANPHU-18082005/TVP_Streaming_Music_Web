@@ -162,7 +162,6 @@ export const RecentlyListenedTrack = () => {
     [tracksData?.totalItems],
   );
   const TrackIds = useMemo(() => allTracks.map((t) => t._id), [allTracks]);
-  /** Read prefers-reduced-motion once at orchestrator level, pass down */
 
   /** Stable retry — prevents ErrorState from re-rendering on unrelated state */
   const handleRetry = useCallback(() => refetchTracks?.(), [refetchTracks]);
@@ -333,7 +332,7 @@ export const RecentlyListenedTrack = () => {
               >
                 <TrackList
                   {...trackListProps}
-                  maxHeight={400}
+                  maxHeight={500}
                   moodColor={`var(--wave-2)`}
                   skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
                   staggerAnimation={true}

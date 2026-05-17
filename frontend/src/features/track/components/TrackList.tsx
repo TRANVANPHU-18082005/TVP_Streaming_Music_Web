@@ -8,7 +8,13 @@ import React, {
   useState,
 } from "react";
 import { useVirtualizer, useWindowVirtualizer } from "@tanstack/react-virtual";
-import { Clock, AlertCircle, RotateCcw, Music2 } from "lucide-react";
+import {
+  Clock,
+  AlertCircle,
+  RotateCcw,
+  Music2,
+  ListChevronsUpDown,
+} from "lucide-react";
 import { shallowEqual } from "react-redux";
 import {
   Table,
@@ -28,6 +34,8 @@ import {
 import type { QueueSourceType } from "@/features/player/slice/playerSlice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { ITrack } from "@/features/track/types";
+import { useContextSheet } from "@/app/provider/SheetProvider";
+import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 
 // ─────────────────────────────────────────────────────────────
 // Module constants
@@ -57,8 +65,8 @@ const COLGROUP = (
         style={{ width: "200px" }}
         className="hidden md:table-column"
       />,
-      <col key="c-4" style={{ width: "2.5rem" }} />,
-      <col key="c-5" style={{ width: "4rem" }} />,
+      <col key="c-4" style={{ width: "4rem" }} />,
+      <col key="c-5" style={{ width: "3rem" }} />,
     ]}
   </colgroup>
 );
@@ -78,7 +86,6 @@ export interface TrackListProps {
   onFetchNextPage?: () => void;
   onRetry?: () => void;
   onTrackPlay?: (track: ITrack, index: number) => void;
-  onContextMenu?: (track: ITrack, anchor: HTMLElement) => void;
   className?: string;
   showHeader?: boolean;
   skeletonCount?: number;
@@ -306,12 +313,19 @@ const ColumnHeaders = memo(
               Album
             </span>
           </TableHead>
-          <TableHead className="pr-1 h-9" />
           <TableHead className="pr-3 h-9">
             <div className="flex items-center justify-center">
               <Clock
                 className="size-3 text-muted-foreground/50"
                 aria-label="Thời lượng"
+              />
+            </div>
+          </TableHead>
+          <TableHead className="pr-1 h-9">
+            <div className="flex items-center justify-center">
+              <ListChevronsUpDown
+                className="size-3 text-muted-foreground/50"
+                aria-label="Tùy chọn"
               />
             </div>
           </TableHead>
@@ -430,7 +444,7 @@ interface VirtualTableBodyProps {
   staggerAnimation: boolean;
   onPlay: (track: ITrack, index: number) => void;
   onSelect?: (id: string, mode: "single" | "range" | "toggle") => void;
-  onContextMenu?: (track: ITrack, anchor: HTMLElement) => void;
+  onContextMenu?: (track: ITrack) => void;
   onNavigate?: (index: number, direction: "up" | "down") => void;
 }
 
@@ -531,7 +545,6 @@ export const TrackList = memo(
     onFetchNextPage,
     onRetry,
     onTrackPlay,
-    onContextMenu,
     className,
     moodColor = "hsl(var(--primary))",
     showHeader = true,
@@ -554,7 +567,8 @@ export const TrackList = memo(
       }),
       shallowEqual,
     );
-
+    /** Read prefers-reduced-motion once at orchestrator level, pass down */
+    useSyncInteractionsPaged(tracks, "like", "track", !isLoading);
     // ── Local UI state ─────────────────────────────────────────
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -700,7 +714,11 @@ export const TrackList = memo(
       observer.observe(sentinel);
       return () => observer.disconnect();
     }, [hasNextPage, isFetchingNextPage, isFixedHeight, onFetchNextPageStable]);
-
+    const { openTrackSheet } = useContextSheet();
+    const onContextMenu = useCallback(
+      (t: ITrack) => openTrackSheet(t),
+      [openTrackSheet],
+    );
     // ── STABLE play handler (key optimization) ─────────────────
     // This function's identity NEVER changes (no deps array items that change).
     // It reads volatile values from refs at call time.

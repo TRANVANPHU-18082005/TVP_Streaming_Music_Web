@@ -26,6 +26,15 @@ export interface UserLibrary {
   tracks: ITrack[];
   albums: IAlbum[];
   playlists: IPlaylist[];
+  topTracks: {
+    data: ITrack[];
+    meta: {
+      totalItems: number;
+      totalPages: number;
+      currentPage: number;
+      itemsPerPage: number;
+    };
+  }; // Thêm trường topTracks vào dashboard
 }
 export interface ProfileDashboard {
   analytics: AnalyticsData[];

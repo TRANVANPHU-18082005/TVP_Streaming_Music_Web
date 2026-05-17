@@ -1,5 +1,6 @@
 // src/features/interaction/slice/interactionSlice.ts
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { RootState } from "@/store/store";
+import { createSelector, createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 export type InteractionTargetType = "track" | "album" | "playlist" | "artist";
 
@@ -43,12 +44,12 @@ export const interactionSlice = createSlice({
       const { interactedIds, checkedIds, targetType } = action.payload;
       const mapName = MAP_NAMES[targetType];
 
-      // 1. Reset trạng thái của các ID vừa check (để đảm bảo tính nhất quán giữa các tab)
+      // 1. Mặc định gán toàn bộ những ID vừa check là false (Đã check nhưng chưa Like)
       checkedIds.forEach((id) => {
-        delete state[mapName][id];
+        state[mapName][id] = false;
       });
 
-      // 2. Map lại dữ liệu mới từ Server
+      // 2. Bài nào thực sự Like thì ghi đè thành true
       interactedIds.forEach((id) => {
         state[mapName][id] = true;
       });
@@ -61,7 +62,7 @@ export const interactionSlice = createSlice({
     ) => {
       const { id, targetType } = action.payload;
       const mapName = MAP_NAMES[targetType];
-      if (state[mapName][id]) delete state[mapName][id];
+      if (state[mapName][id]) state[mapName][id] = false;
       else state[mapName][id] = true;
     },
 
@@ -77,15 +78,22 @@ export const interactionSlice = createSlice({
       const { id, targetType, status } = action.payload;
       const mapName = MAP_NAMES[targetType];
       if (status) state[mapName][id] = true;
-      else delete state[mapName][id];
+      else state[mapName][id] = false;
     },
 
     setInteractionLoading: (
       state,
-      action: PayloadAction<{ id: string; isLoading: boolean }>,
+      action: PayloadAction<{
+        id: string;
+        targetType: InteractionTargetType;
+        isLoading: boolean;
+      }>,
     ) => {
-      if (action.payload.isLoading) state.loadingIds[action.payload.id] = true;
-      else delete state.loadingIds[action.payload.id];
+      const { id, targetType, isLoading } = action.payload;
+      const compositeKey = `${targetType}:${id}`; // 🚀 TẠO KEY KẾT HỢP
+
+      if (isLoading) state.loadingIds[compositeKey] = true;
+      else delete state.loadingIds[compositeKey];
     },
     resetInteractions: () => initialState,
   },
@@ -98,4 +106,54 @@ export const {
   setInteractionLoading,
   resetInteractions,
 } = interactionSlice.actions;
+// 1. Input selector lấy ra toàn bộ state của slice interaction
+const selectInteractionState = (state: RootState) => state.interaction;
+
+// % 2. Output selector được memoize để lấy toàn bộ map (Dùng khi cần lấy cả cụm)
+export const selectInteractionMap = createSelector(
+  [selectInteractionState],
+  (interaction) => ({
+    track: interaction.likedTracks,
+    album: interaction.likedAlbums,
+    playlist: interaction.likedPlaylists,
+    artist: interaction.followedArtists,
+  }),
+);
+
+// 3. Selector kiểm tra trạng thái Loading tổng thể
+export const selectInteractionLoading = (state: RootState) =>
+  state.interaction.loadingIds;
+
+// 4. TỐI ƯU: Plain Selector kiểm tra trạng thái ép về Boolean (Dùng trực tiếp tại Button con)
+// Chuyển từ createSelector thành hàm thường để đạt tốc độ O(1) tuyệt đối trong .map()
+export const selectIsInteracted = (
+  state: RootState,
+  id: string,
+  targetType: InteractionTargetType,
+): boolean => {
+  const MAP_NAMES = {
+    track: "likedTracks",
+    album: "likedAlbums",
+    playlist: "likedPlaylists",
+    artist: "followedArtists",
+  } as const;
+
+  return !!state.interaction[MAP_NAMES[targetType]][id];
+};
+
+// 5. Plain Selector lấy trạng thái gốc (true | false | undefined) phục vụ cho Sync Hook
+export const selectRawInteractionStatus = (
+  state: RootState,
+  id: string,
+  targetType: InteractionTargetType,
+) => {
+  const MAP_NAMES = {
+    track: "likedTracks",
+    album: "likedAlbums",
+    playlist: "likedPlaylists",
+    artist: "followedArtists",
+  } as const;
+
+  return state.interaction[MAP_NAMES[targetType]][id];
+};
 export default interactionSlice.reducer;

@@ -18,7 +18,15 @@
  *  • useHeroSlider is called once per connector; direction stays local
  */
 
-import { useState, useCallback, useMemo, useRef, type ReactNode } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  type ReactNode,
+  lazy,
+  Suspense,
+} from "react";
 import { Disc3, User, List, Hash, Music2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -68,7 +76,9 @@ import { useHeroSlider } from "@/hooks";
 // ── Online status ─────────────────────────────────────────────────────────────
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import MusicResult from "../../../components/ui/Result";
-import HeroCore, { HeroItem, HeroPlayback } from "./Herocore";
+import { HeroItem, HeroPlayback } from "./Herocore";
+import { HeroSkeleton } from "./HeroSkeleton";
+const HeroCore = lazy(() => import("./Herocore"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONFIG
@@ -202,25 +212,27 @@ function AlbumConnector() {
   };
 
   return (
-    <HeroCore
-      items={items}
-      isLoading={isLoading}
-      isError={isError}
-      refetch={refetch}
-      {...nav}
-      playback={playback}
-      onNavigateItem={() =>
-        currentRaw && navigate(`/albums/${currentRaw.slug}`)
-      }
-      onNavigateSubtitle={() =>
-        currentRaw?.artist && navigate(`/artists/${currentRaw.artist.slug}`)
-      }
-      headerLabel="BỘ SƯU TẬP NỔI BẬT"
-      badgeLabel="Album"
-      actionExtra={
-        currentRaw && <AlbumLikeButton id={currentRaw._id} variant="detail" />
-      }
-    />
+    <Suspense fallback={<HeroSkeleton />}>
+      <HeroCore
+        items={items}
+        isLoading={isLoading}
+        isError={isError}
+        refetch={refetch}
+        {...nav}
+        playback={playback}
+        onNavigateItem={() =>
+          currentRaw && navigate(`/albums/${currentRaw.slug}`)
+        }
+        onNavigateSubtitle={() =>
+          currentRaw?.artist && navigate(`/artists/${currentRaw.artist.slug}`)
+        }
+        headerLabel="BỘ SƯU TẬP NỔI BẬT"
+        badgeLabel="Album"
+        actionExtra={
+          currentRaw && <AlbumLikeButton id={currentRaw._id} variant="detail" />
+        }
+      />
+    </Suspense>
   );
 }
 
@@ -249,25 +261,27 @@ function PlaylistConnector() {
   };
 
   return (
-    <HeroCore
-      items={items}
-      isLoading={isLoading}
-      isError={isError}
-      refetch={refetch}
-      {...nav}
-      playback={playback}
-      onNavigateItem={() =>
-        currentRaw && navigate(`/playlists/${currentRaw.slug}`)
-      }
-      // No subtitle navigation — "Tvp Music" is static
-      headerLabel="BỘ SƯU TẬP NỔI BẬT"
-      badgeLabel="Playlist"
-      actionExtra={
-        currentRaw && (
-          <PlaylistLikeButton id={currentRaw._id} variant="detail" />
-        )
-      }
-    />
+    <Suspense fallback={<HeroSkeleton />}>
+      <HeroCore
+        items={items}
+        isLoading={isLoading}
+        isError={isError}
+        refetch={refetch}
+        {...nav}
+        playback={playback}
+        onNavigateItem={() =>
+          currentRaw && navigate(`/playlists/${currentRaw.slug}`)
+        }
+        // No subtitle navigation — "Tvp Music" is static
+        headerLabel="BỘ SƯU TẬP NỔI BẬT"
+        badgeLabel="Playlist"
+        actionExtra={
+          currentRaw && (
+            <PlaylistLikeButton id={currentRaw._id} variant="detail" />
+          )
+        }
+      />
+    </Suspense>
   );
 }
 
@@ -296,20 +310,22 @@ function ArtistConnector() {
   };
 
   return (
-    <HeroCore
-      items={items}
-      isLoading={isLoading}
-      isError={isError}
-      refetch={refetch}
-      {...nav}
-      playback={playback}
-      onNavigateItem={() =>
-        currentRaw && navigate(`/artists/${currentRaw.slug}`)
-      }
-      headerLabel="NGHỆ SỸ NỔI BẬT"
-      badgeLabel="Artist"
-      actionExtra={currentRaw && <FollowButton artistId={currentRaw._id} />}
-    />
+    <Suspense fallback={<HeroSkeleton />}>
+      <HeroCore
+        items={items}
+        isLoading={isLoading}
+        isError={isError}
+        refetch={refetch}
+        {...nav}
+        playback={playback}
+        onNavigateItem={() =>
+          currentRaw && navigate(`/artists/${currentRaw.slug}`)
+        }
+        headerLabel="NGHỆ SỸ NỔI BẬT"
+        badgeLabel="Artist"
+        actionExtra={currentRaw && <FollowButton artistId={currentRaw._id} />}
+      />
+    </Suspense>
   );
 }
 
@@ -334,20 +350,22 @@ function GenreConnector() {
   };
 
   return (
-    <HeroCore
-      items={items}
-      isLoading={isLoading}
-      isError={isError}
-      refetch={refetch}
-      {...nav}
-      playback={playback}
-      onNavigateItem={() =>
-        currentRaw && navigate(`/genres/${currentRaw.slug}`)
-      }
-      headerLabel="THỂ LOẠI NỔI BẬT"
-      badgeLabel="Genre"
-      // No actionExtra — genre has no like button
-    />
+    <Suspense fallback={<HeroSkeleton />}>
+      <HeroCore
+        items={items}
+        isLoading={isLoading}
+        isError={isError}
+        refetch={refetch}
+        {...nav}
+        playback={playback}
+        onNavigateItem={() =>
+          currentRaw && navigate(`/genres/${currentRaw.slug}`)
+        }
+        headerLabel="THỂ LOẠI NỔI BẬT"
+        badgeLabel="Genre"
+        // No actionExtra — genre has no like button
+      />
+    </Suspense>
   );
 }
 
@@ -402,21 +420,25 @@ function TrackConnector() {
   };
 
   return (
-    <HeroCore
-      items={items}
-      isLoading={isLoading}
-      isError={isError}
-      refetch={refetch}
-      {...nav}
-      playback={playback}
-      onNavigateItem={() => currentRaw && navigate(`/tracks/${currentRaw._id}`)}
-      onNavigateSubtitle={() =>
-        currentRaw?.artist && navigate(`/artists/${currentRaw.artist.slug}`)
-      }
-      headerLabel="BÀI HÁT NỔI BẬT"
-      badgeLabel="Track"
-      actionExtra={currentRaw && <TrackLikeButton id={currentRaw._id} />}
-    />
+    <Suspense fallback={<HeroSkeleton />}>
+      <HeroCore
+        items={items}
+        isLoading={isLoading}
+        isError={isError}
+        refetch={refetch}
+        {...nav}
+        playback={playback}
+        onNavigateItem={() =>
+          currentRaw && navigate(`/tracks/${currentRaw._id}`)
+        }
+        onNavigateSubtitle={() =>
+          currentRaw?.artist && navigate(`/artists/${currentRaw.artist.slug}`)
+        }
+        headerLabel="BÀI HÁT NỔI BẬT"
+        badgeLabel="Track"
+        actionExtra={currentRaw && <TrackLikeButton id={currentRaw._id} />}
+      />
+    </Suspense>
   );
 }
 

@@ -16,7 +16,6 @@ import SectionAmbient from "@/components/SectionAmbient";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
 import { KeyboardMusic } from "lucide-react";
-import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { Genrepageskeleton, useGenresByUserQuery } from "@/features/genre";
 
@@ -109,14 +108,7 @@ const GenrePage: React.FC = () => {
       />
     );
   }
-  // Switching
-  if (isLoading && hasResults) {
-    return (
-      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-        <WaveformLoader glass={false} text="Đang tải" />
-      </div>
-    );
-  }
+
   // Deep Error
   if (isError && !hasResults) {
     return (
@@ -177,7 +169,7 @@ const GenrePage: React.FC = () => {
           aria-busy={isLoading}
         >
           {isLoading ? (
-            <div className={GRID_LAYOUT}>
+            <div className={cn(GRID_LAYOUT, "animate-pulse")}>
               <CardSkeleton
                 count={meta.pageSize || DEFAULT_GRID_META.pageSize}
               />

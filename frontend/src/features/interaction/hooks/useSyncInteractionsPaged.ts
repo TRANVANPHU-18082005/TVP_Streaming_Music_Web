@@ -9,12 +9,6 @@ import {
 import { env } from "@/config/env";
 import { ITrack } from "@/features/track";
 
-/**
- * Sync tăng dần: mỗi lần allTracks.length tăng (page mới load),
- * chỉ sync batch IDs chưa từng được check.
- *
- * Không cần pages[] raw — hoạt động với select-transformed data.
- */
 export const useSyncInteractionsPaged = (
   allTracks: ITrack[] | undefined,
   type: "like" | "follow",
@@ -24,12 +18,10 @@ export const useSyncInteractionsPaged = (
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
 
-  // Set chứa IDs đã sync — persist across re-renders, reset khi unmount
   const syncedIds = useRef<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Chỉ lấy IDs chưa sync — tránh tính lại không cần thiết
-  // Also skip IDs we already have in Redux to avoid redundant server checks
+  // Lấy map từ Redux Store
   const interactionMap = useAppSelector((state) => {
     const maps = {
       track: state.interaction.likedTracks,
@@ -40,45 +32,70 @@ export const useSyncInteractionsPaged = (
     return maps[targetType];
   });
 
-  const newIds = useMemo(() => {
-    if (!allTracks?.length) return [];
-    return allTracks
-      .map((t) => t._id)
-      .filter((id) => !syncedIds.current.has(id) && !interactionMap[id]);
-  }, [allTracks, interactionMap]); // allTracks ref thay đổi khi page mới append vào
+  // 🚀 TỐI ƯU 1: Tự động dọn dẹp bộ nhớ đệm ẩn khi Phú đổi tài khoản hoặc đổi Tab nội dung
+  useEffect(() => {
+    syncedIds.current.clear();
+  }, [user?._id, targetType]);
+
+  // 🚀 TỐI ƯU 2: Biến mảng tracks thành chuỗi string có tính tham chiếu ổn định
+  const trackIdsKey = useMemo(() => {
+    if (!allTracks?.length) return "";
+    return allTracks.map((t) => t._id).join(",");
+  }, [allTracks]);
 
   useEffect(() => {
-    if (!user || !enabled || newIds.length === 0) return;
+    if (!user || !enabled || !trackIdsKey) return;
+
+    // 🚀 TỐI ƯU 3: Bóc tách và lọc chính xác những ID thực sự chưa biết (bằng undefined) ngay trong effect
+    const trackIds = trackIdsKey.split(",");
+    const unknownIds = trackIds.filter(
+      (id) => !syncedIds.current.has(id) && interactionMap[id] === undefined,
+    );
+
+    // Nếu không có bài mới nào cần check thì dừng lại ngay tại đây
+    if (unknownIds.length === 0) return;
+
+    // Cờ bảo vệ chống Race Condition khi unmount hoặc re-run
+    let isCancelled = false;
 
     clearTimeout(timerRef.current);
+
     timerRef.current = setTimeout(async () => {
       try {
         if (env.NODE_ENV === "development") {
-          console.log(`[SyncPaged] Syncing ${newIds.length} new IDs`);
+          console.log(
+            `[SyncPaged] Requesting API for ${unknownIds.length} new IDs`,
+          );
         }
 
         const interactedIds = await interactionApi.checkBatch(
-          newIds,
+          unknownIds,
           type,
           targetType,
         );
 
-        dispatch(
-          syncInteractions({
-            interactedIds,
-            checkedIds: newIds,
-            targetType,
-          }),
-        );
+        // Chỉ cập nhật vào Redux nếu luồng này còn hiệu lực
+        if (!isCancelled) {
+          dispatch(
+            syncInteractions({
+              interactedIds,
+              checkedIds: unknownIds,
+              targetType,
+            }),
+          );
 
-        // Đánh dấu đã sync — sẽ không check lại dù re-render
-        newIds.forEach((id) => syncedIds.current.add(id));
+          // Đóng dấu xác nhận đã quét qua vĩnh viễn cho đợt ID này
+          unknownIds.forEach((id) => syncedIds.current.add(id));
+        }
       } catch (err) {
-        console.error("[SyncPaged] error:", err);
+        console.error("[SyncPaged] API error:", err);
       }
     }, 300);
 
-    return () => clearTimeout(timerRef.current);
-  }, [newIds, type, targetType, user, enabled, dispatch]);
-  // newIds thay đổi khi có track mới chưa sync → effect chạy đúng lúc
+    return () => {
+      isCancelled = true;
+      clearTimeout(timerRef.current);
+    };
+    // Cách biệt hoàn toàn khỏi sự re-render của interactionMap tổng
+  }, [trackIdsKey, type, targetType, user, enabled, dispatch]);
 };

@@ -10,7 +10,6 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Edit,
   Heart,
   Plus,
   Calendar,
@@ -46,6 +45,7 @@ import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { IArtist, useMyFollowedArtists } from "@/features/artist";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import { APP_CONFIG } from "@/config/constants";
+import { TrackList } from "@/features/track";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
@@ -330,6 +330,7 @@ const ProfilePage = () => {
   const { user } = useAppSelector((s) => s.auth);
   const { data: dashboard, isLoading: isDashboardLoading } =
     useProfileDashboard();
+  console.log("Profile dashboard data:", dashboard); // Debug log to verify data structure
   const { data: myPlaylists, isLoading: isMyPlaylistsLoading } =
     useMyPlaylists();
   const { data: followedArtists, isLoading: isFollowedArtistsLoading } =
@@ -682,6 +683,35 @@ const ProfilePage = () => {
                     </section>
 
                     {/* Recently Played — infinite + virtual scroll */}
+                    <section aria-label="Top played tracks">
+                      <SectionHeader
+                        icon={History}
+                        eyebrow="Thống kê"
+                        title="Bài hát được nghe nhiều nhất của bạn"
+                        iconColor="hsl(var(--success))"
+                      />
+                      <TrackList
+                        tracks={dashboard?.library?.topTracks.data || []}
+                        allTrackIds={
+                          dashboard?.library?.topTracks?.data?.map(
+                            (t) => t._id,
+                          ) || []
+                        }
+                        totalItems={
+                          dashboard?.library?.topTracks?.meta?.totalItems ?? 0
+                        }
+                        isLoading={false}
+                        moodColor={`var(--primary)`}
+                        maxHeight={500}
+                        skeletonCount={APP_CONFIG.PAGINATION_LIMIT} // nhiều hơn để fill viewport lúc đầu
+                        staggerAnimation
+                        source={{
+                          id: "top-tracks" + user?._id,
+                          type: "topTracks",
+                          title: "Bài hát được nghe nhiều nhất của bạn",
+                        }}
+                      />
+                    </section>
                     <section aria-label="Recently played tracks">
                       <SectionHeader
                         icon={History}

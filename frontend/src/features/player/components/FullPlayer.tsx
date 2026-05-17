@@ -1545,7 +1545,11 @@ const FullPlayerComponent = ({
                 {phase >= 1 ? (
                   <div className="flex justify-center gap-2">
                     <EyeViewBadge size="sm" count={listenCount} />
-                    <TrackLikeButton id={track._id} />
+                    <TrackLikeButton
+                      id={track._id}
+                      showCount
+                      likeCount={track.likeCount}
+                    />
                   </div>
                 ) : (
                   <div className="size-7" aria-hidden="true" />

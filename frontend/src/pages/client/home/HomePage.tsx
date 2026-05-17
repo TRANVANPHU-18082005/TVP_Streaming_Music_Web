@@ -8,7 +8,7 @@ const ArtistSpotlight = lazy(() => import("./ArtistSpotlight"));
 const FeaturedGenres = lazy(() => import("./FeaturedGenres"));
 const TopFeaturedTracks = lazy(() => import("./TopFeaturedTracks"));
 const RecentlyListenedTrack = lazy(() => import("./RecentlyListenedTrack"));
-const LibrarySection = lazy(() => import("./Librarysection"));
+const LibrarySection = lazy(() => import("./LibrarySection"));
 const TrackSection = lazy(() => import("./TrackSection"));
 
 function SectionSkeleton({ height = 48 }: { height?: number }) {

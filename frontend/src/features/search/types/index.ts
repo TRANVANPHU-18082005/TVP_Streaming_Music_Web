@@ -56,7 +56,64 @@ export interface BaseSearchResponse<T> {
   data: T;
   message?: string;
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
 
+export const TRENDING_FALLBACK = [
+  "Sơn Tùng M-TP",
+  "Chill cùng Indie",
+  "Pop Ballad",
+  "Rap Việt",
+  "Nhạc Trẻ",
+  "Tập Gym",
+  "Mới Phát Hành",
+  "Lo-fi Nhẹ Nhàng",
+];
+
+export const MAX_RECENT_SEARCHES = 10;
+export const STORAGE_KEY = "recentSearches";
+
+export const SEARCH_TABS = [
+  { id: "all", label: "Tất cả", Icon: "Music2" },
+  { id: "track", label: "Bài hát", Icon: "Music2" },
+  { id: "artist", label: "Nghệ sĩ", Icon: "Mic2" },
+  { id: "album", label: "Đĩa nhạc", Icon: "Disc3" },
+  { id: "playlist", label: "Danh sách phát", Icon: "ListMusic" },
+  { id: "genre", label: "Thể loại", Icon: "Tag" },
+] as const;
+
+export type SearchTab = (typeof SEARCH_TABS)[number]["id"];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANIMATION PRESETS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SPRING_FAST = {
+  type: "spring",
+  stiffness: 500,
+  damping: 32,
+} as const;
+export const SPRING_MEDIUM = {
+  type: "spring",
+  stiffness: 300,
+  damping: 28,
+} as const;
+
+export const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  visible: (i = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { ...SPRING_MEDIUM, delay: i * 0.045 },
+  }),
+  exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
+};
+
+export const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.04 } },
+};
 // --- Specific API Responses ---
 export type SearchResponse = BaseSearchResponse<SearchData>;
 export type SuggestResponse = BaseSearchResponse<SuggestItem[]>;

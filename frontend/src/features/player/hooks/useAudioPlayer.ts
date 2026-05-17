@@ -437,7 +437,8 @@ export const useAudioPlayer = () => {
 
     setCurrentTime(curr);
 
-    if (curr >= 30) handleRecordView(currentTrack._id);
+    if (curr >= Math.floor(currentTrack.duration * 0.9))
+      handleRecordView(currentTrack._id);
 
     if (
       dur > 0 &&

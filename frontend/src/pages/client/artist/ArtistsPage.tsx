@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
-import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import {
   Artistpageskeleton,
@@ -104,12 +103,7 @@ const ArtistPage: React.FC = () => {
     () => artists.map((a: IArtist) => a._id),
     [artists],
   );
-  useSyncInteractions(
-    artistIds,
-    "follow",
-    "artist",
-    !isLoading && artistIds.length > 0,
-  );
+  useSyncInteractions(artistIds, "follow", "artist", !isLoading);
 
   /** Stable handler object — prevents ArtistFilters re-render on grid updates */
   const stableFilterHandlers = useMemo(
@@ -127,14 +121,6 @@ const ArtistPage: React.FC = () => {
 
   if (isLoading && !hasResults) {
     return <Artistpageskeleton />;
-  }
-
-  if (isLoading && hasResults) {
-    return (
-      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-        <WaveformLoader glass={false} text="Đang tải" />
-      </div>
-    );
   }
 
   if (isError && !hasResults) {
@@ -191,7 +177,7 @@ const ArtistPage: React.FC = () => {
           aria-busy={isLoading}
         >
           {isLoading ? (
-            <div className={GRID_LAYOUT}>
+            <div className={cn(GRID_LAYOUT, "animate-pulse")}>
               <CardSkeleton
                 count={meta.pageSize || DEFAULT_GRID_META.pageSize}
               />

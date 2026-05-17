@@ -25,6 +25,7 @@ import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & VARIANTS
@@ -346,11 +347,14 @@ UpdatingIndicator.displayName = "UpdatingIndicator";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ChartRow = memo(
-  React.forwardRef<HTMLDivElement, {
-    track: RankedTrack;
-    index: number;
-    reduced: boolean;
-  }>(function ChartRowInner({ track, index, reduced }, ref) {
+  React.forwardRef<
+    HTMLDivElement,
+    {
+      track: RankedTrack;
+      index: number;
+      reduced: boolean;
+    }
+  >(function ChartRowInner({ track, index, reduced }, ref) {
     const variants = useMemo(
       () => makeRowVariants(index, reduced),
       [index, reduced],
@@ -380,7 +384,7 @@ export const TopFeaturedTracks = () => {
   const { tracks, isLoading, isUpdating, error, refetch } = useRealtimeChart();
   // FIX A: optional chaining — tránh crash khi tracks undefined trong re-sync
   const top10 = useMemo(() => tracks?.slice(0, TOP_N) ?? [], [tracks]);
-
+  useSyncInteractionsPaged(top10, "like", "track", !isLoading);
   const reduced = useReducedMotion() ?? false;
   const handleRetry = useCallback(() => refetch?.(), [refetch]);
   const hasResults = top10.length > 0;

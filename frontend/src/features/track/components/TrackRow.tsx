@@ -12,6 +12,7 @@ import TrackRowShell from "./TrackRowShell";
 import PlayCell from "./PlayCell";
 import LazyImage from "./LazyImage";
 import { prefersReducedMotion } from "@/utils/playerLayout";
+import { EllipsisVertical } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -25,7 +26,7 @@ export interface TrackRowProps {
   isSelected?: boolean;
   onPlay: (e?: React.MouseEvent) => void;
   onSelect?: (id: string, mode: "single" | "range" | "toggle") => void;
-  onContextMenu?: (track: ITrack, anchorEl: HTMLElement) => void;
+  onContextMenu?: (track: ITrack) => void;
   onNavigate?: (direction: "up" | "down") => void;
   animationDelay?: number;
 }
@@ -83,7 +84,13 @@ export const TrackRow = memo(
       },
       [onPlay],
     );
-
+    const handleMore = useCallback(
+      (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onContextMenu?.(track);
+      },
+      [track, onContextMenu],
+    );
     const center = (
       <>
         <LazyImage
@@ -161,7 +168,7 @@ export const TrackRow = memo(
       <span className="text-xs text-muted-foreground/30 italic">Single</span>
     );
 
-    const actionsNode = onContextMenu ? (
+    const actionsNode = handleMore ? (
       <button
         tabIndex={-1}
         aria-label={`Tùy chọn cho ${track.title}`}
@@ -170,27 +177,10 @@ export const TrackRow = memo(
           "flex items-center justify-center w-8 h-8 rounded-full",
           "text-muted-foreground/40 hover:text-foreground/70",
           "hover:bg-muted/50",
-          prefersReducedMotion
-            ? ""
-            : "transition-[opacity,colors] duration-150",
-          "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
         )}
-        onClick={(e) => {
-          e.stopPropagation();
-          onContextMenu(track, e.currentTarget);
-        }}
+        onClick={handleMore}
       >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 14 14"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <circle cx="7" cy="2" r="1.2" />
-          <circle cx="7" cy="7" r="1.2" />
-          <circle cx="7" cy="12" r="1.2" />
-        </svg>
+        <EllipsisVertical width={14} height={14} />
       </button>
     ) : null;
 
@@ -212,9 +202,7 @@ export const TrackRow = memo(
         isSelected={isSelected}
         onPlay={onPlay}
         onSelect={onSelect}
-        onContextMenu={
-          onContextMenu ? (anchor) => onContextMenu(track, anchor) : undefined
-        }
+        onContextMenu={onContextMenu ? () => onContextMenu(track) : undefined}
         onNavigate={(dir) => onNavigate?.(dir)}
         animationDelay={animationDelay}
         left={

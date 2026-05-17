@@ -3,11 +3,12 @@ import { motion, AnimatePresence, PanInfo, Variants } from "framer-motion";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { SP, SheetBackdrop, HandleBar } from "../sheetPrimitives";
-import { useIsLiked } from "@/features/interaction/hooks/useIsLiked";
 import { Heart, ListPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ITrack } from "@/features/track";
 import { useInteraction } from "@/features/interaction";
+import { useAppSelector } from "@/store/hooks";
+import { selectIsInteracted } from "@/features/interaction/slice/interactionSlice";
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED: TRACK PREVIEW ROW
 // ─────────────────────────────────────────────────────────────────────────────
@@ -51,7 +52,9 @@ export interface TrackSheetProps {
 export const TrackSheet = memo(
   ({ track, isOpen, onClose, onAddToPlaylist }: TrackSheetProps) => {
     const { handleToggle } = useInteraction();
-    const isLiked = useIsLiked(track?._id || "", "track");
+    const isLiked = useAppSelector((state) =>
+      selectIsInteracted(state, track?._id || "", "track"),
+    );
 
     const options = useMemo(() => {
       if (!track) return [];
@@ -64,6 +67,7 @@ export const TrackSheet = memo(
         {
           icon: Heart,
           label: `${isLiked ? "Bỏ thích" : "Thêm vào yêu thích"}`,
+          color: isLiked ? "text-red-500" : "text-muted-foreground",
           onClick: () => {
             handleToggle(track?._id || "", "track");
             onClose();
@@ -106,7 +110,7 @@ export const TrackSheet = memo(
               <TrackPreviewRow track={track} />
 
               <div className="py-2 pb-safe">
-                {options.map(({ icon: Icon, label, onClick }) => (
+                {options.map(({ icon: Icon, label, onClick, color }) => (
                   <motion.button
                     key={label}
                     whileTap={{ backgroundColor: "hsl(var(--muted) / 0.8)" }}
@@ -117,8 +121,13 @@ export const TrackSheet = memo(
                       "transition-colors text-left",
                     )}
                   >
-                    <Icon className="w-5 h-5 shrink-0" />
-                    <span className="text-[15px] font-medium leading-none">
+                    <Icon className={cn("w-5 h-5 shrink-0", color)} />
+                    <span
+                      className={cn(
+                        "text-[15px] font-medium leading-none ",
+                        color,
+                      )}
+                    >
                       {label}
                     </span>
                   </motion.button>

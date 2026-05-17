@@ -19,36 +19,49 @@ export const useInteraction = () => {
     async (id: string, targetType: InteractionTargetType) => {
       if (!user) return toast.error("Vui lòng đăng nhập!");
 
-      // 🚀 Kỹ thuật: Truy cập Store trực tiếp qua Thunk dispatch để lấy state mới nhất
-      // mà không cần đưa state vào dependency array của useCallback
+      // Sử dụng Thunk dispatch để lấy state tươi nhất một cách đồng bộ
       dispatch((_dispatch, getState) => {
         const state = getState();
+
+        // 🚀 CHỐT CHẶN BIẾN CỐ: Nếu ID này đang trong quá trình xử lý API, bỏ qua lượt click này
+        if (state.interaction.loadingIds[`${targetType}:${id}`]) return;
+
         const maps = {
           track: "likedTracks",
           album: "likedAlbums",
           playlist: "likedPlaylists",
           artist: "followedArtists",
         } as const;
+
         const wasInteracted = !!state.interaction[maps[targetType]][id];
 
-        // 1. UI phản hồi ngay lập tức
+        // 1. UI phản hồi ngay lập tức cho người dùng cảm giác mượt mà
         dispatch(toggleOptimistic({ id, targetType }));
 
-        // 2. Xử lý API async tách biệt
+        // 2. Kích hoạt trạng thái Loading để khóa nút bấm chống spam
+        dispatch(setInteractionLoading({ id, targetType, isLoading: true }));
+
+        // 3. Xử lý API tách biệt ra luồng riêng
         (async () => {
           try {
-            dispatch(setInteractionLoading({ id, isLoading: true }));
-            if (targetType === "artist") await interactionApi.toggleFollow(id);
-            else await interactionApi.toggleLike(id, targetType);
+            if (targetType === "artist") {
+              await interactionApi.toggleFollow(id);
+            } else {
+              await interactionApi.toggleLike(id, targetType);
+            }
           } catch (error) {
             handleError(error, "Cập nhật tương tác thất bại");
-            // 3. Rollback chính xác nếu lỗi
+
+            // 4. Rollback chính xác về trạng thái nguyên bản trước khi click nếu API sập
             dispatch(
               setInteractionStatus({ id, targetType, status: wasInteracted }),
             );
             toast.error("Không thể cập nhật yêu thích");
           } finally {
-            dispatch(setInteractionLoading({ id, isLoading: false }));
+            // Giải phóng trạng thái Loading để người dùng có thể thao tác lượt tiếp theo
+            dispatch(
+              setInteractionLoading({ id, targetType, isLoading: false }),
+            );
           }
         })();
       });

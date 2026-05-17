@@ -10,6 +10,7 @@ export { default as TrackList } from "./components/TrackList";
 export { default as TrackModal } from "./components/TrackModal";
 export { default as TrackRow } from "./components/TrackRow";
 export { default as TrackSelector } from "./components/TrackSelector";
+export { default as TrackSkeleton } from "./components/TrackSkeleton";
 export { default as TrackTable } from "./components/TrackTable";
 export { default as TrackTableRow } from "./components/TrackTableRow";
 

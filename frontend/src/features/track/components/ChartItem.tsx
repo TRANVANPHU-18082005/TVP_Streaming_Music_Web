@@ -8,6 +8,7 @@ import {
   TrendingDown,
   Minus,
   Sparkles,
+  EllipsisVertical,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -19,11 +20,11 @@ import { fmtCount, formatDuration } from "@/utils/track-helper";
 import { useAppDispatch } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "@/features/player";
 import { handleError } from "@/utils/handleError";
-import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { TrackTitleMarquee } from "@/features/player/components/TrackTitleMarquee";
 import { EqualizerBars } from "@/components/MusicVisualizer";
 import LazyImage from "./LazyImage";
+import { useContextSheet } from "@/app/provider/SheetProvider";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RANK CONFIG
@@ -330,7 +331,15 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
     },
     [isLoadingPlay, isCurrentTrack, dispatch, isPlaying, track],
   );
+  const { openTrackSheet } = useContextSheet();
 
+  const handleMore = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      openTrackSheet(track);
+    },
+    [track, openTrackSheet],
+  );
   const handleGoToAlbum = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -473,16 +482,6 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
         />
       )}
 
-      {/* Actions — slides in on hover */}
-      <div
-        className={cn(
-          "flex items-center gap-3 pl-2",
-          "transition-[opacity,transform] duration-200 ease-out",
-          "group-hover:opacity-0 group-hover:translate-x-1 group-hover:pointer-events-none min-w-5 md:min-w-10",
-        )}
-      >
-        <TrackLikeButton id={track._id} />
-      </div>
       {/* ── META + ACTIONS ── */}
       <div className="relative z-10 flex items-center pr-2 shrink-0 gap-1 overflow-hidden min-w-12.5 md:min-w-30">
         {/* Meta — fades on hover */}
@@ -504,6 +503,24 @@ export const ChartItem = memo(({ track, rank }: ChartItemProps) => {
           </span>
         </div>
       </div>
+      {/* Actions — slides in on hover */}
+      <button
+        tabIndex={-1}
+        aria-label={`Tùy chọn cho ${track.title}`}
+        data-no-row-click=""
+        className={cn(
+          "flex pr-3 items-center justify-center w-8 h-8 rounded-full",
+          "text-muted-foreground/40 hover:text-foreground/70",
+          "hover:bg-muted/50",
+          prefersReducedMotion
+            ? ""
+            : "transition-[opacity,colors] duration-150",
+          "opacity-100 md:opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+        )}
+        onClick={handleMore}
+      >
+        <EllipsisVertical width={14} height={14} />
+      </button>
     </div>
   );
 });

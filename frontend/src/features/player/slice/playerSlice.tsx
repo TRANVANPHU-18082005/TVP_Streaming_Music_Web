@@ -73,7 +73,8 @@ export type QueueSourceType =
   | "likedTracks"
   | "recentlyPlayed"
   | "trending"
-  | "mostLiked";
+  | "mostLiked"
+  | "topTracks";
 
 interface QueueSource {
   id: string;

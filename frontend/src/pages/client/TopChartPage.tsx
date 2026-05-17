@@ -49,7 +49,7 @@ import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { IChartDataPoint } from "@/features/track";
-import { useSyncInteractions } from "@/features/interaction";
+import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -214,10 +214,7 @@ function usePullToRefresh(
 // fires only on boundary crossing, zero layout cost.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function useSticky<T extends HTMLElement>(): [
-  React.RefObject<T>,
-  boolean,
-] {
+function useSticky<T extends HTMLElement>(): [React.RefObject<T>, boolean] {
   const ref = useRef<T>(null!);
   const [sticky, setSticky] = useState(false);
 
@@ -809,7 +806,7 @@ const TrackListSection = memo(
   }: TrackListSectionProps) => {
     // Sticky header: anchor ref sits above the section heading
     const [anchorRef, isSticky] = useSticky<HTMLDivElement>();
-
+    useSyncInteractionsPaged(visibleTracks, "like", "track", !isLoading);
     return (
       <section
         id="chart-list"
@@ -944,7 +941,7 @@ export const TopChartPage = () => {
   } = useRealtimeChart();
   const [showAll, setShowAll] = useState(false);
   const reduced = useReducedMotion() ?? false;
-  console.log(chartData,tracks);
+  console.log(chartData, tracks);
   const handleRetry = useCallback(() => refetch?.(), [refetch]);
   const handleToggleAll = useCallback(() => setShowAll((v) => !v), []);
 
@@ -977,14 +974,6 @@ export const TopChartPage = () => {
     [tracks, showAll],
   );
 
-  const trackIds = useMemo(() => tracks.map((t) => t._id), [tracks]);
-
-  useSyncInteractions(
-    trackIds,
-    "like",
-    "track",
-    !isLoading && trackIds.length > 0,
-  );
   const navigate = useNavigate();
 
   const hasResults = tracks.length > 0 && chartData.length > 0;

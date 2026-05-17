@@ -16,7 +16,6 @@ import {
 import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 import { useSmartBack } from "@/hooks/useSmartBack";
-import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import {
   Playlistpageskeleton,
   usePlaylistsByUserQuery,
@@ -74,7 +73,7 @@ PageHero.displayName = "PageHero";
 // PLAYLIST GRID — memo'd wrapper, stable across data transitions
 // ─────────────────────────────────────────────────────────────────────────────
 const PlaylistGrid = memo(({ children }: { children: React.ReactNode }) => (
-  <div className={GRID_LAYOUT}>{children}</div>
+  <div className={cn(GRID_LAYOUT)}>{children}</div>
 ));
 PlaylistGrid.displayName = "PlaylistGrid";
 
@@ -103,7 +102,7 @@ const PlaylistPage: React.FC = () => {
     [playlists],
   );
 
-  useSyncInteractions(playlistIds, "like", "playlist", playlistIds.length > 0);
+  useSyncInteractions(playlistIds, "like", "playlist", !isLoading);
   /**
    * Play handler — no throw, no artificial delay (v4.0-prev fixes preserved).
    * useCallback prevents new ref breaking PublicPlaylistCard memo.
@@ -134,14 +133,7 @@ const PlaylistPage: React.FC = () => {
       />
     );
   }
-  // Switching
-  if (isLoading && hasResults) {
-    return (
-      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-        <WaveformLoader glass={false} text="Đang tải" />
-      </div>
-    );
-  }
+
   // Deep Error
   if (isError && !hasResults) {
     return (
@@ -202,7 +194,7 @@ const PlaylistPage: React.FC = () => {
         >
           {isLoading ? (
             <PlaylistGrid>
-              <CardSkeleton count={skeletonCount} />
+              <CardSkeleton count={skeletonCount} className="animate-pulse" />
             </PlaylistGrid>
           ) : !hasResults ? (
             !isLoading && !isFiltering ? (

@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "@/components/SectionAmbient";
 
 import { useSmartBack } from "@/hooks/useSmartBack";
-import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { Albumpageskeleton, useAlbumsByUserQuery } from "@/features/album";
 import { useSyncInteractions } from "@/features/interaction";
@@ -100,7 +99,6 @@ const AlbumPage: React.FC = () => {
 
   const { data, isLoading, isError, refetch } =
     useAlbumsByUserQuery(filterParams);
-  console.log("AlbumPage data:", data); // Debug log to check fetched data
   const albums = useMemo(() => data?.albums ?? [], [data?.albums]);
   const meta = useMemo(
     () => ({ ...DEFAULT_GRID_META, ...data?.meta }),
@@ -108,13 +106,8 @@ const AlbumPage: React.FC = () => {
   );
   const albumIds = useMemo(() => albums?.map((a) => a._id) ?? [], [albums]);
 
-  useSyncInteractions(albumIds, "like", "album", albumIds.length > 0);
-  /**
-   * Play handler — no throw, no artificial delay (v3.2 fixes preserved).
-   * useCallback prevents new function reference breaking PublicAlbumCard memo.
-   */
+  useSyncInteractions(albumIds, "like", "album", !isLoading);
 
-  /** Stable handler object — prevents AlbumFilter re-render on grid updates */
   const stableFilterHandlers = useMemo(
     () => ({
       onSearch: handleSearch,
@@ -133,14 +126,6 @@ const AlbumPage: React.FC = () => {
       <Albumpageskeleton
         cardCount={meta.pageSize || DEFAULT_GRID_META.pageSize}
       />
-    );
-  }
-
-  if (isLoading && hasResults) {
-    return (
-      <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-        <WaveformLoader glass={false} text="Đang tải" />
-      </div>
     );
   }
 
@@ -200,7 +185,7 @@ const AlbumPage: React.FC = () => {
           aria-busy={isLoading}
         >
           {isLoading ? (
-            <div className={GRID_LAYOUT}>
+            <div className={cn(GRID_LAYOUT, "animate-pulse")}>
               <CardSkeleton
                 count={meta.pageSize || DEFAULT_GRID_META.pageSize}
               />

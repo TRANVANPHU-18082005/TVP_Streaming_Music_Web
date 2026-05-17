@@ -746,7 +746,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
               <Suspense fallback={<WaveformLoader />}>
                 <TrackList
                   {...trackListProps}
-                  maxHeight="auto"
+                  maxHeight={500}
                   moodColor={palette.hex}
                   skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
                   staggerAnimation={false}
@@ -1024,7 +1024,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
               <Suspense fallback={<WaveformLoader />}>
                 <TrackList
                   {...trackListProps}
-                  maxHeight="auto"
+                  maxHeight={500}
                   moodColor={palette.hslChannels}
                   skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
                   staggerAnimation

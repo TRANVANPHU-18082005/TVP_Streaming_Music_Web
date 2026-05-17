@@ -15,7 +15,8 @@ import { Heart, Loader2, BookHeart, Disc3 } from "lucide-react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useInteraction } from "../hooks/useInteraction";
-import { useIsLiked, useIsLoading } from "../hooks/useIsLiked";
+import { useAppSelector } from "@/store/hooks";
+import { selectIsInteracted } from "../slice/interactionSlice";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED
@@ -45,28 +46,35 @@ interface TrackLikeButtonProps {
 export const TrackLikeButton = memo(
   ({ id, likeCount, showCount = false, className }: TrackLikeButtonProps) => {
     const { handleToggle } = useInteraction();
-    const isLiked = useIsLiked(id, "track");
-    const isLoading = useIsLoading(id);
+    // 1. Lấy trạng thái ĐÃ LIKE hay chưa (O(1))
+    const isLiked = useAppSelector((state) =>
+      selectIsInteracted(state, id, "track"),
+    );
+
+    // 2. Lấy trạng thái ĐANG XỬ LÝ API của riêng ID này
+    const isPending = useAppSelector(
+      (state) => state.interaction.loadingIds[`track:${id}`],
+    );
     const [burstKey, setBurstKey] = useState(0);
 
     const handleClick = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        if (isLoading) return;
+        if (isPending) return;
         if (!isLiked) setBurstKey((k) => k + 1);
         handleToggle(id, "track");
       },
-      [isLoading, isLiked, handleToggle, id],
+      [isPending, isLiked, handleToggle, id],
     );
 
     return (
       <motion.button
         type="button"
         onClick={handleClick}
-        disabled={isLoading}
-        whileHover={!isLoading ? { scale: 1.12 } : undefined}
-        whileTap={!isLoading ? { scale: 0.82 } : undefined}
+        disabled={isPending}
+        whileHover={!isPending ? { scale: 1.12 } : undefined}
+        whileTap={!isPending ? { scale: 0.82 } : undefined}
         transition={SPRING_SNAPPY}
         aria-label={isLiked ? "Bỏ thích bài hát" : "Thích bài hát"}
         aria-pressed={isLiked}
@@ -94,7 +102,7 @@ export const TrackLikeButton = memo(
           transition={{ duration: 0.38, ease: [0.34, 1.56, 0.64, 1] }}
           className="relative flex items-center justify-center"
         >
-          {isLoading ? (
+          {isPending ? (
             <Loader2 className="size-[15px] animate-spin opacity-50 shrink-0" />
           ) : (
             <Heart
@@ -165,8 +173,14 @@ interface AlbumLikeButtonProps {
 export const AlbumLikeButton = memo(
   ({ id, variant = "detail", className }: AlbumLikeButtonProps) => {
     const { handleToggle } = useInteraction();
-    const isLiked = useIsLiked(id, "album");
-    const isLoading = useIsLoading(id);
+    const isLiked = useAppSelector((state) =>
+      selectIsInteracted(state, id, "album"),
+    );
+
+    // 2. Lấy trạng thái ĐANG XỬ LÝ API của riêng ID này
+    const isPending = useAppSelector(
+      (state) => state.interaction.loadingIds[`album:${id}`],
+    );
     const [burstKey, setBurstKey] = useState(0);
     const controls = useAnimation();
 
@@ -174,7 +188,7 @@ export const AlbumLikeButton = memo(
       async (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        if (isLoading) return;
+        if (isPending) return;
         if (!isLiked) {
           setBurstKey((k) => k + 1);
           // Vinyl spin micro-animation khi save
@@ -185,7 +199,7 @@ export const AlbumLikeButton = memo(
         }
         handleToggle(id, "album");
       },
-      [isLoading, isLiked, handleToggle, id, controls],
+      [isPending, isLiked, handleToggle, id, controls],
     );
 
     const isCard = variant === "card";
@@ -194,9 +208,9 @@ export const AlbumLikeButton = memo(
       <motion.button
         type="button"
         onClick={handleClick}
-        disabled={isLoading}
-        whileHover={!isLoading ? { scale: isCard ? 1.1 : 1.08 } : undefined}
-        whileTap={!isLoading ? { scale: isCard ? 0.88 : 0.92 } : undefined}
+        disabled={isPending}
+        whileHover={!isPending ? { scale: isCard ? 1.1 : 1.08 } : undefined}
+        whileTap={!isPending ? { scale: isCard ? 0.88 : 0.92 } : undefined}
         transition={SPRING_SNAPPY}
         aria-label={isLiked ? "Xóa khỏi thư viện" : "Lưu vào thư viện"}
         aria-pressed={isLiked}
@@ -240,7 +254,7 @@ export const AlbumLikeButton = memo(
           animate={controls}
           className="relative flex items-center justify-center"
         >
-          {isLoading ? (
+          {isPending ? (
             <Loader2
               className={cn(
                 "animate-spin",
@@ -319,19 +333,25 @@ const PARTICLES = [
 export const PlaylistLikeButton = memo(
   ({ id, variant = "detail", className }: PlaylistLikeButtonProps) => {
     const { handleToggle } = useInteraction();
-    const isLiked = useIsLiked(id, "playlist");
-    const isLoading = useIsLoading(id);
+    const isLiked = useAppSelector((state) =>
+      selectIsInteracted(state, id, "playlist"),
+    );
+
+    // 2. Lấy trạng thái ĐANG XỬ LÝ API của riêng ID này
+    const isPending = useAppSelector(
+      (state) => state.interaction.loadingIds[`playlist:${id}`],
+    );
     const [burstKey, setBurstKey] = useState(0);
 
     const handleClick = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        if (isLoading) return;
+        if (isPending) return;
         if (!isLiked) setBurstKey((k) => k + 1);
         handleToggle(id, "playlist");
       },
-      [isLoading, isLiked, handleToggle, id],
+      [isPending, isLiked, handleToggle, id],
     );
 
     // Detect transition từ unliked → liked để trigger particle
@@ -343,9 +363,9 @@ export const PlaylistLikeButton = memo(
       <motion.button
         type="button"
         onClick={handleClick}
-        disabled={isLoading}
-        whileHover={!isLoading ? { scale: isCard ? 1.1 : 1.08 } : undefined}
-        whileTap={!isLoading ? { scale: isCard ? 0.88 : 0.92 } : undefined}
+        disabled={isPending}
+        whileHover={!isPending ? { scale: isCard ? 1.1 : 1.08 } : undefined}
+        whileTap={!isPending ? { scale: isCard ? 0.88 : 0.92 } : undefined}
         transition={SPRING_BOUNCY}
         aria-label={isLiked ? "Xóa khỏi thư viện" : "Lưu playlist"}
         aria-pressed={isLiked}
@@ -396,7 +416,7 @@ export const PlaylistLikeButton = memo(
           transition={{ duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
           className="relative flex items-center justify-center"
         >
-          {isLoading ? (
+          {isPending ? (
             <Loader2
               className={cn(
                 "animate-spin",

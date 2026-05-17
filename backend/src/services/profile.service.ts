@@ -244,17 +244,88 @@ class ProfileService {
       },
     };
   }
+  async getUserTopTracks(
+    userId: string,
+    filter: { page?: number; limit?: number },
+  ) {
+    const page = Number(filter.page) || 1;
+    const limit = Number(filter.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // 1. Gom nhóm tính tổng số lượt nghe (playCount) của từng trackId và phân trang ngầm
+    const logs = await PlayLog.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+      { $group: { _id: "$trackId", playCount: { $sum: 1 } } },
+      { $sort: { playCount: -1 } }, // Thằng nào nghe nhiều nhất xếp đầu
+      { $skip: skip },
+      { $limit: limit },
+    ]);
+
+    const trackIds = logs.map((log) => log._id);
+
+    // Tính tổng số lượng bài hát duy nhất mà user này đã từng nghe để làm meta phân trang
+    const total = await PlayLog.distinct("trackId", {
+      userId: new mongoose.Types.ObjectId(userId),
+    }).then((ids) => ids.length);
+
+    // 2. Lấy chi tiết thông tin Track (Bảo lưu chính xác bộ select & populate của Phú)
+    const tracks = await Track.find({
+      _id: { $in: trackIds },
+      status: "ready",
+      isDeleted: false,
+    })
+      .select(
+        "-plainLyrics -fileSize -errorReason -updatedAt -createdAt -isPublic -status -format -description -isrc -diskNumber -copyright -isDeleted -trackNumber -uploader -tags -__v",
+      )
+      .select(
+        "title slug artist album hlsUrl coverImage duration lyricType lyricUrl moodVideo isExplicit",
+      )
+      .populate("artist", "name avatar slug")
+      .populate("featuringArtists", "name slug avatar")
+      .populate("album", "title coverImage slug")
+      .populate("genres", "name slug")
+      .populate({ path: "moodVideo", select: "videoUrl loop" })
+      .lean();
+
+    // 3. TÁI SẮP XẾP: Giữ đúng thứ tự Top Tracks và đính kèm thuộc tính `playCount` vào dữ liệu trả về
+    const sortedTracks = logs
+      .map((log) => {
+        const trackDoc = tracks.find(
+          (t) => t._id.toString() === log._id.toString(),
+        );
+        if (!trackDoc) return null;
+
+        return {
+          ...trackDoc,
+          playCount: log.playCount, // 🚀 Gắn kèm số lượt nghe cho Frontend hiển thị (Ví dụ: "145 lượt nghe")
+        };
+      })
+      .filter(Boolean);
+
+    // 4. Trả về cấu trúc chuẩn chỉ nhất
+    return {
+      data: sortedTracks,
+      meta: {
+        totalItems: total,
+        page,
+        pageSize: limit,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: skip + limit < total,
+      },
+    };
+  }
   /**
    * 5. TỔNG HỢP DASHBOARD
    */
   async getFullProfileDashboard(userId: string) {
     // Lấy 8 bài hát và 6 album mới nhất đã like làm bản xem trước (preview)
-    const [analytics, likedTracks, likedAlbums, likedPlaylists] =
+    const [analytics, likedTracks, likedAlbums, likedPlaylists, topTracks] =
       await Promise.all([
         this.getListeningAnalytics(userId),
         this.getLikedContent(userId, "track", 1, 8),
         this.getLikedContent(userId, "album", 1, 6),
         this.getLikedContent(userId, "playlist", 1, 6),
+        this.getUserTopTracks(userId, { page: 1, limit: 7 }),
       ]);
     logger.debug("Favourite Track content: " + likedTracks);
     return {
@@ -263,6 +334,7 @@ class ProfileService {
         tracks: likedTracks.data,
         albums: likedAlbums.data,
         playlists: likedPlaylists.data,
+        topTracks: topTracks,
       },
     };
   }

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useInteraction } from "../hooks/useInteraction";
 import { useAppSelector } from "@/store/hooks";
+import { selectIsInteracted } from "../slice/interactionSlice";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED ANIMATION PRESETS — module scope, zero allocation per render
@@ -61,14 +62,13 @@ export const FollowButton = memo(
   ({ artistId, className, size = "default" }: FollowButtonProps) => {
     const { handleToggle } = useInteraction();
 
-    // 🚀 ĐIỀU CHỈNH 1: Subscribe trực tiếp vào store tại đây
-    // Chỉ re-render khi trạng thái follow của artistId này thay đổi.
-    const isFollowed = useAppSelector(
-      (state) => !!state.interaction.followedArtists[artistId],
+    const isFollowed = useAppSelector((state) =>
+      selectIsInteracted(state, artistId, "artist"),
     );
 
-    const isLoading = useAppSelector(
-      (state) => !!state.interaction.loadingIds[artistId],
+    // 2. Lấy trạng thái ĐANG XỬ LÝ API của riêng ID này
+    const isPending = useAppSelector(
+      (state) => state.interaction.loadingIds[artistId],
     );
 
     const [burstKey, setBurstKey] = useState(0);
@@ -78,7 +78,7 @@ export const FollowButton = memo(
         e.stopPropagation();
         e.preventDefault();
 
-        if (isLoading) return;
+        if (isPending) return;
 
         // Chỉ trigger burst effect khi thực hiện hành động Follow
         if (!isFollowed) {
@@ -88,7 +88,7 @@ export const FollowButton = memo(
         // Gọi hàm toggle generic với type "artist"
         handleToggle(artistId, "artist");
       },
-      [isLoading, isFollowed, handleToggle, artistId],
+      [isPending, isFollowed, handleToggle, artistId],
     );
 
     const sizeClasses =
@@ -100,13 +100,13 @@ export const FollowButton = memo(
       <motion.button
         type="button"
         onClick={handleFollow}
-        disabled={isLoading}
+        disabled={isPending}
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.96 }}
         transition={SPRING_SNAPPY}
         aria-pressed={isFollowed}
         aria-label={isFollowed ? "Unfollow artist" : "Follow artist"}
-        aria-busy={isLoading}
+        aria-busy={isPending}
         className={cn(
           "relative inline-flex items-center justify-center font-bold overflow-hidden transition-all duration-200",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55",
@@ -119,7 +119,7 @@ export const FollowButton = memo(
         )}
       >
         {/* CSS Shimmer: Chỉ hiện khi chưa follow */}
-        {!isFollowed && !isLoading && (
+        {!isFollowed && !isPending && (
           <span
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none bg-[linear-gradient(105deg,transparent_20%,hsl(0_0%_100%/0.18)_50%,transparent_80%)] bg-[length:300%_auto] animate-shimmer"
@@ -128,7 +128,7 @@ export const FollowButton = memo(
 
         {/* Content Transition */}
         <AnimatePresence mode="wait" initial={false}>
-          {isLoading ? (
+          {isPending ? (
             <motion.div key="loading" {...FADE_FAST}>
               <Loader2 className="size-4 animate-spin" />
             </motion.div>
