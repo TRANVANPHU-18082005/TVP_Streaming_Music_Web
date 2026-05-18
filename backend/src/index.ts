@@ -4,7 +4,7 @@ import { createApp } from "./app";
 import { connectRedis } from "./config/redis";
 import { connectWithRetry } from "./utils/db.utils";
 import crypto from "node:crypto";
-import { fetchLyrics } from "./services/lyrics/lrclib.service";
+// import { fetchLyrics } from "./services/lyrics/lrclib.service";
 if (typeof global.crypto === "undefined") {
   // @ts-ignore
   global.crypto = crypto;
@@ -50,10 +50,11 @@ const startServer = () => {
         }
       }
       // Sơn Tùng MTP — track: Buông Đôi Tay Nhau Ra - durion: 227.
+      // Sơn Tùng MTP — track: Buông Đôi Tay Nhau Ra - durion: 227.
       // const test = await fetchLyrics(
-      //   "Thời Gian Sẽ Trả Lời",
-      //   "Justatee, Tien Cookie, BigDaddy",
-      //   undefined,
+      //   "Lời Xin Lỗi Vụng Về",
+      //   "V.POP - 14",
+      //   283,
       //   "test-job-123",
       // );
       // console.log(test);

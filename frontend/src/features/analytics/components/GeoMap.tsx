@@ -9,7 +9,6 @@ import { GeoLocation } from "@/features/analytics/types";
 import { ISO_MAPPING } from "@/utils/isoMapping";
 import { feature } from "topojson-client";
 const GEO_URL = "../../../../public/world-countries.json";
-console.log("GEO_URL:", GEO_URL);
 /* ── Color ramp — dùng brand token từ design system ─────────────
    Light: gray-200 → brand-500 (violet-indigo)
    Dark:  brand-800 (very dark) → brand-500 (luminous violet)
@@ -59,7 +58,6 @@ const GeoMap = ({ data, isDark = false }: GeoMapProps) => {
   });
   const [hoveredGeo, setHoveredGeo] = useState<string | null>(null);
   const [geoJson, setGeoJson] = useState<any | null>(null);
-  console.log(geoJson,data);
   // Build lookup map ISO2 → value
   // Trong GeoMap.tsx
   const dataMap = useMemo(() => {

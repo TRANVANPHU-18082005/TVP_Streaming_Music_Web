@@ -1307,6 +1307,7 @@ const FullPlayerComponent = ({
   const [mountedViews, setMountedViews] = useState<Set<PlayerView>>(
     () => new Set<PlayerView>(["artwork"]),
   );
+
   const trackIds = useMemo(() => (track?._id ? [track._id] : []), [track?._id]);
   useSyncInteractions(trackIds, "like", "track", !!track?._id);
   const phase = usePhase();

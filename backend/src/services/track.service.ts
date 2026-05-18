@@ -531,22 +531,30 @@ class TrackService {
     if (currentUser.role !== "admin" && !isOwner)
       throw new ApiError(httpStatus.FORBIDDEN, "Không có quyền");
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    // 🚀 TỐI ƯU ĐỘNG: Chỉ mở Session nếu đang ở Production (tránh sập Standalone DB ở local)
+    const isProd = process.env.NODE_ENV === "production";
+    const session = isProd ? await mongoose.startSession() : null;
+
+    if (session) {
+      session.startTransaction();
+    }
 
     try {
-      // 1. Trừ thông số trong các bảng liên quan (giữ nguyên logic của bạn)
+      // Tạo option động, nếu có session thì nạp vào, không thì để object rỗng {}
+      const options = session ? { session } : {};
+
+      // 1. Trừ thông số trong các bảng liên quan (Đã chuyển sang dùng options)
       await Promise.all([
         Artist.findByIdAndUpdate(
           track.artist,
           { $inc: { totalTracks: -1 } },
-          { session },
+          options, // 🎯 Thay { session } bằng options
         ),
         track.genres?.length
           ? Genre.updateMany(
               { _id: { $in: track.genres }, trackCount: { $gt: 0 } },
               { $inc: { trackCount: -1 } },
-              { session },
+              options, // 🎯 Thay { session } bằng options
             )
           : null,
         track.album
@@ -558,27 +566,36 @@ class TrackService {
                   totalDuration: -(track.duration || 0),
                 },
               },
-              { session },
+              options, // 🎯 Thay { session } bằng options
             )
           : null,
       ]);
 
       // 2. Xóa cứng khỏi Database
-      await Track.findByIdAndDelete(trackId, { session });
+      await Track.findByIdAndDelete(trackId, options); // 🎯 Thay { session } bằng options
 
-      await session.commitTransaction();
+      // Chỉ commit nếu luồng này có mở transaction
+      if (session) {
+        await session.commitTransaction();
+      }
 
       // 3. Xóa file trên B2 (Post-commit)
-      // Lưu ý: folderKey thường được cấu trúc từ trackUrl — dùng helper để trích
+      // Giữ nguyên đoạn code dọn dẹp file rất sạch sẽ này của Phú
       const folderKey = this.getTrackFolderKey(track.trackUrl);
       if (folderKey) await deleteFolderFromB2(folderKey).catch(console.error);
 
       return true;
     } catch (error) {
-      await session.abortTransaction();
+      // Chỉ rollback nếu luồng này có mở transaction
+      if (session) {
+        await session.abortTransaction();
+      }
       throw error;
     } finally {
-      session.endSession();
+      // Giải phóng bộ nhớ của session
+      if (session) {
+        session.endSession();
+      }
     }
   }
   // async deleteTrack(trackId: string, currentUser: IUser) {

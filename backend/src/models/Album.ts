@@ -88,7 +88,7 @@ AlbumSchema.index({ isPublic: 1, releaseYear: 1 });
 AlbumSchema.index({ isPublic: 1, releaseDate: -1 });
 
 // ── MIDDLEWARE ────────────────────────────────────────────────────────────────
-AlbumSchema.pre("save", async function () {
+AlbumSchema.pre("validate", async function () {
   const album = this as any;
 
   if (album.isModified("title")) {

@@ -15,8 +15,8 @@ export async function fetchLyrics(
     syncedLines: [],
     plainLyrics: "",
   };
-  // trackTitle = "HÔN LỄ CỦA EM";
-  // artistName = "Trọng Nhân, Tiểu Mỹ";
+  // trackTitle = "HONGKONG1";
+  // artistName = "Don Raemo; Double X; Nguyễn Trọng Tài";
   // duration = undefined;
 
   console.log(trackTitle, artistName, duration);

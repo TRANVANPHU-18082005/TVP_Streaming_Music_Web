@@ -330,7 +330,7 @@ const ProfilePage = () => {
   const { user } = useAppSelector((s) => s.auth);
   const { data: dashboard, isLoading: isDashboardLoading } =
     useProfileDashboard();
-  console.log("Profile dashboard data:", dashboard); // Debug log to verify data structure
+  // Debug log to verify data structure
   const { data: myPlaylists, isLoading: isMyPlaylistsLoading } =
     useMyPlaylists();
   const { data: followedArtists, isLoading: isFollowedArtistsLoading } =

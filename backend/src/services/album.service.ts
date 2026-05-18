@@ -74,11 +74,17 @@ class AlbumService {
         console.error("[AlbumService] Color extraction failed:", err);
       }
     }
-    // 3. Transaction
-    const session = await mongoose.startSession();
-    session.startTransaction();
+
+    // 🚀 VÁ BUG 2: Kích hoạt session động để chạy được cả ở máy Local Standalone DB
+    const isProd = process.env.NODE_ENV === "production";
+    const session = isProd ? await mongoose.startSession() : null;
+    if (session) {
+      session.startTransaction();
+    }
 
     try {
+      const options = session ? { session } : {};
+
       const [album] = await Album.create(
         [
           {
@@ -86,12 +92,12 @@ class AlbumService {
             artist: targetArtistId,
             type: data.type ?? "album",
             tags: tagsArray,
+            themeColor, // 🚀 VÁ BUG 1: Nạp chính xác màu sắc đã trích xuất vào đây!
             releaseDate: data.releaseDate
               ? new Date(data.releaseDate)
               : new Date(),
             coverImage: coverPath,
             fileSize: coverSize,
-            // Đảm bảo ép kiểu boolean chuẩn xác
             isPublic: String(data.isPublic) === "true",
             totalTracks: 0,
             totalDuration: 0,
@@ -99,33 +105,34 @@ class AlbumService {
             likeCount: 0,
           },
         ],
-        { session },
+        options, // Sử dụng options động thay vì fix cứng { session }
       );
 
-      // Tăng số lượng Album của Artist ngay trong transaction
+      // Tăng số lượng Album của Artist ngay trong bộ kiểm soát options
       await Artist.findByIdAndUpdate(
         targetArtistId,
         { $inc: { totalAlbums: 1 } },
-        { session },
+        options,
       );
 
-      await session.commitTransaction();
+      if (session) {
+        await session.commitTransaction();
+      }
 
       // 4. Hậu kỳ SAU KHI commit thành công
-      // Sử dụng Promise.allSettled để không làm chậm response của user
       Promise.allSettled([
-        CounterAlbum.increment(), // Tăng tổng số album hệ thống
-        // Invalidate cache thông minh
-        invalidateAlbumCache(album._id.toString()), // Hàm này tự xóa list và artist:albums
-        // Cập nhật dung lượng ảnh bìa
+        CounterAlbum.increment(),
+        invalidateAlbumCache(album._id.toString()),
         coverSize > 0
-          ? CounterTrack.increment(coverSize, "image") // Giả sử COVER_MIME là image
+          ? CounterTrack.increment(coverSize, "image")
           : Promise.resolve(),
       ]);
 
       return album;
     } catch (error) {
-      await session.abortTransaction();
+      if (session) {
+        await session.abortTransaction();
+      }
       // Cleanup file nếu upload lên mây rồi mà DB lỗi
       if (coverPath) {
         deleteFileFromCloud(coverPath, "image").catch((err) =>
@@ -134,7 +141,9 @@ class AlbumService {
       }
       throw error;
     } finally {
-      session.endSession();
+      if (session) {
+        session.endSession();
+      }
     }
   }
 
@@ -275,7 +284,7 @@ class AlbumService {
     );
     const cacheKey = buildCacheKey("album:list", userRole, cleanFilter);
 
-      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const {
@@ -357,11 +366,12 @@ class AlbumService {
 
     // Cache với jitter để tránh thundering herd
     const ttl = 600 + Math.floor(Math.random() * 120);
-    cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+    cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl).catch((err) => {
+      console.error(
+        `[Redis Error] Failed to set cache for ${cacheKey}:`,
+        err.message,
+      );
+    });
 
     return result;
   }
@@ -628,7 +638,10 @@ class AlbumService {
     const cacheKey = buildCacheKey(`album:detail:${slug}`, userRole, {});
 
     // 1. Check Cache
-      const cachedData = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    const cachedData = await withCacheTimeout(
+      () => cacheRedis.get(cacheKey),
+      1000,
+    );
     if (cachedData) {
       const parsed = JSON.parse(cachedData as string);
       // Nếu cache là private, check quyền ngay
@@ -666,10 +679,13 @@ class AlbumService {
     };
 
     cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+      .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
+      .catch((err) => {
+        console.error(
+          `[Redis Error] Failed to set cache for ${cacheKey}:`,
+          err.message,
+        );
+      });
 
     return result;
   }
@@ -717,7 +733,7 @@ class AlbumService {
       limit,
     });
 
-     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -753,12 +769,13 @@ class AlbumService {
     };
 
     const ttl = 1800 + Math.floor(Math.random() * 300);
-    cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
-    
+    cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl).catch((err) => {
+      console.error(
+        `[Redis Error] Failed to set cache for ${cacheKey}:`,
+        err.message,
+      );
+    });
+
     return result;
   }
   // ── 8. TOGGLE ALBUM PUBLICITY ─────────────────────────────────────────

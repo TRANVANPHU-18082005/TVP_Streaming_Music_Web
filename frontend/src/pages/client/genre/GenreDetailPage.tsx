@@ -264,7 +264,6 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
     error: tracksError,
     refetch: refetchTracks,
   } = useGenreTracksInfinite(genre?._id);
-  console.log(genre, tracksData);
   const {
     togglePlayGenre,
     shuffleGenre,
