@@ -310,6 +310,7 @@ class ArtistService {
         popular: { playCount: -1, totalFollowers: -1, _id: 1 },
         monthlyListeners: { monthlyListeners: -1, _id: 1 },
         newest: { createdAt: -1, _id: 1 },
+        oldest: { createdAt: 1, _id: 1 },
         name: { name: 1, _id: 1 },
       };
       sortOption = SORT_MAP[sort ?? "popular"] ?? SORT_MAP.popular;

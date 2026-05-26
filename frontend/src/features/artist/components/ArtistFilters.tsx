@@ -420,7 +420,7 @@ export const ArtistFilters = memo<ArtistFiltersProps>(
             >
               <SelectTrigger
                 className={cn(
-                  "h-10 w-auto min-w-[46px] sm:min-w-[160px] rounded-xl",
+                  "h-10 w-auto min-w-[46px] sm:min-w-[160px] rounded-xl text-truncate px-3.5 gap-2 inline-flex items-center",
                   "bg-background/60 border-border/60 text-sm",
                   "hover:border-border transition-all",
                 )}

@@ -322,7 +322,7 @@ const DesktopNav = memo<{
       ref={navRef}
       aria-label="Main navigation"
       className={cn(
-        "hidden md:flex items-center gap-0.5 p-1 rounded-full",
+        "hidden md:flex items-center gap-0.5 p-1 rounded-full overflow-y-auto custom-scrollbar",
         "bg-muted/50 border border-border/40",
         "flex-shrink min-w-0",
       )}

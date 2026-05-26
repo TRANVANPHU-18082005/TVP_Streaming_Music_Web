@@ -1,6 +1,8 @@
+import { Request, Response, NextFunction } from "express-serve-static-core";
 import multer from "multer";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
+// ... các dòng import storage giữ nguyên
 import {
   b2Storage,
   cloudinaryStorage,
@@ -10,8 +12,8 @@ import {
 /**
  * A. UPLOAD TRACK (Hybrid: Audio + Cover -> B2)
  */
-export const uploadTrackFiles = multer({
-  storage: b2Storage, // Sử dụng B2 Storage Engine đã cấu hình
+const multerTrackFiles = multer({
+  storage: b2Storage,
   limits: {
     fileSize: 200 * 1024 * 1024, // 200MB (High quality audio)
   },
@@ -39,6 +41,43 @@ export const uploadTrackFiles = multer({
   { name: "audio", maxCount: 1 },
   { name: "coverImage", maxCount: 1 },
 ]);
+
+/**
+ * 🚀 CUSTOM MIDDLEWARE CHỐT CHẶN (Vá lỗi load thiếu file Audio)
+ * Middleware này bọc ngoài lõi Multer để đảm bảo đồng bộ luồng tải file 100%
+ */
+export const uploadTrackFiles = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  multerTrackFiles(req, res, (err) => {
+    if (err) return next(err); // Nếu bẫy filter hoặc limit quá dung lượng ném lỗi ngay
+
+    // Kiểm tra xem req.files có tồn tại không
+    const files = req.files as
+      | { [fieldname: string]: Express.Multer.File[] }
+      | undefined;
+
+    // 🎯 CHỐT CHẶN VÀNG: Kiểm tra xem file audio thực sự đã được upload stream lên B2 hoàn tất chưa
+    if (!files || !files["audio"] || files["audio"].length === 0) {
+      return next(
+        new ApiError(
+          httpStatus.BAD_REQUEST,
+          "Thiếu file Audio hoặc file chưa tải xong",
+        ),
+      );
+    }
+
+    // Mẹo chuẩn hóa: Trích xuất file đầu tiên trong mảng fields ra để ép kiểu phẳng cho Controller dễ đọc
+    (req as any).audioFile = files["audio"][0];
+    if (files["coverImage"] && files["coverImage"].length > 0) {
+      (req as any).coverImageFile = files["coverImage"][0];
+    }
+
+    next(); // Toàn bộ file đã nằm yên trên mây an toàn, mở cửa cho Service chạy!
+  });
+};
 
 /**
  * B. UPLOAD IMAGES (Artist/User/Playlist -> Cloudinary)
