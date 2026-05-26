@@ -212,9 +212,14 @@ export const useAudioPlayer = () => {
 
     if (Hls.isSupported() && src.endsWith(".m3u8")) {
       const hls = new Hls({
-        maxBufferLength: 30,
-        enableWorker: true,
+        maxBufferLength: 60, // Tải trước tối đa 60 giây nhạc vào bộ đệm nền
+        maxMaxBufferLength: 120, // Giới hạn trần bộ đệm khi mạng siêu khỏe
+        enableWorker: true, // Chạy ngầm mượt bằng luồng Worker độc lập
+        highBufferWatchdogPeriod: 3, // Đợi tối đa 3 giây nếu đệm quá cao để đồng bộ
+        nudgeMaxRetry: 5, // 🚀 FIX ĐÚNG: Đổi từ 'nudgeMaxRetries' thành 'nudgeMaxRetry' (số ít)
         manifestLoadingTimeOut: 15000,
+        abrEwmaDefaultEstimate: 500000,
+        testBandwidth: false,
       });
       hls.loadSource(src);
       hls.attachMedia(audio);
@@ -375,24 +380,34 @@ export const useAudioPlayer = () => {
   // re-run khi _id đổi (tức là khi currentTrack thực sự là bài khác).
   // ==========================================================================
 
+  // ==========================================================================
+  // G. MEDIA SESSION API (Bản Nâng Cấp Gánh Tải Chạy Ngầm)
+  // ==========================================================================
+
   useEffect(() => {
     if (!("mediaSession" in navigator) || !currentTrack) return;
+
     const fullArtist =
       currentTrack.artist?.name +
       (currentTrack.featuringArtists.length > 0
         ? ` ft. ${currentTrack.featuringArtists.map((a) => a.name).join(", ")}`
         : "");
+
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
       artist: fullArtist,
+      album: currentTrack.album?.title || "TVP Music Single",
       artwork: [
         {
-          src: currentTrack.coverImage,
+          src: currentTrack.coverImage || "/default-cover.png",
           sizes: "512x512",
           type: "image/jpeg",
         },
       ],
     });
+
+    // 🎯 VÁ LỖI ĐÓNG BĂNG: Báo trạng thái phát nhạc realtime cho Hệ điều hành thức tỉnh
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
 
     navigator.mediaSession.setActionHandler("play", () =>
       dispatch(setIsPlaying(true)),
@@ -400,12 +415,16 @@ export const useAudioPlayer = () => {
     navigator.mediaSession.setActionHandler("pause", () =>
       dispatch(setIsPlaying(false)),
     );
-    navigator.mediaSession.setActionHandler("previoustrack", () =>
-      dispatch(prevTrack(audioRef.current?.currentTime)),
-    );
-    navigator.mediaSession.setActionHandler("nexttrack", () =>
-      dispatch(nextTrack()),
-    );
+
+    // 🎯 VÁ LỖI CRASH: Không đọc trực tiếp audioRef.current ở closure lồng để tránh sập Lockscreen khi tắt máy
+    navigator.mediaSession.setActionHandler("previoustrack", () => {
+      dispatch(prevTrack(0)); // Truyền fallback an toàn hoặc để slice tự quản lý thời gian
+    });
+
+    navigator.mediaSession.setActionHandler("nexttrack", () => {
+      dispatch(nextTrack());
+    });
+
     navigator.mediaSession.setActionHandler("seekto", (details) => {
       if (details.seekTime != null && audioRef.current) {
         audioRef.current.currentTime = details.seekTime;
@@ -416,10 +435,9 @@ export const useAudioPlayer = () => {
 
     return () => {
       navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = "none";
     };
-    // @fix #8 — chỉ re-run khi _id đổi, không phải khi object reference đổi
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTrack?._id, dispatch]);
+  }, [currentTrack?._id, isPlaying, dispatch]); // 🚀 THÊM 'isPlaying' vào đây để hệ thống Lockscreen không bị lệch trạng thái nút Play/Pause
 
   // ==========================================================================
   // H. DOM EVENT HANDLERS
@@ -437,6 +455,7 @@ export const useAudioPlayer = () => {
 
     setCurrentTime(curr);
 
+    // Ghi nhận view (Giữ nguyên mốc 90% rất tối ưu của Phú)
     if (curr >= Math.floor(currentTrack.duration * 0.9))
       handleRecordView(currentTrack._id);
 
@@ -446,6 +465,25 @@ export const useAudioPlayer = () => {
       Math.floor(dur) !== Math.floor(reduxDurationRef.current)
     ) {
       dispatch(setReduxDuration(dur));
+    }
+
+    // 🚀 BỔ SUNG CHIẾN LƯỢC: Cập nhật thanh thời gian chạy ngầm lên Lockscreen Android/iOS
+    if (
+      "mediaSession" in navigator &&
+      navigator.mediaSession.setPositionState &&
+      dur > 0 &&
+      dur !== Infinity
+    ) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: dur,
+          playbackRate: 1,
+          position: curr,
+        });
+      } catch (e) {
+        // Tránh crash nếu sai lệch mili-giây cấu trúc
+        console.error("[MediaSession] Set position failed:", e);
+      }
     }
   }, [currentTrack, handleRecordView, dispatch]);
   // reduxDuration đã bị loại khỏi deps — đọc qua ref
