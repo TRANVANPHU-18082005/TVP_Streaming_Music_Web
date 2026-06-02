@@ -17,6 +17,7 @@ import { Link } from "react-router-dom";
 
 // Import Hook
 import { useRegister } from "../hooks/useRegister";
+import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const AnimatedBackground = () => (
   <div className="fixed inset-0 z-0 overflow-hidden bg-[#08080a]">
@@ -70,7 +71,7 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
       <div
         className={cn(
           "absolute -inset-0.5 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-500",
-          error && "from-red-500/30 to-red-500/30 opacity-100"
+          error && "from-red-500/30 to-red-500/30 opacity-100",
         )}
       />
 
@@ -81,7 +82,7 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
             "absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none transition-colors duration-300",
             error
               ? "text-red-400"
-              : "text-gray-400 group-focus-within:text-white"
+              : "text-gray-400 group-focus-within:text-white",
           )}
         >
           <Icon className="w-4 h-4" />
@@ -95,7 +96,7 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
             error
               ? "border-red-500/50 focus:border-red-500 text-red-100 placeholder:text-red-300/30"
               : "border-white/5 focus:border-white/20 text-white",
-            className
+            className,
           )}
           {...props}
         />
@@ -108,7 +109,7 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
         )}
       </div>
     </div>
-  )
+  ),
 );
 InputField.displayName = "InputField";
 export default function RegisterPage() {
@@ -159,17 +160,29 @@ export default function RegisterPage() {
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent blur-sm" />
 
                 <div className="mb-6 text-center lg:text-left">
-                  <div className="flex items-center justify-center lg:justify-start gap-2 mb-3">
-                    <div className="h-7 w-7 rounded-full bg-white text-black flex items-center justify-center font-bold shadow-md">
-                      M
-                    </div>
-                    <span className="font-bold tracking-widest text-xs uppercase text-gray-400">
-                      MusicHub
+                  <div className="relative z-10 flex items-center justify-center align-middle gap-3 mb-2">
+                    <Link
+                      to="/"
+                      className="group flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
+                    >
+                      <div className="relative flex size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/10 border border-primary/20 shadow-sm transition-transform duration-300 group-hover:scale-105 group-hover:shadow-primary/30">
+                        <Avatar className="size-full rounded-xl">
+                          <AvatarImage
+                            src="https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
+                            alt="Logo"
+                            className="object-cover p-1" // Padding nhẹ để logo không bị sát viền
+                          />
+                          <AvatarFallback className="font-bold text-primary">
+                            TVP
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    </Link>
+                    <span className="text-2xl font-bold tracking-tight bg-clip-text   ">
+                      TVP MUSIC
                     </span>
                   </div>
-                  <h1 className="text-3xl font-bold mb-1 tracking-tight">
-                    Join the Vibe.
-                  </h1>
+
                   <p className="text-gray-400 text-sm">
                     Unlock your exclusive music journey.
                   </p>
@@ -245,7 +258,7 @@ export default function RegisterPage() {
                         "overflow-hidden transition-all duration-500 ease-in-out bg-black/20 rounded-2xl",
                         isFocused || passwordValue
                           ? "max-h-[300px] opacity-100 p-3"
-                          : "max-h-0 opacity-0 p-0"
+                          : "max-h-0 opacity-0 p-0",
                       )}
                     >
                       <div className="flex justify-between items-center mb-2 px-1">
@@ -255,7 +268,7 @@ export default function RegisterPage() {
                         <span
                           className={cn(
                             "text-[10px] font-bold uppercase transition-colors duration-300",
-                            strengthInfo.textColor
+                            strengthInfo.textColor,
                           )}
                         >
                           {passwordValue ? strengthInfo.label : ""}
@@ -270,7 +283,7 @@ export default function RegisterPage() {
                               "flex-1 transition-all duration-500 ease-out",
                               strengthScore >= step
                                 ? strengthInfo.color
-                                : "bg-transparent"
+                                : "bg-transparent",
                             )}
                           />
                         ))}

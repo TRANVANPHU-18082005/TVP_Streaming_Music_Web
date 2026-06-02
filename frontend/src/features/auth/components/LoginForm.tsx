@@ -4,7 +4,6 @@ import {
   Lock,
   Eye,
   EyeOff,
- 
   Chrome,
   Facebook,
   Check,
@@ -281,11 +280,27 @@ export default function LoginForm() {
             <div className="animate-fade-in-up">
               {/* Header */}
               <div className="mb-8 text-center lg:text-left">
-                <div className="lg:hidden flex items-center justify-center gap-2 mb-4">
-                  <div className="h-8 w-8 rounded-full bg-white text-black flex items-center justify-center font-bold">
-                    M
-                  </div>
-                  <span className="text-xl font-bold">MusicHub</span>
+                <div className="relative z-10 flex items-center justify-center align-middle gap-3 mb-4">
+                  <Link
+                    to="/"
+                    className="group flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
+                  >
+                    <div className="relative flex size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/10 border border-primary/20 shadow-sm transition-transform duration-300 group-hover:scale-105 group-hover:shadow-primary/30">
+                      <Avatar className="size-full rounded-xl">
+                        <AvatarImage
+                          src="https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
+                          alt="Logo"
+                          className="object-cover p-1" // Padding nhẹ để logo không bị sát viền
+                        />
+                        <AvatarFallback className="font-bold text-primary">
+                          TVP
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                  </Link>
+                  <span className="text-2xl font-bold tracking-tight bg-clip-text   ">
+                    TVP MUSIC
+                  </span>
                 </div>
                 <h1 className="text-4xl font-bold mb-2 tracking-tight">
                   Welcome Back.
@@ -384,18 +399,12 @@ export default function LoginForm() {
               </div>
 
               <div className="flex gap-4">
-                <Link
-                  to={`${env.API_URL}/auth/facebook`}
-                  className="w-full"
-                >
+                <Link to={`${env.API_URL}/auth/facebook`} className="w-full">
                   <Button variant="outline" className="w-full cursor-pointer">
                     <Facebook className="mr-2 h-4 w-4" /> Facebook
                   </Button>
                 </Link>
-                <Link
-                  to={`${env.API_URL}/auth/google`}
-                  className="w-full"
-                >
+                <Link to={`${env.API_URL}/auth/google`} className="w-full">
                   <Button variant="outline" className="w-full cursor-pointer">
                     <Chrome className="mr-2 h-4 w-4" /> Google
                   </Button>
