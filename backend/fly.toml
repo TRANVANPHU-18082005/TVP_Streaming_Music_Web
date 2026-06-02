@@ -1,22 +1,36 @@
-# fly.toml app configuration file generated for tvp-backend on 2026-05-11T23:44:43+07:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
+# fly.toml app configuration file generated for tvp-backend
 app = 'tvp-backend'
-primary_region = 'sin'
+primary_region = 'sin' # Đặt ở Singapore là chuẩn bài, ping về VN cực thấp
 
 [build]
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = 'stop'
-  auto_start_machines = true
-  min_machines_running = 0
+  
+  # 🚀 CHỐT CHẶN CHỐNG NGỦ ĐÔNG
+  auto_stop_machines = false      # Tuyệt đối không cho tự tắt
+  auto_start_machines = true      # Tự động bật lại nếu server có biến
+  min_machines_running = 1        # Luôn luôn có 1 lính gác thức 24/7
   processes = ['app']
 
+  # ⚡ CẤU HÌNH CHỊU TẢI (Concurrency) - Quan trọng cho Socket.IO
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200              # Đạt 200 request cùng lúc thì Fly.io cảnh báo
+    hard_limit = 250              # Max ping 250 request/máy (Chống nghẽn cổ chai)
+
+  # 🏥 CẤU HÌNH TỰ ĐỘNG CỨU HỘ (Health Check) - TƯƠNG THÍCH RAM 256MB
+  [[http_service.checks]]
+    grace_period = "60s"          # 🟢 Tăng lên 60s để server RAM nhỏ có đủ thời gian khởi động
+    interval = "15s"              # Cứ 15s Fly.io sẽ gọi kiểm tra 1 lần
+    timeout = "5s"                # 🟢 Tăng lên 5s phòng hờ lúc server đang bận xử lý request đầu tiên
+    method = "get"
+    path = "/api/health"          # Đường dẫn API ping
+    protocol = "http"
+
+# 💻 CẤU HÌNH PHẦN CỨNG (VM) - Tối ưu cho Free Tier
 [[vm]]
-  memory = '1gb'
   cpus = 1
-  memory_mb = 1024
+  cpu_kind = 'shared'
+  memory_mb = 256   # Hạ từ 1gb (1024) xuống 256mb để ăn trọn gói miễn phí
