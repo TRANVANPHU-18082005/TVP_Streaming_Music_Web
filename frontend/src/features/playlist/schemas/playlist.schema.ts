@@ -62,12 +62,11 @@ const playlistBaseSchema = z.object({
 
   publishAt: z.preprocess(
     emptyToUndefined,
-    z.coerce
-      .date()
-      .optional()
-      .refine((date) => !date || date > new Date(Date.now() - 5000), {
-        message: "Ngày phát hành không được ở quá khứ",
-      }),
+    z.string().optional().refine((val) => {
+      if (!val) return true;
+      const date = new Date(val);
+      return !isNaN(date.getTime()) && date > new Date(Date.now() - 5000);
+    }, "Ngày phát hành không được ở quá khứ"),
   ),
 
   tracks: formDataArrayHelper(objectIdSchema).optional(),

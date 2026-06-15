@@ -789,14 +789,14 @@ class PlaylistService {
     forceReset = false,
   ): Promise<void> {
     const playlist = await Playlist.findById(playlistId)
-      .select("coverImage tracks")
+      .select("coverImage tracks isSystem")
       .lean();
 
     if (!playlist) return;
 
-    // Reset cover nếu playlist trống
+    // Reset cover nếu playlist trống (trừ playlist hệ thống)
     if (forceReset || !playlist.tracks.length) {
-      if (playlist.coverImage) {
+      if (playlist.coverImage && !playlist.isSystem) {
         await Playlist.updateOne({ _id: playlistId }, { coverImage: "" });
       }
       return;
@@ -805,18 +805,25 @@ class PlaylistService {
     // Chỉ auto-set nếu chưa có cover
     if (playlist.coverImage) return;
 
-    // FIX: Query Track collection trực tiếp
-    const firstTrack = await Track.findOne({
-      _id: { $in: playlist.tracks },
-      status: "ready",
-    })
-      .select("coverImage")
-      .lean();
+    let smartCover = "";
+    for (const trackId of playlist.tracks) {
+      const track = await Track.findOne({
+        _id: trackId,
+        status: "ready",
+      })
+        .select("coverImage")
+        .lean();
 
-    if (firstTrack?.coverImage) {
+      if (track?.coverImage) {
+        smartCover = track.coverImage;
+        break;
+      }
+    }
+
+    if (smartCover) {
       await Playlist.updateOne(
         { _id: playlistId },
-        { coverImage: firstTrack.coverImage },
+        { coverImage: smartCover },
       );
     }
   }
@@ -1225,15 +1232,27 @@ class PlaylistService {
     const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
-    // Lấy đoạn ID theo phân trang
-    const pagedTrackIds = playlist.tracks.slice(skip, skip + Number(limit));
-
-    // Truy vấn dữ liệu chi tiết
-    const tracks = await Track.find({
-      _id: { $in: pagedTrackIds },
+    // 1. Lọc lấy các ID hợp lệ trước để đảm bảo phân trang và tổng số lượng chính xác
+    const validTracksFromDb = await Track.find({
+      _id: { $in: playlist.tracks },
       status: "ready",
       isPublic: true,
       isDeleted: false,
+    })
+      .select("_id")
+      .lean();
+
+    const validIdSet = new Set(validTracksFromDb.map((t) => t._id.toString()));
+    const orderedValidTrackIds = playlist.tracks.filter((id: any) =>
+      validIdSet.has(id.toString()),
+    );
+
+    // 2. Lấy đoạn ID theo phân trang trên mảng ĐÃ LỌC SẠCH
+    const pagedTrackIds = orderedValidTrackIds.slice(skip, skip + Number(limit));
+
+    // 3. Truy vấn dữ liệu chi tiết
+    const tracks = await Track.find({
+      _id: { $in: pagedTrackIds },
     })
       .select(TRACK_SELECT)
       .populate(TRACK_POPULATE as any)
@@ -1242,17 +1261,17 @@ class PlaylistService {
     // 🔥 ĐỒNG BỘ THỨ TỰ: Khớp tracks với pagedTrackIds
     const trackMap = new Map(tracks.map((t) => [t._id.toString(), t]));
     const sortedTracks = pagedTrackIds
-      .map((id) => trackMap.get(id.toString()))
-      .filter(Boolean); // Loại bỏ những bài không đủ điều kiện (pending, deleted, etc.)
+      .map((id: any) => trackMap.get(id.toString()))
+      .filter(Boolean); 
 
     const result = {
       data: sortedTracks,
       meta: {
-        totalItems: playlist.tracks.length,
+        totalItems: orderedValidTrackIds.length,
         page: Number(page),
         pageSize: Number(limit),
-        totalPages: Math.ceil(playlist.tracks.length / Number(limit)),
-        hasNextPage: skip + Number(limit) < playlist.tracks.length,
+        totalPages: Math.ceil(orderedValidTrackIds.length / Number(limit)),
+        hasNextPage: skip + Number(limit) < orderedValidTrackIds.length,
       },
     };
 

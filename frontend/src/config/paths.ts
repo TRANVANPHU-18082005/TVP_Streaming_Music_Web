@@ -34,6 +34,7 @@ export const CLIENT_PATHS = {
   TRACK_DETAIL: (id: string) => `/tracks/${id}`, // Hàm tạo link động
   // User
   PROFILE: "/profile",
+  FOR_ME: "for-me",
 } as const;
 export const ADMIN_PATHS = {
   ADMIN: "/admin",

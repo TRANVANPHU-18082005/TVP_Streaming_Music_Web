@@ -89,6 +89,8 @@ export const config = {
   logToFile: process.env.LOG_TO_FILE === "true" || nodeEnv === "production",
   // Worker
   workerConcurrency: Number(process.env.WORKER_CONCURRENCY || 5),
+  // Gemini
+  geminiApiKey: process.env.GEMINI_API_KEY || "",
   // CORS
   allowedOrigins: (process.env.ALLOW_ORIGINS || process.env.CLIENT_URL || (nodeEnv !== "production" ? "*" : ""))
     .split(",")

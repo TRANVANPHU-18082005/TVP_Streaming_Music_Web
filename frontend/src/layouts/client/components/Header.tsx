@@ -22,6 +22,7 @@ import {
   KeyboardMusic,
   ChartBar,
   Mic2,
+  AudioWaveform,
   type LucideIcon,
   Settings,
 } from "lucide-react";
@@ -41,6 +42,7 @@ import UserDropdown from "@/features/user/components/UserDropdown";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAppSelector } from "@/store/hooks";
 import { UserProfile } from "@/features/user";
+import AiHubButton from "@/features/ai/components/AiHubButton";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -74,6 +76,12 @@ const NAV_ITEMS: readonly NavItemDef[] = [
     shortLabel: "BXH",
     icon: ChartBar,
     path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.CHART_TOP}`,
+  },
+  {
+    label: "Dành cho tôi",
+    shortLabel: "For Me",
+    icon: AudioWaveform,
+    path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.FOR_ME}`,
   },
   {
     label: "Nghệ sĩ",
@@ -322,9 +330,10 @@ const DesktopNav = memo<{
       ref={navRef}
       aria-label="Main navigation"
       className={cn(
-        "hidden md:flex items-center gap-0.5 p-1 rounded-full overflow-y-auto custom-scrollbar",
+        "hidden md:flex items-center gap-0.5 p-1 rounded-full overflow-y-auto",
+        "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
         "bg-muted/50 border border-border/40",
-        "flex-shrink min-w-0",
+        "flex-shrink min-w-0"
       )}
     >
       {items.map((item) => (
@@ -897,6 +906,9 @@ export function Header() {
             >
               <Search className="size-5" aria-hidden="true" />
             </button>
+
+            {/* AI Hub Button */}
+            <AiHubButton />
 
             {/* Separator + ModeToggle — md+ only (FIX 5) */}
             <div

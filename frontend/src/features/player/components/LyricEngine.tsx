@@ -17,6 +17,7 @@ import { IKaraokeLine, ILyricSyncLine, LyricType } from "@/features/track";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface LyricsViewProps {
+  paddingForMe: number;
   lyricType: LyricType;
   plainLyrics?: string;
   syncedLines?: ILyricSyncLine[];
@@ -124,7 +125,7 @@ const LYRICS_CSS = `
   outline-offset: 4px;
   border-radius: 4px;
 }
-.sv-line--current { transform: scale(1.05);  opacity: 1;    color: var(--color-primary); text-shadow: 0 0 28px var(--lv-accent-glow, hsl(var(--wave-2) / 0.35)); }
+.sv-line--current { transform: scale(1.05);  opacity: 1;    color: var(--lv-accent, var(--color-primary)); text-shadow: 0 0 28px var(--lv-accent-glow, hsl(var(--wave-2) / 0.35)); }
 .sv-line--near1   { transform: scale(1.00);  opacity: .52;  color: hsl(var(--foreground) / 0.52); }
 .sv-line--near2   { transform: scale(.98);   opacity: .26;  color: hsl(var(--foreground) / 0.26); }
 .sv-line--far     { transform: scale(.96);   opacity: .1;   color: hsl(var(--foreground) / 0.1); }
@@ -693,11 +694,13 @@ const SyncedLyricsView = memo(
     onSeek,
     focusRadius,
     accentColor,
+    paddingForMe = 38,
   }: {
     lines: NormSync[];
     onSeek: (ms: number) => void;
     focusRadius: number;
     accentColor: string;
+    paddingForMe: number;
   }) => {
     const rafTime = useRafTime();
     const [currentIndex, setCurrentIndex] = useState(() =>
@@ -758,7 +761,7 @@ const SyncedLyricsView = memo(
         <div
           ref={scrollRef}
           className="lv-scroll h-full px-7 lg:px-10 relative z-10"
-          style={{ paddingTop: "38vh", paddingBottom: "38vh" }}
+          style={{ paddingTop: `${paddingForMe}vh`, paddingBottom: `${paddingForMe}vh` }}
           role="list"
           aria-label="Synced lyrics"
         >
@@ -1181,6 +1184,7 @@ KaraokeView.displayName = "KaraokeView";
 
 export const LyricsView = memo(
   ({
+    paddingForMe,
     lyricType,
     plainLyrics,
     syncedLines,
@@ -1221,6 +1225,7 @@ export const LyricsView = memo(
       if (lyricType === "synced")
         return normSynced.length ? (
           <SyncedLyricsView
+            paddingForMe={paddingForMe}
             lines={normSynced}
             onSeek={handleSeek}
             focusRadius={focusRadius}

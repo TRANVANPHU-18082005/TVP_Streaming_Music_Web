@@ -1,12 +1,15 @@
+import { CLIENT_PATHS } from "@/config/paths";
 import { usePlayerPadding } from "@/hooks/usePlayerPadding";
 import { Footer } from "@/layouts/client/components/Footer";
 import { Header } from "@/layouts/client/components/Header";
 import { cn } from "@/lib/utils";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 
 const ClientLayout = () => {
   // Hook tính toán khoảng cách an toàn cho Player bar
   const playerPaddingClass = usePlayerPadding(120);
+  const location = useLocation();
+  const isForMePage = location.pathname === `/${CLIENT_PATHS.FOR_ME}`;
 
   return (
     <div
@@ -17,7 +20,8 @@ const ClientLayout = () => {
         playerPaddingClass
       )}
     >
-      <Header />
+      {/* Ẩn Global Header trên For Me page — ForMeHeader riêng được render trong ForMePage */}
+      {!isForMePage && <Header />}
 
       {/* Main Content Area */}
       <main className="flex-1 w-full relative z-0">

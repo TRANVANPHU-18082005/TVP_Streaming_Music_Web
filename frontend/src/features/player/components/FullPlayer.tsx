@@ -1128,6 +1128,7 @@ const SwipeableViews = memo(
               }
             >
               <LyricsViewLazy
+                paddingForMe={36}
                 isPlaying={isPlaying}
                 lyricType={track.lyricType}
                 plainLyrics={track.plainLyrics}

@@ -625,8 +625,8 @@ export async function invalidatePlaylistCache(
 
       // 4. Xóa danh sách playlist của Owner (trang Library/Profile)
       if (rel.owner) {
-        // Lưu ý: Escaping dấu hai chấm nếu buildCacheKey của Phú dùng định dạng này
-        p.add(`playlist:list:owner\\:${rel.owner}:*`);
+        // Lưu ý: Đã bỏ Escaping dấu hai chấm vì Redis Glob không yêu cầu
+        p.add(`playlist:list:owner:${rel.owner}:*`);
       }
     } else {
       // Fallback nếu đã xóa Playlist khỏi DB
@@ -650,7 +650,7 @@ export async function invalidatePlaylistListCache(
 ): Promise<void> {
   try {
     const tasks = [scanAndDelete("playlist:list:*")];
-    if (userId) tasks.push(scanAndDelete(`playlist:list:owner\\:${userId}:*`));
+    if (userId) tasks.push(scanAndDelete(`playlist:list:owner:${userId}:*`));
     const counts = await Promise.all(tasks);
     const total = counts.reduce((s, n) => s + n, 0);
     if (total > 0)
@@ -689,7 +689,7 @@ export async function invalidateUserPlaylistCache(
   p.add(`playlist:tracks:${playlistId}:*`);
 
   // 2. Chỉ xóa list của RIÊNG người đó (User-specific)
-  p.add(`playlist:list:owner\\:${userId}:*`);
+  p.add(`playlist:list:owner:${userId}:*`);
 
   // 3. Nếu là System Playlist, mới xóa list hệ thống/toàn cục
   if (isSystem) {
@@ -709,7 +709,7 @@ export async function invalidateUserPlaylistCache(
 export async function invalidateUserPlaylistListCache(
   userId: string,
 ): Promise<void> {
-  const deleted = await scanAndDelete(`playlist:list:owner\\:${userId}:*`);
+  const deleted = await scanAndDelete(`playlist:list:owner:${userId}:*`);
   if (deleted > 0)
     console.log(`[Cache] Invalidated ${deleted} keys for user list: ${userId}`);
 }

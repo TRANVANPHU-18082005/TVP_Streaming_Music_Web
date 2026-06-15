@@ -46,7 +46,7 @@ const processQueue = (error: Error | null, token: string | null = null) => {
 // Instance chính dùng cho toàn app
 const api = axios.create({
   baseURL: env.API_URL,
-  timeout: 30000,
+  timeout: 60000, // Tăng lên 60s để AI có đủ thời gian xử lý
   withCredentials: true,
   headers: { "Content-Type": "application/json" },
 });
@@ -96,6 +96,8 @@ api.interceptors.response.use(
     }
 
     if (!originalRequest) return Promise.reject(error);
+
+    if (!error.response) return Promise.reject(error);
 
     const { status, data } = error.response as any;
     // ----------------------------------------------------------------

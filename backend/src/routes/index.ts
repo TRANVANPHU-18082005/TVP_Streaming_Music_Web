@@ -15,6 +15,7 @@ import analyticRoutes from "./analytics.routes";
 import notifyRoutes from "./notify.route";
 import profileRoutes from "./profile.route";
 import moodVideoRoutes from "./moodVideo.route";
+import aiRoutes from "./ai.routes";
 
 const router = express.Router();
 router.use("/auth", authRoutes);
@@ -32,5 +33,6 @@ router.use("/analytics", analyticRoutes);
 router.use("/notifications", notifyRoutes);
 router.use("/genres", genreRoutes);
 router.use("/mood-videos", moodVideoRoutes);
+router.use("/ai", aiRoutes);
 
 export default router;

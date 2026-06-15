@@ -20,8 +20,8 @@
   "author": "",
   "license": "ISC",
   "engines": {
-  "node": ">=22.0.0"
-},
+    "node": ">=22.0.0"
+  },
   "bugs": {
     "url": "https://github.com/PhuTran2005/TVP_music_Backend/issues"
   },
@@ -31,6 +31,7 @@
     "@aws-sdk/lib-storage": "^3.958.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@ffprobe-installer/ffprobe": "^2.1.2",
+    "@google/generative-ai": "^0.24.1",
     "axios": "^1.13.2",
     "backblaze-b2": "^1.7.1",
     "bcryptjs": "^3.0.3",

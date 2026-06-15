@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router-dom";
 import { albumRoutes } from "@/features/album/routes";
 import { artistRoutes } from "@/features/artist/routes";
 import { playlistRoutes } from "@/features/playlist/routes";
+import { forMeRoutes } from "@/features/for-me/routes";
 
 import { AdminLayout, ClientLayout, RootLayout } from "@/layouts";
 
@@ -66,6 +67,7 @@ export const router = createBrowserRouter([
           ...artistRoutes,
           ...albumRoutes,
           ...becomeArtistRoutes,
+          ...forMeRoutes,
           {
             path: CLIENT_PATHS.TRACK_DETAIL(":id"),
             element: <TrackDetailPage />,

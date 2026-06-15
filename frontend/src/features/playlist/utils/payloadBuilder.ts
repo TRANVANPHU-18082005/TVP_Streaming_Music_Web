@@ -31,6 +31,17 @@ export const buildPlaylistPayload = (
 
       if (!isEditMode || dirtyFields[key]) {
         const value = values[key];
+        
+        // Prevent undefined/null from becoming "undefined"/"null" string in form data
+        if (value === undefined || value === null) {
+          // If in edit mode and field is dirty, it means user cleared it.
+          // In multipart/form-data, sending empty string represents clearing an optional string field.
+          if (isEditMode && dirtyFields[key] && key !== "publishAt") {
+            append(key, "");
+          }
+          return;
+        }
+
         if (Array.isArray(value)) {
           append(key, JSON.stringify(value)); // Mảng -> JSON String
         } else {

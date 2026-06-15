@@ -6,6 +6,8 @@ import {
   useRef,
   useEffect,
 } from "react";
+import { useSelector } from "react-redux";
+import { toast } from "sonner";
 import {
   AlbumSheet,
   PlaylistSheet,
@@ -62,6 +64,7 @@ export function ContextSheetProvider({
   const [active, setActive] = useState<ContextSheetPayload>(null);
   // Keep entity alive during exit animation (220ms)
   const [frozen, setFrozen] = useState<ContextSheetPayload>(null);
+  const user = useSelector((state: any) => state.auth.user);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -86,6 +89,10 @@ export function ContextSheetProvider({
       sourceEntity?: IAlbumDetail | IArtistDetail | IGenreDetail,
       tracks?: ITrack[] | null,
     ) => {
+      if (!user) {
+        toast.error("Vui lòng đăng nhập");
+        return;
+      }
       clearTimeout(closeTimerRef.current);
       setFrozen({
         type: "addToPlaylist",
@@ -98,7 +105,7 @@ export function ContextSheetProvider({
         tracks: tracks ?? null,
       });
     },
-    [],
+    [user],
   );
 
   const openPlaylistSheet = useCallback((entity: IPlaylistDetail) => {

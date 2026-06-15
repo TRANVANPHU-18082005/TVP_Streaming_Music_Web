@@ -19,10 +19,14 @@ export const mapEntityToForm = (
   playlist?: IPlaylist | null,
 ): PlaylistEditFormValues => {
   if (!playlist) return PLAYLIST_DEFAULT_VALUES;
-  const parsePublishAt = (iso?: string | Date | null): Date | undefined => {
+  const parsePublishAt = (iso?: string | Date | null): string | undefined => {
     if (!iso) return undefined;
     const date = typeof iso === "string" ? new Date(iso) : iso;
-    return Number.isNaN(date.getTime()) ? undefined : date;
+    if (Number.isNaN(date.getTime())) return undefined;
+    
+    // Format to YYYY-MM-DDTHH:mm local time format for <input type="datetime-local">
+    const tzOffset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
   };
   return {
     title: playlist.title,
