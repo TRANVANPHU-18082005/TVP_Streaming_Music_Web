@@ -33,9 +33,9 @@ export const useTrackAnalytics = () => {
     const anonId = getAnonymousId();
 
     const emitHeartbeat = () => {
-      // Chỉ tab đang mở mới gửi để tránh nhân đôi số liệu khi mở nhiều tab
-      if (document.visibilityState !== "visible") return;
-
+      // Bỏ check visibilityState để cho phép gửi heartbeat ngay cả khi app đang chạy ngầm (ví dụ: nghe nhạc nền)
+      // Điều này rất quan trọng để Dashboard báo cáo chính xác "Now Listening"
+      
       const { userId, trackId, isPlaying } = infoRef.current;
       const finalUserId = userId || anonId;
 
@@ -48,8 +48,8 @@ export const useTrackAnalytics = () => {
     // 1. Gửi ngay lập tức khi mount hoặc trạng thái Play/Pause thay đổi
     emitHeartbeat();
 
-    // 2. Thiết lập chu kỳ gửi định kỳ (20s)
-    const interval = setInterval(emitHeartbeat, 20000);
+    // 2. Thiết lập chu kỳ gửi định kỳ (15s) để bám sát chu kỳ flush 10s của backend
+    const interval = setInterval(emitHeartbeat, 15000);
 
     // 3. Xử lý khi quay lại tab (User quay lại là phải báo Online ngay)
     const handleVisibilityChange = () => {

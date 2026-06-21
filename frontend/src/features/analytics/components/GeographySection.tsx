@@ -161,9 +161,9 @@ const GeographySection = ({ data }: { data: GeoLocation[] }) => {
 
         {/* Stats row below map */}
         <div className="flex items-center gap-2 flex-wrap">
-          <StatPill label="Countries" value={sortedData.length.toString()} />
+          <StatPill label="Active Regions" value={sortedData.length.toString()} />
           <StatPill
-            label="Total access"
+            label="Active Users"
             value={
               total >= 1000 ? `${(total / 1000).toFixed(1)}k` : total.toString()
             }
@@ -190,20 +190,24 @@ const GeographySection = ({ data }: { data: GeoLocation[] }) => {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-border/50 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0">
+            <div className="p-1.5 rounded-xl bg-primary/10 text-primary shrink-0 relative">
+              <span className="absolute -top-1 -right-1 flex size-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full size-2 bg-emerald-500" />
+              </span>
               <Globe size={14} />
             </div>
             <div className="leading-none">
-              <h3 className="text-section-title text-sm">Top Locations</h3>
+              <h3 className="text-section-title text-sm">Live Locations</h3>
               <p className="text-section-subtitle text-[10px] mt-0.5">
-                Most active regions
+                Real-time regional distribution
               </p>
             </div>
           </div>
 
           {/* Total count badge */}
           <span className="badge badge-muted text-[10px]">
-            {sortedData.length} countries
+            {sortedData.length} regions
           </span>
         </div>
 
@@ -223,15 +227,16 @@ const GeographySection = ({ data }: { data: GeoLocation[] }) => {
           ) : (
             /* Empty state */
             <div className="flex flex-col items-center justify-center h-40 gap-3 text-center">
-              <div className="p-3 rounded-2xl bg-muted/50">
+              <div className="p-3 rounded-2xl bg-muted/50 relative">
+                <div className="absolute inset-0 rounded-2xl border border-dashed border-muted-foreground/20 animate-[spin_10s_linear_infinite]" />
                 <Globe size={22} className="text-muted-foreground/30" />
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground/60">
-                  No traffic data
+                  No active listeners
                 </p>
                 <p className="text-xs text-muted-foreground/40 mt-0.5">
-                  Data will appear once users connect
+                  Locations will appear as users connect
                 </p>
               </div>
             </div>

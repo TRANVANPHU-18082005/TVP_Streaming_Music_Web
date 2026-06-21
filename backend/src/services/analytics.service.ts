@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { cacheRedis } from "../config/redis";
 import PlayLog from "../models/PlayLog";
 import Track from "../models/Track";
+import Artist from "../models/Artist";
 import geoip from "geoip-lite";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,12 +71,12 @@ class AnalyticsService {
   // viewBuffer: trackId → count cộng dồn trong 1 chu kỳ
   private viewBuffer = new Map<string, number>();
 
-  // FIX B: heartbeatBuffer lưu userId → trackId (snapshot tức thời)
-  // Đây là "ảnh chụp" của chu kỳ hiện tại — KHÔNG cộng dồn
-  private heartbeatBuffer = new Map<string, string>();
+  // activeConnections lưu socketId → { userId, trackId, lastSeen }
+  // Lưu trữ liên tục, không xoá trắng sau mỗi chu kỳ flush
+  private activeConnections = new Map<string, { userId: string; trackId: string; lastSeen: number }>();
 
-  // geoBuffer: countryCode → count
-  private geoBuffer = new Map<string, number>();
+  // userLocations: userId → countryCode
+  private userLocations = new Map<string, string>();
 
   private isFlushing = false;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
@@ -107,23 +108,35 @@ class AnalyticsService {
    * FIX A: Heartbeat chấp nhận cả Guest
    * userId có thể là MongoId (authenticated) hoặc "guest_<socketId>"
    */
-  pingUserActivity(userId: string, trackId?: string): void {
-    if (!userId || !isValidUserId(userId)) return;
+  pingUserActivity(socketId: string, userId: string, trackId?: string): void {
+    if (!socketId || !userId || !isValidUserId(userId)) return;
     const validTrack = trackId && isValidMongoId(trackId) ? trackId : "";
-    this.heartbeatBuffer.set(userId, validTrack);
+    this.activeConnections.set(socketId, { userId, trackId: validTrack, lastSeen: Date.now() });
   }
 
-  /** Ghi nhận vị trí địa lý từ IP */
-  trackUserLocation(ip: string): void {
+  /** Xoá user khi họ ngắt kết nối (Socket disconnect) */
+  removeUserActivity(socketId: string): void {
+    if (socketId) {
+      this.activeConnections.delete(socketId);
+    }
+  }
+
+  /** Ghi nhận vị trí địa lý từ IP kết nối với userId */
+  trackUserLocation(userId: string, ip: string): void {
+    if (!userId) return;
+    
     const resolved = resolveIp(ip);
-    if (!resolved) return; // FIX: bỏ hardcode fallback IP
+    if (!resolved) {
+      // Mock VN for local development so the map isn't empty
+      if (process.env.NODE_ENV !== "production") {
+        this.userLocations.set(userId, "VN");
+      }
+      return; 
+    }
 
     const geo = geoip.lookup(resolved);
     if (geo?.country) {
-      this.geoBuffer.set(
-        geo.country,
-        (this.geoBuffer.get(geo.country) ?? 0) + 1,
-      );
+      this.userLocations.set(userId, geo.country);
     }
   }
 
@@ -140,15 +153,26 @@ class AnalyticsService {
     if (this.isFlushing) return;
     this.isFlushing = true;
 
-    // Snapshot & clear — giải phóng RAM ngay để nhận mẻ mới
+    const now = Date.now();
     const views = new Map(this.viewBuffer);
     this.viewBuffer.clear();
-    const heartbeats = new Map(this.heartbeatBuffer);
-    this.heartbeatBuffer.clear();
-    const geos = new Map(this.geoBuffer);
-    this.geoBuffer.clear();
 
-    const hasData = views.size > 0 || heartbeats.size > 0 || geos.size > 0;
+    // Dọn dẹp session đã hết hạn (chống kẹt user)
+    for (const [socketId, conn] of this.activeConnections.entries()) {
+      if (now - conn.lastSeen > USER_TIMEOUT) {
+        this.activeConnections.delete(socketId);
+      }
+    }
+
+    // Clean up userLocations cho những user không còn socket nào active
+    const activeUserIds = new Set(Array.from(this.activeConnections.values()).map(c => c.userId));
+    for (const userId of this.userLocations.keys()) {
+      if (!activeUserIds.has(userId)) {
+        this.userLocations.delete(userId);
+      }
+    }
+
+    const hasData = views.size > 0 || this.activeConnections.size > 0;
     if (!hasData) {
       this.isFlushing = false;
       return;
@@ -166,35 +190,48 @@ class AnalyticsService {
         pipeline.expire(hourKey, 86400);
       });
 
-      // B. Heartbeats → online_users + now_listening
-      // FIX B: Xây dựng snapshot trackId → Set<userId> trong RAM
+      // B. Active Sessions → online_users + now_listening
+      // Xây dựng snapshot trackId → Set<userId> trong RAM từ activeConnections hiện tại
       const nowListeningSnapshot = new Map<string, Set<string>>();
 
-      heartbeats.forEach((trackId, userId) => {
-        pipeline.zadd(ONLINE_KEY, now, userId);
+      this.activeConnections.forEach((conn, socketId) => {
+        pipeline.zadd(ONLINE_KEY, now, conn.userId);
 
-        if (trackId) {
-          if (!nowListeningSnapshot.has(trackId)) {
-            nowListeningSnapshot.set(trackId, new Set());
+        if (conn.trackId) {
+          if (!nowListeningSnapshot.has(conn.trackId)) {
+            nowListeningSnapshot.set(conn.trackId, new Set());
           }
-          nowListeningSnapshot.get(trackId)!.add(userId);
+          nowListeningSnapshot.get(conn.trackId)!.add(conn.userId);
         }
       });
 
       // Ghi snapshot count (số userId duy nhất) vào Redis
-      // Dùng DEL + ZADD để overwrite hoàn toàn thay vì cộng dồn
+      // Luôn xoá dữ liệu cũ, chỉ set nếu có người nghe
+      pipeline.del("now_listening");
       if (nowListeningSnapshot.size > 0) {
-        pipeline.del("now_listening");
         nowListeningSnapshot.forEach((userSet, trackId) => {
           pipeline.zadd("now_listening", userSet.size, trackId);
         });
         pipeline.expire("now_listening", NOW_LISTENING_TTL);
       }
 
-      // C. Geo
-      geos.forEach((count, code) => {
-        pipeline.zincrby(GEO_KEY, count, code);
-      });
+      // C. Geo (Real-time Snapshot)
+      const geoSnapshot = new Map<string, number>();
+      
+      for (const conn of this.activeConnections.values()) {
+        const country = this.userLocations.get(conn.userId);
+        if (country) {
+          geoSnapshot.set(country, (geoSnapshot.get(country) || 0) + 1);
+        }
+      }
+
+      pipeline.del(GEO_KEY); // Luôn xoá dữ liệu cũ
+      if (geoSnapshot.size > 0) {
+        geoSnapshot.forEach((count, code) => {
+          pipeline.zadd(GEO_KEY, count, code);
+        });
+        pipeline.expire(GEO_KEY, NOW_LISTENING_TTL); // Tái sử dụng TTL của now_listening (30s)
+      }
 
       // D. Dọn user offline
       pipeline.zremrangebyscore(ONLINE_KEY, "-inf", now - USER_TIMEOUT);
@@ -203,7 +240,7 @@ class AnalyticsService {
 
       if (process.env.NODE_ENV !== "production") {
         console.log(
-          `[Analytics] Flushed: ${views.size} tracks | ${heartbeats.size} heartbeats | ${geos.size} countries`,
+          `[Analytics] Flushed: ${views.size} tracks | ${activeUserIds.size} active users (${this.activeConnections.size} sockets) | ${geoSnapshot.size} active countries`,
         );
       }
     } catch (error) {

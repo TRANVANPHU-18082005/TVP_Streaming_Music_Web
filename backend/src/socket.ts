@@ -65,11 +65,14 @@ export const initSocket = (httpServer: HttpServer): Server => {
       socket.join(userId);
     }
 
+    // Biến lưu trữ ID hiện tại của socket này (có thể cập nhật qua heartbeat nếu frontend gửi ID ẩn danh khác)
+    let currentUserId = userId;
+
     // ── Geo tracking ─────────────────────────────────────────────────────────
-    analyticsService.trackUserLocation(userIp);
+    analyticsService.trackUserLocation(currentUserId, userIp);
 
     // ── Heartbeat ngay khi connect (khởi tạo trạng thái online) ─────────────
-    analyticsService.pingUserActivity(userId);
+    analyticsService.pingUserActivity(socket.id, currentUserId);
 
     // ─────────────────────────────────────────────────────────────────────────
     // EVENTS
@@ -109,15 +112,20 @@ export const initSocket = (httpServer: HttpServer): Server => {
      * Heartbeat: Client gửi mỗi 30s để duy trì trạng thái online.
      * FIX: userId từ payload có thể là guest_ → analyticsService xử lý được.
      */
-    socket.on(
-      "client_heartbeat",
-      (data: { userId?: string; trackId?: string }) => {
-        // Ưu tiên userId từ payload, fallback về userId của socket này
-        const hbUserId =
-          data.userId && data.userId !== "undefined" ? data.userId : userId;
-        analyticsService.pingUserActivity(hbUserId, data.trackId);
-      },
-    );
+    socket.on("client_heartbeat", ({ userId, trackId }) => {
+      const userIp = getClientIp(socket);
+      // FIX C: Ghi đè currentUserId bằng ID từ Frontend (quan trọng cho Guest)
+      let currentUserId = userId;
+      if (!currentUserId && socket.data.user) {
+        currentUserId = socket.data.user.id;
+      }
+      if (!currentUserId) {
+        currentUserId = `guest_${socket.id}`;
+      }
+
+      analyticsService.pingUserActivity(socket.id, currentUserId, trackId);
+    });
+    
     socket.on("interact_play", async (data: PlayInteraction) => {
       try {
         const { targetId, targetType, userId } = data;
@@ -162,45 +170,6 @@ export const initSocket = (httpServer: HttpServer): Server => {
         console.error("[Socket] interact_play error:", error);
       }
     });
-    /**
-     * Ghi nhận một lượt play.
-     * Anti-spam → Analytics RAM buffer → BullMQ async log.
-     */
-    // socket.on(
-    //   "track_play",
-    //   async (data: { trackId: string; userId?: string }) => {
-    //     try {
-    //       const { trackId } = data;
-    //       console.log(data);
-    //       if (!trackId || typeof trackId !== "string") return;
-
-    //       // Xác định identity để anti-spam (prefer userId, fallback IP)
-    //       const identity = data.userId || userIp || socket.id;
-    //       const spamKey = `limit:view:${trackId}:${identity}`;
-
-    //       const isSpam = await cacheRedis.get(spamKey);
-    //       if (isSpam) return;
-
-    //       await cacheRedis.set(spamKey, "1", "EX", 600);
-
-    //       analyticsService.trackPlay(trackId);
-    //       if (data?.userId) {
-    //         await viewQueue.add(
-    //           "log-listen-history",
-    //           {
-    //             trackId,
-    //             userId: data.userId,
-    //             ip: userIp,
-    //             timestamp: new Date(),
-    //           },
-    //           { removeOnComplete: true, removeOnFail: { count: 100 } },
-    //         );
-    //       }
-    //     } catch (error) {
-    //       console.error("[Socket] track_play error:", error);
-    //     }
-    //   },
-    // );
 
     /** Join chart page — nhận push update mỗi 10s */
     socket.on("join_chart_page", () => {
@@ -253,9 +222,11 @@ export const initSocket = (httpServer: HttpServer): Server => {
      * Dọn dẹp trạng thái Online vĩnh viễn
      */
     socket.on("disconnect", async () => {
+      // FIX B: Xoá dứt điểm Ghost User khi tab đóng
+      analyticsService.removeUserActivity(socket.id);
       try {
         // Xóa khỏi Redis ngay lập tức để Dashboard Admin cập nhật chính xác
-        await cacheRedis.zrem("online_users", userId);
+        await cacheRedis.zrem("online_users", currentUserId);
       } catch (err) {
         console.error("[Socket] Redis zrem error:", err);
       }
