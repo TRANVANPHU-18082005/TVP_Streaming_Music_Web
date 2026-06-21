@@ -12,6 +12,7 @@ import {
   Play,
   Pause,
   MoreHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import MusicResult from "@/components/ui/Result";
+import AiTrackAnalysisModal from "@/features/ai/components/AiTrackAnalysisModal";
 
 import {
   usePublicTrackDetail,
@@ -506,6 +508,8 @@ const TrackDetailPage = () => {
     }
   }, [track]);
 
+  const [isAnalysisOpen, setIsAnalysisOpen] = React.useState(false);
+
   // ── Render States ─────────────────────────────────────────────────────────
   if (isLoading || !track)
     return <WaveformLoader glass={false} text="Đang tải bài hát" />;
@@ -725,6 +729,14 @@ const TrackDetailPage = () => {
             </button>
 
             <button
+              onClick={() => setIsAnalysisOpen(true)}
+              className="rounded-full flex items-center justify-center border border-primary/20 size-10 bg-primary/10 backdrop-blur-sm text-primary hover:bg-primary/20 active:scale-90 transition-all shadow-sm shadow-primary/10"
+              aria-label="Phân tích bài hát"
+            >
+              <Sparkles className="size-4" />
+            </button>
+
+            <button
               onClick={() => handleMoreOptions(track)}
               className="rounded-full flex items-center justify-center border border-border/50 size-10 bg-background/30 backdrop-blur-sm text-foreground/70 hover:text-foreground hover:bg-muted/60 hover:border-border active:scale-90 transition-all"
               aria-label="Khác"
@@ -896,6 +908,11 @@ const TrackDetailPage = () => {
           </p>
         </footer>
       </div>
+      <AiTrackAnalysisModal
+        isOpen={isAnalysisOpen}
+        onClose={() => setIsAnalysisOpen(false)}
+        track={track}
+      />
     </main>
   );
 };

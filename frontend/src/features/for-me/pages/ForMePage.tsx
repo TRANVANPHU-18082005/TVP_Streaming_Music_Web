@@ -12,6 +12,8 @@ export const ForMePage = () => {
   const dispatch = useDispatch();
   const player = useSelector(selectPlayer);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isProgrammaticScroll = useRef(false);
+  const scrollTimeoutRef = useRef<any>(null);
 
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -49,6 +51,9 @@ export const ForMePage = () => {
     if (!container) return;
 
     const handleScroll = () => {
+      // Bỏ qua xử lý scroll nếu đang là programmatic scroll (do next track)
+      if (isProgrammaticScroll.current) return;
+
       const height = container.clientHeight;
       const scrollTop = container.scrollTop;
       const index = Math.round(scrollTop / height);
@@ -79,10 +84,20 @@ export const ForMePage = () => {
     if (player.currentSource?.id === `${CLIENT_PATHS.FOR_ME}` && player.currentIndex !== activeIndex && containerRef.current) {
       const container = containerRef.current;
       const targetScroll = player.currentIndex * container.clientHeight;
+      
+      // Bật cờ programmatic scroll để chặn scroll event
+      isProgrammaticScroll.current = true;
+      
       container.scrollTo({ top: targetScroll, behavior: 'smooth' });
       setActiveIndex(player.currentIndex);
+
+      // Reset cờ sau khi cuộn xong (khoảng 800ms)
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => {
+        isProgrammaticScroll.current = false;
+      }, 800);
     }
-  }, [player.currentIndex, player.currentSource?.id]);
+  }, [player.currentIndex, player.currentSource?.id, activeIndex]);
 
   if (isLoading) {
     return (

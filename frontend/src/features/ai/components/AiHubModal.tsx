@@ -7,9 +7,10 @@ interface AiHubModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenPlaylist: () => void;
+  onOpenAnalysis: () => void;
 }
 
-const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist }: AiHubModalProps) => {
+const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist, onOpenAnalysis }: AiHubModalProps) => {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -72,24 +73,26 @@ const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist }: AiHubModalProps) =
                 </div>
               </button>
 
-              {/* Feature 2: Coming soon */}
-              <div
+              {/* Feature 2: Track Analysis */}
+              <button
+                onClick={onOpenAnalysis}
                 className={cn(
-                  "flex items-start gap-4 p-4 rounded-xl border border-border/50 bg-muted/20 opacity-70 cursor-not-allowed",
+                  "flex items-start gap-4 p-4 rounded-xl border border-border/50 bg-card hover:bg-accent/50 transition-colors text-left",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 )}
               >
-                <div className="flex items-center justify-center size-10 rounded-lg bg-muted shrink-0">
-                  <AudioWaveform className="size-5 text-muted-foreground" />
+                <div className="flex items-center justify-center size-10 rounded-lg bg-primary/10 shrink-0">
+                  <AudioWaveform className="size-5 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-foreground flex items-center gap-2">
-                    Phân tích bài hát <span className="text-[10px] uppercase font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded">Sắp ra mắt</span>
+                    Phân tích bài hát
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Phân tích ý nghĩa lời bài hát, cảm xúc và gợi ý các bài hát tương tự cực chuẩn.
+                    Phân tích ý nghĩa sâu sắc của lời bài hát đang phát, phân loại cảm xúc và gợi ý các bài hát tương tự.
                   </p>
                 </div>
-              </div>
+              </button>
             </div>
           </motion.div>
         </div>

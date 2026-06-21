@@ -62,6 +62,7 @@ import { useSleepTimer } from "@/features/player/sleepTimer/SleepTimerProvider";
 import { formatMs } from "@/utils/track-helper";
 import FullPlayerSkeleton from "./FullPlayerSkeleton";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
+import { useImageColor } from "@/hooks/useImageColor";
 
 // Lazy-loaded views to keep initial bundle small and improve responsiveness
 const MoodFocusViewLazy = lazy(() =>
@@ -1050,6 +1051,7 @@ interface SwipeableViewsProps {
   currentView: PlayerView;
   direction: number;
   showQueue: boolean;
+  accentColor: string;
   toggleQueue: () => void;
   track: ITrack;
   isPlaying: boolean;
@@ -1063,6 +1065,7 @@ const SwipeableViews = memo(
   ({
     lyrics,
     showQueue,
+    accentColor,
     toggleQueue,
     loadingLyrics,
     currentTime,
@@ -1136,6 +1139,7 @@ const SwipeableViews = memo(
                 karaokeLines={lyrics ?? []}
                 currentTime={currentTime}
                 onSeek={onSeek}
+                accentColor={accentColor}
                 loading={loadingLyrics}
                 focusRadius={focusMode ? 1 : 0}
               />
@@ -1308,7 +1312,7 @@ const FullPlayerComponent = ({
   const [mountedViews, setMountedViews] = useState<Set<PlayerView>>(
     () => new Set<PlayerView>(["artwork"]),
   );
-
+  const { color: accentColor } = useImageColor(track.coverImage);
   const trackIds = useMemo(() => (track?._id ? [track._id] : []), [track?._id]);
   useSyncInteractions(trackIds, "like", "track", !!track?._id);
   const phase = usePhase();
@@ -1463,6 +1467,7 @@ const FullPlayerComponent = ({
           )}
 
           <SwipeableViews
+            accentColor={accentColor}
             showQueue={showQueue}
             toggleQueue={toggleQueue}
             lyrics={lyrics}

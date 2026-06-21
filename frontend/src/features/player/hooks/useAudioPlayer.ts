@@ -67,8 +67,12 @@ export const useAudioPlayer = () => {
     hasPlayableUrl(s.player.trackMetadataCache[nextTrackId ?? ""]),
   );
   const user = useAppSelector((state: RootState) => state.auth.user);
-  const activeQueueLen = useAppSelector(
-    (s: RootState) => s.player.activeQueueIds.length,
+  const activeQueueIds = useAppSelector(
+    (s: RootState) => s.player.activeQueueIds,
+  );
+  const activeQueueLen = activeQueueIds.length;
+  const trackMetadataCache = useAppSelector(
+    (s: RootState) => s.player.trackMetadataCache,
   );
   const currentIndex = useAppSelector((s: RootState) => s.player.currentIndex);
   const repeatMode = useAppSelector((s: RootState) => s.player.repeatMode);
@@ -511,9 +515,36 @@ export const useAudioPlayer = () => {
     if (atLast && repeatMode === "off") {
       if (autoplayEnabled && currentTrack._id) {
         try {
-          const resp = await trackApi.getSimilarTracks(currentTrack._id, 10);
-          const recs = resp?.tracks ?? [];
-          const ids = recs.map((t: ITrack) => t._id).filter(Boolean);
+          // ==============================
+          // SMART AUTO-MIX LOGIC
+          // ==============================
+          // 1. Lấy tối đa 3 track cuối cùng từ queue
+          const lastTrackIds = activeQueueIds.slice(-3);
+          const recentTracks = lastTrackIds
+            .map(id => trackMetadataCache[id])
+            .filter(t => t && t._id); // Bỏ các track chưa có metadata (hoặc partial placeholder)
+
+          let ids: string[] = [];
+
+          if (recentTracks.length > 0) {
+            try {
+              // Gọi AI Auto-Mix API
+              const { default: aiApi } = await import('@/features/ai/api/aiApi');
+              const autoMixRes = await aiApi.generateAutoMix(recentTracks);
+              const aiTracks = autoMixRes.data?.data || [];
+              ids = aiTracks.map((t: any) => t._id).filter(Boolean);
+            } catch (aiError) {
+              console.error("AI AutoMix thất bại, fallback sang thuật toán getSimilarTracks:", aiError);
+            }
+          }
+
+          // Fallback nếu AI lỗi hoặc không trả về kết quả
+          if (ids.length === 0) {
+            const resp = await trackApi.getSimilarTracks(currentTrack._id, 10);
+            const recs = resp?.tracks ?? [];
+            ids = recs.map((t: ITrack) => t._id).filter(Boolean);
+          }
+          
           if (ids.length > 0) {
             // Append recommended IDs and immediately advance to the next track
             dispatch(appendQueueIds(ids));

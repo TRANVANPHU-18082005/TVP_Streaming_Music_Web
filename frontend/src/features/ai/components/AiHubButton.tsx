@@ -3,10 +3,18 @@ import { Sparkles, Wand2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AiHubModal from "./AiHubModal";
 import AiPlaylistModal from "./AiPlaylistModal";
+import AiTrackAnalysisModal from "./AiTrackAnalysisModal";
+import { useAppSelector } from "@/store/hooks";
+import { toast } from "sonner";
 
 export const AiHubButton = memo(() => {
   const [isHubOpen, setIsHubOpen] = useState(false);
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
+  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
+
+  const currentTrackId = useAppSelector((state) => state.player.currentTrackId);
+  const trackMetadataCache = useAppSelector((state) => state.player.trackMetadataCache);
+  const currentTrack = currentTrackId ? trackMetadataCache[currentTrackId] : null;
 
   return (
     <>
@@ -37,12 +45,27 @@ export const AiHubButton = memo(() => {
           setIsHubOpen(false);
           setIsPlaylistOpen(true);
         }}
+        onOpenAnalysis={() => {
+          if (!currentTrack) {
+            toast.error("Vui lòng phát một bài hát để AI có thể phân tích!");
+            return;
+          }
+          setIsHubOpen(false);
+          setIsAnalysisOpen(true);
+        }}
       />
 
       {/* Ai Playlist Modal */}
       <AiPlaylistModal 
         isOpen={isPlaylistOpen} 
         onClose={() => setIsPlaylistOpen(false)} 
+      />
+
+      {/* Ai Track Analysis Modal */}
+      <AiTrackAnalysisModal
+        isOpen={isAnalysisOpen}
+        onClose={() => setIsAnalysisOpen(false)}
+        track={currentTrack || null}
       />
     </>
   );

@@ -7,7 +7,7 @@ export const useAiPlaylist = () => {
   return useMutation({
     mutationFn: async (prompt: string) => {
       const res = await aiApi.generatePlaylist(prompt);
-      return res.data as { analyzed: any; tracks: ITrack[] };
+      return res.data.data as { analyzed: any; tracks: ITrack[]; coverImage?: string };
     },
     onError: (error: any) => handleError(error, "Lỗi khi tạo playlist bằng AI"),
   });

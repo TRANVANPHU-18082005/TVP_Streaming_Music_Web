@@ -72,6 +72,7 @@ export type QueueSourceType =
   | "suggestions"
   | "likedTracks"
   | "recentlyPlayed"
+  | "similar"
   | "trending"
   | "mostLiked"
   | "topTracks";
@@ -730,8 +731,8 @@ export const selectIsCurrentTrackReady = createSelector(
 /** Kiểm tra nhanh metadata của một trackId có trong cache chưa. */
 export const selectIsTrackCached =
   (trackId: string) =>
-  (state: RootState): boolean =>
-    Boolean(state.player.trackMetadataCache[trackId]);
+    (state: RootState): boolean =>
+      Boolean(state.player.trackMetadataCache[trackId]);
 
 /** Tổng số bài trong queue (dùng cho Virtual Scroll totalCount). */
 export const selectQueueLength = (state: RootState): number =>

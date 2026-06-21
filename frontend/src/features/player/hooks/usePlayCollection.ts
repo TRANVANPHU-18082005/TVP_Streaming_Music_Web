@@ -82,6 +82,13 @@ export const usePlayCollection = () => {
           trackIds = root.trackIds ?? [];
           id = root._id ?? "";
           slug = root.slug ?? "";
+        } else {
+          // Default fallback cho các sourceType khác (như 'similar', 'search', 'likedTracks', v.v.)
+          tracks = root.tracks ?? [];
+          title = collectionName || root.title || "Danh sách phát";
+          trackIds = root.trackIds ?? tracks.map((t: ITrack) => t._id) ?? [];
+          id = root._id ?? "";
+          slug = root.slug ?? "";
         }
         if (trackIds.length === 0) {
           throw new Error("Không có bài hát nào trong danh sách này.");
