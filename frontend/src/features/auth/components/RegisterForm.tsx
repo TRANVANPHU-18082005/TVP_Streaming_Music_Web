@@ -182,10 +182,6 @@ export default function RegisterPage() {
                       TVP MUSIC
                     </span>
                   </div>
-
-                  <p className="text-gray-400 text-sm">
-                    Unlock your exclusive music journey.
-                  </p>
                 </div>
 
                 {/* FORM BẮT ĐẦU TỪ ĐÂY - Dùng onSubmit từ Hook */}
@@ -195,7 +191,7 @@ export default function RegisterPage() {
                   <div>
                     <InputField
                       icon={User}
-                      placeholder="Full Name"
+                      placeholder="Tên đầy đủ"
                       error={!!errors.fullName}
                       {...register("fullName")}
                     />
@@ -211,7 +207,7 @@ export default function RegisterPage() {
                     <InputField
                       icon={Mail}
                       type="email"
-                      placeholder="Email Address"
+                      placeholder="Email"
                       error={!!errors.email}
                       {...register("email")}
                     />
@@ -228,7 +224,7 @@ export default function RegisterPage() {
                       <InputField
                         icon={Lock}
                         type={showPassword ? "text" : "password"}
-                        placeholder="Password"
+                        placeholder="Mật khẩu"
                         error={!!errors.password}
                         {...register("password")}
                         // Kết nối sự kiện focus để hiện checklist
@@ -237,7 +233,7 @@ export default function RegisterPage() {
                       <button
                         type="button"
                         onClick={toggleShowPassword}
-                        className="absolute right-4 top-3.5 text-gray-500 hover:text-white transition-colors z-20"
+                        className="absolute right-10 top-4 text-gray-500 hover:text-white transition-colors z-20"
                       >
                         {showPassword ? (
                           <EyeOff className="w-4 h-4" />
@@ -317,7 +313,7 @@ export default function RegisterPage() {
                       <InputField
                         icon={Lock}
                         type="password"
-                        placeholder="Confirm Password"
+                        placeholder="Xác nhận mật khẩu"
                         error={!!errors.confirmPassword}
                         {...register("confirmPassword")}
                       />
@@ -346,19 +342,21 @@ export default function RegisterPage() {
                       isLoading={isSubmitting}
                       disabled={isSubmitting}
                     >
-                      {isSubmitting ? "Creating Account..." : "Create Account"}
+                      {isSubmitting
+                        ? "Đang tạo tài khoản..."
+                        : "Tạo tài khoản"}
                     </Button>
                   </div>
                 </form>
 
                 <div className="mt-6 text-center">
                   <p className="text-gray-500 text-xs">
-                    Already have an account?{" "}
+                    Bạn đã có tài khoản?{" "}
                     <Link
                       to="/login"
                       className="text-white font-medium hover:underline decoration-indigo-500 underline-offset-2 transition-all"
                     >
-                      Log in
+                      Đăng nhập
                     </Link>
                   </p>
                 </div>
@@ -371,8 +369,17 @@ export default function RegisterPage() {
                   <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full blur-[60px] opacity-20 animate-pulse"></div>
                   <div className="absolute top-4 left-4 right-4 z-10 p-6 border border-white/10 bg-white/5 backdrop-blur-xl rounded-[2rem] shadow-2xl transform transition-transform hover:-translate-y-1 duration-500">
                     <div className="flex items-center gap-4 mb-4">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                        <Music4 className="text-white w-5 h-5" />
+                      <div className="w-10 h-10 rounded-full ">
+                        <Avatar className="size-full rounded-xl">
+                          <AvatarImage
+                            src="https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
+                            alt="Logo"
+                            className="object-cover p-1" // Padding nhẹ để logo không bị sát viền
+                          />
+                          <AvatarFallback className="font-bold text-primary">
+                            TVP
+                          </AvatarFallback>
+                        </Avatar>
                       </div>
                       <div>
                         <h3 className="font-bold text-lg text-white">
@@ -398,10 +405,10 @@ export default function RegisterPage() {
                       <ShieldCheck className="text-emerald-400 w-6 h-6" />
                       <div>
                         <div className="font-bold text-white text-sm">
-                          Ad-free Experience
+                          Trải nghiệm không quảng cáo
                         </div>
                         <div className="text-[10px] text-gray-400">
-                          Uninterrupted listening
+                          Nghe nhạc không bị gián đoạn
                         </div>
                       </div>
                     </div>

@@ -18,6 +18,7 @@ import { Link } from "react-router-dom";
 import { useLogin } from "../hooks/useLogin";
 import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { env } from "@/config/env";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 
 // --- UI COMPONENTS (Giữ nguyên style của bạn) ---
 
@@ -187,7 +188,7 @@ export default function LoginForm() {
         {/* --- LEFT COLUMN: Visuals (Giữ nguyên) --- */}
         <div className="hidden lg:flex w-1/2 relative flex-col justify-between p-12 overflow-hidden border-r border-[#27272a]/50 bg-black/40 backdrop-blur-sm z-10">
           <div className="absolute inset-0 z-0">
-            <img
+            <ImageWithFallback
               src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=2070&auto=format&fit=crop"
               alt="Music Background"
               className="w-full h-full object-cover opacity-50 transition-transform duration-[40s] hover:scale-110 ease-linear"
@@ -234,24 +235,31 @@ export default function LoginForm() {
                 <div className="relative h-20 w-20 shrink-0">
                   <div className="absolute inset-0 rounded-full bg-black shadow-lg animate-spin-slow border-2 border-gray-800 flex items-center justify-center overflow-hidden">
                     <div className="absolute inset-0 rounded-full border border-gray-800/50 m-1"></div>
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600"></div>
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center z-10">
-                    <div className="bg-white/90 rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                      <Play className="h-4 w-4 text-black fill-current ml-0.5" />
+                    <div className="w-8 h-8 rounded-full">
+                      <Avatar className="size-full rounded-xl bg-white">
+                        <AvatarImage
+                          src="https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
+                          alt="Logo"
+                          className="object-cover p-1" // Padding nhẹ để logo không bị sát viền
+                        />
+                        <AvatarFallback className="font-bold text-primary">
+                          TVP
+                        </AvatarFallback>
+                      </Avatar>
                     </div>
                   </div>
+
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="font-bold text-lg text-white truncate">
-                        Aurora Dreams
+                        Em của ngày hôm qua
                       </h3>
                       <div className="flex items-center gap-2 mt-1">
                         <MusicBars />
                         <p className="text-sm text-indigo-300 font-medium">
-                          Now Playing
+                          Đang phát
                         </p>
                       </div>
                     </div>
@@ -268,7 +276,7 @@ export default function LoginForm() {
           </div>
 
           <div className="relative z-10 text-xs font-medium text-gray-500/80 uppercase tracking-widest">
-            © 2024 MusicHub Inc.
+            © 2026 TVP MUSIC Inc.
           </div>
         </div>
 
@@ -303,10 +311,10 @@ export default function LoginForm() {
                   </span>
                 </div>
                 <h1 className="text-4xl font-bold mb-2 tracking-tight">
-                  Welcome Back.
+                  Chào mừng.
                 </h1>
                 <p className="text-gray-400 text-sm">
-                  Sign in to continue your journey.
+                  Đăng nhập để tiếp tục hành trình âm nhạc của bạn.
                 </p>
               </div>
 
@@ -317,7 +325,7 @@ export default function LoginForm() {
                   <InputField
                     icon={Mail}
                     type="email"
-                    placeholder="Email Address"
+                    placeholder="Email"
                     error={!!errors.email}
                     {...register("email")}
                   />
@@ -334,14 +342,14 @@ export default function LoginForm() {
                     <InputField
                       icon={Lock}
                       type={showPassword ? "text" : "password"}
-                      placeholder="Password"
+                      placeholder="Mật khẩu"
                       error={!!errors.password}
                       {...register("password")}
                     />
                     <button
                       type="button"
                       onClick={toggleShowPassword}
-                      className="absolute right-4 top-3.5 text-gray-500 hover:text-white transition-colors z-20"
+                      className="absolute right-10 top-4 text-gray-500 hover:text-white transition-colors z-20"
                     >
                       {showPassword ? (
                         <EyeOff className="w-4 h-4 cursor-pointer" />
@@ -360,7 +368,7 @@ export default function LoginForm() {
                   <div className="flex items-center justify-between pt-1">
                     <Checkbox
                       id="remember"
-                      label="Remember me"
+                      label="Ghi nhớ đăng nhập"
                       checked={!!rememberMe}
                       onChange={(checked) => setValue("rememberMe", checked)}
                     />
@@ -368,7 +376,7 @@ export default function LoginForm() {
                       to="/forgot-password"
                       className="text-xs font-medium text-gray-400 hover:text-white transition-colors"
                     >
-                      Forgot password?
+                      Quên mật khẩu?
                     </Link>
                   </div>
                 </div>
@@ -381,7 +389,7 @@ export default function LoginForm() {
                     disabled={isSubmitting}
                     className="cursor-pointer"
                   >
-                    {isSubmitting ? "Signing In..." : "Sign In"}
+                    {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
                   </Button>
                 </div>
               </form>
@@ -393,7 +401,7 @@ export default function LoginForm() {
                 </div>
                 <div className="relative flex justify-center text-xs uppercase tracking-widest">
                   <span className="bg-[#09090b]/50 backdrop-blur-md px-3 text-gray-500 font-medium rounded-full">
-                    Or continue with
+                    Hoặc tiếp tục với
                   </span>
                 </div>
               </div>
@@ -413,12 +421,12 @@ export default function LoginForm() {
 
               <div className="mt-8 text-center text-sm">
                 <p className="text-gray-500">
-                  Don't have an account?{" "}
+                  Chưa có tài khoản?{" "}
                   <Link
                     to="/register"
                     className="text-white font-semibold hover:underline decoration-indigo-500 underline-offset-4 transition-all ml-1"
                   >
-                    Sign up
+                    Đăng ký
                   </Link>
                 </p>
               </div>

@@ -19,9 +19,6 @@ export interface IUser extends Document {
   // Auth
   verificationCode?: string;
   verificationCodeExpires?: Date;
-  resetPasswordToken?: string;
-  resetPasswordExpires?: Date;
-  refreshToken?: string;
   authProvider: "local" | "google" | "facebook";
   googleId?: string;
   facebookId?: string;
@@ -76,9 +73,6 @@ const UserSchema = new Schema<IUser>(
     // Auth Tokens
     verificationCode: { type: String, select: false },
     verificationCodeExpires: { type: Date, select: false },
-    resetPasswordToken: { type: String, select: false },
-    resetPasswordExpires: { type: Date, select: false },
-    refreshToken: { type: String, select: false },
     lastOtpSentAt: { type: Date },
 
     authProvider: {

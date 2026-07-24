@@ -69,7 +69,12 @@ router.get(
 );
 
 // ==========================================
-// 2. AUTHENTICATION (Rate Limit + Validation)
+// 2. SOCIAL AUTH EXCHANGE
+// ==========================================
+router.post("/social/exchange", authController.exchangeSocialCode);
+
+// ==========================================
+// 3. AUTHENTICATION (Rate Limit + Validation)
 // ==========================================
 
 // Register: Giới hạn request + Validate Body
@@ -104,7 +109,7 @@ router.post(
 router.post("/logout", requireSameOrigin, authController.logout);
 
 // ==========================================
-// 3. PASSWORD & OTP MANAGEMENT
+// 4. PASSWORD & OTP MANAGEMENT
 // ==========================================
 
 // Resend OTP: Rate Limit chặt hơn (otpLimiter)
@@ -127,7 +132,7 @@ router.post(
 );
 
 // ==========================================
-// 4. USER INFO
+// 5. USER INFO
 // ==========================================
 router.get("/me", protect, authController.getMe);
 

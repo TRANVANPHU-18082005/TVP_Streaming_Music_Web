@@ -134,19 +134,12 @@ const ForgotPasswordForm = () => {
       // Thành công -> Chuyển UI
       setSentEmail(data.email);
       setIsSent(true);
-      toast.success("Email sent successfully!");
+      toast.success("Gửi yêu cầu đặt lại mật khẩu thành công!");
     } catch (error: any) {
       const msg = error.response?.data?.message || "Request failed.";
 
-      // Map lỗi vào ô input nếu liên quan đến email
-      if (
-        msg.toLowerCase().includes("email") ||
-        msg.toLowerCase().includes("tồn tại")
-      ) {
-        setError("email", { type: "server", message: msg });
-      } else {
-        toast.error(msg);
-      }
+      // Chỉ hiển thị lỗi hệ thống hoặc Rate limit
+      toast.error(msg);
     }
   };
 
@@ -160,25 +153,25 @@ const ForgotPasswordForm = () => {
           <Mail className="w-10 h-10 text-indigo-400 animate-pulse" />
         </div>
         <h2 className="text-3xl font-bold mb-3 tracking-tight text-white">
-          Check your mail
+          Kiểm tra email
         </h2>
         <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-          We have sent password recover instructions to your email{" "}
+          Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu đến email của bạn{" "}
           <span className="text-white font-medium">{sentEmail}</span>.
         </p>
 
         <div className="space-y-4">
           <Button onClick={() => window.open("mailto:", "_blank")}>
-            Open Email App
+            Mở ứng dụng email
           </Button>
 
           <p className="text-gray-500 text-xs">
-            Did not receive the email?{" "}
+            Không nhận được email?{" "}
             <button
               onClick={() => setIsSent(false)} // Quay lại form nhập
               className="text-indigo-400 hover:underline font-medium"
             >
-              Try another email
+              Thử email khác
             </button>
           </p>
 
@@ -186,7 +179,7 @@ const ForgotPasswordForm = () => {
             onClick={() => navigate("/login")}
             className="flex items-center justify-center w-full text-gray-400 hover:text-white transition-colors text-sm mt-6"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Login
+            <ArrowLeft className="w-4 h-4 mr-2" /> Trở về đăng nhập
           </button>
         </div>
       </div>
@@ -203,7 +196,7 @@ const ForgotPasswordForm = () => {
         className="flex items-center text-gray-400 hover:text-white mb-8 transition-colors group text-sm"
       >
         <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />{" "}
-        Back to Login
+        Trở về đăng nhập
       </button>
 
       <div className="mb-8 text-center lg:text-left">
@@ -211,10 +204,10 @@ const ForgotPasswordForm = () => {
           <KeyRound className="w-6 h-6 text-white" />
         </div>
         <h1 className="text-3xl font-bold mb-3 tracking-tight text-white">
-          Forgot Password?
+          Quên mật khẩu?
         </h1>
         <p className="text-gray-400 text-sm">
-          No worries, we'll send you reset instructions.
+          Đừng lo, chúng tôi sẽ gửi hướng dẫn đặt lại mật khẩu cho bạn.
         </p>
       </div>
 
@@ -222,7 +215,7 @@ const ForgotPasswordForm = () => {
         <div>
           <InputField
             id="email"
-            label="Enter your email"
+            label="Email của bạn"
             icon={Mail}
             type="email"
             error={!!errors.email}
@@ -241,7 +234,7 @@ const ForgotPasswordForm = () => {
           disabled={isSubmitting}
           className="shadow-xl shadow-indigo-500/20"
         >
-          {isSubmitting ? "Sending..." : "Reset Password"}
+          {isSubmitting ? "Đang gửi..." : "Gửi yêu cầu đặt lại mật khẩu"}
         </Button>
       </form>
     </div>

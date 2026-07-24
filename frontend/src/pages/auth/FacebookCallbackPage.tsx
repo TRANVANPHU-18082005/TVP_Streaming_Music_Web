@@ -17,19 +17,17 @@ const FacebookCallbackPage = () => {
     if (calledRef.current) return;
     calledRef.current = true;
 
-    const accessToken = searchParams.get("token");
-    toast.success("Welcome back!", {
-      description: `Logged in successfully as ${accessToken}`,
-    });
-    if (accessToken) {
+    const authCode = searchParams.get("code");
+
+    if (authCode) {
       authApi
-        .getMe(accessToken)
+        .exchangeSocialCode(authCode)
         .then((res) => {
-          const user = res.data;
+          const { accessToken, user } = res.data;
           dispatch(
             login({
               accessToken,
-              user: user,
+              user,
             }),
           );
           toast.success("Welcome back!", {
@@ -38,9 +36,14 @@ const FacebookCallbackPage = () => {
           navigate("/");
         })
         .catch((err) => {
+          const message = err.response?.data?.message;
           const errorCode = err.response?.data?.errorCode;
+
           if (errorCode === "ACCOUNT_LOCKED") {
             navigate("/login?error=locked");
+          } else if (message) {
+            toast.error("Đăng nhập thất bại", { description: message });
+            navigate("/login");
           } else {
             navigate("/login?error=auth_failed");
           }

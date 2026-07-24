@@ -133,6 +133,12 @@ const authApi = {
       console.warn(error.response?.data?.message);
     }
   },
+
+  // 12. Social Auth Code Exchange
+  exchangeSocialCode: async (code: string): Promise<ApiResponse<LoginResponse>> => {
+    const res = await api.post<ApiResponse<LoginResponse>>("/auth/social/exchange", { code });
+    return res.data;
+  },
 };
 
 export default authApi;

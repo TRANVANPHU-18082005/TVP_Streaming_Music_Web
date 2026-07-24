@@ -26,6 +26,7 @@ export const errorHandler = (
     code: statusCode,
     errorCode: errorCode, // <-- Trả về cho Frontend dùng (quan trọng)
     message,
+    ...(err.errors && { errors: err.errors }), // Thêm chi tiết lỗi nếu có
     ...(isDev() && { stack: err.stack }),
   };
 

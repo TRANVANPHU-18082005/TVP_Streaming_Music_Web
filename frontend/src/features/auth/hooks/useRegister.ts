@@ -3,6 +3,7 @@ interface ApiErrorResponse {
     data?: {
       message?: string;
       errorCode?: string;
+      errors?: Array<{ field: string; message: string }>;
     };
   };
 }
@@ -18,10 +19,10 @@ import { registerSchema, type RegisterInput } from "../schemas/auth.schema";
 
 // Constants cho Password Strength
 const PASSWORD_REQUIREMENTS = [
-  { id: 1, label: "8+ chars", regex: /.{8,}/ },
-  { id: 2, label: "Number", regex: /\d/ },
-  { id: 3, label: "Uppercase", regex: /[A-Z]/ },
-  { id: 4, label: "Special char", regex: /[^A-Za-z0-9]/ },
+  { id: 1, label: "8+ ký tự", regex: /.{8,}/ },
+  { id: 2, label: "Số", regex: /\d/ },
+  { id: 3, label: "Chữ cái viết hoa", regex: /[A-Z]/ },
+  { id: 4, label: "Ký tự đặc biệt", regex: /[^A-Za-z0-9]/ },
 ];
 
 // Interface cho lỗi API (để tránh dùng any)
@@ -38,7 +39,7 @@ export const useRegister = () => {
     resolver: zodResolver(registerSchema) as any,
     mode: "onBlur", // Validate khi rời ô input
     defaultValues: {
-      fullName: "", // Thay fullName bằng username nếu schema của bạn là username
+      fullName: "",
       email: "",
       password: "",
       confirmPassword: "",
@@ -63,20 +64,20 @@ export const useRegister = () => {
   const strengthInfo = useMemo(() => {
     if (strengthScore === 0)
       return {
-        label: "Enter Password",
+        label: "Nhập mật khẩu",
         color: "bg-gray-700",
         textColor: "text-gray-500",
       };
     if (strengthScore <= 2)
-      return { label: "Weak", color: "bg-red-500", textColor: "text-red-400" };
+      return { label: "Yếu", color: "bg-red-500", textColor: "text-red-400" };
     if (strengthScore === 3)
       return {
-        label: "Medium",
+        label: "Trung bình",
         color: "bg-yellow-500",
         textColor: "text-yellow-400",
       };
     return {
-      label: "Strong",
+      label: "Mạnh",
       color: "bg-emerald-500",
       textColor: "text-emerald-400",
     };
@@ -88,31 +89,30 @@ export const useRegister = () => {
   // 3. Handle Submit
   const handleRegister = async (data: RegisterInput) => {
     try {
+      console.log(data);
       await authApi.register(data);
 
-      toast.success("Account created successfully!", {
-        description: "Please check your email to verify your account.",
+      toast.success("Đăng ký thành công!", {
+        description: "Vui lòng kiểm tra email để xác thực tài khoản.",
       });
 
-      // Chuyển hướng sang trang OTP, mang theo email
       navigate("/verify-otp", { state: { email: data.email } });
     } catch (err: unknown) {
       const error = err as ApiErrorResponse;
-      const msg = error.response?.data?.message || "Registration failed";
+      console.log("Error register: ", error);
+      const dataError = error.response?.data;
+      const msg = dataError?.message || "Đăng ký thất bại";
 
-      // Map lỗi server vào input
-      if (
-        msg.toLowerCase().includes("email") ||
-        msg.toLowerCase().includes("tồn tại")
-      ) {
-        setError("email", { type: "manual", message: msg });
-      } else if (
-        msg.toLowerCase().includes("name") ||
-        msg.toLowerCase().includes("username")
-      ) {
-        // Lưu ý: Check xem schema bạn dùng key là 'username' hay 'fullName' để setError đúng field
-        setError("fullName", { type: "manual", message: msg });
+      if (dataError?.errors && Array.isArray(dataError.errors)) {
+        // Tự động map tất cả lỗi Zod từ backend trả về vào đúng field tương ứng
+        dataError.errors.forEach((errDetail) => {
+          // errDetail.field thường có dạng "body.email", "body.password"...
+          const fieldParts = errDetail.field.split(".");
+          const fieldName = fieldParts[fieldParts.length - 1] as keyof RegisterInput;
+          setError(fieldName, { type: "manual", message: errDetail.message });
+        });
       } else {
+        // Lỗi logic khác (Rate limit, lỗi máy chủ) -> Show thông báo
         toast.error(msg);
       }
     }

@@ -14,10 +14,10 @@ import type { ApiErrorResponse } from "@/types";
 
 // --- CONSTANTS ---
 const PASSWORD_REQUIREMENTS = [
-  { id: 1, label: "8+ chars", regex: /.{8,}/ },
-  { id: 2, label: "Number", regex: /\d/ },
-  { id: 3, label: "Uppercase", regex: /[A-Z]/ },
-  { id: 4, label: "Special char", regex: /[^A-Za-z0-9]/ },
+  { id: 1, label: "8+ ký tự", regex: /.{8,}/ },
+  { id: 2, label: "Chứa số", regex: /\d/ },
+  { id: 3, label: "Chứa chữ in hoa", regex: /[A-Z]/ },
+  { id: 4, label: "Chứa ký tự đặc biệt", regex: /[^A-Za-z0-9]/ },
 ];
 
 // --- UI COMPONENTS (Giữ nguyên style của bạn) ---
@@ -151,15 +151,15 @@ const ResetPasswordForm = () => {
       // Gọi API Reset Password
       await authApi.resetPassword(token, data.password);
 
-      toast.success("Password reset successful!", {
-        description: "You can now login with your new password.",
+      toast.success("Đặt lại mật khẩu thành công!", {
+        description: "Bạn có thể đăng nhập với mật khẩu mới.",
       });
 
       // Chuyển về trang login
       navigate("/login");
     } catch (err: unknown) {
       const error = err as ApiErrorResponse;
-      toast.error(error.response?.data?.message || "Failed to reset password.");
+      toast.error(error.response?.data?.message || "Đặt lại mật khẩu thất bại.");
     }
   };
 
@@ -167,10 +167,10 @@ const ResetPasswordForm = () => {
     <div className="animate-fade-in-up">
       <div className="mb-8 text-center lg:text-left">
         <h1 className="text-3xl font-bold mb-3 tracking-tight text-white">
-          Set new password
+          Đặt lại mật khẩu
         </h1>
         <p className="text-gray-400 text-sm">
-          Create a new password for your account.
+          Tạo mật khẩu mới cho tài khoản của bạn.
         </p>
       </div>
 
@@ -179,7 +179,7 @@ const ResetPasswordForm = () => {
         <div className="relative">
           <InputField
             id="password"
-            label="New Password"
+            label="Mật khẩu mới"
             icon={Lock}
             type={showPassword ? "text" : "password"}
             error={!!errors.password}
@@ -269,7 +269,7 @@ const ResetPasswordForm = () => {
         <div className="relative">
           <InputField
             id="confirmPassword"
-            label="Confirm Password"
+            label="Xác nhận mật khẩu"
             icon={Lock}
             type="password"
             error={!!errors.confirmPassword}
@@ -295,7 +295,7 @@ const ResetPasswordForm = () => {
             disabled={isSubmitting}
             className="shadow-xl shadow-indigo-500/20"
           >
-            Reset Password
+            Đặt lại mật khẩu
           </Button>
         </div>
       </form>

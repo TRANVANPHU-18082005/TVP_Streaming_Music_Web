@@ -17,18 +17,17 @@ const GoogleCallbackPage = () => {
     if (calledRef.current) return;
     calledRef.current = true;
 
-    const accessToken = searchParams.get("token");
+    const authCode = searchParams.get("code");
 
-    if (accessToken) {
+    if (authCode) {
       authApi
-        .getMe(accessToken)
+        .exchangeSocialCode(authCode)
         .then((res) => {
-          // ✅ SỬA Ở ĐÂY: Dữ liệu user nằm trong res.data
-          const user = res.data;
+          const { accessToken, user } = res.data;
           dispatch(
             login({
               accessToken,
-              user: user, // Truyền user object vào đây
+              user,
             }),
           );
           toast.success("Welcome back!", {
@@ -39,10 +38,14 @@ const GoogleCallbackPage = () => {
           navigate("/");
         })
         .catch((err) => {
+          const message = err.response?.data?.message;
           const errorCode = err.response?.data?.errorCode;
+          
           if (errorCode === "ACCOUNT_LOCKED") {
-            // Chuyển về login với cờ locked
             navigate("/login?error=locked");
+          } else if (message) {
+            toast.error("Đăng nhập thất bại", { description: message });
+            navigate("/login");
           } else {
             navigate("/login?error=auth_failed");
           }

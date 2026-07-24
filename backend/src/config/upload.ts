@@ -60,18 +60,23 @@ export const uploadTrackFiles = (
       | undefined;
 
     // 🎯 CHỐT CHẶN VÀNG: Kiểm tra xem file audio thực sự đã được upload stream lên B2 hoàn tất chưa
-    if (!files || !files["audio"] || files["audio"].length === 0) {
-      return next(
-        new ApiError(
-          httpStatus.BAD_REQUEST,
-          "Thiếu file Audio hoặc file chưa tải xong",
-        ),
-      );
+    const hasAudio = files && files["audio"] && files["audio"].length > 0;
+
+    if (!hasAudio) {
+      // Nếu là upload mới (POST), bắt buộc phải có audio
+      if (req.method === "POST") {
+        return next(
+          new ApiError(
+            httpStatus.BAD_REQUEST,
+            "Thiếu file Audio hoặc file chưa tải xong",
+          ),
+        );
+      }
+    } else {
+      (req as any).audioFile = files["audio"][0];
     }
 
-    // Mẹo chuẩn hóa: Trích xuất file đầu tiên trong mảng fields ra để ép kiểu phẳng cho Controller dễ đọc
-    (req as any).audioFile = files["audio"][0];
-    if (files["coverImage"] && files["coverImage"].length > 0) {
+    if (files && files["coverImage"] && files["coverImage"].length > 0) {
       (req as any).coverImageFile = files["coverImage"][0];
     }
 

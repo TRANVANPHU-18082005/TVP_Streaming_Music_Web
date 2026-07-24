@@ -3,7 +3,7 @@ import { z } from "zod";
 // --- HELPERS ---
 const passwordRule = z
   .string()
-  .min(6, "Mật khẩu phải có ít nhất 6 ký tự")
+  .min(8, "Mật khẩu phải có ít nhất 8 ký tự")
   .max(100);
 const emailRule = z.string().trim().email("Email không hợp lệ").toLowerCase();
 

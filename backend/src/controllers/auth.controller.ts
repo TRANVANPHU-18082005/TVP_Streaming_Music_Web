@@ -11,7 +11,9 @@ import {
 } from "../utils/token";
 import logger from "../config/logger";
 import config from "../config/env";
-import { IUser } from "../models/User";
+import User, { IUser } from "../models/User";
+import crypto from "crypto";
+import { cacheRedis } from "../config/redis";
 
 // 1. Google Auth (Start)
 export const googleAuth = passport.authenticate("google", {
@@ -32,13 +34,56 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
     user.role,
   );
 
-  user.refreshToken = refreshToken;
-  await user.save();
-  setRefreshTokenCookie(res, refreshToken);
-  logger.info(`Set refresh cookie for user=${user._id}`);
+  await AuthService.saveSession(user._id.toString(), refreshToken);
+  
+  // BẢO MẬT: Không đẩy thẳng token lên URL.
+  // Dùng Code Exchange pattern.
+  const authCode = crypto.randomBytes(32).toString("hex");
+  await cacheRedis.setex(
+    `social_auth:${authCode}`,
+    60,
+    JSON.stringify({ accessToken, refreshToken, userId: user._id.toString() })
+  );
 
-  res.redirect(`${config.clientUrl}/auth/google?token=${accessToken}`);
+  logger.info(`Generated social auth code for user=${user._id}`);
+  res.redirect(`${config.clientUrl}/auth/google/callback?code=${authCode}`);
 };
+
+// 2b. Social Code Exchange (Mới thêm)
+export const exchangeSocialCode = catchAsync(async (req: Request, res: Response) => {
+  const { code } = req.body;
+  if (!code) return res.status(httpStatus.BAD_REQUEST).json({ message: "Thiếu code" });
+
+  const redisKey = `social_auth:${code}`;
+  const dataStr = await cacheRedis.get(redisKey);
+
+  if (!dataStr) {
+    return res.status(httpStatus.BAD_REQUEST).json({ message: "Code không hợp lệ hoặc đã hết hạn" });
+  }
+
+  const { accessToken, refreshToken, userId } = JSON.parse(dataStr);
+  await cacheRedis.del(redisKey); // Đảm bảo code chỉ dùng 1 lần
+
+  const user = await User.findById(userId);
+  if (!user) return res.status(httpStatus.NOT_FOUND).json({ message: "User không tồn tại" });
+
+  setRefreshTokenCookie(res, refreshToken);
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: {
+      accessToken,
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        fullName: user.fullName,
+        role: user.role,
+        avatar: user.avatar,
+      },
+    },
+  });
+});
 
 // Facebook Auth (Start)
 export const facebookAuth = passport.authenticate("facebook", {
@@ -59,12 +104,18 @@ export const facebookCallbackHandler = async (req: Request, res: Response) => {
     user.role,
   );
 
-  user.refreshToken = refreshToken;
-  await user.save();
-  setRefreshTokenCookie(res, refreshToken);
-  logger.info(`Set refresh cookie for user=${user._id}`);
+  await AuthService.saveSession(user._id.toString(), refreshToken);
+  
+  // BẢO MẬT: Dùng Code Exchange pattern
+  const authCode = crypto.randomBytes(32).toString("hex");
+  await cacheRedis.setex(
+    `social_auth:${authCode}`,
+    60,
+    JSON.stringify({ accessToken, refreshToken, userId: user._id.toString() })
+  );
 
-  res.redirect(`${config.clientUrl}/auth/facebook?token=${accessToken}`);
+  logger.info(`Generated social auth code for user=${user._id}`);
+  res.redirect(`${config.clientUrl}/auth/facebook/callback?code=${authCode}`);
 };
 
 // 3. Register
@@ -186,16 +237,17 @@ export const logout = catchAsync(async (req: Request, res: Response) => {
     : undefined;
 
   // If we have an authenticated user, revoke server-side refresh token
+  const cookieToken = req.cookies?.refreshToken;
+
   if (currentUserId) {
-    await AuthService.logout(currentUserId);
+    await AuthService.logout(currentUserId, cookieToken);
   } else {
     // Fallback: try to decode refresh cookie and revoke that session server-side
-    const cookieToken = req.cookies?.refreshToken;
     if (cookieToken) {
       try {
         const decoded: any = jwt.verify(cookieToken, config.jwtRefreshSecret!);
         const cookieUserId = decoded?.id;
-        if (cookieUserId) await AuthService.logout(cookieUserId);
+        if (cookieUserId) await AuthService.logout(cookieUserId, cookieToken);
       } catch (err) {
         // ignore invalid token — still proceed to clear cookie
       }

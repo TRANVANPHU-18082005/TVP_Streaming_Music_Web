@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError, ZodObject } from "zod";
 import { deleteFromB2, deleteFromCloudinary } from "../utils/fileCleanup";
+import ApiError from "../utils/ApiError";
 
 // Dùng ZodObject<any, any> để nhận mọi schema object
 type RequestSchema = ZodObject<any, any>;
@@ -76,28 +77,37 @@ const validate =
       }
 
       // =========================================================
-      // 3. FORMAT LỖI TRẢ VỀ
+      // 3. FORMAT LỖI TRẢ VỀ & CHUYỂN QUA ERROR MIDDLEWARE
       // =========================================================
 
       if (error instanceof ZodError) {
-        const errorMessage = error.issues
-          .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-          .join(", ");
+        const errors = error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        }));
 
-        return res.status(400).json({
-          success: false,
-          status: "error",
-          message: errorMessage,
-        });
+        // Trả lỗi dạng ApiError với errorCode "VALIDATION_ERROR"
+        return next(
+          new ApiError(
+            400,
+            "Dữ liệu đầu vào không hợp lệ",
+            "VALIDATION_ERROR",
+            true,
+            "",
+            errors
+          )
+        );
       }
 
       console.error("❌ Middleware Validation Error:", error);
 
-      return res.status(500).json({
-        success: false,
-        status: "error",
-        message: "Internal Server Error",
-      });
+      return next(
+        new ApiError(
+          500,
+          "Internal Server Error",
+          "INTERNAL_ERROR"
+        )
+      );
     }
   };
 
