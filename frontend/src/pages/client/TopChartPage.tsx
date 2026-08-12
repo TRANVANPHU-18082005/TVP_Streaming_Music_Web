@@ -50,6 +50,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { IChartDataPoint } from "@/features/track";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
+import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -84,37 +85,37 @@ const SKELETON_WIDTHS = [
 const fadeUp = (delay = 0, reduced = false) =>
   reduced
     ? {
-        initial: { opacity: 0 },
-        animate: { opacity: 1 },
-        transition: { duration: 0.15 },
-      }
+      initial: { opacity: 0 },
+      animate: { opacity: 1 },
+      transition: { duration: 0.15 },
+    }
     : ({
-        initial: { opacity: 0, y: 20 },
-        animate: { opacity: 1, y: 0 },
-        transition: { delay, duration: 0.54, ease: EXPO_EASE },
-      } as const);
+      initial: { opacity: 0, y: 20 },
+      animate: { opacity: 1, y: 0 },
+      transition: { delay, duration: 0.54, ease: EXPO_EASE },
+    } as const);
 
 const listItem = (index: number, reduced = false) =>
   reduced
     ? {
-        layout: true as const,
-        initial: { opacity: 0 },
-        animate: { opacity: 1 },
-        exit: { opacity: 0 },
-        transition: { duration: 0.12 },
-      }
+      layout: true as const,
+      initial: { opacity: 0 },
+      animate: { opacity: 1 },
+      exit: { opacity: 0 },
+      transition: { duration: 0.12 },
+    }
     : ({
-        layout: true as const,
-        initial: { opacity: 0, y: 10 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, scale: 0.97 },
-        transition: {
-          type: "spring" as const,
-          stiffness: 500,
-          damping: 30,
-          delay: Math.min(index * 0.028, 0.35),
-        },
-      } as const);
+      layout: true as const,
+      initial: { opacity: 0, y: 10 },
+      animate: { opacity: 1, y: 0 },
+      exit: { opacity: 0, scale: 0.97 },
+      transition: {
+        type: "spring" as const,
+        stiffness: 500,
+        damping: 30,
+        delay: Math.min(index * 0.028, 0.35),
+      },
+    } as const);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // usePullToRefresh — Production v2 (fully ref-based, zero re-renders)
@@ -417,10 +418,7 @@ const PageLoader = memo(() => (
         aria-hidden="true"
       />
       <div className="absolute inset-0 rounded-full border border-primary/18 flex items-center justify-center">
-        <Loader2
-          className="w-6 h-6 animate-spin text-primary"
-          aria-hidden="true"
-        />
+        <PremiumMusicVisualizer active={true} />
       </div>
     </div>
     <div className="text-center space-y-1.5">

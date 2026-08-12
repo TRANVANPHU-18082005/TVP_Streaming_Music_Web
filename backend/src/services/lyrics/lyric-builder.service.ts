@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import {
-  KaraokeOutput,
   RawLyricData,
   LyricLine,
   LyricType,
@@ -83,7 +82,6 @@ async function writeAndUpload(
  */
 export async function buildFinalLyricResult(
   raw: RawLyricData,
-  karaokeData: KaraokeOutput | null,
   trackTitle: string,
   tmpDir: string,
   trackFolderKey: string,
@@ -118,37 +116,11 @@ export async function buildFinalLyricResult(
     console.warn(`[Job ${jobId}] ⚠️ Minor: Failed to clear old lyrics folder.`);
   }
   // ── Tier 1: Karaoke ─────────────────────────────────────────────────────────
-  if (karaokeData && karaokeData.lines.length > 0) {
-    const karaokeUrl = await upload(
-      { type: "karaoke", lines: karaokeData.lines },
-      "karaoke.json",
-      "Karaoke",
-    );
+  // (Đã xoá theo yêu cầu user, ưu tiên LRCLIB synced)
 
-    if (karaokeUrl) {
-      console.log(
-        `[Job ${jobId}] 🎤 Final lyric type: karaoke (Uploaded to B2)`,
-      );
-      return {
-        finalLyricType: "karaoke",
-        finalLyricUrl: karaokeUrl,
-        finalLyricPreview: karaokeData.lines
-          .slice(0, LYRIC_PREVIEW_LIMIT)
-          .map((l) => ({
-            startTime: l.start,
-            endTime: l.end,
-            text: l.text,
-          })),
-        finalPlainLyrics: raw.plainLyrics,
-      };
-    }
-    console.warn(
-      `[Job ${jobId}] ⚠️ Karaoke tier failed — falling through to synced.`,
-    );
-  }
 
   // ── Tier 2: Synced (Lời chạy theo dòng - Upload lên B2) ─────────────────────
-  if (raw.plainLyrics.length > 0) {
+  if (raw.syncedLines.length > 0) {
     const syncedUrl = await upload(
       { type: "synced", lines: raw.syncedLines },
       "lyrics_synced.json",
@@ -162,7 +134,11 @@ export async function buildFinalLyricResult(
       return {
         finalLyricType: "synced",
         finalLyricUrl: syncedUrl,
-        finalLyricPreview: raw.syncedLines.slice(0, LYRIC_PREVIEW_LIMIT),
+        finalLyricPreview: raw.syncedLines.slice(0, LYRIC_PREVIEW_LIMIT).map(l => ({
+          startTime: l.startTime,
+          endTime: l.endTime || l.startTime, // Thêm endTime để thoả mãn TS type LyricLine, dù frontend có thể không dùng
+          text: l.text,
+        })),
         finalPlainLyrics: raw.plainLyrics,
       };
     }

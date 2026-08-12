@@ -1,3 +1,5 @@
+
+
 // services/genre.service.ts
 
 import mongoose, { Types } from "mongoose";
@@ -292,11 +294,9 @@ class GenreService {
       // 1. Lấy thông tin trước khi xóa
 
       // 2. Kiểm tra sự phụ thuộc chặt chẽ (Giữ nguyên vì rất tốt)
-      const [tracksUsing, albumsUsing, subGenres] = await Promise.all([
-        Track.exists({ genres: id }).session(session),
-        Album.exists({ genres: id }).session(session),
-        Genre.exists({ parentId: id }).session(session),
-      ]);
+      const tracksUsing = await Track.exists({ genres: id }).session(session);
+      const albumsUsing = await Album.exists({ genres: id }).session(session);
+      const subGenres = await Genre.exists({ parentId: id }).session(session);
 
       if (tracksUsing || albumsUsing || subGenres) {
         const reasons = [];
@@ -336,9 +336,12 @@ class GenreService {
   // ── 4. TOGGLE STATUS (truly atomic) ───────────────────────────────────────
 
   async toggleStatus(id: string) {
+    const genre = await Genre.findById(id).select("_id isActive");
+    if (!genre) throw new ApiError(httpStatus.NOT_FOUND, "Không tìm thấy thể loại");
+
     const updated = await Genre.findByIdAndUpdate(
       id,
-      [{ $set: { isActive: { $not: "$isActive" } } }],
+      { $set: { isActive: !genre.isActive } },
       { new: true, select: "_id isActive" },
     ).lean();
 
@@ -368,7 +371,7 @@ class GenreService {
     );
     const cacheKey = buildCacheKey("genre:list", userRole, cleanFilter);
 
-      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const {
@@ -433,11 +436,11 @@ class GenreService {
     };
 
     const ttl = 1800 + Math.floor(Math.random() * 600);
-  cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+    cacheRedis
+      .set(cacheKey, JSON.stringify(result), "EX", ttl)
+      .catch((err) => {
+        console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+      });
 
     return result;
   }
@@ -580,11 +583,11 @@ class GenreService {
     };
 
     // 3. Lưu Cache với cơ chế "Fire-and-forget" để không block client
-   cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+    cacheRedis
+      .set(cacheKey, JSON.stringify(result), "EX", 3600) // Cache 1 giờ
+      .catch((err) => {
+        console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+      });
 
     return result;
   }
@@ -634,10 +637,10 @@ class GenreService {
 
     const ttl = 900 + Math.floor(Math.random() * 120);
     cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+      .set(cacheKey, JSON.stringify(result), "EX", ttl)
+      .catch((err) => {
+        console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+      });
     return result;
   }
 

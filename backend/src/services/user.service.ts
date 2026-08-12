@@ -6,6 +6,7 @@ import Playlist from "../models/Playlist"; // Import thêm Playlist để cleanu
 import ApiError from "../utils/ApiError";
 import { generateSafeSlug } from "../utils/slug";
 import { sendEmail } from "../utils/sendEmail";
+import { welcomeAdminCreatedEmail } from "../utils/emailTemplates";
 import { deleteFileFromCloud } from "../utils/cloudinary";
 import {
   UpdateProfileInput,
@@ -164,6 +165,26 @@ class UserService {
   }
 
   /**
+   * 5.1 [ADMIN] GET USER STATS
+   */
+  async getUserStats() {
+    const [totalUsers, activeUsers, blockedUsers, artistCount] =
+      await Promise.all([
+        User.countDocuments(),
+        User.countDocuments({ isActive: true }),
+        User.countDocuments({ isActive: false }),
+        User.countDocuments({ role: "artist" }),
+      ]);
+
+    return {
+      totalUsers,
+      activeUsers,
+      blockedUsers,
+      artistCount,
+    };
+  }
+
+  /**
    * 6. [ADMIN] CREATE USER
    */
   async createUserByAdmin(
@@ -180,7 +201,7 @@ class UserService {
     const tempPassword =
       password || Math.random().toString(36).slice(-8) + "Aa1@";
     const avatarPath = file ? file.path : "";
-    const username = await generateSafeSlug(User, fullName);
+    const username = await generateSafeSlug(User, fullName, undefined, "username");
 
     try {
       const newUser = await User.create({
@@ -303,8 +324,8 @@ class UserService {
     try {
       await sendEmail(
         email,
-        "Chào mừng bạn đến với hệ thống",
-        `<p>Xin chào ${name}, tài khoản của bạn đã được tạo.</p><p>Pass: <b>${pass}</b></p>`,
+        `🎵 Chào mừng bạn đến với TVP Streaming Music`,
+        welcomeAdminCreatedEmail(name, email, pass),
       );
     } catch (err) {
       console.error("Gửi mail thất bại:", err);

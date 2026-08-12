@@ -61,9 +61,9 @@ export const createQuickPlaylistSchema = z.object({
   body: z.object({
     title: z
       .string()
-      .trim()
       .min(1, "Tiêu đề không được để trống")
-      .max(100, "Tiêu đề không được vượt quá 100 ký tự"),
+      .max(100, "Tiêu đề không được vượt quá 100 ký tự")
+      .optional(),
     tracks: formDataArrayHelper(objectIdSchema).optional(),
     visibility: visibilitySchema.default("public"),
   }),

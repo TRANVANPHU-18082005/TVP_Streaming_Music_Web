@@ -217,11 +217,13 @@ const PlaylistModals = memo<{
         isOpen={isDeleteOpen}
         onCancel={onCloseDelete}
         onConfirm={onConfirmDelete}
+        isLoading={isMutating}
         title="Xóa danh sách phát?"
         description={`Hành động này không thể hoàn tác. "${playlist?.title}" sẽ bị xóa vĩnh viễn.`}
         confirmLabel="Xóa vĩnh viễn"
         isDestructive
       />
+
     </>
   ),
 );
@@ -323,7 +325,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
     playlist?.title ?? "",
   );
 
-  const { updatePlaylistAsync, deletePlaylist, isMutating } =
+  const { updatePlaylistAsync, deletePlaylistAsync, isMutating } =
     usePlaylistMutations();
 
   const isOwner = useMemo(
@@ -355,13 +357,17 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
     [playlist, updatePlaylistAsync],
   );
 
-  const handleConfirmDelete = useCallback(() => {
+  const handleConfirmDelete = useCallback(async () => {
     if (!playlist) return;
-    deletePlaylist(playlist._id);
-    setIsDeleteOpen(false);
-    if (isEmbedded && onClose) onClose();
-    else navigate("/playlists");
-  }, [playlist, deletePlaylist, isEmbedded, onClose, navigate]);
+    try {
+      await deletePlaylistAsync(playlist._id);
+      setIsDeleteOpen(false);
+      if (isEmbedded && onClose) onClose();
+      else navigate("/playlists");
+    } catch (error) {
+      // Error is handled globally by mutation
+    }
+  }, [playlist, deletePlaylistAsync, isEmbedded, onClose, navigate]);
 
   const closeEditMeta = useCallback(() => setIsEditMetaOpen(false), []);
   const closeManageTracks = useCallback(() => setIsManageTracksOpen(false), []);
@@ -710,13 +716,8 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
             ) : null}
 
             {/* Owner row */}
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2.5 gap-y-1.5 mt-1.5">
-              <button
-                type="button"
-                onClick={() => navigate(`/profile/${playlist.user?._id}`)}
-                className="flex items-center gap-2 hover:opacity-80 transition-opacity group/user focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 rounded"
-                aria-label={`Xem hồ sơ: ${playlist.user?.fullName ?? "Hệ thống"}`}
-              >
+            <div className="flex flex-wrap items-center justify-center align-middle md:justify-start gap-x-2.5 gap-y-1.5 mt-1.5">
+              <div className="flex items-center gap-2">
                 <Avatar className="size-6 border-[1.5px] border-background/70 shadow-sm">
                   <AvatarImage src={playlist.user?.avatar} />
                   <AvatarFallback className="text-[9px] font-black bg-primary/20 text-primary">
@@ -726,7 +727,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
                 <span className="text-sm font-black text-foreground group-hover/user:underline underline-offset-3 decoration-2">
                   {playlist.user?.fullName ?? "Hệ thống"}
                 </span>
-              </button>
+              </div>
 
               <span
                 className="text-foreground/30 text-xs hidden sm:inline"

@@ -23,11 +23,12 @@ export const createGenreSchema = z.object({
         .trim()
         .max(500, { message: "Mô tả tối đa 500 ký tự" })
         .optional(),
-      parentId: nullableObjectIdSchema,
+      parentId: z.union([objectIdSchema, z.literal("root"), z.literal(""), z.null()]).optional(),
       color: hexColorSchema.optional(),
       gradient: z.string().optional(),
       priority: z.coerce.number().default(0),
       isTrending: booleanSchema.default(false),
+      image: z.any().optional(),
     })
     .strict(), // Chặn field lạ không nằm trong whitelist
 });
@@ -49,11 +50,12 @@ export const updateGenreSchema = z.object({
         .max(500, { message: "Mô tả tối đa 500 ký tự" })
         .optional(),
       // Allow empty string or null to explicitly clear the parent on update
-      parentId: z.union([objectIdSchema, z.literal(""), z.null()]).optional(),
+      parentId: z.union([objectIdSchema, z.literal("root"), z.literal(""), z.null()]).optional(),
       color: hexColorSchema.optional(),
       gradient: z.string().optional(),
       priority: z.coerce.number().optional(),
       isTrending: booleanSchema.optional(),
+      image: z.any().optional(),
     })
     .strict(), // Chặn field lạ không nằm trong whitelist
 });

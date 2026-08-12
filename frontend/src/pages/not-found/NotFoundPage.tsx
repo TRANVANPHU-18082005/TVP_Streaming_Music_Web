@@ -57,7 +57,14 @@ export default function NotFoundPage() {
       {/* --- BACKGROUND EFFECTS --- */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Static Noise */}
-        <div className="absolute inset-0 opacity-[0.07] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+        <div
+          className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{
+            backgroundImage:
+              "radial-gradient(rgba(255,255,255,0.15) 0.8px, transparent 0.8px)",
+            backgroundSize: "8px 8px",
+          }}
+        />
 
         {/* Ambient Glows */}
         <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[120px] animate-pulse" />

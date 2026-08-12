@@ -61,6 +61,31 @@ export const createTrackSchema = z.object({
       plainLyrics: z.string().optional(), // Chỉ dùng khi lyricType là "plain"
       // Duration sẽ được Worker tính lại, nhưng FE gửi lên để hiển thị tạm thời
       duration: z.coerce.number().min(0).default(0),
+
+      aiMetadata: z
+        .preprocess((val) => {
+          if (typeof val === "string") {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        }, z.object({
+          emotion: z.string().max(200).optional(),
+          musicalStyle: z.string().max(500).optional(),
+          meaning: z.string().max(1000).optional(),
+          language: z.string().max(50).optional(),
+          era: z.string().max(50).optional(),
+          colorHex: z.string().max(10).optional(),
+          energy: z.coerce.number().min(0).max(1).optional(),
+          tempo: z.coerce.number().int().optional(),
+          moods: z.array(z.string()).optional(),
+          contexts: z.array(z.string()).optional(),
+          similarKeywords: z.array(z.string()).optional(),
+        }))
+        .optional(),
     })
     .strict(),
 });
@@ -92,6 +117,30 @@ export const updateTrackSchema = z.object({
       lyricType: lyricTypeEnum.optional(),
       plainLyrics: z.string().optional(),
       duration: z.coerce.number().min(0).optional(),
+      aiMetadata: z
+        .preprocess((val) => {
+          if (typeof val === "string") {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        }, z.object({
+          emotion: z.string().max(200).optional(),
+          musicalStyle: z.string().max(500).optional(),
+          meaning: z.string().max(1000).optional(),
+          language: z.string().max(50).optional(),
+          era: z.string().max(50).optional(),
+          colorHex: z.string().max(10).optional(),
+          energy: z.coerce.number().min(0).max(1).optional(),
+          tempo: z.coerce.number().int().optional(),
+          moods: z.array(z.string()).optional(),
+          contexts: z.array(z.string()).optional(),
+          similarKeywords: z.array(z.string()).optional(),
+        }))
+        .optional(),
     })
     .strict()
     .refine(
@@ -125,8 +174,10 @@ export const bulkUpdateTracksSchema = z.object({
         genreIds: genreIdsSchema.optional(),
         tags: tagsSchema.optional(),
         isPublic: booleanSchema.optional(),
+        isExplicit: booleanSchema.optional(),
         moodVideoId: nullableObjectIdSchema.optional(), // Cập nhật Canvas hàng loạt
         status: trackStatusEnum.optional(),
+        errorReason: z.string().max(500).optional(),
       })
       .refine(
         (data) => Object.values(data).some((val) => val !== undefined),
@@ -191,6 +242,20 @@ export const processTrackBulkSchema = z.object({
     trackIds: formDataArrayHelper(objectIdSchema).refine(
       (ids) => ids.length >= 1,
       "Vui lòng chọn ít nhất 1 bài hát",
+    ),
+  }),
+});
+
+// --- 10. PROCESS TRACK CUSTOM BULK SCHEMA ---
+export const processTrackCustomBulkSchema = z.object({
+  body: z.object({
+    trackIds: formDataArrayHelper(objectIdSchema).refine(
+      (ids) => ids.length >= 1,
+      "Vui lòng chọn ít nhất 1 bài hát",
+    ),
+    tasks: z.array(z.string()).refine(
+      (tasks) => tasks.length >= 1,
+      "Vui lòng chọn ít nhất 1 tác vụ",
     ),
   }),
 });

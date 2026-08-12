@@ -23,8 +23,6 @@ export const updateProfileSchema = z.object({
     username: usernameRule.optional(),
     bio: z.string().max(500).optional(),
 
-    // User KHÔNG ĐƯỢC tự đổi email ở đây (thường phải qua quy trình riêng verify lại)
-    // avatar, social links...
     avatar: z.string().url().optional().or(z.literal("")),
     facebook: z.string().url().optional().or(z.literal("")),
     instagram: z.string().url().optional().or(z.literal("")),

@@ -721,30 +721,28 @@ class ArtistService {
 
     try {
       // 2. Thực hiện Xóa mềm với Transaction
-      await Promise.all([
-        // A. Đánh dấu Artist là đã xóa
-        Artist.updateOne(
-          { _id: id },
-          {
-            isDeleted: true,
-            isActive: false,
-            deletedAt: new Date(),
-          },
+      // A. Đánh dấu Artist là đã xóa
+      await Artist.updateOne(
+        { _id: id },
+        {
+          isDeleted: true,
+          isActive: false,
+          deletedAt: new Date(),
+        },
+        { session },
+      );
+
+      // B. Gỡ quyền User (Về mặt logic, tài khoản này không còn là Artist nữa)
+      if (artist.user) {
+        await User.updateOne(
+          { _id: artist.user },
+          { role: "user", $unset: { artistProfile: 1 } },
           { session },
-        ),
+        );
+      }
 
-        // B. Gỡ quyền User (Về mặt logic, tài khoản này không còn là Artist nữa)
-        artist.user
-          ? User.updateOne(
-              { _id: artist.user },
-              { role: "user", $unset: { artistProfile: 1 } },
-              { session },
-            )
-          : Promise.resolve(),
-
-        // C. Xử lý Follow (Tùy chọn: Có thể giữ lại nếu muốn bảo toàn stats cũ)
-        // Follow.deleteMany({ following: id }, { session }),
-      ]);
+      // C. Xử lý Follow (Tùy chọn: Có thể giữ lại nếu muốn bảo toàn stats cũ)
+      // await Follow.deleteMany({ following: id }, { session });
 
       await session.commitTransaction();
 

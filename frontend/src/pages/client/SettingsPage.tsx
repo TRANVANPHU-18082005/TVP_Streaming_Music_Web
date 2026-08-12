@@ -16,6 +16,7 @@ import {
   Globe,
   Save,
   Camera,
+  Paintbrush,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -146,14 +147,13 @@ const MODES: {
   icon: React.ElementType;
   desc: string;
 }[] = [
-  { id: "light", label: "Light", icon: Sun, desc: "Clean & bright" },
-  { id: "dark", label: "Dark", icon: Moon, desc: "Obsidian abyss" },
-  { id: "system", label: "System", icon: Monitor, desc: "Follow device" },
-];
+    { id: "light", label: "Sáng", icon: Sun, desc: "Giao diện sáng" },
+    { id: "dark", label: "Tối", icon: Moon, desc: "Giao diện tối" },
+    { id: "system", label: "Hệ thống", icon: Monitor, desc: "Sử dụng cài đặt hệ thống" },
+  ];
 
 type SectionId =
-  | "account"
-  | "appearance"
+  "appearance"
   | "playback"
   | "notifications"
   | "privacy";
@@ -164,17 +164,16 @@ const SECTIONS: {
   icon: React.ElementType;
   desc: string;
 }[] = [
-  { id: "account", label: "Account", icon: User, desc: "Profile & Security" },
-  {
-    id: "appearance",
-    label: "Appearance",
-    icon: Palette,
-    desc: "Themes & Skins",
-  },
-  { id: "playback", label: "Playback", icon: Volume2, desc: "Audio Quality" },
-  { id: "notifications", label: "Alerts", icon: Bell, desc: "Push & Email" },
-  { id: "privacy", label: "Privacy", icon: Shield, desc: "Data Safety" },
-];
+    {
+      id: "appearance",
+      label: "Giao diện",
+      icon: Palette,
+      desc: "Chủ đề & Skin",
+    },
+    { id: "playback", label: "Phát lại", icon: Volume2, desc: "Chất lượng âm thanh" },
+    { id: "notifications", label: "Thông báo", icon: Bell, desc: "Push & Email" },
+    { id: "privacy", label: "Quyền riêng tư", icon: Shield, desc: "Data Safety" },
+  ];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION VARIANTS — aligned with --ease-snappy / --ease-spring tokens
@@ -225,9 +224,9 @@ const SectionNavItem = memo(
         isActive
           ? ["bg-card border-border/50 text-primary", "shadow-elevated"]
           : [
-              "border-transparent text-foreground",
-              "hover:bg-surface-2/70 hover:border-border/30",
-            ],
+            "border-transparent text-foreground",
+            "hover:bg-surface-2/70 hover:border-border/30",
+          ],
       )}
       style={{ animationDelay: `${index * 60}ms` }}
     >
@@ -343,9 +342,9 @@ const AppearanceSection = memo(
       {/* Interface Mode */}
       <SectionCard>
         <SectionCardHeader
-          icon={Sparkles}
-          title="Interface Mode"
-          description="Optimized visual experience for every lighting condition."
+          icon={Paintbrush}
+          title="Chế độ giao diện"
+          description="Giao diện tối ưu cho mọi điều kiện ánh sáng."
         />
         <div className="px-6 sm:px-8 pb-6 sm:pb-8 grid grid-cols-3 gap-3">
           {MODES.map((m) => {
@@ -400,8 +399,8 @@ const AppearanceSection = memo(
       <SectionCard>
         <SectionCardHeader
           icon={Palette}
-          title="Color Skins"
-          description="Adaptive Color system auto-adjusts saturation per theme mode."
+          title="Màu sắc"
+          description="Hệ thống màu sắc thích ứng tự động điều chỉnh độ bão hòa cho từng chế độ chủ đề."
         />
         <div className="px-6 sm:px-8 pb-6 sm:pb-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
           {SKINS.map((s, i) => {
@@ -456,109 +455,6 @@ const AppearanceSection = memo(
   ),
 );
 AppearanceSection.displayName = "AppearanceSection";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ACCOUNT SECTION
-// ─────────────────────────────────────────────────────────────────────────────
-const AccountSection = memo(() => (
-  <SectionCard>
-    {/* Hero banner — gradient-brand token */}
-    <div
-      className="h-28 sm:h-36 gradient-brand opacity-30"
-      aria-hidden="true"
-    />
-
-    <div className="px-6 sm:px-8 pb-8">
-      {/* Avatar + name row */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-end gap-5 -mt-10 sm:-mt-14 mb-8">
-        <div className="relative group size-24 sm:size-28 rounded-[28px] sm:rounded-[32px] shrink-0">
-          {/* Avatar frame — card-base tokens */}
-          <div className="size-full rounded-[inherit] bg-card border-2 border-border/60 shadow-card-md flex items-center justify-center overflow-hidden">
-            <User
-              size={44}
-              className="text-muted-foreground/30"
-              aria-hidden="true"
-            />
-          </div>
-          {/* Hover overlay */}
-          <button
-            className={cn(
-              "absolute inset-0 rounded-[inherit]",
-              "bg-overlay/70 backdrop-blur-sm",
-              "flex flex-col items-center justify-center gap-1",
-              "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
-              "transition-opacity duration-200",
-              "focus-visible:outline-2 focus-visible:outline-offset-2",
-              "focus-visible:outline-[hsl(var(--ring))]",
-            )}
-            aria-label="Change profile photo"
-          >
-            <Camera size={20} className="text-white" aria-hidden="true" />
-            <span className="text-[10px] font-black text-white uppercase tracking-widest">
-              Change
-            </span>
-          </button>
-        </div>
-
-        <div className="pb-1 sm:pb-2 min-w-0">
-          <h3 className="text-2xl font-black tracking-tight text-foreground truncate">
-            Soundwave User
-          </h3>
-          <p
-            className="text-xs font-bold uppercase tracking-widest mt-1"
-            style={{ color: "hsl(var(--primary))" }}
-          >
-            Premium Member
-          </p>
-        </div>
-      </div>
-
-      {/* Form fields */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-        <div className="space-y-2">
-          <label className="text-overline text-muted-foreground/60 ml-0.5">
-            Username
-          </label>
-          <Input
-            className="input-base h-11"
-            defaultValue="Neural_Artist_01"
-            aria-label="Username"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-overline text-muted-foreground/60 ml-0.5">
-            Email
-          </label>
-          <Input
-            className="input-base h-11 opacity-70 cursor-not-allowed"
-            defaultValue="user@soundwave.io"
-            readOnly
-            aria-label="Email address (read-only)"
-          />
-        </div>
-
-        <div className="md:col-span-2 space-y-2">
-          <label className="text-overline text-muted-foreground/60 ml-0.5">
-            Biography
-          </label>
-          <Textarea
-            className="input-base min-h-[110px] resize-none py-3"
-            placeholder="Tell us about your musical taste…"
-            aria-label="Biography"
-          />
-        </div>
-      </div>
-
-      {/* Save CTA — .btn-primary from design system */}
-      <button className="btn-primary btn-lg mt-8 gap-2.5">
-        <Save size={16} aria-hidden="true" />
-        Save Profile
-      </button>
-    </div>
-  </SectionCard>
-));
-AccountSection.displayName = "AccountSection";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYBACK SECTION
@@ -651,14 +547,14 @@ const PlaybackSection = memo(
               label: "Crossfade Tracks",
               desc: "Blend between songs during playback (5s transition).",
               checked: true,
-              onChange: () => {},
+              onChange: () => { },
             },
             {
               id: "gapless",
               label: "Gapless Playback",
               desc: "Remove silence between tracks in albums.",
               checked: false,
-              onChange: () => {},
+              onChange: () => { },
             },
           ].map((item, i) => (
             <div
@@ -740,7 +636,7 @@ export default function SettingsPage() {
     setTheme,
     setSkin,
   } = useTheme();
-  const [activeSection, setActiveSection] = useState<SectionId>("account");
+  const [activeSection, setActiveSection] = useState<SectionId>("appearance");
   const [audioQuality, setAudioQuality] = useState([320]);
   const [normalize, setNormalize] = useState(true);
 
@@ -858,7 +754,6 @@ export default function SettingsPage() {
                 role="tabpanel"
                 aria-label={SECTIONS.find((s) => s.id === activeSection)?.label}
               >
-                {activeSection === "account" && <AccountSection />}
 
                 {activeSection === "appearance" && (
                   <AppearanceSection

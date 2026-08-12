@@ -1,3 +1,6 @@
+
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // routes/track.routes.ts
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,6 +26,7 @@ import {
   processTrackSchema,
   deleteTrackSchema,
   processTrackBulkSchema,
+  processTrackCustomBulkSchema,
 } from "../validations/track.validation";
 
 const router = express.Router();
@@ -54,6 +58,36 @@ router.get(
   recommendationController.getRecommendedTracks,
 );
 
+router.get(
+  "/recommendations/albums",
+  optionalAuth,
+  recommendationController.getRecommendedAlbums,
+);
+
+router.get(
+  "/recommendations/playlists",
+  optionalAuth,
+  recommendationController.getRecommendedPlaylists,
+);
+
+router.get(
+  "/recommendations/feed",
+  optionalAuth,
+  recommendationController.getForYouFeed,
+);
+
+router.get(
+  "/top/trending-albums",
+  optionalAuth,
+  recommendationController.getTrendingAlbums,
+);
+
+router.get(
+  "/top/trending-playlists",
+  optionalAuth,
+  recommendationController.getTrendingPlaylists,
+);
+
 // 3. List Tracks
 // Lưu ý: Nếu bạn muốn User chưa login vẫn xem được list thì dùng optionalAuth
 router.get(
@@ -67,8 +101,9 @@ router.get(
 // 🔵 DYNAMIC GET ROUTES (Tham số :id)
 // ==========================================
 
-// 4. Sub-resource (Similar)
+// 4. Sub-resource (Similar & Random)
 router.get("/:id/similar", recommendationController.getSimilarTracks);
+router.get("/random", optionalAuth, trackController.getRandomTrack);
 
 // 5. Detail (Catch-all cho GET)
 router.get(
@@ -108,6 +143,18 @@ router.post(
   trackController.bulkRetryLyrics,
 );
 router.post(
+  "/bulk/retry/custom",
+  authorize("admin"),
+  validate(processTrackCustomBulkSchema),
+  trackController.bulkRetryCustom,
+);
+router.post(
+  "/bulk/retry/mood",
+  authorize("admin"),
+  validate(processTrackBulkSchema),
+  trackController.bulkRetryMood,
+);
+router.post(
   "/bulk/retry/karaoke",
   authorize("admin"),
   validate(processTrackBulkSchema),
@@ -124,6 +171,18 @@ router.post(
   authorize("admin"),
   validate(processTrackBulkSchema),
   trackController.bulkRetryFull,
+);
+router.post(
+  "/bulk/retry/ai",
+  authorize("admin"),
+  validate(processTrackBulkSchema),
+  trackController.bulkRetryAi,
+);
+router.post(
+  "/bulk/retry/custom",
+  authorize("admin"),
+  validate(processTrackCustomBulkSchema),
+  trackController.bulkRetryCustom,
 );
 
 // --- 2. SINGLE RESOURCE ACTIONS ---
@@ -176,6 +235,12 @@ router.post(
   authorize("admin"),
   validate(processTrackSchema),
   trackController.retryMoodCanvas,
+);
+router.post(
+  "/:id/retry-ai",
+  authorize("admin"),
+  validate(processTrackSchema),
+  trackController.retryAi,
 );
 
 // --- 4. UPDATE & DELETE (Generic ID) ---

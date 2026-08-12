@@ -283,9 +283,9 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
   const handleBack = useSmartBack();
 
   const handleNavigateArtist = useCallback(() => {
-    const artistSlug = album?.artist?.slug;
+    const artistSlug = typeof album?.artist === "object" ? album?.artist?.slug : undefined;
     if (artistSlug) navigate(`/artists/${artistSlug}`);
-  }, [navigate, album?.artist?.slug]);
+  }, [navigate, album?.artist]);
 
   const { openAlbumSheet } = useContextSheet();
   const handleMoreOptions = useCallback(

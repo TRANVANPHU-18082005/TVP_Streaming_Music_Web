@@ -401,6 +401,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         render={({ field }) => (
                           <Textarea
                             {...field}
+                            value={field.value || ""}
                             placeholder="© 2024 Artist Name. All rights reserved."
                             className="min-h-[80px] bg-transparent border-none resize-none"
                           />

@@ -43,6 +43,10 @@ import TableSkeleton from "@/components/ui/TableSkeleton";
 // --- Feature Components ---
 import { UserFilters } from "@/features/user/components/UserFilters";
 import UserModal from "@/features/user/components/UserModal";
+import { UserStatsCards } from "@/features/user/components/UserStatsCards";
+import { UserDetailDrawer } from "@/features/user/components/UserDetailDrawer";
+import { BulkActionsBar } from "@/features/user/components/BulkActionsBar";
+import { exportUsersToCSV } from "@/features/user/utils/exportUsers";
 
 // --- Hooks Mới ---
 import { useUserParams } from "@/features/user/hooks/useUserParams";
@@ -79,6 +83,10 @@ const UsersManagementPage = () => {
   const [userToEdit, setUserToEdit] = useState<IUser | null>(null);
   const [userToBlock, setUserToBlock] = useState<IUser | null>(null);
   const [userToDelete, setUserToDelete] = useState<IUser | null>(null);
+  const [userToView, setUserToView] = useState<IUser | null>(null);
+  
+  // Bulk selection state
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
 
   // Bóc tách data an toàn
   const userData = data?.users || [];
@@ -126,8 +134,85 @@ const UsersManagementPage = () => {
   const handleConfirmDelete = () => {
     if (userToDelete) {
       deleteUser(userToDelete._id, {
-        onSuccess: () => setUserToDelete(null),
+        onSuccess: () => {
+          setUserToDelete(null);
+          // If viewing this user, close the drawer
+          if (userToView?._id === userToDelete._id) {
+            setUserToView(null);
+          }
+        },
       });
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (userData.length > 0) {
+      exportUsersToCSV(userData);
+    }
+  };
+
+  // --- BULK HANDLERS ---
+  const toggleSelectAll = () => {
+    if (selectedUserIds.size === userData.length) {
+      setSelectedUserIds(new Set());
+    } else {
+      setSelectedUserIds(new Set(userData.map((u: IUser) => u._id)));
+    }
+  };
+
+  const toggleSelectUser = (id: string) => {
+    const newSet = new Set(selectedUserIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedUserIds(newSet);
+  };
+
+  const handleBulkBlock = async () => {
+    // In a real production scenario, you would have a bulkBlock API. 
+    // Here we'll execute sequentially or promise.all (sequentially is safer for not spamming if no bulk api)
+    const ids = Array.from(selectedUserIds);
+    try {
+      for (const id of ids) {
+        const user = userData.find((u: IUser) => u._id === id);
+        if (user && user.isActive) {
+          await toggleBlockUser(id);
+        }
+      }
+      setSelectedUserIds(new Set());
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleBulkUnblock = async () => {
+    const ids = Array.from(selectedUserIds);
+    try {
+      for (const id of ids) {
+        const user = userData.find((u: IUser) => u._id === id);
+        if (user && !user.isActive) {
+          await toggleBlockUser(id);
+        }
+      }
+      setSelectedUserIds(new Set());
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedUserIds);
+    if (confirm(`Bạn có chắc chắn muốn xóa ${ids.length} người dùng? Hành động này không thể hoàn tác.`)) {
+      try {
+        for (const id of ids) {
+          await deleteUser(id);
+        }
+        setSelectedUserIds(new Set());
+      } catch (e) {
+        console.error(e);
+      }
     }
   };
 
@@ -209,6 +294,9 @@ const UsersManagementPage = () => {
           </Button>
         }
       />
+      
+      {/* --- STATS CARDS --- */}
+      <UserStatsCards />
       <div className="bg-card rounded-2xl shadow-sm">
         {/* --- FILTERS --- */}
         <UserFilters
@@ -216,6 +304,7 @@ const UsersManagementPage = () => {
           onSearch={handleSearch}
           onFilterChange={handleFilterChange}
           onReset={clearFilters}
+          onExport={handleExportCSV}
         />
       </div>
       {isLoading ? (
@@ -239,10 +328,18 @@ const UsersManagementPage = () => {
           />
         )
       ) : (
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden pb-12 sm:pb-0">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="w-[40px] px-4">
+                  <input 
+                    type="checkbox" 
+                    className="rounded border-gray-300 text-primary focus:ring-primary size-4 cursor-pointer"
+                    checked={userData.length > 0 && selectedUserIds.size === userData.length}
+                    onChange={toggleSelectAll}
+                  />
+                </TableHead>
                 <TableHead className="w-[300px]">User Info</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
@@ -254,7 +351,22 @@ const UsersManagementPage = () => {
             </TableHeader>
             <TableBody>
               {userData.map((user: IUser) => (
-                <TableRow key={user._id} className="group">
+                <TableRow 
+                  key={user._id} 
+                  className={cn(
+                    "group cursor-pointer transition-colors",
+                    selectedUserIds.has(user._id) && "bg-primary/5"
+                  )}
+                  onClick={() => setUserToView(user)}
+                >
+                  <TableCell className="px-4" onClick={(e) => e.stopPropagation()}>
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-gray-300 text-primary focus:ring-primary size-4 cursor-pointer"
+                      checked={selectedUserIds.has(user._id)}
+                      onChange={() => toggleSelectUser(user._id)}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="size-9 border">
@@ -298,54 +410,68 @@ const UsersManagementPage = () => {
                       day: "numeric",
                     })}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground"
-                        >
-                          <MoreHorizontal className="size-4" />
-                          <span className="sr-only">Open menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-end items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEdit(user);
+                        }}
+                        className="h-8 hidden md:flex opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <PenSquare className="size-4 mr-2" /> Sửa
+                      </Button>
+                      
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground"
+                          >
+                            <MoreHorizontal className="size-4" />
+                            <span className="sr-only">Open menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
 
-                        <DropdownMenuItem onClick={() => handleOpenEdit(user)}>
-                          <PenSquare className="mr-2 size-4" /> Edit Details
-                        </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenEdit(user)}>
+                            <PenSquare className="mr-2 size-4" /> Edit Details
+                          </DropdownMenuItem>
 
-                        <DropdownMenuItem
-                          onClick={() => setUserToBlock(user)}
-                          className={cn(
-                            user.isActive
-                              ? "text-destructive focus:text-destructive focus:bg-destructive/10"
-                              : "text-emerald-600 focus:text-emerald-600 focus:bg-emerald-500/10",
-                          )}
-                        >
-                          {user.isActive ? (
-                            <>
-                              <Lock className="mr-2 size-4" /> Block User
-                            </>
-                          ) : (
-                            <>
-                              <Unlock className="mr-2 size-4" /> Unblock User
-                            </>
-                          )}
-                        </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setUserToBlock(user)}
+                            className={cn(
+                              user.isActive
+                                ? "text-destructive focus:text-destructive focus:bg-destructive/10"
+                                : "text-emerald-600 focus:text-emerald-600 focus:bg-emerald-500/10",
+                            )}
+                          >
+                            {user.isActive ? (
+                              <>
+                                <Lock className="mr-2 size-4" /> Block User
+                              </>
+                            ) : (
+                              <>
+                                <Unlock className="mr-2 size-4" /> Unblock User
+                              </>
+                            )}
+                          </DropdownMenuItem>
 
-                        <DropdownMenuSeparator />
+                          <DropdownMenuSeparator />
 
-                        <DropdownMenuItem
-                          onClick={() => setUserToDelete(user)}
-                          className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                        >
-                          <Trash2 className="mr-2 size-4" /> Delete Account
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          <DropdownMenuItem
+                            onClick={() => setUserToDelete(user)}
+                            className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                          >
+                            <Trash2 className="mr-2 size-4" /> Delete Account
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -420,6 +546,33 @@ const UsersManagementPage = () => {
         }
         confirmLabel="Yes, Delete Permanently"
         isDestructive
+      />
+      
+      {/* 4. User Detail Drawer */}
+      <UserDetailDrawer
+        isOpen={!!userToView}
+        onClose={() => setUserToView(null)}
+        user={userToView}
+        onEdit={(user) => {
+          setUserToView(null);
+          handleOpenEdit(user);
+        }}
+        onBlock={(user) => {
+          setUserToBlock(user);
+        }}
+        onDelete={(user) => {
+          setUserToDelete(user);
+        }}
+      />
+      
+      {/* 5. Bulk Actions Bar */}
+      <BulkActionsBar
+        selectedCount={selectedUserIds.size}
+        onClearSelection={() => setSelectedUserIds(new Set())}
+        onBlockSelected={handleBulkBlock}
+        onUnblockSelected={handleBulkUnblock}
+        onDeleteSelected={handleBulkDelete}
+        isPending={isMutating}
       />
     </div>
   );

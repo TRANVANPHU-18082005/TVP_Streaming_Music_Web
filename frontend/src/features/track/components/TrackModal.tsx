@@ -658,6 +658,7 @@ const TrackModal = ({
                       [
                         { value: "metadata", label: "Info", icon: Type },
                         { value: "canvas", label: "Canvas", icon: Video },
+                        { value: "ai", label: "AI & Vibes", icon: Sparkles },
                         { value: "lyrics", label: "Lyrics", icon: Languages },
                         { value: "legal", label: "Legal", icon: FileText },
                       ] as const
@@ -932,6 +933,250 @@ const TrackModal = ({
                       />
                     )}
                   />
+                </TabsContent>
+
+                {/* ── TAB 2.5: AI & Vibes ────────────────────────────────── */}
+                <TabsContent
+                  value="ai"
+                  className="space-y-6 animate-fade-up animation-fill-both focus:outline-none"
+                >
+                  <SectionHeader
+                    icon={Sparkles}
+                    title="AI Analysis & Vibes"
+                    description="Quản lý metadata thông minh cho AI Recommendations và Playlists"
+                  />
+                  
+                  {/* Smart selection info banner */}
+                  {!isEditing && (
+                    <div
+                      className={cn(
+                        "card-base p-5 space-y-2 mb-4",
+                        "bg-gradient-to-r from-primary/8 via-transparent to-transparent",
+                        "border-l-[3px] border-l-primary border-t-0 border-b-0 border-r-0",
+                        "rounded-l-none rounded-r-2xl",
+                      )}
+                    >
+                      <div className="flex items-center gap-2 text-primary">
+                        <Sparkles className="size-4" aria-hidden="true" />
+                        <h4 className="text-xs font-black uppercase tracking-widest">
+                          Tự động phân tích
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Hệ thống sẽ tự động dùng AI để phân tích và điền các thông tin này ngay sau khi bài hát được xử lý (trừ khi bạn nhập tay).
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Emotion & Energy */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="space-y-1.5">
+                      <FieldLabel icon={Type} htmlFor="ai-emotion">
+                        Cảm xúc (Emotion)
+                      </FieldLabel>
+                      <Input
+                        id="ai-emotion"
+                        {...register("aiMetadata.emotion")}
+                        placeholder="VD: Buồn bã, Sôi động..."
+                        className={cn(
+                          "bg-card/50 border-border/60",
+                          "focus:border-primary/60 focus:ring-primary/20 rounded-xl px-4",
+                          errors.aiMetadata?.emotion && "border-destructive/60",
+                        )}
+                      />
+                      <ErrorMessage message={errors.aiMetadata?.emotion?.message} />
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      <FieldLabel icon={AudioLines} htmlFor="ai-energy">
+                        Năng lượng (0.0 - 1.0)
+                      </FieldLabel>
+                      <Input
+                        id="ai-energy"
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        max={1}
+                        {...register("aiMetadata.energy", { valueAsNumber: true })}
+                        className={cn(
+                          "bg-card/50 border-border/60 rounded-xl",
+                          errors.aiMetadata?.energy && "border-destructive/60",
+                        )}
+                        placeholder="0.85"
+                      />
+                      <ErrorMessage message={errors.aiMetadata?.energy?.message} />
+                    </div>
+                  </div>
+
+                  {/* Moods */}
+                  <div className="space-y-1.5">
+                    <FieldLabel icon={Tags}>Mood Tags (1-3 tags)</FieldLabel>
+                    <Controller
+                      name="aiMetadata.moods"
+                      control={control}
+                      render={({ field }) => (
+                        <TagInput
+                          value={field.value || []}
+                          onChange={field.onChange}
+                          placeholder="e.g. sad, romantic, chill…"
+                          className="bg-card/50 border-border/60 min-h-[52px] rounded-xl"
+                        />
+                      )}
+                    />
+                    <div className="flex items-start gap-2 text-muted-foreground/55 px-1">
+                      <Info className="size-3 mt-0.5 shrink-0" aria-hidden="true" />
+                      <p className="text-[10px] leading-relaxed">
+                        Danh sách chuẩn: happy, sad, romantic, energetic, chill, melancholic, aggressive, peaceful, dreamy, dark, uplifting, nostalgic
+                      </p>
+                    </div>
+                    <ErrorMessage message={errors.aiMetadata?.moods?.message as string} />
+                  </div>
+
+                  {/* Contexts */}
+                  <div className="space-y-1.5">
+                    <FieldLabel icon={Globe}>Hoàn cảnh nghe (Contexts)</FieldLabel>
+                    <Controller
+                      name="aiMetadata.contexts"
+                      control={control}
+                      render={({ field }) => (
+                        <TagInput
+                          value={field.value || []}
+                          onChange={field.onChange}
+                          placeholder="e.g. study, gym, sleep…"
+                          className="bg-card/50 border-border/60 min-h-[52px] rounded-xl"
+                        />
+                      )}
+                    />
+                    <div className="flex items-start gap-2 text-muted-foreground/55 px-1">
+                      <Info className="size-3 mt-0.5 shrink-0" aria-hidden="true" />
+                      <p className="text-[10px] leading-relaxed">
+                        Danh sách chuẩn: study, gym, driving, sleep, party, morning, cooking, rain, commute, meditation, date, gaming
+                      </p>
+                    </div>
+                    <ErrorMessage message={errors.aiMetadata?.contexts?.message as string} />
+                  </div>
+
+                  {/* Tempo & ColorHex */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="space-y-1.5">
+                      <FieldLabel icon={ListOrdered} htmlFor="ai-tempo">
+                        Tempo (BPM)
+                      </FieldLabel>
+                      <Input
+                        id="ai-tempo"
+                        type="number"
+                        {...register("aiMetadata.tempo", { valueAsNumber: true })}
+                        className="bg-card/50 border-border/60 rounded-xl"
+                        placeholder="120"
+                      />
+                      <ErrorMessage message={errors.aiMetadata?.tempo?.message} />
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      <FieldLabel icon={Camera} htmlFor="ai-color">
+                        Màu Vibe (Hex)
+                      </FieldLabel>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="ai-color"
+                          {...register("aiMetadata.colorHex")}
+                          className="bg-card/50 border-border/60 rounded-xl font-mono uppercase"
+                          placeholder="#1db954"
+                        />
+                        <div 
+                          className="size-11 rounded-xl border shrink-0" 
+                          style={{ backgroundColor: useWatch({ control, name: "aiMetadata.colorHex" }) || "transparent" }}
+                        />
+                      </div>
+                      <ErrorMessage message={errors.aiMetadata?.colorHex?.message} />
+                    </div>
+                  </div>
+
+                  {/* Musical Style & Meaning */}
+                  <div className="space-y-5">
+                    <div className="space-y-1.5">
+                      <FieldLabel icon={AlignLeft} htmlFor="ai-musicalStyle">
+                        Phong cách âm nhạc
+                      </FieldLabel>
+                      <Textarea
+                        id="ai-musicalStyle"
+                        {...register("aiMetadata.musicalStyle")}
+                        placeholder="VD: Phong cách C-Pop nhẹ nhàng mang hơi hướng Cổ Phong..."
+                        className={cn(
+                          "min-h-[80px] bg-card/50 border-border/60",
+                          "focus:border-primary/60 focus:ring-primary/20 rounded-xl px-4 py-3",
+                          "resize-none",
+                          errors.aiMetadata?.musicalStyle && "border-destructive/60",
+                        )}
+                      />
+                      <ErrorMessage message={errors.aiMetadata?.musicalStyle?.message} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <FieldLabel icon={AlignLeft} htmlFor="ai-meaning">
+                        Ý nghĩa lời bài hát
+                      </FieldLabel>
+                      <Textarea
+                        id="ai-meaning"
+                        {...register("aiMetadata.meaning")}
+                        placeholder="Ý nghĩa thâm sâu đằng sau bài hát..."
+                        className={cn(
+                          "min-h-[80px] bg-card/50 border-border/60",
+                          "focus:border-primary/60 focus:ring-primary/20 rounded-xl px-4 py-3",
+                          "resize-none",
+                          errors.aiMetadata?.meaning && "border-destructive/60",
+                        )}
+                      />
+                      <ErrorMessage message={errors.aiMetadata?.meaning?.message} />
+                    </div>
+                  </div>
+
+                  {/* Similar Keywords */}
+                  <div className="space-y-1.5">
+                    <FieldLabel icon={Tags}>Từ khóa tương tự (Similar Keywords)</FieldLabel>
+                    <Controller
+                      name="aiMetadata.similarKeywords"
+                      control={control}
+                      render={({ field }) => (
+                        <TagInput
+                          value={field.value || []}
+                          onChange={field.onChange}
+                          placeholder="e.g. co phong, lofi chill…"
+                          className="bg-card/50 border-border/60 min-h-[52px] rounded-xl"
+                        />
+                      )}
+                    />
+                    <ErrorMessage message={errors.aiMetadata?.similarKeywords?.message as string} />
+                  </div>
+
+                  {/* Language & Era */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="space-y-1.5">
+                      <FieldLabel icon={Languages} htmlFor="ai-language">
+                        Ngôn ngữ (Language)
+                      </FieldLabel>
+                      <Input
+                        id="ai-language"
+                        {...register("aiMetadata.language")}
+                        className="bg-card/50 border-border/60 rounded-xl"
+                        placeholder="VD: vi, en, zh..."
+                      />
+                      <ErrorMessage message={errors.aiMetadata?.language?.message} />
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      <FieldLabel icon={Type} htmlFor="ai-era">
+                        Thập niên (Era)
+                      </FieldLabel>
+                      <Input
+                        id="ai-era"
+                        {...register("aiMetadata.era")}
+                        className="bg-card/50 border-border/60 rounded-xl"
+                        placeholder="VD: 2020s, 2010s..."
+                      />
+                      <ErrorMessage message={errors.aiMetadata?.era?.message} />
+                    </div>
+                  </div>
                 </TabsContent>
 
                 {/* ── TAB 3: Lyrics ───────────────────────────────────────── */}

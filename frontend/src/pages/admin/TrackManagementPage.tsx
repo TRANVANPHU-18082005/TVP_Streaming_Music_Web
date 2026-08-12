@@ -22,6 +22,7 @@ import { TrackTable } from "@/features/track/components/TrackTable";
 import TrackModal from "@/features/track/components/TrackModal";
 import { BulkActionBar } from "@/features/track/components/BulkActionBar";
 import { BulkEditModal } from "@/features/track/components/BulkEditModal";
+import { BulkActionConfirmModal, BulkActionConfig } from "@/features/track/components/BulkActionConfirmModal";
 
 // 🔥 NEW HOOKS
 import { useTrackParams } from "@/features/track/hooks/useTrackParams";
@@ -66,14 +67,14 @@ const TrackManagementPage = () => {
     retryLyrics,
     retryKaraoke,
     retryMood,
-
-    bulkChangeTrackStatus,
     bulkUpdateTrack,
     bulkRetryTranscode,
     bulkRetryLyrics,
     bulkRetryKaraoke,
     bulkRetryMood,
     bulkRetryFull,
+    bulkRetryAi,
+    bulkRetryCustom,
     isMutating,
   } = useTrackMutations();
 
@@ -87,6 +88,9 @@ const TrackManagementPage = () => {
   const [bulkMode, setBulkMode] = useState<
     "metadata" | "album" | "mood" | "legal" | null
   >(null);
+  const [bulkActionConfig, setBulkActionConfig] = useState<BulkActionConfig | null>(null);
+  const [isCustomRetryModalOpen, setIsCustomRetryModalOpen] = useState(false);
+  const [customTasks, setCustomTasks] = useState<string[]>(["lyrics", "ai", "mood"]);
 
   // --- HANDLERS ---
   const { openAddToPlaylistSheet } = useContextSheet();
@@ -151,113 +155,98 @@ const TrackManagementPage = () => {
     );
   };
 
-  const handleBulkRetryTranscode = () => {
+  const openBulkConfirm = (config: BulkActionConfig) => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Gửi lệnh retranscode cho ${selectedIds.length} bài hát?`))
-      return;
-    bulkRetryTranscode(selectedIds, {
-      onSuccess: () => setSelectedIds([]),
-    });
+    setBulkActionConfig(config);
   };
 
-  const handleBulkRetryLyrics = () => {
-    if (selectedIds.length === 0) return;
-    if (!confirm(`Gửi lệnh retry lyrics cho ${selectedIds.length} bài hát?`))
-      return;
-    bulkRetryLyrics(selectedIds, {
-      onSuccess: () => setSelectedIds([]),
-    });
-  };
+  const handleBulkRetryTranscode = () =>
+    openBulkConfirm({ type: "retry_transcode", title: "Xử lý lại âm thanh (HLS)" });
 
-  const handleBulkRetryMood = () => {
-    if (selectedIds.length === 0) return;
-    if (
-      !confirm(
-        `Gửi lệnh retry mood matching cho ${selectedIds.length} bài hát?`,
-      )
-    )
-      return;
-    bulkRetryMood(selectedIds, {
-      onSuccess: () => setSelectedIds([]),
-    });
-  };
+  const handleBulkRetryLyrics = () =>
+    openBulkConfirm({ type: "retry_lyrics", title: "Tìm lại lời bài hát" });
 
-  const handleBulkRetryKaraoke = () => {
-    if (selectedIds.length === 0) return;
-    if (!confirm(`Gửi lệnh retry karaoke cho ${selectedIds.length} bài hát?`))
-      return;
-    bulkRetryKaraoke(selectedIds, {
-      onSuccess: () => setSelectedIds([]),
-    });
-  };
+  const handleBulkRetryMood = () =>
+    openBulkConfirm({ type: "retry_mood", title: "Tìm lại Mood Video" });
 
-  const handleBulkRetryFull = () => {
-    if (selectedIds.length === 0) return;
-    if (!confirm(`Gửi lệnh retry full cho ${selectedIds.length} bài hát?`))
-      return;
-    bulkRetryFull(selectedIds, {
-      onSuccess: () => setSelectedIds([]),
-    });
-  };
+  const handleBulkRetryKaraoke = () =>
+    openBulkConfirm({ type: "retry_karaoke", title: "Căn nhịp Karaoke" });
 
-  const handleBulkTogglePublic = () => {
-    if (selectedIds.length === 0) return;
-    if (!confirm(`Đặt ${selectedIds.length} bài hát thành công khai?`)) return;
-    bulkUpdateTrack(
-      { ids: selectedIds, data: { isPublic: true } },
-      {
-        onSuccess: () => setSelectedIds([]),
-      },
-    );
-  };
+  const handleBulkRetryFull = () =>
+    openBulkConfirm({ type: "retry_full", title: "Xử lý lại toàn bộ (Full Pipeline)" });
 
-  const handleBulkToggleExplicit = () => {
-    if (selectedIds.length === 0) return;
-    if (!confirm(`Đặt ${selectedIds.length} bài hát thành explicit (18+)?`))
-      return;
-    bulkUpdateTrack(
-      { ids: selectedIds, data: { isExplicit: true } },
-      {
-        onSuccess: () => setSelectedIds([]),
-      },
-    );
-  };
+  const handleBulkRetryAi = () =>
+    openBulkConfirm({ type: "retry_ai", title: "Phân tích AI Metadata" });
 
-  const handleBulkChangeStatus = () => {
-    if (selectedIds.length === 0) return;
+  const handleBulkTogglePublic = () =>
+    openBulkConfirm({ type: "public", title: "Đặt công khai" });
 
-    const status = window
-      .prompt(
-        `Nhập trạng thái mới cho ${selectedIds.length} bài hát: ${TRACK_STATUS_OPTIONS.join(", ")}`,
-        "ready",
-      )
-      ?.trim() as TrackStatus | undefined;
+  const handleBulkToggleExplicit = () =>
+    openBulkConfirm({ type: "explicit", title: "Đặt làm Explicit (18+)" });
 
-    if (!status || !TRACK_STATUS_OPTIONS.includes(status)) return;
+  const handleBulkChangeStatus = () =>
+    openBulkConfirm({ type: "status", title: "Đổi trạng thái xử lý" });
 
-    let errorReason: string | undefined;
-    if (status === "failed") {
-      errorReason = window
-        .prompt("Nhập lý do lỗi cho trạng thái failed (tùy chọn):", "")
-        ?.trim();
+  const handleBulkDelete = () =>
+    openBulkConfirm({ type: "delete", title: "Xóa bài hát", isDestructive: true });
+
+  const handleBulkConfirmAction = (extraData?: any) => {
+    if (!bulkActionConfig || selectedIds.length === 0) return;
+
+    const onSuccess = () => {
+      setSelectedIds([]);
+      setBulkActionConfig(null);
+    };
+
+    switch (bulkActionConfig.type) {
+      case "retry_transcode":
+        bulkRetryTranscode(selectedIds, { onSuccess });
+        break;
+      case "retry_lyrics":
+        bulkRetryLyrics(selectedIds, { onSuccess });
+        break;
+      case "retry_mood":
+        bulkRetryMood(selectedIds, { onSuccess });
+        break;
+      case "retry_karaoke":
+        bulkRetryKaraoke(selectedIds, { onSuccess });
+        break;
+      case "retry_full":
+        bulkRetryFull(selectedIds, { onSuccess });
+        break;
+      case "retry_ai":
+        bulkRetryAi(selectedIds, { onSuccess });
+        break;
+      case "public":
+        bulkUpdateTrack({ ids: selectedIds, data: { isPublic: true } }, { onSuccess });
+        break;
+      case "explicit":
+        bulkUpdateTrack({ ids: selectedIds, data: { isExplicit: true } }, { onSuccess });
+        break;
+      case "status":
+        if (extraData?.status) {
+           bulkUpdateTrack({ ids: selectedIds, data: { status: extraData.status, errorReason: extraData.errorReason } }, { onSuccess });
+        }
+        break;
+      case "delete":
+        bulkDeleteTracks(selectedIds, { onSuccess });
+        break;
     }
-
-    bulkChangeTrackStatus(
-      selectedIds,
-      { status, errorReason: errorReason || undefined },
-      {
-        onSuccess: () => setSelectedIds([]),
-      },
-    );
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkRetryCustom = () => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Bạn có chắc muốn xóa ${selectedIds.length} bài hát đã chọn?`))
-      return;
+    setCustomTasks(["lyrics", "ai", "mood"]); // default selection
+    setIsCustomRetryModalOpen(true);
+  };
 
-    bulkDeleteTracks(selectedIds, {
-      onSuccess: () => setSelectedIds([]),
+  const handleConfirmCustomRetry = () => {
+    if (customTasks.length === 0) return;
+    bulkRetryCustom(selectedIds, customTasks, {
+      onSuccess: () => {
+        setIsCustomRetryModalOpen(false);
+        setSelectedIds([]);
+      }
     });
   };
 
@@ -421,6 +410,8 @@ const TrackManagementPage = () => {
         onRetryKaraoke={handleBulkRetryKaraoke}
         onRetryMood={handleBulkRetryMood}
         onRetryFull={handleBulkRetryFull}
+        onRetryAi={handleBulkRetryAi}
+        onRetryCustom={handleBulkRetryCustom}
         onTogglePublic={handleBulkTogglePublic}
         onToggleExplicit={handleBulkToggleExplicit}
         onChangeStatus={handleBulkChangeStatus}
@@ -448,6 +439,16 @@ const TrackManagementPage = () => {
           isPending={isMutating}
         />
       )}
+
+      {/* Bulk Action Confirm Modal */}
+      <BulkActionConfirmModal
+        isOpen={!!bulkActionConfig}
+        onClose={() => setBulkActionConfig(null)}
+        onConfirm={handleBulkConfirmAction}
+        config={bulkActionConfig}
+        count={selectedIds.length}
+        isPending={isMutating}
+      />
 
       {/* 4. Delete Confirmation */}
       <ConfirmationModal
@@ -481,6 +482,51 @@ const TrackManagementPage = () => {
         }
         confirmLabel="Yes, Delete"
         isDestructive
+      />
+
+      {/* 5. Custom Retry Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isCustomRetryModalOpen}
+        onCancel={() => setIsCustomRetryModalOpen(false)}
+        onConfirm={handleConfirmCustomRetry}
+        title="Tùy chỉnh Xử lý"
+        isLoading={isMutating}
+        confirmLabel="Chạy Job"
+        description={
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-foreground/80 mb-2">
+              Chọn các bước bạn muốn xử lý lại cho <strong>{selectedIds.length}</strong> bài hát (Tối ưu tải audio một lần):
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { id: "ai", label: "Phân tích AI" },
+                { id: "lyrics", label: "Lấy lời (Lyrics)" },
+                { id: "mood", label: "Video nền (Mood)" },
+                { id: "karaoke", label: "Căn nhịp (Karaoke)" },
+                { id: "transcode", label: "Xử lý âm thanh (HLS)" },
+              ].map((task) => (
+                <label
+                  key={task.id}
+                  className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={customTasks.includes(task.id)}
+                    onChange={(e) => {
+                      setCustomTasks((prev) =>
+                        e.target.checked
+                          ? [...prev, task.id]
+                          : prev.filter((t) => t !== task.id),
+                      );
+                    }}
+                    className="rounded border-input text-primary focus:ring-primary size-4"
+                  />
+                  <span className="text-sm font-medium">{task.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        }
       />
     </div>
   );

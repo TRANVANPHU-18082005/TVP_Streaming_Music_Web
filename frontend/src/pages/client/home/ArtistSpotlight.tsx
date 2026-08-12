@@ -251,7 +251,7 @@ export function ArtistSpotlight() {
     }
 
     return (
-      <div className="relative">
+      <div className="relative ">
         <ArtistScroll artists={artists} />
         <ArtistGrid artists={artists} />
       </div>

@@ -78,6 +78,23 @@ export interface TrackResponseDTO {
   isExplicit: boolean;
   tags: string[];
 
+  // --- AI METADATA ---
+  aiMetadata?: {
+    emotion?: string;
+    musicalStyle?: string;
+    meaning?: string;
+    language?: string;
+    era?: string;
+    colorHex?: string;
+    energy?: number;
+    tempo?: number;
+    moods?: string[];
+    contexts?: string[];
+    similarKeywords?: string[];
+    analyzedAt?: string;
+    analysisVersion?: number;
+  };
+
   releaseDate: Date | string;
   copyright?: string;
   isrc?: string;

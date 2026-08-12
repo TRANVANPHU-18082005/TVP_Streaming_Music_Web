@@ -263,7 +263,9 @@ class SearchService {
             // Nó xử lý: "Son Tung" == "Sơn Tùng", "nguoi" == "người"
             text: {
               query: keyword,
-              path: nameField,
+              path: type === "track"
+                ? ["title", "aiMetadata.emotion", "aiMetadata.similarKeywords", "aiMetadata.moods", "aiMetadata.contexts"]
+                : nameField,
               fuzzy: { maxEdits: 1, prefixLength: 2 },
             },
             highlight: { path: nameField },
@@ -421,24 +423,34 @@ class SearchService {
     const nameField = ["track", "album", "playlist"].includes(type)
       ? "title"
       : "name";
-    const query: any = { [nameField]: regex };
+    const query: any = {};
 
     if (type === "track") {
+      query.$or = [
+        { title: regex },
+        { "aiMetadata.emotion": regex },
+        { "aiMetadata.similarKeywords": regex },
+        { "aiMetadata.moods": regex },
+        { "aiMetadata.contexts": regex }
+      ];
       query.isDeleted = false;
       query.status = "ready";
       query.isPublic = true;
-    } else if (type === "album") {
-      query.isPublic = true;
-      query.isDeleted = false;
-    } else if (type === "artist") {
-      query.isActive = true;
-      query.isDeleted = false;
-    } else if (type === "playlist") {
-      query.visibility = "public";
-      query.isDeleted = false;
-    } else if (type === "genre") {
-      query.isActive = true;
-      query.isDeleted = false;
+    } else {
+      query[nameField] = regex;
+      if (type === "album") {
+        query.isPublic = true;
+        query.isDeleted = false;
+      } else if (type === "artist") {
+        query.isActive = true;
+        query.isDeleted = false;
+      } else if (type === "playlist") {
+        query.visibility = "public";
+        query.isDeleted = false;
+      } else if (type === "genre") {
+        query.isActive = true;
+        query.isDeleted = false;
+      }
     }
 
     const base = Model.find(query);

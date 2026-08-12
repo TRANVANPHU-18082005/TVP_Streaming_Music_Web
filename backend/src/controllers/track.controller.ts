@@ -92,6 +92,16 @@ export const getTrackDetail = catchAsync(
   },
 );
 
+export const getRandomTrack = catchAsync(
+  async (req: Request, res: Response) => {
+    const track = await trackService.getRandomTrack();
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: track,
+    });
+  },
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. CHANGE STATUS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,6 +191,16 @@ export const bulkRetryMood = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+export const bulkRetryAi = catchAsync(async (req: Request, res: Response) => {
+  const { trackIds } = req.body as BulkRetryInput;
+  const result = await trackService.bulkRetryAi(req.user as IUser, trackIds);
+  res.status(httpStatus.ACCEPTED).json({
+    success: true,
+    message: `Queued AI analysis jobs for ${result.queued}/${result.requested} tracks`,
+    data: result,
+  });
+});
+
 export const bulkRetryFull = catchAsync(async (req: Request, res: Response) => {
   const { trackIds } = req.body as BulkRetryInput;
   const result = await trackService.bulkRetryFull(req.user as IUser, trackIds);
@@ -188,6 +208,15 @@ export const bulkRetryFull = catchAsync(async (req: Request, res: Response) => {
     success: true,
     message: `Queued full pipeline for ${result.queued}/${result.requested} tracks`,
     data: result,
+  });
+});
+
+export const bulkRetryCustom = catchAsync(async (req: Request, res: Response) => {
+  const { trackIds, tasks } = req.body;
+  const result = await trackService.bulkRetryCustom(req.user as IUser, trackIds, tasks);
+  res.status(httpStatus.ACCEPTED).json({
+    status: "success",
+    message: result.message,
   });
 });
 
@@ -253,6 +282,18 @@ export const retryMoodCanvas = catchAsync(
     });
   },
 );
+
+/** Retry AI Metadata */
+export const retryAi = catchAsync(async (req: Request, res: Response) => {
+  const track = await trackService.retryAi(req.params.id as string);
+  res.status(httpStatus.ACCEPTED).json({
+    success: true,
+    message: "AI Analysis job đã được queue lại.",
+    data: { trackId: track._id, status: track.status },
+  });
+});
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 9. CHART

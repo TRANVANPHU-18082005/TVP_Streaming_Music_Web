@@ -1,31 +1,40 @@
 import { z } from "zod";
-
-// --- HELPERS ---
-const passwordRule = z
+// hepers
+const passwordValidation = z
   .string()
-  .min(8, "Mật khẩu phải có ít nhất 8 ký tự")
-  .max(100);
-const emailRule = z.string().trim().email("Email không hợp lệ").toLowerCase();
+  .min(8, "Mật khẩu phải từ 8 ký tự")
+  .max(128, "Mật khẩu không được vượt quá 128 ký tự")
+  .regex(/\d/, "Mật khẩu phải chứa ít nhất 1 số")
+  .regex(/[A-Z]/, "Mật khẩu phải chứa ít nhất 1 chữ cái viết hoa")
+  .regex(/[^A-Za-z0-9]/, "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt");
+
+const emailValidation = z.string().trim().email("Email không hợp lệ").toLowerCase();
 
 // --- SCHEMAS ---
-export const registerSchema = z.object({
-  body: z.object({
-    fullName: z.string().trim().min(2, "Họ tên quá ngắn").max(50),
-    email: emailRule,
-    password: passwordRule,
-  }),
-});
-
+// Schema Đăng nhập
 export const loginSchema = z.object({
   body: z.object({
-    email: emailRule,
-    password: z.string().min(1, "Vui lòng nhập mật khẩu"),
+    email: emailValidation,
+    password: z.string().min(1, "Vui lòng nhập mật khẩu").max(128, "Mật khẩu quá dài"),
+    rememberMe: z.boolean().optional(), 
   }),
 });
 
+// Schema Đăng ký
+export const registerSchema = z.object({
+  body: z.object({
+    fullName: z.string().trim().min(3, "Tên đầy đủ phải từ 3 ký tự trở lên").max(50, "Tên không được vượt quá 50 ký tự"),
+    email: emailValidation,
+    password: passwordValidation,
+  }),
+});
+
+
+
 export const verifyEmailSchema = z.object({
-  query: z.object({
-    token: z.string().min(1, "Thiếu Token xác thực"),
+  body: z.object({
+    email: emailValidation,
+    otp: z.string().length(6, "Mã OTP phải có đúng 6 số").regex(/^\d+$/, "Mã OTP chỉ chứa số"),
   }),
 });
 
@@ -37,14 +46,21 @@ export const refreshTokenSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: emailRule,
+    email: emailValidation,
   }),
 });
 
 export const resetPasswordSchema = z.object({
+  params: z.object({
+    token: z.string().optional(),
+  }).optional(),
   body: z.object({
-    token: z.string().min(1, "Thiếu Token"),
-    newPassword: passwordRule,
+    token: z.string().optional(),
+    newPassword: passwordValidation,
+    confirmPassword: z.string().min(1, "Vui lòng xác nhận mật khẩu"),
+  }).refine((data) => !data.newPassword || !data.confirmPassword || data.newPassword === data.confirmPassword, {
+    message: "Mật khẩu xác nhận không khớp",
+    path: ["confirmPassword"],
   }),
 });
 

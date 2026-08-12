@@ -197,18 +197,16 @@ class AlbumService {
             "Artist mới không tồn tại",
           );
 
-        await Promise.all([
-          Artist.findByIdAndUpdate(
-            album.artist,
-            { $inc: { totalAlbums: -1 } },
-            { session },
-          ),
-          Artist.findByIdAndUpdate(
-            data.artist,
-            { $inc: { totalAlbums: 1 } },
-            { session },
-          ),
-        ]);
+        await Artist.findByIdAndUpdate(
+          album.artist,
+          { $inc: { totalAlbums: -1 } },
+          { session },
+        );
+        await Artist.findByIdAndUpdate(
+          data.artist,
+          { $inc: { totalAlbums: 1 } },
+          { session },
+        );
 
         album.artist = new mongoose.Types.ObjectId(data.artist);
       }
@@ -508,20 +506,18 @@ class AlbumService {
       );
 
       // 3. Xử lý các dữ liệu liên quan
-      await Promise.all([
-        // Cách A: Gỡ album khỏi các bài hát (như bạn đang làm)
-        // Track.updateMany({ album: id }, { $unset: { album: "" } }, { session }),
+      // Cách A: Gỡ album khỏi các bài hát (như bạn đang làm)
+      // await Track.updateMany({ album: id }, { $unset: { album: "" } }, { session });
 
-        // Cách B (Khuyên dùng nếu muốn khôi phục sau này):
-        // Chỉ đánh dấu các Track đó thuộc về một album đã bị xóa mềm.
+      // Cách B (Khuyên dùng nếu muốn khôi phục sau này):
+      // Chỉ đánh dấu các Track đó thuộc về một album đã bị xóa mềm.
 
-        // Giảm counter của Artist (Vì album không còn hiển thị nữa)
-        Artist.findByIdAndUpdate(
-          artistId,
-          { $inc: { totalAlbums: -1 } },
-          { session },
-        ),
-      ]);
+      // Giảm counter của Artist (Vì album không còn hiển thị nữa)
+      await Artist.findByIdAndUpdate(
+        artistId,
+        { $inc: { totalAlbums: -1 } },
+        { session },
+      );
 
       await session.commitTransaction();
 

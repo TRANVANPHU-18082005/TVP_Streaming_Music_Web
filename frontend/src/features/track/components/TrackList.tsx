@@ -858,10 +858,10 @@ export const TrackList = memo(
       () =>
         isFixedHeight
           ? {
-              maxHeight: `${maxHeight}px`,
-              overflowY: "auto",
-              overflowX: "hidden",
-            }
+            maxHeight: `${maxHeight}px`,
+            overflowY: "auto",
+            overflowX: "hidden",
+          }
           : { overflowX: "hidden" },
       [isFixedHeight, maxHeight],
     );

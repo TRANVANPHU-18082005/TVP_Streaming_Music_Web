@@ -129,8 +129,8 @@ class PlaylistService {
       // 4. Xử lý Collaborators an toàn
       const collaboratorIds = data.collaborators
         ? parseTags(data.collaborators)
-            .filter((id) => Types.ObjectId.isValid(id)) // Bảo vệ định dạng ID
-            .map((id) => new Types.ObjectId(id))
+          .filter((id) => Types.ObjectId.isValid(id)) // Bảo vệ định dạng ID
+          .map((id) => new Types.ObjectId(id))
         : [];
 
       const [newPlaylist] = await Playlist.create(
@@ -269,6 +269,7 @@ class PlaylistService {
     data: UpdatePlaylistInput,
     file?: Express.Multer.File,
   ) {
+    console.log("update playlist admin", data);
     const playlist = await Playlist.findById(id);
     if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
@@ -309,22 +310,20 @@ class PlaylistService {
         }
 
         // Sync counter cho cả 2 người
-        await Promise.all([
-          mongoose
-            .model("User")
-            .findByIdAndUpdate(
-              oldUserId,
-              { $inc: { totalPlaylists: -1 } },
-              { session },
-            ),
-          mongoose
-            .model("User")
-            .findByIdAndUpdate(
-              data.userId,
-              { $inc: { totalPlaylists: 1 } },
-              { session },
-            ),
-        ]);
+        await mongoose
+          .model("User")
+          .findByIdAndUpdate(
+            oldUserId,
+            { $inc: { totalPlaylists: -1 } },
+            { session },
+          );
+        await mongoose
+          .model("User")
+          .findByIdAndUpdate(
+            data.userId,
+            { $inc: { totalPlaylists: 1 } },
+            { session },
+          );
         playlist.user = new Types.ObjectId(data.userId);
       }
 
@@ -882,7 +881,7 @@ class PlaylistService {
     // 1. Tạo Cache Key dựa trên User và Phân trang
     const cacheKey = `playlist:list:owner:${userId}:page:${page}:limit:${limit}`;
 
-      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     // 2. Query thông minh: Chỉ lấy các trường cần cho UI (Thumbnail, Title, Stats)
@@ -910,14 +909,14 @@ class PlaylistService {
       },
     };
 
-   
 
-    const ttl =  600 + Math.floor(Math.random() * 120);
+
+    const ttl = 600 + Math.floor(Math.random() * 120);
     cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+      .set(cacheKey, JSON.stringify(result), "EX", ttl)
+      .catch((err) => {
+        console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+      });
   }
 
   // ── 12.A GET LIST BY ADMIN ──────────────────────────────────────────────────────────
@@ -1108,10 +1107,10 @@ class PlaylistService {
     const ttl = isSensitive ? 30 : 600 + Math.floor(Math.random() * 120);
 
     cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+      .set(cacheKey, JSON.stringify(result), "EX", ttl)
+      .catch((err) => {
+        console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+      });
 
     return result;
   }
@@ -1125,7 +1124,7 @@ class PlaylistService {
       currentUserId,
     });
 
-      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
+    const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey), 1000);
     if (cached) return JSON.parse(cached as string);
 
     const playlist = await Playlist.findOne({ _id: id, isDeleted: false })
@@ -1179,11 +1178,11 @@ class PlaylistService {
       trackIds: orderedValidTrackIds, // Mảng ID "sạch" và đúng thứ tự
     };
 
-   cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", 3600) // 1 giờ
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+    cacheRedis
+      .set(cacheKey, JSON.stringify(result), "EX", 3600) // 1 giờ
+      .catch((err) => {
+        console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+      });
     return result;
   }
 
@@ -1262,7 +1261,7 @@ class PlaylistService {
     const trackMap = new Map(tracks.map((t) => [t._id.toString(), t]));
     const sortedTracks = pagedTrackIds
       .map((id: any) => trackMap.get(id.toString()))
-      .filter(Boolean); 
+      .filter(Boolean);
 
     const result = {
       data: sortedTracks,
@@ -1277,11 +1276,11 @@ class PlaylistService {
 
     const ttl = 600 + Math.floor(Math.random() * 60);
     // SỬA THÀNH:
-  cacheRedis
-  .set(cacheKey, JSON.stringify(result), "EX", ttl)
-  .catch((err) => {
-    console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
-  });
+    cacheRedis
+      .set(cacheKey, JSON.stringify(result), "EX", ttl)
+      .catch((err) => {
+        console.error(`[Redis Error] Failed to set cache for ${cacheKey}:`, err.message);
+      });
 
     return result;
   }
