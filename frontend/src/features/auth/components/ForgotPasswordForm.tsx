@@ -12,6 +12,7 @@ import {
   forgotPasswordSchema,
   type ForgotPasswordInput,
 } from "@/features/auth/schemas/auth.schema";
+import { useSmartBack } from "@/hooks/useSmartBack";
 
 // ==========================================
 // UI COMPONENTS
@@ -110,7 +111,6 @@ InputField.displayName = "InputField";
 // ==========================================
 
 const ForgotPasswordForm = () => {
-  const navigate = useNavigate();
   const [isSent, setIsSent] = useState(false); // Trạng thái chuyển màn hình
   const [sentEmail, setSentEmail] = useState(""); // Lưu email để hiển thị ở màn hình thành công
 
@@ -118,11 +118,10 @@ const ForgotPasswordForm = () => {
   const {
     register,
     handleSubmit,
-    setError,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordInput>({
     resolver: zodResolver(forgotPasswordSchema) as any,
-    mode: "onBlur",
+    mode: "onChange",
   });
 
   // 2. Xử lý Submit
@@ -142,6 +141,7 @@ const ForgotPasswordForm = () => {
       toast.error(msg);
     }
   };
+  const handleBack = useSmartBack();
 
   // ------------------------------------------------------
   // VIEW 2: SUCCESS (CHECK MAIL)
@@ -176,10 +176,10 @@ const ForgotPasswordForm = () => {
           </p>
 
           <button
-            onClick={() => navigate("/login")}
+            onClick={handleBack}
             className="flex items-center justify-center w-full text-gray-400 hover:text-white transition-colors text-sm mt-6"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" /> Trở về đăng nhập
+            <ArrowLeft className="w-4 h-4 mr-2" /> Trở về
           </button>
         </div>
       </div>
@@ -192,11 +192,11 @@ const ForgotPasswordForm = () => {
   return (
     <div className="animate-fade-in-up">
       <button
-        onClick={() => navigate("/login")}
+        onClick={handleBack}
         className="flex items-center text-gray-400 hover:text-white mb-8 transition-colors group text-sm"
       >
         <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />{" "}
-        Trở về đăng nhập
+        Trở về
       </button>
 
       <div className="mb-8 text-center lg:text-left">

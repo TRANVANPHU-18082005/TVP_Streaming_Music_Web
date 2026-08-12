@@ -5,6 +5,7 @@ import type {
   UserFilterParams,
   ChangePasswordDTO,
   ArtistRequest,
+  UserStats,
 } from "../types";
 
 const userApi = {
@@ -58,6 +59,12 @@ const userApi = {
   // ==========================================
   // 2. ADMIN LOGIC (Quản lý hệ thống)
   // ==========================================
+
+  // Lấy thống kê
+  getStats: async () => {
+    const res = await api.get<ApiResponse<UserStats>>("/users/stats");
+    return res.data;
+  },
 
   // Lấy danh sách có phân trang & tìm kiếm
   getAll: async (params: UserFilterParams) => {

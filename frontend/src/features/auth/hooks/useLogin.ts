@@ -12,21 +12,20 @@ export const useLogin = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const [showPassword, setShowPassword] = useState(false);
+  const [requiredProviders, setRequiredProviders] = useState<string[]>([]);
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema) as any,
-    mode: "onBlur",
+    mode: "onChange",
     defaultValues: { email: "", password: "", rememberMe: false },
   });
 
   const onSubmit = async (data: LoginInput) => {
-    // Dispatch thunk thay vì gọi trực tiếp API
+    setRequiredProviders([]); // Reset state trước khi submit
     const resultAction = await dispatch(loginUser(data));
-
     if (loginUser.fulfilled.match(resultAction)) {
       const { user } = resultAction.payload;
 
-      // 1. Xử lý chuyển hướng đặc biệt
       if (user.mustChangePassword) {
         toast.warning("Yêu cầu bảo mật", {
           description: "Vui lòng đổi mật khẩu mới.",
@@ -34,14 +33,13 @@ export const useLogin = () => {
         return navigate("/force-change-password");
       }
 
-      toast.success("Welcome back!", {
-        description: `Logged in as ${user.fullName}`,
+      toast.success("Xin chào!", {
+        description: `Đã đăng nhập với tư cách ${user.fullName}`,
       });
       navigate("/");
     } else {
-      // 2. Xử lý lỗi tập trung
       const errorPayload = resultAction.payload as any;
-      handleAuthError(errorPayload, form, navigate);
+      handleAuthError(errorPayload, form, navigate, setRequiredProviders);
     }
   };
 
@@ -50,19 +48,37 @@ export const useLogin = () => {
     showPassword,
     toggleShowPassword: () => setShowPassword((prev) => !prev),
     onSubmit: form.handleSubmit(onSubmit),
+    requiredProviders,
+    resetRequiredProviders: () => setRequiredProviders([]),
   };
 };
 
 /**
- * Helper xử lý lỗi tập trung - Chuẩn Production
+ * Helper xử lý lỗi tập trung - Chuẩn Production & Enterprise
  */
-const handleAuthError = (error: any, form: any, navigate: any) => {
-  // Accept either server payload or axios-style error
+const handleAuthError = (
+  error: any,
+  form: any,
+  navigate: any,
+  setRequiredProviders: (providers: string[]) => void
+) => {
   const server = error?.response?.data ?? error;
   const errorCode = server?.errorCode ?? server?.data?.errorCode;
   const message = server?.message ?? error?.message ?? "Đăng nhập thất bại";
 
   switch (errorCode) {
+    case "LOGIN_METHOD_REQUIRED": {
+      const providers = server?.data?.providers || [];
+      if (providers.length > 0) {
+        setRequiredProviders(providers);
+        toast.info("Yêu cầu phương thức xác thực", {
+          description: "Vui lòng tiếp tục với tài khoản mạng xã hội đã liên kết.",
+        });
+        return;
+      }
+      toast.error("Lỗi xác thực", { description: message });
+      break;
+    }
     case "ACCOUNT_LOCKED":
       toast.error("Tài khoản đã bị khóa", {
         description: message,
@@ -80,8 +96,8 @@ const handleAuthError = (error: any, form: any, navigate: any) => {
       break;
     default:
       toast.error("Lỗi", { description: message });
-      // Focus và đánh dấu lỗi đỏ cho Input
       form.setError("email", { type: "manual" });
       form.setError("password", { type: "manual" });
   }
 };
+

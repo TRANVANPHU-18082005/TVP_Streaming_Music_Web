@@ -86,7 +86,7 @@ const OtpInput: React.FC<{
             value.length < length
               ? index === value.length
               : index === length - 1 &&
-                document.activeElement === inputRef.current;
+              document.activeElement === inputRef.current;
 
           const isFilled = index < value.length;
 
@@ -109,7 +109,7 @@ const OtpInput: React.FC<{
                     ? "bg-white/10 border-indigo-500/50 text-white shadow-indigo-500/10"
                     : "bg-white/5 border-white/10 text-gray-400",
                   isActive &&
-                    "border-white/30 bg-white/10 ring-1 ring-white/20",
+                  "border-white/30 bg-white/10 ring-1 ring-white/20",
                 )}
               >
                 {digit}
@@ -173,12 +173,12 @@ const ResendTimer = ({
             )}
           </div>
           <span className="text-sm font-medium text-gray-300 group-hover:text-white">
-            Click to Resend Code
+            Nhấn để gửi lại mã
           </span>
         </button>
       ) : (
         <div className="flex items-center gap-2 text-sm text-gray-500">
-          <span>Resend code in</span>
+          <span>Gửi lại mã sau</span>
           <span className="font-mono font-medium text-indigo-400 w-[4ch]">
             00:{timeLeft.toString().padStart(2, "0")}
           </span>
@@ -240,7 +240,7 @@ const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({ email }) => {
         toast.error("Mã đã hết hạn. Vui lòng gửi lại mã mới.");
         setOtp(""); // Xóa trắng để nhập lại
       } else {
-        toast.error("Mã OTP không đúng. Vui lòng thử lại.");
+        toast.error(msg || "Mã OTP không đúng. Vui lòng thử lại.");
         setOtp(""); // Xóa trắng để nhập lại
       }
     } finally {
@@ -275,11 +275,9 @@ const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({ email }) => {
     }
   };
 
-  // ... (Các phần logic giữ nguyên)
+
 
   return (
-    // ✨ THAY ĐỔI 1: Thêm flex flex-col và h-full cho mobile
-    // sm:h-auto để trên PC nó vẫn gọn gàng như cũ
     <div className="animate-fade-in-up w-full flex flex-col h-full sm:h-auto min-h-[60vh] sm:min-h-0">
       {/* Nút Back */}
       <button
@@ -287,7 +285,7 @@ const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({ email }) => {
         className="flex items-center text-gray-400 hover:text-white mb-6 sm:mb-8 transition-colors group shrink-0"
       >
         <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
-        Back to Login
+        Trở về
       </button>
 
       {/* Header Text */}
@@ -296,16 +294,15 @@ const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({ email }) => {
           <Smartphone className="w-6 h-6 text-white" />
         </div>
         <h1 className="text-3xl font-bold mb-3 tracking-tight">
-          Verify Your Identity
+          Xác thực tài khoản
         </h1>
         <p className="text-gray-400 text-sm">
-          We've sent a 6-digit code to{" "}
+          Chúng tôi đã gửi mã gồm 6 chữ số đến{" "}
           <span className="text-white font-medium">
             {email || "your email"}
           </span>
           .
-          <br className="hidden sm:block" /> Enter it below to confirm your
-          account.
+          <br className="hidden sm:block" /> Nhập mã dưới đây để xác nhận tài khoản của bạn.
         </p>
       </div>
 
@@ -329,7 +326,7 @@ const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({ email }) => {
             onClick={() => executeVerify(otp)}
             className="shadow-xl shadow-indigo-500/20"
           >
-            {isLoading ? "Verifying..." : "Verify & Continue"}
+            {isLoading ? "Xác thực..." : "Xác thực & Tiếp tục"}
           </Button>
         </div>
 

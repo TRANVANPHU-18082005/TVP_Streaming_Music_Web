@@ -1,12 +1,4 @@
-interface ApiErrorResponse {
-  response?: {
-    data?: {
-      message?: string;
-      errorCode?: string;
-      errors?: Array<{ field: string; message: string }>;
-    };
-  };
-}
+
 import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,14 +8,11 @@ import { toast } from "sonner";
 // API & Schema
 import authApi from "@/features/auth/api/authApi";
 import { registerSchema, type RegisterInput } from "../schemas/auth.schema";
+import { ApiErrorResponse } from "@/types";
+import { PASSWORD_REQUIREMENTS } from "@/config/constants";
 
 // Constants cho Password Strength
-const PASSWORD_REQUIREMENTS = [
-  { id: 1, label: "8+ ký tự", regex: /.{8,}/ },
-  { id: 2, label: "Số", regex: /\d/ },
-  { id: 3, label: "Chữ cái viết hoa", regex: /[A-Z]/ },
-  { id: 4, label: "Ký tự đặc biệt", regex: /[^A-Za-z0-9]/ },
-];
+
 
 // Interface cho lỗi API (để tránh dùng any)
 
@@ -37,7 +26,7 @@ export const useRegister = () => {
   // 1. Setup Form
   const form = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema) as any,
-    mode: "onBlur", // Validate khi rời ô input
+    mode: "onChange", // Validate khi rời ô input
     defaultValues: {
       fullName: "",
       email: "",
@@ -89,8 +78,8 @@ export const useRegister = () => {
   // 3. Handle Submit
   const handleRegister = async (data: RegisterInput) => {
     try {
-      console.log(data);
-      await authApi.register(data);
+      const { confirmPassword, ...payload } = data;
+      await authApi.register(payload);
 
       toast.success("Đăng ký thành công!", {
         description: "Vui lòng kiểm tra email để xác thực tài khoản.",
@@ -99,7 +88,6 @@ export const useRegister = () => {
       navigate("/verify-otp", { state: { email: data.email } });
     } catch (err: unknown) {
       const error = err as ApiErrorResponse;
-      console.log("Error register: ", error);
       const dataError = error.response?.data;
       const msg = dataError?.message || "Đăng ký thất bại";
 

@@ -4,9 +4,10 @@ import type {
   RefreshResponse,
   LoginRequest,
   RegisterRequest,
-  // Import thêm các type mới
   ChangePasswordRequest,
   ClaimProfileRequest,
+  UserIdentity,
+  AuthProviderType,
 } from "@/features/auth/types";
 import type { UserProfile } from "@/features/user";
 import api from "@/lib/axios";
@@ -78,11 +79,12 @@ const authApi = {
   // 7. Đặt lại mật khẩu (Từ mail quên mật khẩu)
   resetPassword: async (
     token: string,
-    password: string
+    password: string,
+    confirmPassword?: string
   ): Promise<ApiResponse<void>> => {
     const res = await api.post<ApiResponse<void>>(
       `/auth/reset-password/${token}`,
-      { password }
+      { newPassword: password, confirmPassword: confirmPassword ?? password }
     );
     return res.data;
   },
@@ -137,6 +139,24 @@ const authApi = {
   // 12. Social Auth Code Exchange
   exchangeSocialCode: async (code: string): Promise<ApiResponse<LoginResponse>> => {
     const res = await api.post<ApiResponse<LoginResponse>>("/auth/social/exchange", { code });
+    return res.data;
+  },
+
+  // 13. Lấy danh sách tài khoản liên kết (Identities)
+  getIdentities: async (): Promise<ApiResponse<UserIdentity[]>> => {
+    const res = await api.get<ApiResponse<UserIdentity[]>>("/auth/identities");
+    return res.data;
+  },
+
+  // 14. Liên kết tài khoản mạng xã hội
+  linkProvider: async (payload: { provider: AuthProviderType; providerUserId: string; providerEmail: string }): Promise<ApiResponse<UserIdentity>> => {
+    const res = await api.post<ApiResponse<UserIdentity>>("/auth/link-provider", payload);
+    return res.data;
+  },
+
+  // 15. Hủy liên kết tài khoản mạng xã hội
+  unlinkProvider: async (provider: AuthProviderType): Promise<ApiResponse<{ message: string }>> => {
+    const res = await api.delete<ApiResponse<{ message: string }>>(`/auth/unlink-provider/${provider}`);
     return res.data;
   },
 };

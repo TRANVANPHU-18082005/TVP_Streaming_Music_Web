@@ -7,7 +7,7 @@ import {
   User,
   CheckCircle2,
   XCircle,
-  Music4,
+
   Disc,
   ShieldCheck,
   AlertCircle,
@@ -18,15 +18,8 @@ import { Link } from "react-router-dom";
 // Import Hook
 import { useRegister } from "../hooks/useRegister";
 import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AnimatedBackground } from "@/components/AmbientBackground";
 
-const AnimatedBackground = () => (
-  <div className="fixed inset-0 z-0 overflow-hidden bg-[#08080a]">
-    <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-indigo-500/10 rounded-full blur-[120px] animate-blob mix-blend-screen" />
-    <div className="absolute top-[20%] right-[-10%] w-[40vw] h-[40vw] bg-purple-500/10 rounded-full blur-[120px] animate-blob animation-delay-2000 mix-blend-screen" />
-    <div className="absolute bottom-[-20%] left-[20%] w-[50vw] h-[50vw] bg-pink-500/10 rounded-full blur-[120px] animate-blob animation-delay-4000 mix-blend-screen" />
-    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150"></div>
-  </div>
-);
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "neon" | "ghost";
@@ -192,6 +185,8 @@ export default function RegisterPage() {
                     <InputField
                       icon={User}
                       placeholder="Tên đầy đủ"
+                      className="pr-10"
+
                       error={!!errors.fullName}
                       {...register("fullName")}
                     />
@@ -209,6 +204,7 @@ export default function RegisterPage() {
                       type="email"
                       placeholder="Email"
                       error={!!errors.email}
+                      className="pr-10"
                       {...register("email")}
                     />
                     {errors.email && (
@@ -225,6 +221,8 @@ export default function RegisterPage() {
                         icon={Lock}
                         type={showPassword ? "text" : "password"}
                         placeholder="Mật khẩu"
+                        className="pr-15"
+
                         error={!!errors.password}
                         {...register("password")}
                         // Kết nối sự kiện focus để hiện checklist
@@ -233,7 +231,7 @@ export default function RegisterPage() {
                       <button
                         type="button"
                         onClick={toggleShowPassword}
-                        className="absolute right-10 top-4 text-gray-500 hover:text-white transition-colors z-20"
+                        className="absolute right-10 top-4 text-indigo-300  hover:text-white transition-colors z-20"
                       >
                         {showPassword ? (
                           <EyeOff className="w-4 h-4" />
@@ -313,6 +311,8 @@ export default function RegisterPage() {
                       <InputField
                         icon={Lock}
                         type="password"
+                        className="pr-10"
+
                         placeholder="Xác nhận mật khẩu"
                         error={!!errors.confirmPassword}
                         {...register("confirmPassword")}
@@ -354,7 +354,7 @@ export default function RegisterPage() {
                     Bạn đã có tài khoản?{" "}
                     <Link
                       to="/login"
-                      className="text-white font-medium hover:underline decoration-indigo-500 underline-offset-2 transition-all"
+                      className="text-white font-semibold hover:underline underline-offset-4 transition-all ml-1"
                     >
                       Đăng nhập
                     </Link>

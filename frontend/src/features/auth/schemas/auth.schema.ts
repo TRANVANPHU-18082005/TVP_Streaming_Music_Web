@@ -1,24 +1,28 @@
 import { z } from "zod";
-
-// Schema Đăng nhập
-export const loginSchema = z.object({
-  email: z.string().email("Email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu phải từ 6 ký tự"),
-  rememberMe: z.boolean(), // <--- Thêm dòng này
-});
+// hepers
 
 const passwordValidation = z
   .string()
   .min(8, "Mật khẩu phải từ 8 ký tự")
+  .max(128, "Mật khẩu không được vượt quá 128 ký tự")
   .regex(/\d/, "Mật khẩu phải chứa ít nhất 1 số")
   .regex(/[A-Z]/, "Mật khẩu phải chứa ít nhất 1 chữ cái viết hoa")
   .regex(/[^A-Za-z0-9]/, "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt");
+const emailValidation = z.string().trim().email("Email không hợp lệ").toLowerCase();
+
+// --- SCHEMAS ---
+// Schema Đăng nhập
+export const loginSchema = z.object({
+  email: emailValidation,
+  password: z.string().min(1, "Vui lòng nhập mật khẩu").max(128, "Mật khẩu quá dài"),
+  rememberMe: z.boolean(), // <--- Thêm dòng này
+});
 
 // Schema Đăng ký
 export const registerSchema = z
   .object({
-    fullName: z.string().min(3, "Tên phải từ 3 ký tự"),
-    email: z.string().email("Email không hợp lệ"),
+    fullName: z.string().trim().min(3, "Tên đầy đủ phải từ 3 ký tự trở lên").max(50, "Tên không được vượt quá 50 ký tự"),
+    email: emailValidation,
     password: passwordValidation,
     confirmPassword: z.string(),
   })

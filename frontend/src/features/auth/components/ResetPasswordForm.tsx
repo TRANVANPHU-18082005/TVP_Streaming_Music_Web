@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { Lock, Eye, EyeOff, Disc, CheckCircle2, XCircle } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { Lock, Eye, EyeOff, Disc, CheckCircle2, XCircle, AlertTriangle, ArrowLeft, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,16 +11,20 @@ import {
   type ResetPasswordInput,
 } from "@/features/auth/schemas/auth.schema";
 import type { ApiErrorResponse } from "@/types";
+import { PASSWORD_REQUIREMENTS } from "@/config/constants";
 
-// --- CONSTANTS ---
-const PASSWORD_REQUIREMENTS = [
-  { id: 1, label: "8+ ký tự", regex: /.{8,}/ },
-  { id: 2, label: "Chứa số", regex: /\d/ },
-  { id: 3, label: "Chứa chữ in hoa", regex: /[A-Z]/ },
-  { id: 4, label: "Chứa ký tự đặc biệt", regex: /[^A-Za-z0-9]/ },
-];
 
-// --- UI COMPONENTS (Giữ nguyên style của bạn) ---
+
+// Ánh xạ error code sang thông báo tiếng Việt
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  RESET_TOKEN_EXPIRED: "Link đặt lại mật khẩu đã hết hạn (10 phút). Vui lòng gửi lại yêu cầu mới.",
+  RESET_TOKEN_INVALID: "Link đặt lại mật khẩu không hợp lệ. Vui lòng kiểm tra lại đường dẫn trong email.",
+  SAME_PASSWORD_ERROR: "Mật khẩu mới không được trùng với mật khẩu hiện tại.",
+  ACCOUNT_NOT_ACTIVE: "Tài khoản của bạn đã bị vô hiệu hóa. Vui lòng liên hệ hỗ trợ.",
+  ACCOUNT_NOT_FOUND: "Tài khoản không còn tồn tại trong hệ thống.",
+};
+
+// --- UI COMPONENTS ---
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "neon" | "ghost";
@@ -85,7 +89,7 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={id}
           className={cn(
-            "w-full h-12 bg-white/5 hover:bg-white/10 rounded-2xl border text-white pl-11 pr-4 outline-none placeholder:text-gray-500 text-sm font-medium transition-all duration-300 shadow-inner shadow-black/20 backdrop-blur-sm",
+            "w-full h-12 bg-white/5 hover:bg-white/10 rounded-2xl border text-white pl-11 pr-12 outline-none placeholder:text-gray-500 text-sm font-medium transition-all duration-300 shadow-inner shadow-black/20 backdrop-blur-sm",
             error
               ? "border-red-500/50 focus:border-red-500 placeholder:text-red-300/30"
               : "border-white/5 focus:border-white/20",
@@ -100,19 +104,90 @@ const InputField = React.forwardRef<HTMLInputElement, InputProps>(
 );
 InputField.displayName = "InputField";
 
+// --- TOKEN INVALID STATE ---
+const TokenInvalidState = ({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) => (
+  <div className="animate-fade-in-up text-center">
+    <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30">
+      <AlertTriangle className="w-10 h-10 text-red-400" />
+    </div>
+    <h2 className="text-2xl font-bold mb-3 tracking-tight text-white">
+      Link không hợp lệ
+    </h2>
+    <p className="text-gray-400 text-sm mb-8 leading-relaxed max-w-sm mx-auto">
+      {message}
+    </p>
+    <Button onClick={onRetry} className="max-w-xs mx-auto">
+      Gửi lại yêu cầu đặt lại mật khẩu
+    </Button>
+  </div>
+);
+
+// --- SUCCESS STATE ---
+const SuccessState = ({ countdown }: { countdown: number }) => (
+  <div className="animate-fade-in-up text-center">
+    <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/30">
+      <ShieldCheck className="w-10 h-10 text-emerald-400" />
+    </div>
+    <h2 className="text-2xl font-bold mb-3 tracking-tight text-white">
+      Đặt lại mật khẩu thành công!
+    </h2>
+    <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+      Mật khẩu mới của bạn đã được cập nhật. Toàn bộ phiên đăng nhập cũ đã bị thu hồi để bảo mật tài khoản.
+    </p>
+    <p className="text-gray-500 text-xs">
+      Tự động chuyển về trang đăng nhập sau{" "}
+      <span className="text-white font-bold">{countdown}s</span>...
+    </p>
+  </div>
+);
+
 // --- MAIN COMPONENT ---
 
 const ResetPasswordForm = () => {
   const { token } = useParams(); // Lấy token từ URL (/reset-password/:token)
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
-  // 1. Setup Form
+  // States
+  const [pageState, setPageState] = useState<"form" | "invalid" | "success">("form");
+  const [invalidMessage, setInvalidMessage] = useState("");
+  const [countdown, setCountdown] = useState(5);
+
+  // 1. Kiểm tra token ngay khi component mount
+  useEffect(() => {
+    if (!token || token.trim().length < 10) {
+      setInvalidMessage(
+        "Link đặt lại mật khẩu không hợp lệ hoặc đã bị thay đổi. Vui lòng yêu cầu gửi lại email.",
+      );
+      setPageState("invalid");
+    }
+  }, [token]);
+
+  // 2. Countdown và redirect sau khi thành công
+  useEffect(() => {
+    if (pageState !== "success") return;
+    if (countdown <= 0) {
+      navigate("/login", { replace: true });
+      return;
+    }
+    const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [pageState, countdown, navigate]);
+
+  // 3. Setup Form
   const {
     register,
     handleSubmit,
     watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ResetPasswordInput>({
     resolver: zodResolver(resetPasswordSchema) as any,
@@ -122,7 +197,7 @@ const ResetPasswordForm = () => {
   const passwordValue = watch("password", "");
   const confirmPasswordValue = watch("confirmPassword", "");
 
-  // 2. Logic Check Strength (Dùng useMemo)
+  // 4. Logic Check Strength
   const requirementsStatus = useMemo(() => {
     return PASSWORD_REQUIREMENTS.map((req) => ({
       ...req,
@@ -132,7 +207,6 @@ const ResetPasswordForm = () => {
 
   const strengthScore = requirementsStatus.filter((r) => r.met).length;
 
-  // Logic màu sắc
   const getStrengthColor = () => {
     if (strengthScore === 0) return "text-gray-500";
     if (strengthScore <= 2) return "text-red-400";
@@ -140,37 +214,89 @@ const ResetPasswordForm = () => {
     return "text-emerald-400";
   };
 
-  // 3. Submit Handler
+  const getStrengthBarColor = () => {
+    if (strengthScore <= 2) return "bg-red-500";
+    if (strengthScore === 3) return "bg-yellow-500";
+    return "bg-emerald-500";
+  };
+
+  // 5. Submit Handler
   const onSubmit = async (data: ResetPasswordInput) => {
     if (!token) {
-      toast.error("Invalid or missing token.");
+      toast.error("Token không hợp lệ hoặc đã hết hạn.");
       return;
     }
 
     try {
-      // Gọi API Reset Password
-      await authApi.resetPassword(token, data.password);
+      await authApi.resetPassword(token, data.password, data.confirmPassword);
 
       toast.success("Đặt lại mật khẩu thành công!", {
-        description: "Bạn có thể đăng nhập với mật khẩu mới.",
+        description: "Toàn bộ phiên đăng nhập cũ đã bị thu hồi để bảo mật.",
       });
 
-      // Chuyển về trang login
-      navigate("/login");
+      setPageState("success");
     } catch (err: unknown) {
       const error = err as ApiErrorResponse;
-      toast.error(error.response?.data?.message || "Đặt lại mật khẩu thất bại.");
+      const errorCode = error.response?.data?.errorCode as string | undefined;
+      const serverMsg = error.response?.data?.message;
+
+      // Ánh xạ error code sang thông báo cụ thể
+      const displayMsg =
+        (errorCode && ERROR_CODE_MESSAGES[errorCode]) ||
+        serverMsg ||
+        "Đặt lại mật khẩu thất bại. Vui lòng thử lại.";
+
+      // Nếu token hết hạn hoặc không hợp lệ -> chuyển sang trạng thái lỗi
+      if (errorCode === "RESET_TOKEN_EXPIRED" || errorCode === "RESET_TOKEN_INVALID") {
+        setInvalidMessage(displayMsg);
+        setPageState("invalid");
+        return;
+      }
+
+      // Nếu trùng mật khẩu cũ -> hiển thị lỗi inline trên field
+      if (errorCode === "SAME_PASSWORD_ERROR") {
+        setError("password", { message: displayMsg });
+        toast.error(displayMsg);
+        return;
+      }
+
+      // Các lỗi còn lại -> toast
+      toast.error(displayMsg);
     }
   };
 
+  // --- RENDER STATES ---
+
+  if (pageState === "invalid") {
+    return (
+      <TokenInvalidState
+        message={invalidMessage}
+        onRetry={() => navigate("/forgot-password")}
+      />
+    );
+  }
+
+  if (pageState === "success") {
+    return <SuccessState countdown={countdown} />;
+  }
+
+  // --- FORM VIEW ---
   return (
     <div className="animate-fade-in-up">
+      <button
+        onClick={() => navigate("/forgot-password")}
+        className="flex items-center text-gray-400 hover:text-white mb-8 transition-colors group text-sm"
+      >
+        <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />{" "}
+        Gửi lại yêu cầu
+      </button>
+
       <div className="mb-8 text-center lg:text-left">
         <h1 className="text-3xl font-bold mb-3 tracking-tight text-white">
           Đặt lại mật khẩu
         </h1>
         <p className="text-gray-400 text-sm">
-          Tạo mật khẩu mới cho tài khoản của bạn.
+          Tạo mật khẩu mới mạnh hơn cho tài khoản của bạn.
         </p>
       </div>
 
@@ -197,9 +323,12 @@ const ResetPasswordForm = () => {
               <Eye className="w-5 h-5" />
             )}
           </button>
+          {errors.password && (
+            <p className="text-red-400 text-xs mt-2 ml-2">{errors.password.message}</p>
+          )}
         </div>
 
-        {/* Strength Meter (Hiển thị khi focus hoặc có value) */}
+        {/* Strength Meter */}
         <div
           className={cn(
             "overflow-hidden transition-all duration-500 ease-in-out bg-black/20 rounded-2xl",
@@ -210,7 +339,7 @@ const ResetPasswordForm = () => {
         >
           <div className="flex justify-between items-center mb-2 px-1">
             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-              Strength
+              Độ mạnh
             </span>
             <span
               className={cn(
@@ -219,10 +348,10 @@ const ResetPasswordForm = () => {
               )}
             >
               {strengthScore <= 2
-                ? "Weak"
+                ? "Yếu"
                 : strengthScore === 3
-                  ? "Medium"
-                  : "Strong"}
+                  ? "Trung bình"
+                  : "Mạnh"}
             </span>
           </div>
 
@@ -233,13 +362,7 @@ const ResetPasswordForm = () => {
                 key={step}
                 className={cn(
                   "flex-1 transition-all duration-500 ease-out",
-                  strengthScore >= step
-                    ? strengthScore <= 2
-                      ? "bg-red-500"
-                      : strengthScore === 3
-                        ? "bg-yellow-500"
-                        : "bg-emerald-500"
-                    : "bg-transparent",
+                  strengthScore >= step ? getStrengthBarColor() : "bg-transparent",
                 )}
               />
             ))}
@@ -271,18 +394,29 @@ const ResetPasswordForm = () => {
             id="confirmPassword"
             label="Xác nhận mật khẩu"
             icon={Lock}
-            type="password"
+            type={showConfirm ? "text" : "password"}
             error={!!errors.confirmPassword}
             {...register("confirmPassword")}
           />
+          <button
+            type="button"
+            onClick={() => setShowConfirm(!showConfirm)}
+            className="absolute right-4 top-[14px] text-gray-500 hover:text-white transition-colors z-20 outline-none"
+          >
+            {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          </button>
+          {/* Match indicator */}
           {confirmPasswordValue.length > 0 && (
-            <div className="absolute right-4 top-[14px]">
+            <div className="absolute right-12 top-[14px]">
               {passwordValue === confirmPasswordValue ? (
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               ) : (
                 <XCircle className="w-4 h-4 text-red-500" />
               )}
             </div>
+          )}
+          {errors.confirmPassword && (
+            <p className="text-red-400 text-xs mt-2 ml-2">{errors.confirmPassword.message}</p>
           )}
         </div>
 
@@ -291,12 +425,16 @@ const ResetPasswordForm = () => {
           <Button
             type="submit"
             isLoading={isSubmitting}
-            // Disable nếu đang gửi hoặc form chưa valid (optional: bỏ disabled để show error on submit)
-            disabled={isSubmitting}
+            disabled={isSubmitting || strengthScore < 4}
             className="shadow-xl shadow-indigo-500/20"
           >
-            Đặt lại mật khẩu
+            {isSubmitting ? "Đang cập nhật..." : "Đặt lại mật khẩu"}
           </Button>
+          {strengthScore < 4 && passwordValue.length > 0 && (
+            <p className="text-gray-500 text-xs text-center mt-3">
+              Hãy đáp ứng đủ yêu cầu mật khẩu để tiếp tục
+            </p>
+          )}
         </div>
       </form>
     </div>

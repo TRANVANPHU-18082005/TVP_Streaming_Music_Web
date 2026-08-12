@@ -11,6 +11,7 @@ import {
   Trash2,
   UserCheck,
   UserX,
+  DownloadCloud,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ interface UserFiltersProps {
   onSearch: (keyword: string) => void;
   onFilterChange: (key: keyof UserFilterParams, value: any) => void;
   onReset: () => void;
+  onExport: () => void;
 }
 
 // Đồng bộ SORT_OPTIONS khớp chính xác với getUsersSchema của Zod
@@ -50,6 +52,7 @@ export const UserFilters: React.FC<UserFiltersProps> = ({
   onSearch,
   onFilterChange,
   onReset,
+  onExport,
 }) => {
   // --- 1. UI STATE ---
   const [isExpanded, setIsExpanded] = useState(false);
@@ -150,6 +153,17 @@ export const UserFilters: React.FC<UserFiltersProps> = ({
                 ))}
               </SelectContent>
             </Select>
+
+            <Separator orientation="vertical" className="h-6 hidden md:block" />
+
+            <Button
+              variant="outline"
+              onClick={onExport}
+              className="h-10 px-4 shadow-sm border-input hover:bg-accent/50 transition-all hidden sm:flex text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/10"
+            >
+              <DownloadCloud className="size-4 mr-2" />
+              Export
+            </Button>
 
             <Separator orientation="vertical" className="h-6 hidden md:block" />
 

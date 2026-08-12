@@ -2,14 +2,9 @@ import VerifyOtpForm from "@/features/auth/components/VerifyOtpForm";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { AnimatedBackground } from "@/components/AmbientBackground";
 
-const AnimatedBackground = () => (
-  <div className="absolute inset-0 z-0 overflow-hidden bg-[#08080a]">
-    <div className="absolute top-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-indigo-500/10 rounded-full blur-[100px] animate-blob mix-blend-screen" />
-    <div className="absolute bottom-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-purple-500/10 rounded-full blur-[100px] animate-blob animation-delay-2000 mix-blend-screen" />
-    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150"></div>
-  </div>
-);
+
 
 export default function VerifyOtpPage() {
   const location = useLocation();
@@ -53,7 +48,7 @@ export default function VerifyOtpPage() {
         {/* --- RIGHT COLUMN: Content Area --- */}
         <div className="w-full relative flex items-center justify-center overflow-hidden">
           <AnimatedBackground />
-          <div className="relative z-10 w-full max-w-[480px] p-6 sm:p-12">
+          <div className="relative z-10 w-full max-w-[480px] py-4 px-6 sm:p-12">
             <VerifyOtpForm email={email} />
           </div>
         </div>

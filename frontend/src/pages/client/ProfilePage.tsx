@@ -46,6 +46,8 @@ import { IArtist, useMyFollowedArtists } from "@/features/artist";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import { APP_CONFIG } from "@/config/constants";
 import { TrackList } from "@/features/track";
+import { AmbientBackground } from "@/components/AmbientBackground";
+import { AUTH_PATHS } from "@/config/paths";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
@@ -81,30 +83,10 @@ const PublicPlaylistCard = lazy(
 const PublicArtistCard = lazy(
   () => import("@/features/artist/components/PublicArtistCard"),
 );
+const LinkedAccountsTab = lazy(
+  () => import("@/features/auth/components/LinkedAccountsTab").then((mod) => ({ default: mod.LinkedAccountsTab || mod.default })),
+);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AMBIENT BACKGROUND
-// ─────────────────────────────────────────────────────────────────────────────
-const AmbientBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
-    <div className="absolute inset-0 bg-background" />
-    <div
-      className="absolute inset-x-0 top-0 h-[55vh] pointer-events-none"
-      style={{
-        background:
-          "linear-gradient(180deg, hsl(var(--primary)/0.07) 0%, hsl(var(--primary)/0.03) 40%, transparent 100%)",
-      }}
-    />
-    <div
-      className="absolute inset-0 opacity-[0.022] mix-blend-overlay pointer-events-none"
-      style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-      }}
-    />
-    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
-  </div>
-));
-AmbientBackground.displayName = "AmbientBackground";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HERO BACKDROP
@@ -177,31 +159,6 @@ const SectionHeader = memo(
 );
 SectionHeader.displayName = "SectionHeader";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// EMPTY STATE
-// ─────────────────────────────────────────────────────────────────────────────
-const EmptyState = memo(
-  ({
-    icon: Icon,
-    title,
-    description,
-  }: {
-    icon: React.ElementType;
-    title: string;
-    description?: string;
-  }) => (
-    <div className="col-span-full flex flex-col items-center justify-center min-h-[180px] gap-3 text-center animate-fade-in py-8">
-      <div className="flex items-center justify-center size-12 rounded-full bg-muted text-muted-foreground/40">
-        <Icon className="size-5" aria-hidden="true" />
-      </div>
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      {description && (
-        <p className="text-xs text-muted-foreground max-w-xs">{description}</p>
-      )}
-    </div>
-  ),
-);
-EmptyState.displayName = "EmptyState";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOADING SKELETON
@@ -279,21 +236,25 @@ const GuestState = memo(() => (
         className={cn("card-base p-8 max-w-md space-y-5", "border-primary/15")}
       >
         <div className="space-y-2">
-          <h2 className="text-display-lg text-gradient-brand">Đăng nhập</h2>
+          <h2 className="text-display-lg text-primary">Đăng nhập</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
             Đăng nhập để xem playlist, lịch sử nghe nhạc và quản lý thư viện của
             bạn.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
-          <button type="button" className="btn-primary gap-2">
-            <Shield className="size-4" aria-hidden="true" />
-            Đăng nhập
-          </button>
-          <button type="button" className="btn-outline gap-2">
-            <Headphones className="size-4" aria-hidden="true" />
-            Khám phá nhạc
-          </button>
+          <Link to={AUTH_PATHS.LOGIN}>
+            <button type="button" className="btn-primary gap-2">
+              <Shield className="size-4" aria-hidden="true" />
+              Đăng nhập
+            </button>
+          </Link>
+          <Link to="/">
+            <button type="button" className="btn-outline gap-2">
+              <Headphones className="size-4" aria-hidden="true" />
+              Khám phá nhạc
+            </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -532,13 +493,7 @@ const ProfilePage = () => {
                   </AvatarFallback>
                 </Avatar>
               </div>
-              <button
-                type="button"
-                aria-label="Đổi ảnh đại diện"
-                className="absolute inset-[3px] rounded-full bg-black/55 backdrop-blur-sm opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-200 focus-visible:opacity-100"
-              >
-                <Camera className="size-6 text-white" aria-hidden="true" />
-              </button>
+
             </motion.div>
 
             {/* Identity */}
@@ -559,7 +514,7 @@ const ProfilePage = () => {
                     "text-foreground",
                   )}
                 >
-                  {user?.fullName}
+                  {user?.fullName || user?.username || 'User'}
                 </h1>
 
                 {user?.bio && (
@@ -959,9 +914,9 @@ const ProfilePage = () => {
                       >
                         {!followedArtistsList.length ? (
                           <MusicResult
-                            variant="empty-playlists"
-                            title="Chưa có playlists"
-                            description="Tạo playlist đầu tiên để bắt đầu."
+                            variant="empty-artists"
+                            title="Chưa có nghệ sĩ"
+                            description="Theo dõi nghệ sĩ để cập nhật thông tin mới nhất."
                           />
                         ) : (
                           followedArtistsList.map(
@@ -1123,6 +1078,8 @@ const ProfilePage = () => {
                   </Tabs>
                 </motion.div>
               )}
+
+
             </AnimatePresence>
           </div>
         </Tabs>

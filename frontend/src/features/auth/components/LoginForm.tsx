@@ -4,13 +4,13 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Chrome,
-  Facebook,
+
   Check,
   Disc,
   AlertCircle,
-  Play,
 } from "lucide-react";
+import { FaFacebook } from "react-icons/fa";
+import { FcGoogle } from "react-icons/fc";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 
@@ -19,16 +19,11 @@ import { useLogin } from "../hooks/useLogin";
 import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { env } from "@/config/env";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { AnimatedBackground } from "@/components/AmbientBackground";
 
 // --- UI COMPONENTS (Giữ nguyên style của bạn) ---
 
-const AnimatedBackground = () => (
-  <div className="absolute inset-0 z-0 overflow-hidden bg-[#08080a]">
-    <div className="absolute top-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-indigo-500/10 rounded-full blur-[100px] animate-blob mix-blend-screen" />
-    <div className="absolute bottom-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-purple-500/10 rounded-full blur-[100px] animate-blob animation-delay-2000 mix-blend-screen" />
-    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150"></div>
-  </div>
-);
+
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "neon" | "outline" | "ghost";
@@ -82,7 +77,7 @@ const Checkbox: React.FC<{
     </button>
     <label
       htmlFor={id}
-      className="text-sm text-gray-400 select-none cursor-pointer hover:text-gray-300 transition-colors"
+      className="text-xs md:text-sm text-gray-400 select-none cursor-pointer hover:text-gray-300 transition-colors"
       onClick={() => onChange(!checked)}
     >
       {label}
@@ -156,7 +151,7 @@ const MusicBars: React.FC = () => (
 
 export default function LoginForm() {
   // 1. Gọi Hook
-  const { form, onSubmit, showPassword, toggleShowPassword } = useLogin();
+  const { form, onSubmit, showPassword, toggleShowPassword, requiredProviders, resetRequiredProviders } = useLogin();
 
   // Destructuring các giá trị cần dùng từ form
   const {
@@ -234,8 +229,7 @@ export default function LoginForm() {
               <div className="p-5 flex items-center gap-5">
                 <div className="relative h-20 w-20 shrink-0">
                   <div className="absolute inset-0 rounded-full bg-black shadow-lg animate-spin-slow border-2 border-gray-800 flex items-center justify-center overflow-hidden">
-                    <div className="absolute inset-0 rounded-full border border-gray-800/50 m-1"></div>
-                    <div className="w-8 h-8 rounded-full">
+                    <div className="w-20 h-20 rounded-full">
                       <Avatar className="size-full rounded-xl bg-white">
                         <AvatarImage
                           src="https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
@@ -254,7 +248,7 @@ export default function LoginForm() {
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="font-bold text-lg text-white truncate">
-                        Em của ngày hôm qua
+                        Passion of the Night
                       </h3>
                       <div className="flex items-center gap-2 mt-1">
                         <MusicBars />
@@ -288,7 +282,7 @@ export default function LoginForm() {
             <div className="animate-fade-in-up">
               {/* Header */}
               <div className="mb-8 text-center lg:text-left">
-                <div className="relative z-10 flex items-center justify-center align-middle gap-3 mb-4">
+                <div className="relative z-10 flex items-center justify-center align-middle gap-3 mb-2">
                   <Link
                     to="/"
                     className="group flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
@@ -318,113 +312,165 @@ export default function LoginForm() {
                 </p>
               </div>
 
-              {/* FORM CHÍNH */}
-              <form onSubmit={onSubmit} className="space-y-4">
-                {/* Email */}
-                <div>
-                  <InputField
-                    icon={Mail}
-                    type="email"
-                    placeholder="Email"
-                    error={!!errors.email}
-                    {...register("email")}
-                  />
-                  {errors.email && (
-                    <p className="text-red-400 text-xs mt-1 ml-2">
-                      {errors.email.message}
-                    </p>
-                  )}
-                </div>
-
-                {/* Password */}
-                <div className="space-y-4">
-                  <div className="relative">
-                    <InputField
-                      icon={Lock}
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Mật khẩu"
-                      error={!!errors.password}
-                      {...register("password")}
-                    />
+              {/* ENTERPRISE LOGIN METHOD REQUIRED BANNER */}
+              {requiredProviders.length > 0 ? (
+                <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-2xl p-6 mb-6 animate-in fade-in zoom-in duration-300">
+                  <div className="flex items-start gap-3 mb-4">
+                    <AlertCircle className="w-6 h-6 text-indigo-400 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-white font-bold text-base mb-1">Phương thức đăng nhập khác</h3>
+                      <p className="text-indigo-200/80 text-xs leading-relaxed">
+                        Tài khoản này được bảo mật bằng mạng xã hội. Vui lòng nhấn vào nút bên dưới để đăng nhập:
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {requiredProviders.includes("google") && (
+                      <a href={`${env.API_URL}/auth/google`} className="w-full block">
+                        <Button variant="neon" className="w-full bg-white text-black hover:bg-gray-100 cursor-pointer">
+                          <FcGoogle className="w-5 h-5" /> Tiếp tục với Google
+                        </Button>
+                      </a>
+                    )}
+                    {requiredProviders.includes("facebook") && (
+                      <a href={`${env.API_URL}/auth/facebook`} className="w-full block">
+                        <Button variant="outline" className="w-full bg-[#1877F2]/20 border-[#1877F2]/50 text-white hover:bg-[#1877F2]/30 cursor-pointer">
+                          <FaFacebook className="w-5 h-5 text-[#1877F2]" /> Tiếp tục với Facebook
+                        </Button>
+                      </a>
+                    )}
                     <button
                       type="button"
-                      onClick={toggleShowPassword}
-                      className="absolute right-10 top-4 text-gray-500 hover:text-white transition-colors z-20"
+                      onClick={resetRequiredProviders}
+                      className="w-full text-center text-xs text-gray-400 hover:text-white pt-2 transition-colors cursor-pointer"
                     >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4 cursor-pointer" />
-                      ) : (
-                        <Eye className="w-4 h-4 cursor-pointer" />
-                      )}
+                      ← Thử đăng nhập bằng tài khoản khác
                     </button>
                   </div>
-                  {errors.password && (
-                    <p className="text-red-400 text-xs mt-1 ml-2">
-                      {errors.password.message}
-                    </p>
-                  )}
+                </div>
+              ) : (
+                <>
+                  {/* FORM CHÍNH */}
+                  <form onSubmit={onSubmit} className="space-y-4">
+                    {/* Email */}
+                    <div>
+                      <InputField
+                        icon={Mail}
+                        type="email"
+                        placeholder="Email"
+                        className="pr-10"
+                        error={!!errors.email}
+                        {...register("email")}
+                      />
+                      {errors.email && (
+                        <p className="text-red-400 text-xs mt-1 ml-2">
+                          {errors.email.message}
+                        </p>
+                      )}
+                    </div>
 
-                  {/* Remember & Forgot */}
-                  <div className="flex items-center justify-between pt-1">
-                    <Checkbox
-                      id="remember"
-                      label="Ghi nhớ đăng nhập"
-                      checked={!!rememberMe}
-                      onChange={(checked) => setValue("rememberMe", checked)}
-                    />
-                    <Link
-                      to="/forgot-password"
-                      className="text-xs font-medium text-gray-400 hover:text-white transition-colors"
-                    >
-                      Quên mật khẩu?
-                    </Link>
+                    {/* Password */}
+                    <div>
+                      <div className="relative">
+                        <InputField
+                          icon={Lock}
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Mật khẩu"
+                          className="pr-15"
+                          error={!!errors.password}
+                          {...register("password")}
+                        />
+                        <button
+                          type="button"
+                          onClick={toggleShowPassword}
+                          className="absolute right-10 top-4 text-indigo-300 hover:text-white transition-colors z-20"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="w-4 h-4 cursor-pointer" />
+                          ) : (
+                            <Eye className="w-4 h-4 cursor-pointer" />
+                          )}
+                        </button>
+                      </div>
+                      {errors.password && (
+                        <p className="text-red-400 text-xs mt-1 ml-2">
+                          {errors.password.message}
+                        </p>
+                      )}
+
+                      {/* Remember & Forgot */}
+                      <div className="flex items-center text-xs justify-between align-middle pt-1 mt-4">
+                        <Checkbox
+                          id="remember"
+                          label="Ghi nhớ đăng nhập"
+                          checked={!!rememberMe}
+                          onChange={(checked) => setValue("rememberMe", checked)}
+                        />
+                        <Link
+                          to="/forgot-password"
+                          className="text-xs font-medium text-gray-400 hover:text-white hover:underline underline-offset-4 transition-colors"
+                        >
+                          Quên mật khẩu?
+                        </Link>
+                      </div>
+                    </div>
+
+                    {/* Submit Button */}
+                    <div className="pt-4 ">
+                      <Button
+                        type="submit"
+                        isLoading={isSubmitting}
+                        disabled={isSubmitting}
+                        className="cursor-pointer"
+                      >
+                        {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
+                      </Button>
+                    </div>
+                  </form>
+
+                  {/* Social Login */}
+                  <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-white/10" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase tracking-widest">
+                      <span className="bg-[#09090b]/50 backdrop-blur-md px-3 text-gray-500 font-medium rounded-full">
+                        Hoặc tiếp tục với
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                {/* Submit Button */}
-                <div className="pt-4 ">
-                  <Button
-                    type="submit"
-                    isLoading={isSubmitting}
-                    disabled={isSubmitting}
-                    className="cursor-pointer"
-                  >
-                    {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
-                  </Button>
-                </div>
-              </form>
+                  <div className="flex gap-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full cursor-pointer"
+                      onClick={() => {
+                        window.location.href = `${env.API_URL}/auth/facebook`;
+                      }}
+                    >
+                      <FaFacebook size={20} className="text-[#1877F2]" /> Facebook
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full cursor-pointer"
+                      onClick={() => {
+                        window.location.href = `${env.API_URL}/auth/google`;
+                      }}
+                    >
+                      <FcGoogle size={20} /> Google
+                    </Button>
+                  </div>
+                </>
+              )}
 
-              {/* Social Login */}
-              <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-white/10" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase tracking-widest">
-                  <span className="bg-[#09090b]/50 backdrop-blur-md px-3 text-gray-500 font-medium rounded-full">
-                    Hoặc tiếp tục với
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <Link to={`${env.API_URL}/auth/facebook`} className="w-full">
-                  <Button variant="outline" className="w-full cursor-pointer">
-                    <Facebook className="mr-2 h-4 w-4" /> Facebook
-                  </Button>
-                </Link>
-                <Link to={`${env.API_URL}/auth/google`} className="w-full">
-                  <Button variant="outline" className="w-full cursor-pointer">
-                    <Chrome className="mr-2 h-4 w-4" /> Google
-                  </Button>
-                </Link>
-              </div>
-
-              <div className="mt-8 text-center text-sm">
+              <div className="mt-6 text-center text-sm">
                 <p className="text-gray-500">
                   Chưa có tài khoản?{" "}
                   <Link
                     to="/register"
-                    className="text-white font-semibold hover:underline decoration-indigo-500 underline-offset-4 transition-all ml-1"
+                    className="text-white font-semibold hover:underline underline-offset-4 transition-all ml-1"
                   >
                     Đăng ký
                   </Link>

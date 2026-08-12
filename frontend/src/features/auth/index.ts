@@ -6,12 +6,15 @@ export { default as RegisterForm } from "./components/RegisterForm";
 export { default as ForgotPasswordForm } from "./components/ForgotPasswordForm";
 export { default as ResetPasswordForm } from "./components/ResetPasswordForm";
 export { default as VerifyOtpForm } from "./components/VerifyOtpForm";
+export { default as LinkedAccountsTab } from "./components/LinkedAccountsTab";
+export * from "./components/LinkedAccountsTab";
 
 // 🧠 Xuất hooks chính
 export * from "./hooks/useInitAuth";
 export * from "./hooks/useLogin";
 export * from "./hooks/useRegister";
 export * from "./hooks/useForceChangePassword";
+export * from "./hooks/useLinkedAccounts";
 
 // 🪄 Xuất services / slice nếu cần dùng global
 export * from "./api/authApi";

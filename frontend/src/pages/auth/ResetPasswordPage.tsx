@@ -1,12 +1,6 @@
+import { AnimatedBackground } from "@/components/AmbientBackground";
 import ResetPasswordForm from "@/features/auth/components/ResetPasswordForm";
 
-const AnimatedBackground = () => (
-  <div className="absolute inset-0 z-0 overflow-hidden bg-[#08080a]">
-    <div className="absolute top-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-indigo-500/10 rounded-full blur-[100px] animate-blob mix-blend-screen" />
-    <div className="absolute bottom-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-purple-500/10 rounded-full blur-[100px] animate-blob animation-delay-2000 mix-blend-screen" />
-    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150"></div>
-  </div>
-);
 export default function ForgotPasswordPage() {
   return (
     <>
