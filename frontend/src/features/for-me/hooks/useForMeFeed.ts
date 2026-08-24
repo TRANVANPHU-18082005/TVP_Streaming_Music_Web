@@ -9,3 +9,12 @@ export const useForMeFeed = (limit: number = 50) => {
     refetchOnWindowFocus: false,
   });
 };
+
+export const useUnifiedFeed = (limit: number = 50) => {
+  return useQuery({
+    queryKey: ["for-you-unified-feed", limit],
+    queryFn: () => recommendationApi.getUnifiedFeed(limit),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+};

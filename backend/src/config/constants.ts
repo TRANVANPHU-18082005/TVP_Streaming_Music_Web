@@ -9,6 +9,7 @@ export const APP_CONFIG = {
   API_TIMEOUT: 10000,
   MAX_PAGES: 100, // Giới hạn max page để tránh ReDoS
   MAX_LIMIT: 1000, // Giới hạn max items có thể request để tránh ReDoS
+  DUMMY_HASH: "$2b$10$2b102b102b102b102b102uX/fakestringtofoolhacker...",
 } as const;
 export const TRACK_SELECT =
   "title slug artist featuringArtists album genres coverImage duration lyricUrl bitrate description hlsUrl lyricType isExplicit playCount releaseDate moodVideo plainLyrics lyricPreview likeCount";

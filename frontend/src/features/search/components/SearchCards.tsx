@@ -116,7 +116,7 @@ export const SearchAlbumCard = React.memo(
           }}
         />
         <p className="text-[12px] dark:text-white/40 text-gray-500 mt-0.5 truncate">
-          {album.artist?.name || "Đĩa nhạc"}
+          {(typeof album.artist === "object" ? album.artist?.name : null) || "Đĩa nhạc"}
         </p>
       </div>
     </motion.div>

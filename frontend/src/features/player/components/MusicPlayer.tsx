@@ -28,7 +28,7 @@ export function MusicPlayer() {
   const { isPlaying, duration } = useSelector(selectPlayer);
   const [isExpanded, setIsExpanded] = useState(false);
   const location = useLocation();
-  const isForMePage = location.pathname === `/${CLIENT_PATHS.FOR_ME}`;
+  const isHiddenPlayerPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}`;
 
   // 2. DATA RESOLVER: Đặt lên đầu để đảm bảo metadata luôn được xử lý nếu cache miss
   // Resolver này sẽ kích hoạt fetch nếu currentTrackId có nhưng metadata chưa có.
@@ -95,7 +95,7 @@ export function MusicPlayer() {
       */}
       <div
         className={
-          isExpanded || isForMePage
+          isExpanded || isHiddenPlayerPage
             ? "invisible opacity-0 transition-opacity duration-500 delay-200"
             : "visible opacity-100"
         }

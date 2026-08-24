@@ -33,6 +33,12 @@ export const generateUniqueSlug = async (
   excludeId?: string | Types.ObjectId, // Dùng khi Update (bỏ qua ID hiện tại)
   slugField: string = "slug",
 ): Promise<string> => {
+  // Defensive check: nếu truyền nhầm tên field (như "username" hoặc "slug") vào vị trí excludeId
+  if (typeof excludeId === "string" && !Types.ObjectId.isValid(excludeId)) {
+    slugField = excludeId;
+    excludeId = undefined;
+  }
+
   const baseSlug = stringToSlug(fieldValue);
 
   // Tạo query: Tìm chính nó hoặc bỏ qua chính nó (nếu đang Edit)
@@ -69,17 +75,24 @@ export const generateUniqueSlug = async (
 
 /**
  * 3. Tạo Slug kèm Short ID
- * Đã fix: Hỗ trợ excludeId khi Update
+ * Đã fix: Hỗ trợ excludeId khi Update và slugField tùy chỉnh
  */
 export const generateSafeSlug = async (
   model: Model<any>,
   fieldValue: string,
   excludeId?: string | Types.ObjectId,
+  slugField: string = "slug",
 ): Promise<string> => {
+  // Defensive check: nếu truyền nhầm tên field vào vị trí excludeId
+  if (typeof excludeId === "string" && !Types.ObjectId.isValid(excludeId)) {
+    slugField = excludeId;
+    excludeId = undefined;
+  }
+
   const baseSlug = stringToSlug(fieldValue);
 
   // KIỂM TRA NHANH: Nếu baseSlug chưa ai dùng, ta lấy luôn baseSlug (Tốt cho SEO)
-  const query: any = { slug: baseSlug };
+  const query: any = { [slugField]: baseSlug };
   if (excludeId) query._id = { $ne: excludeId };
 
   const isUsed = await model.exists(query);
@@ -93,7 +106,7 @@ export const generateSafeSlug = async (
     const shortId = Math.random().toString(36).substring(2, 8);
     uniqueSlug = `${baseSlug}-${shortId}`;
 
-    const randomQuery: any = { slug: uniqueSlug };
+    const randomQuery: any = { [slugField]: uniqueSlug };
     if (excludeId) randomQuery._id = { $ne: excludeId };
 
     const existing = await model.exists(randomQuery);

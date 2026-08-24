@@ -4,10 +4,10 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import interactionApi from "../api/interactionApi";
 import {
   syncInteractions,
-  InteractionTargetType,
 } from "../slice/interactionSlice";
+import type { InteractionTargetType } from "../slice/interactionSlice";
 import { env } from "@/config/env";
-import { ITrack } from "@/features/track";
+import type { ITrack } from "@/features/track";
 
 export const useSyncInteractionsPaged = (
   allTracks: ITrack[] | undefined,
@@ -90,7 +90,9 @@ export const useSyncInteractionsPaged = (
       } catch (err) {
         console.error("[SyncPaged] API error:", err);
       }
-    }, 300);
+    // Tăng debounce 600ms: nếu nhiều page loads liên tiếp (infinite scroll),
+    // chỉ gửi 1 API call sau khi tất cả đã ổn định
+    }, 600);
 
     return () => {
       isCancelled = true;

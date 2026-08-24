@@ -184,10 +184,8 @@ export const ProgressBar = memo(
               style={{
                 width: `${displayPercent}%`,
                 background: `linear-gradient(
-                  to right,
-                  hsl(var(--primary)),
-                  hsl(var(--wave-1)),
-                  hsl(var(--wave-2))
+                  to right, 
+                  hsl(var(--primary))
                 )`,
                 boxShadow: isDragging
                   ? "0 0 8px hsl(var(--brand-glow) / 0.5)"

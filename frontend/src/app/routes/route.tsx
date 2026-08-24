@@ -3,6 +3,9 @@ import { albumRoutes } from "@/features/album/routes";
 import { artistRoutes } from "@/features/artist/routes";
 import { playlistRoutes } from "@/features/playlist/routes";
 import { forMeRoutes } from "@/features/for-me/routes";
+import { shortsAdminRoutes } from "@/features/shorts/routes/adminRoutes";
+import { shortsRoutes } from "@/features/shorts/routes";
+import { mashupRoutes } from "@/features/mashup/routes";
 
 import { AdminLayout, ClientLayout, RootLayout } from "@/layouts";
 
@@ -68,6 +71,8 @@ export const router = createBrowserRouter([
           ...albumRoutes,
           ...becomeArtistRoutes,
           ...forMeRoutes,
+          ...shortsRoutes,
+          ...mashupRoutes,
           {
             path: CLIENT_PATHS.TRACK_DETAIL(":id"),
             element: <TrackDetailPage />,
@@ -84,7 +89,6 @@ export const router = createBrowserRouter([
               //   element: <ClaimProfilePage />,
               // },
               ...trackRoutes,
-
               ...protectedAuthRoutes,
             ],
           },
@@ -138,6 +142,7 @@ export const router = createBrowserRouter([
                 path: ADMIN_PATHS.PLAYLISTS,
                 element: <PlaylistManagementPage />,
               },
+              ...shortsAdminRoutes,
               ...verifyArtistAdminRoutes,
             ],
           },

@@ -293,27 +293,41 @@ class MoodVideoService {
    */
   async matchMoodCanvas(
     tags: string[],
+    moods: string[],
     jobId?: string,
   ): Promise<mongoose.Types.ObjectId | undefined> {
-    if (!Array.isArray(tags) || !tags.length) return undefined;
+    const combinedInput = [...(tags || []), ...(moods || [])];
+    if (!combinedInput.length) return undefined;
 
     try {
       const matched = await TrackMoodVideo.aggregate<{
         _id: mongoose.Types.ObjectId;
         matchScore: number;
       }>([
-        // Bước 1: Lọc video active có ít nhất 1 tag match
-        { $match: { tags: { $in: tags }, isActive: true } },
+        // Bước 1: Lọc video active có ít nhất 1 tag/mood match
+        { $match: { tags: { $in: combinedInput }, isActive: true } },
 
-        // Bước 2: Tính số tags overlap
+        // Bước 2: Tính số tags overlap (Moods nhân đôi điểm để ưu tiên hơn)
         {
           $addFields: {
-            matchScore: {
+            tagsMatch: {
               $size: {
-                $ifNull: [{ $setIntersection: ["$tags", tags] }, []],
+                $ifNull: [{ $setIntersection: ["$tags", tags || []] }, []],
+              },
+            },
+            moodsMatch: {
+              $size: {
+                $ifNull: [{ $setIntersection: ["$tags", moods || []] }, []],
               },
             },
           },
+        },
+        {
+          $addFields: {
+            matchScore: {
+              $add: ["$tagsMatch", { $multiply: ["$moodsMatch", 2] }]
+            }
+          }
         },
 
         // Bước 3: Sắp xếp theo score cao nhất

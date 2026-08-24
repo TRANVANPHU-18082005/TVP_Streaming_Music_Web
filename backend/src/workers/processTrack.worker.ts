@@ -38,6 +38,8 @@ import { uploadConcurrently } from "../services/upload/b2-upload.service";
 import { invalidateTrackCache } from "../utils/cacheHelper";
 import MoodVideoService from "../services/moodVideo.service";
 import { toCdnUrl } from "../utils/url.utils";
+import { AudioAnalysisService } from "../services/audio/audio-analysis.service";
+import AiService from "../services/ai/ai.service";
 
 const ffprobeStatic = require("ffprobe-static");
 dotenv.config();
@@ -77,11 +79,8 @@ async function runLyricPipeline(
     `[Job ${jobId}] 🎵 LRCLIB: bestAvailable=${rawLyrics.bestAvailable} | plain=${rawLyrics.plainLyrics.length} chars`,
   );
 
-  let karaokeData: KaraokeOutput | null = null;
-
   return buildFinalLyricResult(
     rawLyrics,
-    karaokeData,
     trackTitle,
     tmpDir,
     trackFolderKey,
@@ -114,10 +113,17 @@ const worker = new Worker<ProcessTrackJobData>(
       throw new Error("[Worker] Missing env var: B2_BUCKET_NAME");
 
     // ── Route flags ────────────────────────────────────────────────────────────
-    const doTranscode = type === "full" || type === "transcode_only";
-    const doLyrics = type === "full" || type === "lyric_only";
-    const doKaraokeOnly = type === "karaoke_only";
-    const doMoodOnly = type === "mood_only";
+    const isCustom = type === "custom";
+    const tasks = job.data.tasks || [];
+
+    const doTranscode = type === "full" || type === "transcode_only" || (isCustom && tasks.includes("transcode"));
+    const doLyrics = type === "full" || type === "lyric_only" || (isCustom && tasks.includes("lyrics"));
+    // Karaoke is part of lyric fallback, but if we need a specific doKaraoke flag later it goes here.
+    const doMood = type === "full" || type === "mood_only" || (isCustom && tasks.includes("mood"));
+    const doAi = type === "full" || type === "ai_only" || (isCustom && tasks.includes("ai"));
+
+    // Only transcode and lyrics tasks require downloading the audio
+    const requiresAudio = doTranscode || doLyrics;
 
     const tmpDir = path.join(TMP_ROOT, `${trackId}_${job.id}`);
     const inputExt = path.extname(fileUrl.split("?")[0]) || ".mp3";
@@ -137,8 +143,8 @@ const worker = new Worker<ProcessTrackJobData>(
         throw new Error(`[Worker] Track "${trackId}" not found in DB.`);
 
       // ── STEP 1: Download (bắt buộc với mọi type — cần file audio) ─────────
-      // mood_only không cần download vì không xử lý audio
-      if (!doMoodOnly) {
+      // mood_only hoặc custom (chỉ có mood) không cần download vì không xử lý audio
+      if (requiresAudio) {
         console.log(`[Job ${job.id}] ⬇️  Downloading audio [type=${type}]...`);
         await downloadFile(fileUrl, inputPath);
         console.log(`[Job ${job.id}] ✅ Download complete.`);
@@ -146,7 +152,7 @@ const worker = new Worker<ProcessTrackJobData>(
 
       // ── STEP 2: Audio metadata ─────────────────────────────────────────────
       let meta = { duration: 0, bitrate: 0 };
-      if (!doMoodOnly) {
+      if (requiresAudio) {
         meta = await getAudioMetadata(inputPath);
         console.log(
           `[Job ${job.id}] 🎵 Duration: ${meta.duration}s | Bitrate: ${meta.bitrate}kbps`,
@@ -188,29 +194,7 @@ const worker = new Worker<ProcessTrackJobData>(
         artistName = artistDoc?.name ?? "";
       }
 
-      // ── STEP 4: Mood canvas ────────────────────────────────────────────────
-      let moodVideoId: mongoose.Types.ObjectId | undefined;
-      if (type === "full" || doMoodOnly) {
-        console.log(`[Job ${job.id}] 🎨 Matching mood canvas...`);
-        moodVideoId = await MoodVideoService.matchMoodCanvas(
-          trackDoc.tags ?? [],
-          String(job.id),
-        );
-      }
-
-      // mood_only: chỉ cập nhật moodVideo rồi xong
-      if (doMoodOnly) {
-        await Track.findByIdAndUpdate(trackId, {
-          status: "ready",
-          errorReason: "",
-          ...(moodVideoId ? { moodVideo: moodVideoId } : {}),
-        });
-        await cacheRedis.del(`track:detail:${trackId}`).catch(() => {});
-        console.log(`[Job ${job.id}] ✅ mood_only done.`);
-        return { success: true, lyricType: undefined };
-      }
-
-      // ── STEP 5 & 6: Lyrics pipeline ───────────────────────────────────────
+      // ── STEP 4 & 5: Lyrics pipeline ───────────────────────────────────────
       let finalLyricType: string | undefined;
       let finalLyricUrl: string | undefined;
       let finalLyricPreview: any[] = [];
@@ -219,76 +203,31 @@ const worker = new Worker<ProcessTrackJobData>(
         `[Job ${job.id}] ℹ️ artistName: ${artistName} — track: ${trackDoc.title} - durion: ${meta.duration}.`,
       );
       if (doLyrics) {
-        // full hoặc lyric_only → chạy toàn bộ LRCLIB + karaoke
-        const result = await runLyricPipeline(
-          trackId,
-          trackDoc.title,
-          artistName,
-          meta.duration,
-          inputPath,
-          tmpDir,
-          trackFolderKey,
-          bucketName,
-          String(job.id),
-        );
-        finalLyricType = result.finalLyricType;
-        finalLyricUrl = result.finalLyricUrl;
-        finalLyricPreview = result.finalLyricPreview;
-        finalPlainLyrics = result.finalPlainLyrics;
+        // full hoặc lyric_only → chạy toàn bộ LRCLIB
+        try {
+          const result = await runLyricPipeline(
+            trackId,
+            trackDoc.title,
+            artistName,
+            meta.duration,
+            inputPath,
+            tmpDir,
+            trackFolderKey,
+            bucketName,
+            String(job.id),
+          );
+          finalLyricType = result.finalLyricType;
+          finalLyricUrl = result.finalLyricUrl;
+          finalLyricPreview = result.finalLyricPreview;
+          finalPlainLyrics = result.finalPlainLyrics;
+        } catch (lyricErr: any) {
+          console.error(`[Job ${job.id}] ⚠️ Lyrics pipeline failed (non-blocking for full):`, lyricErr.message);
+          if (type === "lyric_only" || (isCustom && tasks.includes("lyrics"))) {
+            throw lyricErr; // Throw to trigger BullMQ auto-retry and mark track as failed
+          }
+        }
       }
-      // } else if (doKaraokeOnly) {
-      //   // karaoke_only → dùng plainLyrics đã có trong DB, chỉ chạy alignment
-      //   console.log(
-      //     `[Job ${job.id}] 🎤 karaoke_only — using existing plainLyrics from DB`,
-      //   );
-      //   const existingPlain = trackDoc.plainLyrics ?? "";
-      //   const karaokeData = await runKaraokeOnlyPipeline(
-      //     trackId,
-      //     existingPlain,
-      //     inputPath,
-      //     tmpDir,
-      //     trackFolderKey,
-      //     bucketName,
-      //     String(job.id),
-      //   );
 
-      //   if (karaokeData) {
-      //     // Upload karaoke.json
-      //     const { buildFinalLyricResult: buildResult } =
-      //       await import("../services/lyrics/lyric-builder.service");
-      //     // Tái dùng buildFinalLyricResult với rawLyrics = "synced" giả
-      //     // để trigger tier 1 (karaoke) → upload đúng 1 lần
-      //     const fakeRaw = {
-      //       bestAvailable: "synced" as const,
-      //       syncedLines: [],
-      //       plainLyrics: existingPlain,
-      //     };
-      //     const result = await buildResult(
-      //       fakeRaw,
-      //       karaokeData,
-      //       trackDoc.title,
-      //       tmpDir,
-      //       trackFolderKey,
-      //       bucketName,
-      //       String(job.id),
-      //     );
-      //     finalLyricType = result.finalLyricType;
-      //     finalLyricUrl = result.finalLyricUrl;
-      //     finalLyricPreview = result.finalLyricPreview;
-      //     finalPlainLyrics = existingPlain;
-      //   } else {
-      //     console.log(
-      //       `[Job ${job.id}] ℹ️ karaoke_only: alignment produced null — track unchanged.`,
-      //     );
-      //     // Không update lyrics fields — giữ nguyên state cũ
-      //     await Track.findByIdAndUpdate(trackId, {
-      //       status: "ready",
-      //       errorReason: "",
-      //     });
-      //     await cacheRedis.del(`track:detail:${trackId}`).catch(() => {});
-      //     return { success: true };
-      //   }
-      // }
 
       // ── STEP 7: Upload HLS segments (chỉ khi có transcode) ───────────────
       let hlsUrl = (trackBefore as any).hlsUrl ?? "";
@@ -321,7 +260,61 @@ const worker = new Worker<ProcessTrackJobData>(
         `[Job ${job.id}] 📊 Generated: ${(generatedBytes / 1024 / 1024).toFixed(2)} MB`,
       );
 
-      // ── STEP 8: Finalize DB ────────────────────────────────────────────────
+      // ── STEP 7: Run Audio Analysis & AI Metadata Extraction ────────────────
+      if (doAi) {
+        try {
+          let audioAnalysis = null;
+          if (requiresAudio) {
+            console.log(`[Job ${job.id}] 🎶 Starting Audio Analysis (BPM/Energy) for ${trackId}`);
+            audioAnalysis = await AudioAnalysisService.analyzeAudio(inputPath);
+          } else {
+            console.log(`[Job ${job.id}] ⏭️ Skipping Audio Analysis (BPM/Energy) to save bandwidth.`);
+          }
+
+          console.log(`[Job ${job.id}] 🤖 Starting AI Metadata Analysis for ${trackId}`);
+          await AiService.analyzeTrack(trackId);
+
+          if (audioAnalysis) {
+            await Track.findByIdAndUpdate(trackId, {
+              "aiMetadata.energy": audioAnalysis.energy,
+              "aiMetadata.tempo": audioAnalysis.tempo
+            });
+          }
+        } catch (analyzeErr: any) {
+          console.error(`[Job ${job.id}] ⚠️ Metadata analysis failed (non-blocking for full):`, analyzeErr.message);
+          if (type === "ai_only" || (isCustom && tasks.includes("ai"))) {
+            throw analyzeErr; // Throw to trigger BullMQ auto-retry and mark track as failed
+          }
+        }
+      }
+
+      // ── STEP 8: Mood canvas ────────────────────────────────────────────────
+      // Fetch lại track để lấy aiMetadata mới nhất
+      const updatedTrackDoc = await Track.findById(trackId).lean<any>();
+      let moodVideoId: mongoose.Types.ObjectId | undefined;
+
+      if (doMood) {
+        console.log(`[Job ${job.id}] 🎨 Matching mood canvas...`);
+        moodVideoId = await MoodVideoService.matchMoodCanvas(
+          updatedTrackDoc?.tags ?? [],
+          updatedTrackDoc?.aiMetadata?.moods ?? [],
+          String(job.id),
+        );
+      }
+
+      // mood_only hoặc custom chỉ có mood: cập nhật moodVideo rồi xong
+      if (!requiresAudio) {
+        await Track.findByIdAndUpdate(trackId, {
+          status: "ready",
+          errorReason: "",
+          ...(moodVideoId ? { moodVideo: moodVideoId } : {}),
+        });
+        await cacheRedis.del(`track:detail:${trackId}`).catch(() => { });
+        console.log(`[Job ${job.id}] ✅ mood_only/custom mood done.`);
+        return { success: true, lyricType: undefined };
+      }
+
+      // ── STEP 9: Finalize DB ────────────────────────────────────────────────
       const currentTrack = await Track.findById(trackId)
         .select("fileSize")
         .lean();
@@ -340,7 +333,7 @@ const worker = new Worker<ProcessTrackJobData>(
         dbUpdate.fileSize = originalSize + generatedBytes;
       }
 
-      if (doLyrics || doKaraokeOnly) {
+      if (doLyrics) {
         if (finalLyricType) dbUpdate.lyricType = finalLyricType;
         if (finalLyricUrl) dbUpdate.lyricUrl = toCdnUrl(finalLyricUrl);
         if (finalLyricPreview) dbUpdate.lyricPreview = finalLyricPreview;
@@ -353,7 +346,7 @@ const worker = new Worker<ProcessTrackJobData>(
 
       if (generatedBytes > 0) {
         await CounterTrack.increment(generatedBytes, "audio/mpeg").catch(
-          () => {},
+          () => { },
         );
       }
 

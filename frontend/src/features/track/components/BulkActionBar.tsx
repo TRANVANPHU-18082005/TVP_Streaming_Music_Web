@@ -30,6 +30,8 @@ interface BulkActionBarProps {
   onRetryKaraoke?: () => void;
   onRetryMood?: () => void;
   onRetryFull?: () => void;
+  onRetryAi?: () => void;
+  onRetryCustom?: () => void;
   onTogglePublic?: () => void;
   onToggleExplicit?: () => void;
   onChangeStatus?: () => void;
@@ -44,6 +46,8 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onRetryKaraoke,
   onRetryTranscode,
   onRetryFull,
+  onRetryAi,
+  onRetryCustom,
   onEditMetadata,
   onDelete,
   onTogglePublic,
@@ -55,9 +59,9 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   if (selectedCount === 0) return null;
 
   return (
-    // Z-INDEX: 40 (Thấp hơn Modal thường là 50)
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-full px-4 flex justify-center animate-in slide-in-from-bottom-10 fade-in duration-300 pointer-events-none">
-      <div className="bg-foreground text-background pointer-events-auto rounded-full shadow-2xl p-2 pr-3 flex items-center gap-2 sm:gap-4 border border-border/10 ring-1 ring-white/10 max-w-full overflow-x-auto no-scrollbar">
+    // Z-INDEX: 45
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[45] flex justify-center animate-in slide-in-from-bottom-10 fade-in duration-300 w-max max-w-[95vw]">
+      <div className="bg-foreground text-background rounded-full shadow-2xl p-2 pr-3 flex items-center gap-2 sm:gap-4 border border-border/10 ring-1 ring-white/10 overflow-x-auto no-scrollbar">
         {/* === Left: Info & Clear === */}
         <div className="flex items-center gap-2 pl-1">
           <div className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1.5 rounded-full font-bold text-xs shadow-sm select-none whitespace-nowrap">
@@ -145,8 +149,24 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
             onRetryLyrics ||
             onRetryKaraoke ||
             onRetryMood ||
-            onRetryFull) && (
+            onRetryFull ||
+            onRetryAi ||
+            onRetryCustom) && (
             <>
+              {onRetryCustom && (
+                <ActionButton
+                  icon={<Sparkles className="size-4 text-primary" />}
+                  label="Tùy chỉnh"
+                  onClick={onRetryCustom}
+                />
+              )}
+              {onRetryAi && (
+                <ActionButton
+                  icon={<Sparkles className="size-4 text-purple-400" />}
+                  label="Analyze AI"
+                  onClick={onRetryAi}
+                />
+              )}
               {onRetryTranscode && (
                 <ActionButton
                   icon={<RefreshCw className="size-4" />}
@@ -214,7 +234,7 @@ const ActionButton = ({
   <Button
     variant="ghost"
     size="sm"
-    className="text-background font-semibold hover:bg-background gap-2 h-9 rounded-full px-3 transition-all active:scale-95 shrink-0"
+    className="text-background font-semibold hover:bg-background/20 hover:text-background gap-2 h-9 rounded-full px-3 transition-all active:scale-95 shrink-0"
     onClick={onClick}
   >
     {icon}

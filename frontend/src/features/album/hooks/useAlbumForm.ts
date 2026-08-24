@@ -82,17 +82,15 @@ export const useAlbumForm = <TMode extends "create" | "edit">({
       const hasDirtyFields = Object.keys(dirtyFields).length > 0;
 
       if (!hasDirtyFields && !hasFile) {
-        // Không throw, không toast — gọi callback để component tự xử lý (đóng modal,...)
-        console.warn("[AlbumForm] No changes detected, skipping API call.");
+        toast.info("Không có thay đổi nào để lưu");
         return;
       }
     }
-
     // Build payload — chỉ gửi dirtyFields khi Edit, gửi tất cả khi Create
     const payload = buildAlbumPayload(values, dirtyFields, isEditMode);
-
+    console.log(values, dirtyFields, isEditMode)
     try {
-      await onSubmit(payload);
+      // await onSubmit(payload);
     } catch (err: any) {
       // Map server-side validation errors to form fields where possible.
       const resp = err?.response?.data || err?.response || null;

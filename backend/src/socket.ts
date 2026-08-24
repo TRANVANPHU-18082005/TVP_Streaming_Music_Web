@@ -151,13 +151,13 @@ export const initSocket = (httpServer: HttpServer): Server => {
         await cacheRedis.incr(`views:${targetType}:${targetId}`);
 
         // 4. CHỈ Log lịch sử nếu là Track
-        if (targetType === "track" && userId) {
+        if (targetType === "track") {
           analyticsService.trackPlay(targetId);
           await viewQueue.add(
             "log-listen-history",
             {
               trackId: targetId,
-              userId,
+              userId: userId || null, // Có thể null cho guest
               ip: userIp,
               timestamp: new Date(),
             },

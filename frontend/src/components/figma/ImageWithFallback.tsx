@@ -1,6 +1,5 @@
+import { ERROR_IMG_SRC } from '@/config/constants'
 import React, { useState } from 'react'
-
-const ERROR_IMG_SRC = "https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
 
 
 export function ImageWithFallback(props: React.ImgHTMLAttributes<HTMLImageElement>) {

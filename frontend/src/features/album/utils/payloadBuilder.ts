@@ -26,7 +26,7 @@ export const buildAlbumPayload = (
 
       if (Array.isArray(value)) {
         append(key, JSON.stringify(value));
-      } else {
+      } else if (value !== undefined && value !== null) {
         append(key, String(value));
       }
     }

@@ -15,9 +15,10 @@ export async function fetchLyrics(
     syncedLines: [],
     plainLyrics: "",
   };
-  // trackTitle = "HONGKONG1";
-  // artistName = "Don Raemo; Double X; Nguyễn Trọng Tài";
-  // duration = undefined;
+  trackTitle = "Tìm Em";
+  artistName = "Hngle & Bảo Anh";
+  duration = 274;
+
 
   console.log(trackTitle, artistName, duration);
   try {
@@ -30,7 +31,7 @@ export async function fetchLyrics(
       params: {
         track_name: trackTitle,
         artist_name: artistName,
-        duration: undefined,
+        duration: duration ? Math.round(duration) : undefined,
       },
       timeout: LYRICS_TIMEOUT_MS,
       validateStatus: (s) => s < 500,
@@ -40,7 +41,6 @@ export async function fetchLyrics(
       lrcRes.status === 200 &&
       (lrcRes.data.syncedLyrics || lrcRes.data.plainLyrics)
     ) {
-      console.log(lrcRes.data);
       return processLyricResponse(lrcRes.data, jobId);
     }
 
@@ -57,27 +57,30 @@ export async function fetchLyrics(
       timeout: LYRICS_TIMEOUT_MS,
     });
 
-    if (searchRes.data && searchRes.data.length > 0 && duration !== undefined) {
+    if (searchRes.data && searchRes.data.length > 0) {
       // Tìm bài có thời lượng gần nhất (lệch không quá 10s)
       const bestMatch =
         searchRes.data.find(
-          (item) => item.duration && Math.abs(item.duration - duration) < 10,
+          (item) => item.duration && duration !== undefined && Math.abs(item.duration - duration) < 10,
         ) || searchRes.data[0]; // Hoặc lấy bừa kết quả đầu tiên
 
       console.log(`[Job ${jobId}] ✅ Found match via fuzzy search.`);
-      console.log(bestMatch);
       return processLyricResponse(bestMatch, jobId);
     }
 
     console.log(`[Job ${jobId}] ℹ️ No lyrics found even with search.`);
-    return empty;
+    throw new Error(`Không tìm thấy lyrics nào cho bài hát "${trackTitle}" trên LRCLIB.`);
   } catch (err) {
+    // Nếu lỗi đã là do chúng ta chủ động throw ở trên thì ném ra luôn
+    if (err instanceof Error && err.message.includes("Không tìm thấy lyrics")) {
+      throw err;
+    }
     const msg =
       err instanceof AxiosError
         ? `HTTP ${err.response?.status}: ${err.message}`
         : (err as Error).message;
     console.warn(`[Job ${jobId}] ⚠️ LRCLIB fetch failed: ${msg}`);
-    return empty;
+    throw new Error(`Lỗi khi kết nối tới LRCLIB: ${msg}`);
   }
 }
 
@@ -108,5 +111,5 @@ function processLyricResponse(
     };
   }
 
-  return { bestAvailable: "none", syncedLines: [], plainLyrics: "" };
+  throw new Error("LRCLIB trả về kết quả nhưng không chứa dữ liệu lyrics (cả synced và plain đều rỗng).");
 }

@@ -7,12 +7,15 @@ export type TrackProcessingType =
   | "transcode_only" // chỉ HLS
   | "lyric_only" // chỉ LRCLIB + karaoke fallback chain
   | "karaoke_only" // chỉ forced alignment (plainLyrics đã có trong DB)
-  | "mood_only"; // chỉ match mood canvas (không cần download)
+  | "mood_only" // chỉ match mood canvas (không cần download)
+  | "ai_only" // chỉ phân tích AI Metadata (không cần download nếu chỉ phân tích lại text)
+  | "custom"; // tự chọn nhiều bước (transcode, lyrics, mood, ai, karaoke)
 
 export interface ProcessTrackJobData {
   trackId: string;
   fileUrl: string;
   type: TrackProcessingType;
+  tasks?: string[]; // ["transcode", "lyrics", "karaoke", "mood", "ai"]
 }
 
 export type LyricType = "none" | "plain" | "synced" | "karaoke";

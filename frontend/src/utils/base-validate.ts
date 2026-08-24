@@ -42,7 +42,6 @@ export const optionalString = (maxLen: number, maxMsg: string) =>
     .max(maxLen, maxMsg)
     .optional()
     .nullable()
-    .transform((val) => (val === "" ? undefined : val) ?? undefined);
 
 /** Optional nullable ObjectId-like string (24-char hex)
  * Preprocess empty-like values ("", "null", "undefined") to undefined

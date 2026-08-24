@@ -444,7 +444,9 @@ const playerSlice = createSlice({
     toggleMute: (state) => {
       state.isMuted = !state.isMuted;
     },
-
+    togglePlayPause: (state) => {
+      state.isPlaying = !state.isPlaying;
+    },
     stopPlaying: (state) => {
       Object.assign(state, {
         ...initialState,
@@ -619,6 +621,7 @@ export const {
   seekTo,
   setVolume,
   toggleMute,
+  togglePlayPause,
   stopPlaying,
   toggleShuffle,
   toggleRepeat,

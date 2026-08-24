@@ -83,6 +83,7 @@ export const usePlaylistForm = ({
 
     // Build Payload (FormData) - buildPlaylistPayload sẽ chỉ lấy các field bị "dirty" khi Edit
     const payload = buildPlaylistPayload(values, dirtyFields, isEditMode);
+    console.log(values, dirtyFields, isEditMode)
 
     try {
       await onSubmit(payload);

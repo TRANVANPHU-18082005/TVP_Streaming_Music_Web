@@ -6,8 +6,8 @@ export const AUTH_PATHS = {
   LOGOUT: "/logout",
   VERIFY_OTP: "/verify-otp",
   FORGOT_PASSWORD: "/forgot-password",
-  AUTH_GOOGLE: "/auth/google",
-  AUTH_FACEBOOK: "/auth/facebook",
+  AUTH_GOOGLE: "/auth/google/callback",
+  AUTH_FACEBOOK: "/auth/facebook/callback",
   FORCE_CHANGE_PASSWORD: "/force-change-password",
   RESET_PASSWORD: (token: string) => `/reset-password/${token}`,
 } as const;
@@ -35,6 +35,10 @@ export const CLIENT_PATHS = {
   // User
   PROFILE: "/profile",
   FOR_ME: "for-me",
+  SHORTS: "shorts",
+  MASHUPS_FEED: "mashups/feed",
+  MASHUPS_CREATE: "mashups/create",
+  MASHUPS_DETAIL: (id: string) => `mashups/${id}`,
 } as const;
 export const ADMIN_PATHS = {
   ADMIN: "/admin",
@@ -51,4 +55,5 @@ export const ADMIN_PATHS = {
   SETTINGS: "settings",
   // Track
   UPLOAD: "upload",
+  SHORTS: "shorts",
 } as const;

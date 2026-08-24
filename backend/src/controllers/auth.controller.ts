@@ -26,7 +26,7 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
   const user: any = req.user;
 
   if (!user) {
-    return res.redirect(`${config.clientUrl}/login?error=auth_failed`);
+    return res.redirect(`${config.clientUrl}/login?error=OAUTH_ERROR&provider=google&reason=${encodeURIComponent("Không thể xác thực thông tin tài khoản Google")}`);
   }
 
   const { accessToken, refreshToken } = generateTokens(
@@ -35,7 +35,7 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
   );
 
   await AuthService.saveSession(user._id.toString(), refreshToken);
-  
+
   // BẢO MẬT: Không đẩy thẳng token lên URL.
   // Dùng Code Exchange pattern.
   const authCode = crypto.randomBytes(32).toString("hex");
@@ -96,7 +96,7 @@ export const facebookCallbackHandler = async (req: Request, res: Response) => {
   const user: any = req.user;
 
   if (!user) {
-    return res.redirect(`${config.clientUrl}/login?error=auth_failed`);
+    return res.redirect(`${config.clientUrl}/login?error=OAUTH_ERROR&provider=facebook&reason=${encodeURIComponent("Không thể xác thực thông tin tài khoản Facebook")}`);
   }
 
   const { accessToken, refreshToken } = generateTokens(
@@ -105,7 +105,7 @@ export const facebookCallbackHandler = async (req: Request, res: Response) => {
   );
 
   await AuthService.saveSession(user._id.toString(), refreshToken);
-  
+
   // BẢO MẬT: Dùng Code Exchange pattern
   const authCode = crypto.randomBytes(32).toString("hex");
   await cacheRedis.setex(
@@ -294,3 +294,37 @@ export const resetPassword = catchAsync(async (req: Request, res: Response) => {
     message: "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.",
   });
 });
+
+// 12. Get Linked Identities
+export const getIdentities = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?._id || (req as any).user?.id;
+  const identities = await AuthService.getIdentities(userId);
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: identities,
+  });
+});
+
+// 13. Link Provider
+export const linkProvider = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?._id || (req as any).user?.id;
+  const { provider, providerUserId, providerEmail } = req.body;
+  const identity = await AuthService.linkProvider(userId, provider, providerUserId, providerEmail);
+  res.status(httpStatus.CREATED).json({
+    success: true,
+    message: `Đã liên kết ${provider} thành công.`,
+    data: identity,
+  });
+});
+
+// 14. Unlink Provider
+export const unlinkProvider = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user?._id || (req as any).user?.id;
+  const { provider } = req.params;
+  const result = await AuthService.unlinkProvider(userId, provider as any);
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: result.message,
+  });
+});
+

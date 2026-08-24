@@ -38,8 +38,8 @@ export const buildTrackPayload = (
       return;
     }
 
-    // 4. Xử lý Array (tags, genres...)
-    if (Array.isArray(value)) {
+    // 4. Xử lý Array (tags, genres...) hoặc Object (aiMetadata...)
+    if (Array.isArray(value) || (typeof value === "object" && value !== null && !(value instanceof File) && !(value instanceof Date))) {
       formData.append(key, JSON.stringify(value));
     }
     // 5. Xử lý Date

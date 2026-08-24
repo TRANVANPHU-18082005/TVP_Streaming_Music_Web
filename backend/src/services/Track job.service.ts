@@ -15,6 +15,7 @@ import {
   addRetryLyricJob,
   addRetryMoodJob,
   addRetryTranscodeJob,
+  addRetryAiJob,
 } from "../queue/processTrack.queue";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,36 +158,11 @@ export async function retryLyrics(trackId: string) {
  * Guard: phải có plainLyrics trong DB và lyricType chưa phải karaoke.
  * Dùng khi: đang synced, muốn nâng cấp lên karaoke sau khi aligner sửa.
  */
-export async function retryKaraoke(trackId: string) {
-  const track = await guardTrack(trackId);
-
-  if (!track.plainLyrics?.trim()) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      "Track chưa có plainLyrics — hãy retry lyrics trước.",
-    );
-  }
-
-  if (track.lyricType === "karaoke") {
-    throw new ApiError(
-      httpStatus.CONFLICT,
-      "Track đã có karaoke, không cần retry.",
-    );
-  }
-
-  // Chỉ xoá karaoke.json cũ nếu có, không xoá lyrics.json
-  const folder = getTrackFolderKey(track.trackUrl);
-  if (folder) {
-    deleteFolderFromB2(`${folder}/lyrics/karaoke.json`).catch(() => {});
-  }
-
-  track.status = "pending";
-  track.errorReason = "";
-  await track.save();
-
-  await addRetryKaraokeJob(track._id.toString(), track.trackUrl);
-  await invalidateCache(trackId);
-  return track;
+export async function retryKaraoke(trackId: string): Promise<any> {
+  throw new ApiError(
+    httpStatus.NOT_IMPLEMENTED,
+    "Tính năng Karaoke đã bị loại bỏ.",
+  );
 }
 
 /**
@@ -202,6 +178,24 @@ export async function retryMoodCanvas(trackId: string) {
   await track.save();
 
   await addRetryMoodJob(track._id.toString(), track.trackUrl);
+  await invalidateCache(trackId);
+  return track;
+}
+
+/**
+ * Retry AI Metadata
+ * Chạy lại Audio Analysis & AI Service để sinh ra aiMetadata
+ */
+export async function retryAi(trackId: string) {
+  const track = await guardTrack(trackId);
+
+  // Không set về pending nếu không muốn UI lock hoàn toàn,
+  // nhưng để nhất quán thì ta vẫn báo cho user là "processing" hoặc "pending".
+  track.status = "pending";
+  track.errorReason = "";
+  await track.save();
+
+  await addRetryAiJob(track._id.toString(), track.trackUrl);
   await invalidateCache(trackId);
   return track;
 }

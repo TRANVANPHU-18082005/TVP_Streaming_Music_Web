@@ -10,7 +10,7 @@ import {
 } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { IKaraokeLine, ILyricSyncLine, LyricType } from "@/features/track";
+import type { IKaraokeLine, ILyricSyncLine, LyricType } from "@/features/track";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC PROPS
@@ -1213,42 +1213,50 @@ export const LyricsView = memo(
 
     const renderContent = () => {
       if (loading) return <LyricsEmpty loading={true} />;
-      if (lyricType === "none") return <LyricsEmpty loading={false} />;
 
-      if (lyricType === "plain")
+      const fallbackToPlain = () => {
         return plainLyrics?.trim() ? (
           <PlainLyricsView text={plainLyrics} />
         ) : (
           <LyricsEmpty loading={false} />
         );
+      };
 
-      if (lyricType === "synced")
-        return normSynced.length ? (
-          <SyncedLyricsView
-            paddingForMe={paddingForMe}
-            lines={normSynced}
-            onSeek={handleSeek}
-            focusRadius={focusRadius}
-            accentColor={accentColor}
-          />
-        ) : (
-          <LyricsEmpty loading={false} />
-        );
+      if (lyricType === "none") return fallbackToPlain();
 
-      if (lyricType === "karaoke")
-        return karaokeLines?.length ? (
-          <KaraokeView
-            lines={karaokeLines}
-            onSeek={handleSeek}
-            focusRadius={focusRadius}
-            accentColor={accentColor}
-            degraded={degraded}
-          />
-        ) : (
-          <LyricsEmpty loading={false} />
-        );
+      if (lyricType === "plain") return fallbackToPlain();
 
-      return <LyricsEmpty loading={false} />;
+      if (lyricType === "synced") {
+        if (normSynced.length) {
+          return (
+            <SyncedLyricsView
+              paddingForMe={paddingForMe}
+              lines={normSynced}
+              onSeek={handleSeek}
+              focusRadius={focusRadius}
+              accentColor={accentColor}
+            />
+          );
+        }
+        return fallbackToPlain();
+      }
+
+      if (lyricType === "karaoke") {
+        if (karaokeLines?.length) {
+          return (
+            <KaraokeView
+              lines={karaokeLines}
+              onSeek={handleSeek}
+              focusRadius={focusRadius}
+              accentColor={accentColor}
+              degraded={degraded}
+            />
+          );
+        }
+        return fallbackToPlain();
+      }
+
+      return fallbackToPlain();
     };
 
     return (

@@ -92,3 +92,28 @@ export async function addRetryMoodJob(
     "retry:mood",
   );
 }
+
+/** Retry AI metadata (phân tích AI cho track) */
+export async function addRetryAiJob(
+  trackId: string,
+  fileUrl: string,
+): Promise<void> {
+  await addJob(
+    { trackId, fileUrl, type: "ai_only" },
+    { jobId: `retry-ai-${trackId}-${Date.now()}` },
+    "retry:ai",
+  );
+}
+
+/** Tự chọn nhiều thao tác để tối ưu băng thông */
+export async function addCustomJob(
+  trackId: string,
+  fileUrl: string,
+  tasks: string[],
+): Promise<void> {
+  await addJob(
+    { trackId, fileUrl, type: "custom", tasks },
+    { jobId: `retry-custom-${trackId}-${Date.now()}` },
+    "retry:custom",
+  );
+}

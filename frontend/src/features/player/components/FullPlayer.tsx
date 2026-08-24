@@ -63,6 +63,7 @@ import { formatMs } from "@/utils/track-helper";
 import FullPlayerSkeleton from "./FullPlayerSkeleton";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 import { useImageColor } from "@/hooks/useImageColor";
+import { WaveformBars } from "@/components/MusicVisualizer";
 
 // Lazy-loaded views to keep initial bundle small and improve responsiveness
 const MoodFocusViewLazy = lazy(() =>
@@ -1126,7 +1127,7 @@ const SwipeableViews = memo(
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-foreground">
-                  Đang tải lời...
+                  <WaveformBars color={accentColor} active={true} />
                 </div>
               }
             >
@@ -1161,7 +1162,7 @@ const SwipeableViews = memo(
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-foreground">
-                  Đang tải...
+                  <WaveformBars color={accentColor} active={true} />
                 </div>
               }
             >
@@ -1188,7 +1189,7 @@ const SwipeableViews = memo(
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-foreground">
-                  Đang tải thông tin...
+                  <WaveformBars color={accentColor} active={true} />
                 </div>
               }
             >
@@ -1209,7 +1210,7 @@ const SwipeableViews = memo(
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-foreground">
-                  Đang tải hàng chờ...
+                  <WaveformBars color={accentColor} active={true} />
                 </div>
               }
             >

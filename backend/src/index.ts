@@ -4,6 +4,7 @@ import { createApp } from "./app";
 import { connectRedis } from "./config/redis";
 import { connectWithRetry } from "./utils/db.utils";
 import crypto from "node:crypto";
+import { errorHandler } from "./middlewares/error.middleware";
 // import { fetchLyrics } from "./services/lyrics/lrclib.service";
 if (typeof global.crypto === "undefined") {
   // @ts-ignore
@@ -30,6 +31,7 @@ const startServer = () => {
         const routesModule = await import("./routes");
         const routes = routesModule.default || routesModule;
         app.use("/api", routes);
+        app.use(errorHandler);
         console.log("🔌 API routes mounted");
       } catch (err) {
         console.error("⚠️ Failed to mount routes:", err);

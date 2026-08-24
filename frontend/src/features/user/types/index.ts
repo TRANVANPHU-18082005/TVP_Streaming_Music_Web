@@ -98,3 +98,11 @@ export interface UserFilterParams {
 
 // Compatibility alias
 export type User = IUser;
+
+// 5. Admin Stats
+export interface UserStats {
+  totalUsers: number;
+  activeUsers: number;
+  blockedUsers: number;
+  artistCount: number;
+}

@@ -51,6 +51,24 @@ export interface ITrack extends Document {
   format: string;
   bitrate: number;
 
+  // === AI-ENRICHED METADATA ===
+  aiMetadata?: {
+    emotion?: string;
+    moods?: string[];
+    energy?: number;
+    tempo?: number;
+    musicalKey?: string;
+    musicalStyle?: string;
+    meaning?: string;
+    language?: string;
+    era?: string;
+    contexts?: string[];
+    colorHex?: string;
+    similarKeywords?: string[];
+    analyzedAt?: Date;
+    analysisVersion?: number;
+  };
+
   // Stats & Flags
   status: "pending" | "processing" | "ready" | "failed";
   isPublic: boolean;
@@ -129,6 +147,24 @@ const TrackSchema = new Schema<ITrack>(
     },
     isPublic: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false, select: false, index: true },
+
+    // === AI-ENRICHED METADATA ===
+    aiMetadata: {
+      emotion: { type: String },
+      moods: [{ type: String, lowercase: true, trim: true }],
+      energy: { type: Number, min: 0, max: 1 },
+      tempo: { type: Number },
+      musicalKey: { type: String },
+      musicalStyle: { type: String },
+      meaning: { type: String },
+      language: { type: String },
+      era: { type: String },
+      contexts: [{ type: String, lowercase: true, trim: true }],
+      colorHex: { type: String },
+      similarKeywords: [{ type: String, lowercase: true, trim: true }],
+      analyzedAt: { type: Date },
+      analysisVersion: { type: Number, default: 1 },
+    },
   },
   {
     timestamps: true,
@@ -160,8 +196,26 @@ TrackSchema.pre("save", async function () {
 
 // --- INDEXING STRATEGY ---
 
-// 1. Full Text Search (Giữ nguyên)
-TrackSchema.index({ title: "text", tags: "text", plainLyrics: "text" });
+// 1. Full Text Search (Mở rộng cho AI Metadata)
+TrackSchema.index(
+  {
+    title: "text",
+    tags: "text",
+    plainLyrics: "text",
+    "aiMetadata.emotion": "text",
+    "aiMetadata.similarKeywords": "text",
+  },
+  {
+    weights: {
+      title: 10,
+      "aiMetadata.emotion": 5,
+      tags: 4,
+      "aiMetadata.similarKeywords": 3,
+      plainLyrics: 1,
+    },
+    name: "TrackTextIndex",
+  }
+);
 
 // 2. Cơ bản & Mặc định
 TrackSchema.index({ isPublic: 1, isDeleted: 1, createdAt: -1 });
@@ -190,5 +244,12 @@ TrackSchema.index({
 // 6. Thể loại & Ngày phát hành (Giữ nguyên)
 TrackSchema.index({ genres: 1, playCount: -1, isPublic: 1, isDeleted: 1 });
 TrackSchema.index({ releaseDate: -1, isPublic: 1, isDeleted: 1 });
+
+// 7. AI Metadata Filters
+TrackSchema.index({ "aiMetadata.moods": 1, isPublic: 1, isDeleted: 1 });
+TrackSchema.index({ "aiMetadata.energy": 1, isPublic: 1 });
+TrackSchema.index({ "aiMetadata.contexts": 1, isPublic: 1 });
+TrackSchema.index({ "aiMetadata.language": 1, isPublic: 1 });
+
 const Track = mongoose.model<ITrack>("Track", TrackSchema);
 export default Track;

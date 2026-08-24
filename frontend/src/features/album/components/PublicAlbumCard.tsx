@@ -14,6 +14,7 @@ import {
   PremiumMusicVisualizer,
   WaveformBars,
 } from "@/components/MusicVisualizer";
+import { useIsMobile } from "@/components/ui/use-mobile";
 
 interface PublicAlbumCardProps {
   album: IAlbum;
@@ -23,6 +24,7 @@ interface PublicAlbumCardProps {
 const PublicAlbumCard = memo<PublicAlbumCardProps>(
   function PublicAlbumCard({ album, className }) {
     const navigate = useNavigate();
+    const isMobile = useIsMobile();
 
     // 1. Sử dụng Hook vạn năng đã đóng gói logic Source Context
     const {
@@ -52,7 +54,7 @@ const PublicAlbumCard = memo<PublicAlbumCardProps>(
         className={cn(
           "group cursor-pointer flex flex-col gap-3 relative",
           "album-card !overflow-visible p-2 rounded-2xl transition-all duration-300",
-          "hover:bg-muted/10",
+          !isMobile && "hover:bg-muted/10",
           isThisAlbumActive && "bg-primary/5 shadow-brand-soft", // Highlight vùng card
           className,
         )}
@@ -60,7 +62,8 @@ const PublicAlbumCard = memo<PublicAlbumCardProps>(
         {/* ── ARTWORK CONTAINER ── */}
         <div
           className={cn(
-            "album-card aspect-square relative isolate overflow-hidden rounded-xl transition-all duration-500",
+            "relative aspect-square overflow-hidden rounded-[18px] transition-all duration-500",
+            "bg-muted border border-border/10 shadow-raised group-hover:shadow-elevated",
             isThisAlbumActive
               ? "ring-2 ring-primary shadow-glow-md"
               : "ring-1 ring-border/50",
@@ -71,7 +74,7 @@ const PublicAlbumCard = memo<PublicAlbumCardProps>(
             alt={album.title}
             className={cn(
               "img-cover transition-transform duration-1000",
-              "group-hover:scale-110",
+              !isMobile && "group-hover:scale-110",
               isThisAlbumPlaying && "blur-[2px] opacity-70 scale-105", // Làm mờ nhẹ khi đĩa than hiện lên
             )}
           />
@@ -101,7 +104,12 @@ const PublicAlbumCard = memo<PublicAlbumCardProps>(
             )}
           </AnimatePresence>
           {/* Overlays */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+          <div
+            className={cn(
+              "absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 transition-opacity",
+              !isMobile && "group-hover:opacity-80"
+            )}
+          />
 
           {/* Like Button */}
           <div className="absolute top-2.5 right-2.5 z-20 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
@@ -111,10 +119,13 @@ const PublicAlbumCard = memo<PublicAlbumCardProps>(
           {/* ── Play Button ── */}
           <div
             className={cn(
-              "absolute right-3 bottom-3 z-20 transition-all duration-300 ease-out",
+              "absolute right-2 bottom-4 sm:bottom-3 md:right-3 z-20 transition-all duration-300 ease-out",
               isThisAlbumActive || isFetching
                 ? "translate-y-0 opacity-100 scale-100"
-                : "translate-y-3 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100",
+                : cn(
+                  "translate-y-3 opacity-0 scale-90",
+                  isMobile ? "hidden" : "group-hover:translate-y-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 group-hover:scale-100"
+                )
             )}
           >
             <button
@@ -186,13 +197,13 @@ const PublicAlbumCard = memo<PublicAlbumCardProps>(
           </div>
           <div className="flex items-center gap-2 text-track-meta truncate">
             <Link
-              to={`/artists/${album.artist?.slug || album.artist?._id}`}
+              to={`/artists/${typeof album.artist === "object" ? (album.artist?.slug || album.artist?._id) : album.artist}`}
               onClick={stopProp}
               className="hover:text-primary hover:underline transition-colors"
             >
-              {album?.artist?.name ? album?.artist?.name : ""}
+              {typeof album.artist === "object" && album.artist?.name ? album.artist.name : ""}
             </Link>
-            {album?.artist?.name && (
+            {typeof album.artist === "object" && album?.artist?.name && (
               <span className="text-[10px] opacity-30">•</span>
             )}
             <span className="text-duration">{releaseYear}</span>

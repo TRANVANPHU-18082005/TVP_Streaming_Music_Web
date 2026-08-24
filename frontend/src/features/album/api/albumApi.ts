@@ -57,10 +57,9 @@ const albumApi = {
 
   // 6. Cập nhật album (Admin - Multipart/form-data nếu có coverImage mới)
   update: async (id: string, data: FormData) => {
-    const isFormData = data instanceof FormData;
     const response = await api.patch(`/albums/${id}`, data, {
       headers: {
-        "Content-Type": isFormData ? "multipart/form-data" : "application/json",
+        "Content-Type": "multipart/form-data",
       },
     });
     return response.data;
@@ -76,7 +75,7 @@ const albumApi = {
     const response = await api.patch(`/albums/${id}/restore`);
     return response.data;
   },
-  // 8. Toggle public status (Admin - Bật/Tắt nhanh)
+  // 9. Toggle public status (Admin - Bật/Tắt nhanh)
   togglePublicStatus: async (id: string, isPublic: boolean) => {
     const response = await api.patch(`/albums/${id}/toggle-public`, {
       isPublic,

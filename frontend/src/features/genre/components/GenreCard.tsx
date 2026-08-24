@@ -12,6 +12,7 @@ import {
   PremiumMusicVisualizer,
   WaveformBars,
 } from "@/components/MusicVisualizer";
+import { useIsMobile } from "@/components/ui/use-mobile";
 
 interface GenreCardProps {
   genre: IGenre;
@@ -27,6 +28,7 @@ export const GenreCard = memo<GenreCardProps>(
       isThisGenrePlaying,
       isFetching,
     } = useGenrePlayback(genre);
+    const isMobile = useIsMobile();
 
     // ── Style động theo màu/gradient của genre ──
     const moodColorStyle = useMemo(() => {
@@ -57,7 +59,7 @@ export const GenreCard = memo<GenreCardProps>(
         className={cn(
           "group cursor-pointer flex flex-col gap-3 relative",
           "genre-card !overflow-visible p-2 rounded-2xl transition-all duration-300",
-          "hover:bg-muted/10",
+          !isMobile && "hover:bg-muted/10",
           isThisGenreActive && "bg-primary/5 shadow-brand-soft",
           className,
         )}
@@ -79,7 +81,7 @@ export const GenreCard = memo<GenreCardProps>(
             alt={genre.name}
             className={cn(
               "img-cover transition-transform duration-1000",
-              "group-hover:scale-110",
+              !isMobile && "group-hover:scale-110",
               // Làm mờ khi đang phát — giống AlbumCard
               isThisGenrePlaying && "blur-[2px] opacity-70 scale-105",
             )}
@@ -105,7 +107,12 @@ export const GenreCard = memo<GenreCardProps>(
           </AnimatePresence>
 
           {/* Gradient overlay để text dễ đọc */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+          <div
+            className={cn(
+              "absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 transition-opacity",
+              !isMobile && "group-hover:opacity-80"
+            )}
+          />
 
           {/* ── Trending Badge — top-left (Like Button chiếm top-right) ── */}
           {genre.isTrending && (
@@ -120,10 +127,13 @@ export const GenreCard = memo<GenreCardProps>(
           {/* ── Play Button — giống hệt AlbumCard ── */}
           <div
             className={cn(
-              "absolute right-3 bottom-3 z-20 transition-all duration-300 ease-out",
+              "absolute right-2 bottom-4 sm:bottom-3 md:right-3 md:bottom-3 z-20 transition-all duration-300 ease-out",
               isThisGenreActive || isFetching
                 ? "translate-y-0 opacity-100 scale-100"
-                : "translate-y-3 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100",
+                : cn(
+                    "translate-y-3 opacity-0 scale-90",
+                    isMobile ? "hidden" : "group-hover:translate-y-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 group-hover:scale-100"
+                  )
             )}
           >
             <button

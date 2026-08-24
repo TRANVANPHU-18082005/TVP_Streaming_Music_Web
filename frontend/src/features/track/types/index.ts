@@ -67,15 +67,27 @@ export interface ITrack {
   errorReason?: string;
   createdAt: string;
   updatedAt: string;
+  aiMetadata?: {
+    emotion?: string;
+    moods?: string[];
+    energy?: number;
+    tempo?: number;
+    musicalKey?: string;
+    musicalStyle?: string;
+    meaning?: string;
+    language?: string;
+    era?: string;
+    contexts?: string[];
+    colorHex?: string;
+    similarKeywords?: string[];
+    analyzedAt?: string;
+    analysisVersion?: number;
+  };
 }
 
 // 3. Chart Interfaces (Giữ nguyên cấu trúc nhưng đồng bộ technical fields)
 
 
-export interface IChartResponse {
-  success: boolean;
-  data: IRealtimeChartData;
-}
 // Định nghĩa Artist và Album tối giản để dùng chung cho Chart và Track
 export interface IArtistMin {
   _id: string;

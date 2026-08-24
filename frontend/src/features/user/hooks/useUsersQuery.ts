@@ -4,7 +4,19 @@ import { userKeys } from "../utils/userKeys";
 import type { UserFilterParams } from "../types";
 
 // ==========================================
-// 1. QUERY: LẤY DANH SÁCH USERS (ADMIN)
+// 1. QUERY: LẤY THỐNG KÊ USERS (ADMIN)
+// ==========================================
+export const useUserStatsQuery = () => {
+  return useQuery({
+    queryKey: ["users-stats"],
+    queryFn: () => userApi.getStats(),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    select: (response) => response.data,
+  });
+};
+
+// ==========================================
+// 2. QUERY: LẤY DANH SÁCH USERS (ADMIN)
 // ==========================================
 export const useUsersQuery = (params: UserFilterParams) => {
   return useQuery({

@@ -1,8 +1,12 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import Track from "../../models/Track";
 import Genre from "../../models/Genre";
+import Track from "../../models/Track";
 import config from "../../config/env";
+import mongoose from "mongoose";
 import { fetchLyrics } from "../lyrics/lrclib.service";
+
+const MOOD_ENUM = ["happy", "sad", "romantic", "energetic", "chill", "melancholic", "aggressive", "peaceful", "dreamy", "dark", "uplifting", "nostalgic"];
+const CONTEXT_ENUM = ["study", "gym", "driving", "sleep", "party", "morning", "cooking", "rain", "commute", "meditation", "date", "gaming"];
 
 class AiService {
   private genAI: GoogleGenerativeAI;
@@ -22,9 +26,16 @@ class AiService {
     const systemPrompt = `You are a music recommendation AI. The user wants a playlist based on the following prompt: "${prompt}".
 Analyze the prompt and extract:
 1. "genres": Array of strings (music genres like Pop, Lofi, EDM, Rap, Ballad, etc.)
-2. "keywords": Array of strings (keywords representing the mood, activity, or specific words like "buổi sáng", "thư giãn", "chill", "sôi động", "tập gym").
-3. "imagePrompt": A short English string (max 10 words) describing an abstract, aesthetic image representing the playlist vibe (e.g. "abstract lofi chill aesthetics purple neon").
-Return ONLY a raw JSON object with keys "genres", "keywords", and "imagePrompt". No markdown formatting, no backticks.`;
+2. "keywords": Array of strings (keywords representing vibe, activity, e.g., "buổi sáng", "thư giãn", "mưa").
+3. "moods": Array of strings selected ONLY from this list: ${JSON.stringify(MOOD_ENUM)}.
+4. "contexts": Array of strings selected ONLY from this list: ${JSON.stringify(CONTEXT_ENUM)}.
+5. "energy": Object with "min" (0.0 to 1.0) and "max" (0.0 to 1.0), representing the desired energy level. If not specified, leave null.
+6. "language": A language code like "vi", "en", "ko" if specified. If not, leave null.
+7. "era": A decade or era like "2020s", "2010s", "90s" if specified. If not, leave null.
+8. "emotion": A concise string capturing the core emotion (e.g., "Lãng mạn, Da diết", "Sôi động").
+9. "musicalStyle": A short string describing the musical arrangement or style.
+10. "imagePrompt": A short English string (max 10 words) describing an abstract, aesthetic image representing the playlist vibe (e.g. "abstract lofi chill aesthetics purple neon").
+Return ONLY a raw JSON object with keys: "genres", "keywords", "moods", "contexts", "energy", "language", "era", "emotion", "musicalStyle", "imagePrompt". No markdown formatting, no backticks.`;
 
     try {
       const result = await this.model.generateContent(systemPrompt);
@@ -38,10 +49,21 @@ Return ONLY a raw JSON object with keys "genres", "keywords", and "imagePrompt".
         console.error("Lỗi parse JSON từ Gemini:", err, response);
       }
 
-      const { genres = [], keywords = [], imagePrompt = "abstract colorful aesthetic music vibes" } = parsedData;
-      console.log("🤖 AI phân tích yêu cầu:", { genres, keywords, imagePrompt });
+      const { 
+        genres = [], 
+        keywords = [], 
+        moods = [], 
+        contexts = [], 
+        energy = null, 
+        language = null, 
+        era = null,
+        emotion = null,
+        musicalStyle = null,
+        imagePrompt = "abstract colorful aesthetic music vibes" 
+      } = parsedData;
+      console.log("🤖 AI phân tích yêu cầu:", { genres, keywords, moods, contexts, energy, language, era, emotion, musicalStyle, imagePrompt });
 
-      // Sinh Cover Image bằng Pollinations AI & Upload Cloudinary
+      // Sinh Cover Image bằng Pollinations AI
       let coverImage = "";
       if (imagePrompt) {
         coverImage = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?width=512&height=512&nologo=true`;
@@ -57,35 +79,71 @@ Return ONLY a raw JSON object with keys "genres", "keywords", and "imagePrompt".
       console.log("🎯 Thể loại (Genres) khớp trong DB:", genreDocs.map(g => g.name));
       const genreIds = genreDocs.map(g => g._id);
 
-      // Xây dựng query tìm Track
-      let trackQuery: any = {
-        isPublic: true,
-        isDeleted: false,
-        status: "ready"
-      };
+      // --- CHUẨN BỊ TEXT SEARCH ---
+      const searchTerms = [...keywords];
+      if (emotion) searchTerms.push(emotion);
+      if (musicalStyle) searchTerms.push(musicalStyle);
+      const textQuery = searchTerms.length > 0 ? searchTerms.join(" ") : "";
 
-      const orConditions: any[] = [];
+      const baseQuery = { isPublic: true, isDeleted: false, status: "ready" };
+      let tracks: any[] = [];
 
-      if (genreIds.length > 0) {
-        orConditions.push({ genres: { $in: genreIds } });
+      // ==========================================
+      // PASS 1: STRICT MATCH (Ưu tiên độ chính xác)
+      // ==========================================
+      let strictQuery: any = { ...baseQuery };
+      if (moods.length > 0) strictQuery["aiMetadata.moods"] = { $in: moods };
+      if (contexts.length > 0) strictQuery["aiMetadata.contexts"] = { $in: contexts };
+      if (language) strictQuery["aiMetadata.language"] = language;
+      if (era) strictQuery["aiMetadata.era"] = { $regex: new RegExp(era, "i") }; // Era là chuỗi tự do, dùng regex
+      if (energy && typeof energy.min === "number" && typeof energy.max === "number") {
+        strictQuery["aiMetadata.energy"] = { $gte: energy.min, $lte: energy.max };
       }
 
-      if (keywords.length > 0) {
-        orConditions.push({
-          $text: { $search: keywords.join(" ") }
-        });
+      const strictOr: any[] = [];
+      if (genreIds.length > 0) strictOr.push({ genres: { $in: genreIds } });
+      if (textQuery) strictOr.push({ $text: { $search: textQuery } });
+      
+      if (strictOr.length > 0) {
+        strictQuery.$or = strictOr;
       }
 
-      if (orConditions.length > 0) {
-        trackQuery.$or = orConditions;
-      }
-
-      // Query database
-      const tracks = await Track.find(trackQuery)
+      tracks = await Track.find(strictQuery, textQuery ? { score: { $meta: "textScore" } } : {})
         .populate("artist", "name slug")
         .limit(20)
-        .sort({ playCount: -1 })
+        .sort(textQuery ? { score: { $meta: "textScore" }, playCount: -1 } : { playCount: -1 })
         .lean();
+
+      // ==========================================
+      // PASS 2: LOOSE MATCH (Fallback nếu thiếu bài)
+      // ==========================================
+      if (tracks.length < 20) {
+        console.log(`⚠️ Pass 1 chỉ tìm thấy ${tracks.length} bài. Chuyển sang Pass 2 (Fallback)...`);
+        const foundIds = tracks.map(t => t._id);
+        const limitNeeded = 20 - tracks.length;
+
+        let fallbackQuery: any = { ...baseQuery, _id: { $nin: foundIds } };
+        const fallbackOr: any[] = [];
+
+        // Bỏ các điều kiện khắt khe (energy, language, era). Mở rộng OR cho moods và contexts
+        if (moods.length > 0) fallbackOr.push({ "aiMetadata.moods": { $in: moods } });
+        if (contexts.length > 0) fallbackOr.push({ "aiMetadata.contexts": { $in: contexts } });
+        if (genreIds.length > 0) fallbackOr.push({ genres: { $in: genreIds } });
+        if (textQuery) fallbackOr.push({ $text: { $search: textQuery } });
+
+        // Nếu không có bất kỳ điều kiện OR nào, ta cứ lấy ngẫu nhiên theo playCount
+        if (fallbackOr.length > 0) {
+          fallbackQuery.$or = fallbackOr;
+        }
+        
+        const fallbackTracks = await Track.find(fallbackQuery, fallbackOr.length > 0 && textQuery ? { score: { $meta: "textScore" } } : {})
+          .populate("artist", "name slug")
+          .limit(limitNeeded)
+          .sort((fallbackOr.length > 0 && textQuery) ? { score: { $meta: "textScore" }, playCount: -1 } : { playCount: -1 })
+          .lean();
+        
+        tracks = [...tracks, ...fallbackTracks];
+      }
 
       return {
         success: true,
@@ -113,8 +171,9 @@ Return ONLY a raw JSON object with keys "genres", "keywords", and "imagePrompt".
     // Prepare info for Gemini
     const trackInfo = recentTracks.map(t => {
       const artistName = typeof t.artist === 'object' ? t.artist.name : "Unknown Artist";
-      return `"${t.title}" by ${artistName}`;
-    }).join(", ");
+      const moods = t.aiMetadata?.moods?.join(", ") || "unknown";
+      return `"${t.title}" by ${artistName} (Moods: ${moods})`;
+    }).join("; ");
 
     const excludedIds = recentTracks.map(t => t._id);
 
@@ -124,7 +183,8 @@ Analyze the musical flow, vibe, and genre of these tracks.
 Extract:
 1. "genres": Array of strings (music genres)
 2. "keywords": Array of strings (keywords for search, mood, or related artists).
-Return ONLY a raw JSON object with keys "genres" and "keywords", no markdown formatting.`;
+3. "moods": Array of strings selected ONLY from this list: ${JSON.stringify(MOOD_ENUM)}.
+Return ONLY a raw JSON object with keys "genres", "keywords" and "moods", no markdown formatting.`;
 
     try {
       const result = await this.model.generateContent(systemPrompt);
@@ -138,8 +198,8 @@ Return ONLY a raw JSON object with keys "genres" and "keywords", no markdown for
         console.error("Lỗi parse JSON AutoMix từ Gemini:", err, response);
       }
 
-      const { genres = [], keywords = [] } = parsedData;
-      console.log("📻 AutoMix phân tích Vibe:", { genres, keywords });
+      const { genres = [], keywords = [], moods = [] } = parsedData;
+      console.log("📻 AutoMix phân tích Vibe:", { genres, keywords, moods });
 
       const genreDocs = await Genre.find({
         name: { $regex: new RegExp(genres.join("|"), "i") },
@@ -155,6 +215,10 @@ Return ONLY a raw JSON object with keys "genres" and "keywords", no markdown for
         status: "ready",
         _id: { $nin: excludedIds } // Loại bỏ các bài đã nghe
       };
+
+      if (moods.length > 0) {
+        trackQuery["aiMetadata.moods"] = { $in: moods };
+      }
 
       const orConditions: any[] = [];
       if (genreIds.length > 0) orConditions.push({ genres: { $in: genreIds } });
@@ -215,7 +279,6 @@ Return ONLY a raw JSON object with keys "genres" and "keywords", no markdown for
       }
     }
 
-    // Bước 2: Chuẩn bị Prompt
     const systemPrompt = `You are an expert music analyst and critic. 
 Analyze the following song:
 Title: "${track.title}"
@@ -231,6 +294,13 @@ Provide a detailed analysis in Vietnamese formatted strictly as a JSON object wi
 2. "emotion": Cảm xúc chủ đạo (ví dụ: "Buồn bã, Da diết", "Sôi động, Năng lượng", "Thư giãn, Chill"). Ngắn gọn 2-5 từ.
 3. "musicalStyle": Phân tích ngắn gọn về phong cách âm nhạc, nhịp điệu, nhạc cụ đặc trưng của bài hát này.
 4. "similarKeywords": Một mảng (array) chứa 3-5 từ khóa (tiếng Việt hoặc Anh không dấu) để tìm kiếm các bài hát tương tự trong database (VD: ["chill", "lofi", "acoustic"]).
+5. "moods": Array of strings selected ONLY from this list: ${JSON.stringify(MOOD_ENUM)}. Choose 1-3 most relevant.
+6. "contexts": Array of strings selected ONLY from this list: ${JSON.stringify(CONTEXT_ENUM)}. Choose 1-3 most relevant.
+7. "language": Ngôn ngữ chính của bài hát (e.g. "vi", "en", "ko").
+8. "era": Thập niên phát hành (e.g. "2020s", "2010s").
+9. "colorHex": Một mã màu hex (e.g. "#7c3aed") phản ánh chân thực nhất vibe của bài hát.
+10. "energy": Estimated energy level from 0.0 (very calm/acoustic) to 1.0 (very energetic/loud). Only used if actual audio analysis fails.
+11. "tempo": Estimated BPM (integer, e.g., 120). Only used if actual audio analysis fails.
 
 Return ONLY a raw JSON object. No markdown formatting, no backticks.`;
 
@@ -247,7 +317,37 @@ Return ONLY a raw JSON object. No markdown formatting, no backticks.`;
         console.error("Lỗi parse JSON Analyze từ Gemini:", err, response);
       }
 
-      const { meaning = "", emotion = "", musicalStyle = "", similarKeywords = [] } = parsedData;
+      const { 
+        meaning = "", 
+        emotion = "", 
+        musicalStyle = "", 
+        similarKeywords = [],
+        moods = [],
+        contexts = [],
+        language = "",
+        era = "",
+        colorHex = "",
+        energy = null,
+        tempo = null
+      } = parsedData;
+
+      // Save to Track
+      track.aiMetadata = {
+        meaning,
+        emotion,
+        musicalStyle,
+        similarKeywords,
+        moods,
+        contexts,
+        language,
+        era,
+        colorHex,
+        energy,
+        tempo,
+        analyzedAt: new Date(),
+        analysisVersion: 1
+      };
+      await track.save();
 
       // Bước 4: Query bài hát tương tự
       let similarTracks: any[] = [];
@@ -293,6 +393,63 @@ Return ONLY a raw JSON object. No markdown formatting, no backticks.`;
 
     } catch (error) {
       console.error("Lỗi khi AI phân tích bài hát:", error);
+      throw error;
+    }
+  }
+
+  public async generateMashupPlan(prompt: string) {
+    if (!config.geminiApiKey) {
+      throw new Error("Chưa cấu hình GEMINI_API_KEY trong hệ thống.");
+    }
+
+    const systemPrompt = `You are an expert DJ and music producer. The user wants a mashup based on: "${prompt}".
+Analyze the prompt and extract:
+1. "genres": Array of strings (music genres).
+2. "moods": Array of strings selected ONLY from this list: ${JSON.stringify(MOOD_ENUM)}.
+3. "energyProfile": A string describing the energy curve (e.g., "build-up", "chill", "peak", "wave").
+4. "keywords": Array of keywords for searching.
+Return ONLY a raw JSON object with keys: "genres", "moods", "energyProfile", "keywords". No markdown formatting, no backticks.`;
+
+    try {
+      const result = await this.model.generateContent(systemPrompt);
+      const response = result.response.text();
+      let parsedData: any = { genres: [], moods: [], keywords: [] };
+
+      try {
+        const cleanedText = response.replace(/```json/g, '').replace(/```/g, '').trim();
+        parsedData = JSON.parse(cleanedText);
+      } catch (err) {
+        console.error("Lỗi parse JSON Mashup từ Gemini:", err, response);
+      }
+
+      const { genres = [], moods = [], keywords = [] } = parsedData;
+
+      // Find shorts matching these criteria
+      let shortQuery: any = { isPublished: true };
+      const orConditions: any[] = [];
+      
+      if (moods.length > 0) {
+        // Need to join with Track to filter by moods, but for simplicity, just fetch recent shorts and filter
+        // A better approach would be aggregate, but we will fetch and filter in memory for now.
+      }
+
+      // We'll just fetch a pool of recent shorts and rank them
+      const pool = await mongoose.model('TrackShort').find({ isPublished: true }).populate('track').limit(100).lean();
+      
+      // Filter pool based on AI criteria (mood, genre, keyword)
+      // This is a simplified version. Ideally we use the MashupService compatibility algorithm.
+      // But we just need to return the AI parsed data for now, and let controller handle the rest.
+      
+      return {
+        success: true,
+        data: {
+          aiAnalysis: parsedData,
+          poolSize: pool.length
+          // Implementation of full AI matching can be expanded here
+        }
+      };
+    } catch (error) {
+      console.error("Lỗi khi gọi AI Mashup:", error);
       throw error;
     }
   }

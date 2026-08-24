@@ -83,3 +83,58 @@ export const getTopFavouriteTracks = catchAsync(
     res.status(httpStatus.OK).json({ success: true, data: result });
   },
 );
+
+export const getRecommendedAlbums = catchAsync(
+  async (req: Request, res: Response) => {
+    const currentUser = (req as any).user;
+    if (!currentUser) return res.status(httpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized" });
+    const limit = Math.min(Number(req.query.limit) || 10, 30);
+    const result = await recommendationService.getRecommendedAlbums(currentUser._id.toString(), limit);
+    res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);
+
+export const getRecommendedPlaylists = catchAsync(
+  async (req: Request, res: Response) => {
+    const currentUser = (req as any).user;
+    if (!currentUser) return res.status(httpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized" });
+    const limit = Math.min(Number(req.query.limit) || 10, 30);
+    const result = await recommendationService.getRecommendedPlaylists(currentUser._id.toString(), limit);
+    res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);
+
+export const getTrendingAlbums = catchAsync(
+  async (req: Request, res: Response) => {
+    const limit = Math.min(Number(req.query.limit) || 10, 30);
+    const result = await recommendationService.getTrendingAlbums(limit);
+    res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);
+
+export const getTrendingPlaylists = catchAsync(
+  async (req: Request, res: Response) => {
+    const limit = Math.min(Number(req.query.limit) || 10, 30);
+    const result = await recommendationService.getTrendingPlaylists(limit);
+    res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);
+
+export const getForYouFeed = catchAsync(
+  async (req: Request, res: Response) => {
+    const currentUser = (req as any).user;
+    const userId = currentUser?._id?.toString() ?? null;
+    const limit = Math.min(Number(req.query.limit) || 20, 50);
+    const feed = await recommendationService.getForYouFeed(userId, limit);
+    res.status(httpStatus.OK).json({
+      success: true,
+      data: {
+        feed,
+        meta: {
+          total: feed.length,
+          userId: userId ?? "guest",
+        },
+      },
+    });
+  },
+);

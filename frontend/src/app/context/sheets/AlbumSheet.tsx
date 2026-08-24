@@ -64,7 +64,7 @@ const AlbumPreviewRow = memo(({ album }: { album: IAlbum }) => {
           {album.title}
         </p>
         <p className="text-xs text-muted-foreground truncate mt-0.5">
-          {album.artist?.name}
+          {typeof album.artist === "object" ? album.artist?.name : ""}
         </p>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md text-muted-foreground bg-muted">
@@ -226,9 +226,11 @@ export const AlbumSheet = memo(
           ? [
               {
                 icon: Mic2,
-                label: `Xem nghệ sĩ: ${album.artist.name}`,
+                label: `Xem nghệ sĩ: ${typeof album.artist === "object" ? album.artist.name : ""}`,
                 onClick: () => {
-                  onAlbumGoToArtist?.(album.artist!.slug);
+                  if (typeof album.artist === "object") {
+                    onAlbumGoToArtist?.(album.artist.slug);
+                  }
                   onClose();
                 },
               } as ActionItem,

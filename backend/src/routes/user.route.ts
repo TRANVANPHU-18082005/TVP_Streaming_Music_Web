@@ -59,6 +59,9 @@ router.use(authorize("admin"));
 // Lấy danh sách users (có filter/search)
 router.get("/", validate(getUsersSchema), userController.getUsers);
 
+// Lấy thống kê Users (Admin)
+router.get("/stats", userController.getUserStats);
+
 // Tạo User mới (bởi Admin)
 router.post(
   "/",

@@ -18,7 +18,7 @@ export const errorHandler = (
     statusCode = statusCode || httpStatus.INTERNAL_SERVER_ERROR;
     message = message || "Internal Server Error";
   }
-  if (err.errorCode === "ACCOUNT_LOCKED" || err.message?.includes("khóa")) {
+  if (err.errorCode === "ACCOUNT_LOCKED") {
     clearRefreshTokenCookie(res);
   }
   const response = {
@@ -27,6 +27,7 @@ export const errorHandler = (
     errorCode: errorCode, // <-- Trả về cho Frontend dùng (quan trọng)
     message,
     ...(err.errors && { errors: err.errors }), // Thêm chi tiết lỗi nếu có
+    ...(err.data && { data: err.data }), // Thêm custom data (VD: providers)
     ...(isDev() && { stack: err.stack }),
   };
 

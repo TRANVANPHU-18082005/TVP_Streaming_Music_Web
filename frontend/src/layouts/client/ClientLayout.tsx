@@ -9,7 +9,7 @@ const ClientLayout = () => {
   // Hook tính toán khoảng cách an toàn cho Player bar
   const playerPaddingClass = usePlayerPadding(120);
   const location = useLocation();
-  const isForMePage = location.pathname === `/${CLIENT_PATHS.FOR_ME}`;
+  const isHiddenHeaderPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}`;
 
   return (
     <div
@@ -21,7 +21,7 @@ const ClientLayout = () => {
       )}
     >
       {/* Ẩn Global Header trên For Me page — ForMeHeader riêng được render trong ForMePage */}
-      {!isForMePage && <Header />}
+      {!isHiddenHeaderPage && <Header />}
 
       {/* Main Content Area */}
       <main className="flex-1 w-full relative z-0">

@@ -173,43 +173,50 @@ export const useGenreForm = <TMode extends "create" | "edit">({
       console.log("🚀 Final Genre Payload (FormData):", payload);
       await onSubmit(payload);
     } catch (err: any) {
-      // Map server-side validation errors to form fields where possible.
       const resp = err?.response?.data || err?.response || null;
-
-      let handled = false;
+      let handledCount = 0;
+      let unhandledErrors: string[] = [];
 
       const maybeFieldMap = resp?.data ?? resp?.errors ?? resp;
+
+      const processFieldError = (field: string, msg: string) => {
+        // Zod validation errors from backend usually have prefixes like 'body.name'
+        const cleanField = field.replace(/^(body|query|params)\./, "");
+
+        if (Object.keys(defaultValues as any).includes(cleanField) || cleanField === "image") {
+          form.setError(cleanField as any, { type: "server", message: msg });
+          handledCount++;
+        } else {
+          unhandledErrors.push(`${cleanField}: ${msg}`);
+        }
+      };
+
       if (maybeFieldMap && typeof maybeFieldMap === "object") {
         if (Array.isArray(maybeFieldMap)) {
           for (const item of maybeFieldMap) {
             if (!item) continue;
             if (typeof item === "string") {
-              toast.error(item);
+              unhandledErrors.push(item);
             } else if (item.field && (item.message || item.msg)) {
-              form.setError(item.field, {
-                type: "server",
-                message: item.message || item.msg,
-              });
-              handled = true;
+              processFieldError(item.field, item.message || item.msg);
             }
           }
         } else {
           Object.entries(maybeFieldMap).forEach(([k, v]) => {
-            if (!k) return;
+            if (!k || k === "message" || k === "errorCode" || k === "isOperational") return;
             const msg = Array.isArray(v) ? v.join(" ") : String(v || "");
-            if (k === "message" || k === "errorCode") return;
-            form.setError(k as any, { type: "server", message: msg });
-            handled = true;
+            processFieldError(k, msg);
           });
         }
       }
 
-      if (!handled) {
-        const message = resp?.message || err?.message || "Lỗi lưu thể loại";
+      if (unhandledErrors.length > 0) {
+        unhandledErrors.forEach((msg) => toast.error(msg));
+      } else if (handledCount === 0) {
+        const message = resp?.message || err?.message || "Lỗi khi lưu thể loại";
         toast.error(message);
       }
 
-      // Keep modal open for user to fix errors — swallow the error here.
       return;
     }
   });

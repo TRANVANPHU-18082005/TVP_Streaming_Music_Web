@@ -116,9 +116,9 @@ const AlbumCard: React.FC<AlbumCardProps> = ({
               </h3>
               <p
                 className="text-sm text-muted-foreground truncate mt-0.5"
-                title={album.artist?.name}
+                title={typeof album.artist === "object" ? album.artist?.name : undefined}
               >
-                {album.artist?.name || (
+                {(typeof album.artist === "object" ? album.artist?.name : null) || (
                   <span className="italic opacity-60">Unknown Artist</span>
                 )}
               </p>

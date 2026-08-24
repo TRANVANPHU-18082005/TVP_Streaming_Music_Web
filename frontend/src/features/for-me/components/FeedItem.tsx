@@ -170,7 +170,7 @@ export const FeedItem = ({ track, index, isActive }: FeedItemProps) => {
           <div className="flex flex-col items-center justify-center md:justify-center shrink-0 mt-10 md:mt-0">
 
             {/* Title & Artist */}
-            <div className="text-center mb-6 md:mb-8 w-[300px] sm:w-full lg:w-full justify-center align-center pointer-events-auto cursor-pointer" >
+            <div className="text-center mb-6 md:mb-8 max-w-[300px] md:max-w-[300px] lg:max-w-[400px] xl:max-w-[500px]  sm:w-full lg:w-full justify-center align-center pointer-events-auto cursor-pointer" >
               <MarqueeText
                 text={track.title}
                 className="text-2xl md:text-3xl font-bold text-white truncate leading-tight tracking-tight"

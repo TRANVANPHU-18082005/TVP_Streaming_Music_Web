@@ -255,7 +255,7 @@ export const PremiumMusicVisualizer: FC<PremiumVisualizerProps> = memo(
               height: active ? h * heightFactor : 3,
               background:
                 colorVariant === "brand"
-                  ? `linear-gradient(to top, hsl(var(--primary)), hsl(var(--wave-2)))`
+                  ? `hsl(var(--primary))`
                   : `hsl(var(--wave-${(i % 5) + 1}))`,
               animationDelay: `${i * 0.1}s`,
               transformOrigin: "center",

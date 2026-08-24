@@ -4,8 +4,6 @@ import { Disc3 } from "lucide-react";
 interface PageHeroProps {
   title: string;
   subtitle: string;
-  totalItems: number;
-  isLoading: boolean;
   icon?: React.ElementType;
   label?: string;
 }

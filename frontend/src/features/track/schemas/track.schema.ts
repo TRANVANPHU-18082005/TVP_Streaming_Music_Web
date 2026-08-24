@@ -115,6 +115,21 @@ const trackBaseSchema = z.object({
 
   // ── 7. DURATION ───────────────────────────────────────────────────────────
   duration: z.coerce.number().int().min(0).default(0),
+
+  // ── 8. AI METADATA ────────────────────────────────────────────────────────
+  aiMetadata: z.object({
+    emotion: optionalString(200, "Cảm xúc không được vượt quá 200 ký tự"),
+    musicalStyle: optionalString(500, "Phong cách âm nhạc không được vượt quá 500 ký tự"),
+    meaning: optionalString(1000, "Ý nghĩa không được vượt quá 1000 ký tự"),
+    language: optionalString(50, "Ngôn ngữ không được vượt quá 50 ký tự"),
+    era: optionalString(50, "Thập niên không được vượt quá 50 ký tự"),
+    colorHex: optionalString(10, "Mã màu không được vượt quá 10 ký tự"),
+    energy: z.coerce.number().min(0).max(1).optional(),
+    tempo: z.coerce.number().int().optional(),
+    moods: formDataArrayHelper(z.string()).default([]),
+    contexts: formDataArrayHelper(z.string()).default([]),
+    similarKeywords: formDataArrayHelper(z.string()).default([]),
+  }).optional(),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -222,6 +237,10 @@ export const bulkTrackUpdateSchema = z.object({
       isExplicit: booleanSchema.optional(),
       moodVideoId: nullableObjectIdSchema.optional(),
       status: trackStatusSchema.optional(),
+      errorReason: optionalString(
+        500,
+        "Lý do lỗi không được vượt quá 500 ký tự",
+      ).optional(),
       copyright: optionalString(
         500,
         "Bản quyền không được vượt quá 500 ký tự",
@@ -293,6 +312,21 @@ export const trackDetailSchema = trackItemSchema.extend({
   copyright: z.string().nullable().optional(),
   isrc: z.string().nullable().optional(),
   tags: z.array(z.string()),
+  aiMetadata: z.object({
+    emotion: z.string().optional(),
+    musicalStyle: z.string().optional(),
+    meaning: z.string().optional(),
+    language: z.string().optional(),
+    era: z.string().optional(),
+    colorHex: z.string().optional(),
+    energy: z.number().optional(),
+    tempo: z.number().optional(),
+    moods: z.array(z.string()).optional(),
+    contexts: z.array(z.string()).optional(),
+    similarKeywords: z.array(z.string()).optional(),
+    analyzedAt: z.string().optional(),
+    analysisVersion: z.number().optional(),
+  }).optional(),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

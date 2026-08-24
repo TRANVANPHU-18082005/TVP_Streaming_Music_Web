@@ -9,10 +9,8 @@ export const ALBUM_DEFAULT_VALUES: AlbumFormValues = {
   releaseDate: new Date().toISOString().split("T")[0],
   isPublic: false,
   artist: "",
-
   tags: [],
   coverImage: null,
-
   themeColor: "#1db954",
 };
 
@@ -20,9 +18,9 @@ export const mapEntityToForm = (album?: IAlbum | null): AlbumFormValues => {
   if (!album) return ALBUM_DEFAULT_VALUES;
 
   const artistId =
-    typeof album.artist === "object" && album.artist
-      ? (album.artist as any)._id
-      : (album.artist as any) || "";
+    typeof album.artist === "object" && album.artist !== null
+      ? album.artist._id
+      : album.artist || "";
 
   let formattedDate = new Date().toISOString().split("T")[0];
   if (album.releaseDate) {
@@ -43,7 +41,6 @@ export const mapEntityToForm = (album?: IAlbum | null): AlbumFormValues => {
     artist: artistId,
     tags: Array.isArray(album.tags) ? album.tags : [],
     coverImage: album.coverImage,
-
     themeColor: album.themeColor || "#1db954",
   };
 };

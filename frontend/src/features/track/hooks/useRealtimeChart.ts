@@ -19,6 +19,17 @@ const isSameTrackList = (a: ChartTrack[], b: ChartTrack[]): boolean => {
   return a.every((t, i) => t._id === b[i]._id && t.score === b[i].score);
 };
 
+const isSameChartData = (a: any[], b: any[]): boolean => {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (p, i) =>
+      p.time === b[i].time &&
+      p.top1 === b[i].top1 &&
+      p.top2 === b[i].top2 &&
+      p.top3 === b[i].top3,
+  );
+};
+
 /** Trích xuất items[] từ mọi dạng response (Array hoặc Object {items, chart}) */
 const extractItems = (data: any): ChartTrack[] =>
   Array.isArray(data) ? data : (data?.items ?? []);
@@ -126,6 +137,9 @@ export const useRealtimeChart = () => {
         const isItemsSame = isSameTrackList(oldItems, newItems);
         const finalItems = isItemsSame ? oldItems : newItems;
 
+        const isChartSame = isSameChartData(oldChart, newChart);
+        const finalChart = isChartSame ? oldChart : newChart;
+
         // Chỉ update snapshot thứ hạng CŨ nếu danh sách có sự thay đổi
         if (!isItemsSame && oldItems.length > 0) {
           const snapshot: Record<string, number> = {};
@@ -140,7 +154,7 @@ export const useRealtimeChart = () => {
           return {
             data: {
               items: finalItems,
-              chart: newChart,
+              chart: finalChart,
               lastUpdatedAt: payload?.lastUpdatedAt ?? null,
             },
           };
@@ -151,7 +165,7 @@ export const useRealtimeChart = () => {
           data: {
             ...(old.data || {}),
             items: finalItems,
-            chart: newChart,
+            chart: finalChart,
             lastUpdatedAt: payload?.lastUpdatedAt ?? old.data?.lastUpdatedAt,
           },
         };
@@ -203,9 +217,14 @@ export const useRealtimeChart = () => {
   }, [socket, isConnected, flushPendingUpdate]);
 
   // ── Re-sync khi reconnect — silent invalidation (không flash loading) ────
+  const hasConnectedOnce = useRef(false);
+  
   useEffect(() => {
     if (isConnected) {
-      queryClient.invalidateQueries({ queryKey: ["live-chart"] });
+      if (hasConnectedOnce.current) {
+        queryClient.invalidateQueries({ queryKey: ["live-chart"] });
+      }
+      hasConnectedOnce.current = true;
     }
   }, [isConnected, queryClient]);
 

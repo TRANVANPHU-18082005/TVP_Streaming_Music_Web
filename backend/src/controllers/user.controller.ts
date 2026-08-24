@@ -64,6 +64,16 @@ export const getUsers = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// 5.1 ADMIN: Get User Stats
+export const getUserStats = catchAsync(async (req: Request, res: Response) => {
+  const stats = await UserService.getUserStats();
+
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: stats,
+  });
+});
+
 // 6. ADMIN: Create User
 export const createUser = catchAsync(async (req: Request, res: Response) => {
   const user = await UserService.createUserByAdmin(req.body, req.file);

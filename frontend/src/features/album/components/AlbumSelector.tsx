@@ -78,7 +78,7 @@ const AlbumItem = memo(({ album, isSelected, onToggle }: AlbumItemProps) => {
           {album.title}
         </p>
         <p className="text-[10px] text-muted-foreground truncate mt-0.5 font-medium">
-          {album.artist?.name || "Unknown Artist"}
+          {(typeof album.artist === "object" ? album.artist?.name : null) || "Unknown Artist"}
         </p>
       </div>
 

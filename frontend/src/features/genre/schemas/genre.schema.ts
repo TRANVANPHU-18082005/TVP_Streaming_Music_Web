@@ -47,7 +47,7 @@ const genreBaseSchema = z.object({
         : trimmed;
     }
     return val === null ? "root" : val;
-  }, nullableObjectIdSchema.optional()),
+  }, z.union([z.string().regex(/^[0-9a-fA-F]{24}$/, "ID không hợp lệ"), z.literal("root")]).optional()),
 
   priority: z.coerce
     .number()

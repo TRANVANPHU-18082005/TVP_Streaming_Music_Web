@@ -42,8 +42,21 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || "",
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || "",
 
-  // Client
-  clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  // Client (đảm bảo luôn là 1 URL duy nhất kể cả khi trong env có nhiều origin ngăn cách bởi dấu phẩy)
+  clientUrl: (() => {
+    const raw = process.env.CLIENT_URL || "http://localhost:5173";
+    const urls = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (urls.length === 0) return "http://localhost:5173";
+    if (urls.length === 1) return urls[0];
+    if (nodeEnv !== "production") {
+      const local = urls.find((u) => u.includes("localhost") || u.includes("127.0.0.1"));
+      if (local) return local;
+    } else {
+      const prod = urls.find((u) => !u.includes("localhost") && !u.includes("127.0.0.1"));
+      if (prod) return prod;
+    }
+    return urls[0];
+  })(),
   allowOrigins: process.env.ALLOW_ORIGINS || process.env.CLIENT_URL || (nodeEnv !== "production" ? "*" : ""),
 
   // Redis / Upstash

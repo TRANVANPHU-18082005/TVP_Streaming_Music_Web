@@ -38,9 +38,10 @@ const LegalInfoSection: React.FC<LegalInfoSectionProps> = ({ form }) => {
               <TagInput
                 value={field.value || []}
                 onChange={(newTags) => {
-                  field.onChange(newTags);
-                  // THÊM DÒNG NÀY (Nhớ lấy form.setValue từ hook ra)
-                  form.setValue("tags", newTags, { shouldDirty: true });
+                  form.setValue("tags", newTags, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  });
                 }}
                 placeholder="Nhập tag và ấn Enter..."
                 className="border-none shadow-none focus-visible:ring-0"

@@ -125,3 +125,12 @@ export const GRID_LAYOUT = cn(
   "gap-x-4 gap-y-8 sm:gap-x-5 sm:gap-y-10",
 );
 export const staggerDelay = (i: number) => Math.min(i * 45, 700);
+// Password Requirements
+export const PASSWORD_REQUIREMENTS = [
+  { id: 1, label: "8+ ký tự", regex: /.{8,}/ },
+  { id: 2, label: "Chứa số", regex: /\d/ },
+  { id: 3, label: "Chứa chữ in hoa", regex: /[A-Z]/ },
+  { id: 4, label: "Chứa ký tự đặc biệt", regex: /[^A-Za-z0-9]/ },
+];
+export const ERROR_IMG_SRC = "https://res.cloudinary.com/dc5rfjnn5/image/upload/v1770807338/LOGO_o4n02n.png"
+

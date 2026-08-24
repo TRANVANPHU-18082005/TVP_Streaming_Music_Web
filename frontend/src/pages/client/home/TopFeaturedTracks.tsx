@@ -3,7 +3,7 @@
  */
 
 import React, { memo, useMemo, useCallback, useRef, useEffect } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion, useAnimation } from "framer-motion";
 import {
   BarChart3,
   Loader2,
@@ -276,28 +276,30 @@ ChartRankBadge.displayName = "ChartRankBadge";
 const ScoreGlow = memo(
   ({ score, children }: { score: number; children: React.ReactNode }) => {
     const isFirstRender = useRef(true);
+    const controls = useAnimation();
 
     useEffect(() => {
-      isFirstRender.current = false;
-    }, []);
-
-    // Bỏ qua lần mount đầu — chỉ glow khi score thực sự tăng qua socket
-    if (isFirstRender.current) return <>{children}</>;
+      if (isFirstRender.current) {
+        isFirstRender.current = false;
+        return;
+      }
+      
+      // Trigger animation on score change without remounting
+      controls.start({
+        boxShadow: [
+          "0 0 0px   0px  hsl(var(--brand-glow) / 0)",
+          "0 0 14px  4px  hsl(var(--brand-glow) / 0.35)",
+          "0 0 6px   2px  hsl(var(--brand-glow) / 0.18)",
+          "0 0 0px   0px  hsl(var(--brand-glow) / 0)",
+        ],
+        transition: { duration: 0.9, ease: "easeOut", times: [0, 0.2, 0.6, 1] }
+      });
+    }, [score, controls]);
 
     return (
       <motion.div
-        // key thay đổi → motion.div được unmount/mount → initial chạy lại
-        key={score}
+        animate={controls}
         initial={{ boxShadow: "0 0 0px 0px hsl(var(--brand-glow) / 0)" }}
-        animate={{
-          boxShadow: [
-            "0 0 0px   0px  hsl(var(--brand-glow) / 0)",
-            "0 0 14px  4px  hsl(var(--brand-glow) / 0.35)",
-            "0 0 6px   2px  hsl(var(--brand-glow) / 0.18)",
-            "0 0 0px   0px  hsl(var(--brand-glow) / 0)",
-          ],
-        }}
-        transition={{ duration: 0.9, ease: "easeOut", times: [0, 0.2, 0.6, 1] }}
         className="rounded-xl"
       >
         {children}

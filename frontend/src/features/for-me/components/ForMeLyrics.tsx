@@ -76,7 +76,7 @@ export const ForMeLyrics = memo(({ track, isActive, isPlaying, accentColor }: Fo
         <LyricsView
           paddingForMe={isMobile ? 7 : 36}
           lyricType={track.lyricType || "synced"}
-
+          plainLyrics={track.plainLyrics}
           syncedLines={lyrics}
           karaokeLines={lyrics}
           currentTime={currentTime}

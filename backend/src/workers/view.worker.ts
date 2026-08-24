@@ -44,19 +44,6 @@ export const startViewWorker = () => {
           });
           recommendationService.invalidateUserRecommendCache(userId);
 
-          // Task B: Cập nhật Global Chart (Redis)
-          const vnHour = new Date(
-            listenDate.toLocaleString("en-US", {
-              timeZone: "Asia/Ho_Chi_Minh",
-            }),
-          ).getHours();
-          const hourKey = `chart:hourly:${vnHour}`;
-
-          const redisPromises = [
-            cacheRedis.zincrby(hourKey, 1, trackId),
-            cacheRedis.expire(hourKey, 172800), // 48h
-          ];
-
           // Task C: Cập nhật Daily Stats (Cho User Chart)
           let statsPromise = Promise.resolve() as Promise<any>;
 
@@ -75,7 +62,7 @@ export const startViewWorker = () => {
           }
 
           // 3. THỰC THI ĐỒNG THỜI
-          await Promise.all([logPromise, ...redisPromises, statsPromise]);
+          await Promise.all([logPromise, statsPromise]);
 
           console.log(
             `✅ [Worker] Processed: ${trackId} | User: ${userId || "Guest"} | Date: ${vnDateStr}`,

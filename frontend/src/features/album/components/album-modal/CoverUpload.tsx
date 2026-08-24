@@ -68,7 +68,7 @@ const CoverUpload: React.FC<CoverUploadProps> = ({ form }) => {
               Tải ảnh lên
             </span>
             <span className="text-[11px] font-medium text-muted-foreground mt-1 text-center">
-              JPEG, PNG • Max 5MB
+              JPEG, PNG, WebP • Tối đa 2MB
             </span>
           </div>
         )}

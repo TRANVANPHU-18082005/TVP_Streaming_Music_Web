@@ -47,7 +47,7 @@ const albumBaseSchema = z.object({
         .string()
         .trim()
         .min(1, "Tag không được để trống")
-        .max(30, "Mỗi tag tối đa 30 ký tự"),
+        .max(15, "Mỗi tag tối đa 15 ký tự"),
     )
     .max(10, "Chỉ được nhập tối đa 10 tags")
     .default([]),
@@ -102,9 +102,20 @@ export const albumEditSchema = albumBaseSchema
       ])
       .optional(),
   })
-  .partial()
-  .refine((body) => Object.values(body).some((v) => v !== undefined), {
-    message: "Phải có ít nhất một trường để cập nhật",
+  .superRefine((data, ctx) => {
+    // Business rule: releaseDate không được ở tương lai khi publish ngay
+    if (data.isPublic) {
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (data.releaseDate && new Date(data.releaseDate) > today) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["releaseDate"],
+          message:
+            "Album công khai không thể có ngày phát hành trong tương lai",
+        });
+      }
+    }
   });
 
 // ─────────────────────────────────────────────────────────────────────────────

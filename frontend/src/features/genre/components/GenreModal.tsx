@@ -82,14 +82,14 @@ const GenreModal = memo<GenreModalProps>(
     } = useGenreForm(
       genreToEdit
         ? {
-            mode: "edit",
-            genreToEdit,
-            onSubmit,
-          }
+          mode: "edit",
+          genreToEdit,
+          onSubmit,
+        }
         : {
-            mode: "create",
-            onSubmit,
-          },
+          mode: "create",
+          onSubmit,
+        },
     );
     const {
       register,
@@ -148,11 +148,11 @@ const GenreModal = memo<GenreModalProps>(
         const file = e.target.files?.[0];
         if (!file) return;
         if (!ACCEPTED_TYPES.includes(file.type)) {
-          setImageFileError("Chi ho tro JPEG, PNG, WebP, SVG.");
+          setImageFileError("Chỉ hỗ trợ JPEG, PNG, WebP, SVG.");
           return;
         }
         if (file.size > MAX_FILE_SIZE) {
-          setImageFileError(`Kich thuoc toi da ${MAX_FILE_SIZE_MB}MB.`);
+          setImageFileError(`Kích thước tối đa ${MAX_FILE_SIZE_MB}MB.`);
           return;
         }
         setImageFileError(null);
@@ -305,7 +305,7 @@ const GenreModal = memo<GenreModalProps>(
                               className={cn(
                                 "h-11 bg-transparent border-input rounded-md text-[15px] font-semibold focus-visible:ring-1 focus-visible:ring-primary transition-all",
                                 errors.name &&
-                                  "border-destructive focus-visible:ring-destructive pr-10",
+                                "border-destructive focus-visible:ring-destructive pr-10",
                               )}
                             />
                             {errors.name && (
@@ -359,7 +359,6 @@ const GenreModal = memo<GenreModalProps>(
                         register={register}
                         errors={errors}
                         watchColor={watchColor}
-                        watchGradient={watchGradient}
                       />
                     </Suspense>
                   </div>
@@ -414,11 +413,11 @@ const GenreModal = memo<GenreModalProps>(
                         aria-hidden="true"
                         className={cn(
                           "pl-2 shrink-0",
-                          "text-[11px] font-medium mt-0.5 transition-colors",
+                          "text-xs md:text-sm font-medium mt-0.5 transition-colors",
                           isTrending ? "text-primary" : "text-muted-foreground",
                         )}
                       >
-                        <p>
+                        <p className="w-40">
                           {isTrending
                             ? "Đang được đánh dấu là thể loại thịnh hành"
                             : "Không nằm trong danh sách thịnh hành"}
@@ -464,7 +463,7 @@ const GenreModal = memo<GenreModalProps>(
                     disabled={isWorking}
                     className="font-bold border-input bg-background hover:bg-accent hover:text-foreground h-10 px-5 rounded-md flex-1 sm:flex-none"
                   >
-                    Huy
+                    Hủy
                   </Button>
                   <Button
                     type="submit"

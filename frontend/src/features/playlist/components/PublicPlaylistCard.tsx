@@ -12,6 +12,7 @@ import {
   PremiumMusicVisualizer,
   WaveformBars,
 } from "@/components/MusicVisualizer";
+import { useIsMobile } from "@/components/ui/use-mobile";
 interface PublicPlaylistCardProps {
   playlist: IPlaylist;
   className?: string;
@@ -20,6 +21,7 @@ interface PublicPlaylistCardProps {
 const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
   function PublicPlaylistCard({ playlist, className }) {
     const navigate = useNavigate();
+    const isMobile = useIsMobile();
 
     // 1. Hook Playback với đầy đủ trạng thái
     const {
@@ -58,7 +60,7 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
           "group cursor-pointer flex flex-col gap-3 relative",
           "album-card !overflow-visible p-2 rounded-2xl transition-all duration-300",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          "hover:bg-muted/10",
+          !isMobile && "hover:bg-muted/10",
           isThisPlaylistActive && "bg-primary/5 shadow-brand-soft", // Highlight vùng card
           className,
         )}
@@ -79,8 +81,8 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
               src={playlist.coverImage}
               alt={playlist.title}
               className={cn(
-                "size-full object-cover transition-transform duration-1000 ease-out",
-                "group-hover:scale-105 [will-change:transform]",
+                "size-full object-cover transition-transform duration-1000 ease-out [will-change:transform]",
+                !isMobile && "group-hover:scale-105",
                 isThisPlaylistPlaying && "blur-[2px] opacity-70 scale-110", // Zoom nhẹ & mờ khi có đĩa than
               )}
             />
@@ -91,7 +93,12 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
           )}
 
           {/* C. OVERLAYS */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+          <div
+            className={cn(
+              "absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 transition-opacity",
+              !isMobile && "group-hover:opacity-80"
+            )}
+          />
 
           {/* D. PREMIUM VISUALIZER (Hiện dải sóng rộng ở đáy Card khi ACTIVE) */}
           <AnimatePresence>
@@ -122,10 +129,13 @@ const PublicPlaylistCard = memo<PublicPlaylistCardProps>(
           {/* E. NÚT PLAY CHÍNH (Morphing Icon) */}
           <div
             className={cn(
-              "absolute right-3 bottom-3 z-30 transition-all duration-300 ease-out",
+              "absolute right-2 bottom-4 md:right-3 md:bottom-3 z-30 transition-all duration-300 ease-out",
               isThisPlaylistActive || isFetching
                 ? "translate-y-0 opacity-100 scale-100"
-                : "translate-y-3 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100",
+                : cn(
+                    "translate-y-3 opacity-0 scale-90",
+                    isMobile ? "hidden" : "group-hover:translate-y-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 group-hover:scale-100"
+                  )
             )}
           >
             <button

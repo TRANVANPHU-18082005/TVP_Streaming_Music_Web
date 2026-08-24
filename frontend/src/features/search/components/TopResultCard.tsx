@@ -103,6 +103,7 @@ const TopResultCard = React.memo(
               {type !== "artist" &&
                 type !== "genre" &&
                 type !== "playlist" &&
+                typeof item.artist === "object" &&
                 item.artist?.name && (
                   <span className="text-sm dark:text-white/45 text-gray-500 truncate">
                     {item.artist.name}

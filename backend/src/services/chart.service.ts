@@ -30,7 +30,7 @@ export const getRealtimeChart = async () => {
           trackId: "$trackId",
           // Ưu tiên userId, fallback về ip để cover khách vãng lai
           listener: { $ifNull: ["$userId", "$ip"] },
-          hour: { $hour: { date: "$listenedAt", timezone: "+07:00" } },
+          hourSlot: { $dateToString: { format: "%Y-%m-%d-%H", date: "$listenedAt", timezone: "+07:00" } },
         },
       },
     },
@@ -104,7 +104,6 @@ export const getRealtimeChart = async () => {
     {
       $unwind: { path: "$moodVideoDetails", preserveNullAndEmptyArrays: true },
     },
-    { $unwind: { path: "$genreDetails", preserveNullAndEmptyArrays: true } },
     // Deduplicate documents that may have been multiplied by $unwind on array lookups
     // (e.g. multiple genres / featuring artists). We keep the first appearance per track._id
     {
@@ -271,18 +270,20 @@ const getChartDataForTop3 = async (top3Ids: any[], startTime: Date) => {
       $project: {
         trackId: 1,
         listener: { $ifNull: ["$userId", "$ip"] },
+        hourSlot: { $dateToString: { format: "%Y-%m-%d-%H", date: "$listenedAt", timezone: "+07:00" } },
         hour: { $hour: { date: "$listenedAt", timezone: "+07:00" } },
       },
     },
     // Chống cày view trong biểu đồ: 1 người/1 bài/1 giờ = 1 điểm
     {
       $group: {
-        _id: { trackId: "$trackId", listener: "$listener", hour: "$hour" },
+        _id: { trackId: "$trackId", listener: "$listener", hourSlot: "$hourSlot" },
+        hour: { $first: "$hour" },
       },
     },
     {
       $group: {
-        _id: { trackId: "$_id.trackId", hour: "$_id.hour" },
+        _id: { trackId: "$_id.trackId", hour: "$hour" },
         count: { $sum: 1 },
       },
     },

@@ -15,6 +15,7 @@ import { useForm } from "react-hook-form";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import React from "react";
+import { usePlaylistMutations } from "../hooks/usePlaylistMutations";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MODULE-SCOPE CONSTANTS
@@ -48,15 +49,15 @@ const MODAL_SPRING = {
 const VISIBILITY_OPTIONS = [
   {
     id: "public",
-    label: "Public",
-    desc: "Anyone can listen and discover",
+    label: "Công khai",
+    desc: "Bất kỳ ai cũng có thể nghe và khám phá",
     icon: Globe,
     token: "--success", // maps to hsl(var(--success))
   },
   {
     id: "private",
-    label: "Private",
-    desc: "Only visible to you",
+    label: "Riêng tư",
+    desc: "Chỉ mình bạn có thể nghe",
     icon: Lock,
     token: "--error", // maps to hsl(var(--error))
   },
@@ -126,18 +127,18 @@ const VisibilityCard = memo(
           isSelected
             ? "shadow-raised"
             : [
-                "border-border/50 bg-surface-1/60",
-                "hover:border-border-strong hover:bg-surface-2/60",
-              ],
+              "border-border/50 bg-surface-1/60",
+              "hover:border-border-strong hover:bg-surface-2/60",
+            ],
         )}
         style={
           isSelected
             ? {
-                // All colors via token → skin + light/dark adaptive
-                background: `hsl(var(${option.token}) / 0.07)`,
-                borderColor: `hsl(var(${option.token}) / 0.40)`,
-                boxShadow: `0 0 16px hsl(var(${option.token}) / 0.12)`,
-              }
+              // All colors via token → skin + light/dark adaptive
+              background: `hsl(var(${option.token}) / 0.07)`,
+              borderColor: `hsl(var(${option.token}) / 0.40)`,
+              boxShadow: `0 0 16px hsl(var(${option.token}) / 0.12)`,
+            }
             : undefined
         }
       >
@@ -152,9 +153,9 @@ const VisibilityCard = memo(
             style={
               isSelected
                 ? {
-                    background: `hsl(var(${option.token}) / 0.14)`,
-                    color: `hsl(var(${option.token}))`,
-                  }
+                  background: `hsl(var(${option.token}) / 0.14)`,
+                  color: `hsl(var(${option.token}))`,
+                }
                 : undefined
             }
           >
@@ -171,9 +172,9 @@ const VisibilityCard = memo(
             style={
               isSelected
                 ? {
-                    borderColor: `hsl(var(${option.token}))`,
-                    background: `hsl(var(${option.token}))`,
-                  }
+                  borderColor: `hsl(var(${option.token}))`,
+                  background: `hsl(var(${option.token}))`,
+                }
                 : undefined
             }
           >
@@ -212,6 +213,8 @@ VisibilityCard.displayName = "VisibilityCard";
 
 const UserPlaylistModal = memo<UserPlaylistModalProps>(
   ({ isOpen, onClose, onSubmit, isPending }) => {
+    const { createQuickPlaylistAsync, isCreating } = usePlaylistMutations();
+
     const {
       register,
       handleSubmit,
@@ -225,8 +228,8 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
 
     // FIX 10: single useMemo for derived loading state
     const isWorking = useMemo(
-      () => isPending || isSubmitting,
-      [isPending, isSubmitting],
+      () => isPending || isCreating || isSubmitting,
+      [isPending, isCreating, isSubmitting],
     );
 
     const currentVisibility = watch("visibility");
@@ -266,13 +269,26 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
 
     const onInternalSubmit = useCallback(
       async (data: FormValues) => {
-        await onSubmit?.({
-          title: data.title || undefined,
-          visibility: data.visibility,
-        });
-        onClose();
+        console.log("data", data);
+
+        try {
+          if (onSubmit) {
+            await onSubmit({
+              title: data.title || undefined,
+              visibility: data.visibility,
+            });
+          } else {
+            await createQuickPlaylistAsync({
+              title: data.title || undefined,
+              visibility: data.visibility,
+            });
+          }
+          onClose();
+        } catch (error) {
+          console.error("Failed to create playlist:", error);
+        }
       },
-      [onSubmit, onClose],
+      [onSubmit, onClose, createQuickPlaylistAsync],
     );
 
     // FIX 5: SSR guard
@@ -352,10 +368,10 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
                       id="upm-title"
                       className="text-base font-bold text-foreground leading-tight"
                     >
-                      New Playlist
+                      Tạo playlist
                     </h3>
                     <p className="text-track-meta mt-0.5">
-                      Start building your own sound.
+                      Bắt đầu xây dựng âm thanh của riêng bạn.
                     </p>
                   </div>
                 </div>
@@ -393,18 +409,18 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
                     <div className="space-y-2">
                       <label htmlFor="upm-title" className={LABEL_CLASS}>
                         <Type className="size-3" aria-hidden="true" />
-                        Name
+                        Tên Playlist
                       </label>
                       <Input
                         id="upm-title"
                         {...register("title")}
-                        placeholder="Leave blank to auto-generate…"
+                        placeholder="Để trống để tự động tạo…"
                         autoComplete="off"
                         // .input-base from design system
                         className="input-base h-11 text-sm"
                       />
                       <p className="text-track-meta text-muted-foreground/50 pl-0.5">
-                        System will generate a name if left empty.
+                        Hệ thống sẽ tự động tạo tên nếu để trống.
                       </p>
                     </div>
                   </SectionBlock>
@@ -417,7 +433,7 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
                   />
 
                   {/* ── Visibility ── */}
-                  <SectionBlock title="Visibility">
+                  <SectionBlock title="Khả năng hiển thị">
                     <div
                       role="radiogroup"
                       aria-label="Select playlist visibility"
@@ -439,7 +455,7 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
               {/* ══════ STICKY FOOTER ══════ */}
               <footer className="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-t border-border/40 shrink-0">
                 <p className="text-track-meta text-muted-foreground/45 hidden sm:block">
-                  You can edit this later.
+                  Bạn có thể chỉnh sửa sau.
                 </p>
 
                 <div className="flex items-center gap-2.5 w-full sm:w-auto">
@@ -450,7 +466,7 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
                     disabled={isWorking}
                     className="btn-ghost btn-sm flex-1 sm:flex-none rounded-xl h-10 px-5 disabled:opacity-40"
                   >
-                    Cancel
+                    Hủy
                   </button>
 
                   {/* Submit — .btn-primary from design system (gradient + glow) */}
@@ -466,12 +482,12 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
                           className="size-3.5 animate-[spin_0.7s_linear_infinite]"
                           aria-hidden="true"
                         />
-                        Creating…
+                        Đang tạo...
                       </>
                     ) : (
                       <>
                         <Plus className="size-3.5" aria-hidden="true" />
-                        Create Playlist
+                        Tạo playlist
                       </>
                     )}
                   </button>

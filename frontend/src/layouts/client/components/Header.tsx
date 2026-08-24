@@ -25,6 +25,7 @@ import {
   AudioWaveform,
   type LucideIcon,
   Settings,
+  TvMinimalPlay,
 } from "lucide-react";
 import {
   motion,
@@ -43,6 +44,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAppSelector } from "@/store/hooks";
 import { UserProfile } from "@/features/user";
 import AiHubButton from "@/features/ai/components/AiHubButton";
+import { useSearchSuggestions } from "@/features/search/hooks/useSearch";
+import SuggestionDropdown from "@/features/search/components/SuggestionDropdown";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -79,9 +82,15 @@ const NAV_ITEMS: readonly NavItemDef[] = [
   },
   {
     label: "Dành cho tôi",
-    shortLabel: "For Me",
+    shortLabel: "FM",
     icon: AudioWaveform,
     path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.FOR_ME}`,
+  },
+  {
+    label: "Shorts",
+    shortLabel: "S",
+    icon: TvMinimalPlay,
+    path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.SHORTS}`,
   },
   {
     label: "Nghệ sĩ",
@@ -358,34 +367,134 @@ const DesktopSearchBar = memo<{
   value: string;
   onChange: (v: string) => void;
   onSubmit: (e: React.FormEvent) => void;
-}>(({ value, onChange, onSubmit }) => (
-  <form
-    onSubmit={onSubmit}
-    role="search"
-    aria-label="Search music"
-    className="relative hidden lg:flex items-center group w-[220px] xl:w-[280px]"
-  >
-    <Search
-      className="absolute left-3.5 size-4 text-muted-foreground/60 group-focus-within:text-primary transition-colors z-10 pointer-events-none"
-      aria-hidden="true"
-    />
-    <Input
-      type="search"
-      placeholder="Tìm kiếm nhạc..."
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label="Search"
-      className={cn(
-        "pl-10 pr-4 h-9 rounded-full w-full",
-        "bg-muted/60 border-border/50",
-        "text-[13px] font-medium placeholder:text-muted-foreground/50",
-        "focus-visible:bg-background focus-visible:border-primary/40",
-        "focus-visible:ring-2 focus-visible:ring-primary/15",
-        "transition-all duration-200",
-      )}
-    />
-  </form>
-));
+}>(({ value, onChange, onSubmit }) => {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const navigate = useNavigate();
+
+  const { data: suggestionsData, isFetching: isSuggesting } = useSearchSuggestions(value);
+  const suggestions = suggestionsData ?? [];
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(target) &&
+        formRef.current && !formRef.current.contains(target)
+      ) {
+        setShowSuggestions(false);
+        setSuggestionIndex(-1);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSuggestionSelect = useCallback(
+    (item: { label: string; slug: string; type: string }) => {
+      onChange(item.label);
+      setShowSuggestions(false);
+      setSuggestionIndex(-1);
+      if (item.type === "artist") {
+        navigate(`/artists/${item.slug}`);
+      } else {
+        navigate(`/search?q=${encodeURIComponent(item.label)}`);
+      }
+    },
+    [onChange, navigate],
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showSuggestions && suggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSuggestionIndex((i) => Math.min(i + 1, suggestions.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSuggestionIndex((i) => Math.max(i - 1, -1));
+        return;
+      }
+      if (e.key === "Enter" && suggestionIndex >= 0) {
+        e.preventDefault();
+        handleSuggestionSelect(suggestions[suggestionIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        setShowSuggestions(false);
+        setSuggestionIndex(-1);
+        return;
+      }
+    }
+  };
+
+  return (
+    <form
+      ref={formRef}
+      onSubmit={(e) => {
+        onSubmit(e);
+        setShowSuggestions(false);
+      }}
+      role="search"
+      aria-label="Search music"
+      className="relative hidden lg:flex items-center group w-[220px] xl:w-[280px]"
+    >
+      <Search
+        className="absolute left-3.5 size-4 text-muted-foreground/60 group-focus-within:text-primary transition-colors z-10 pointer-events-none"
+        aria-hidden="true"
+      />
+      <Input
+        type="search"
+        placeholder="Tìm kiếm nhạc..."
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setSuggestionIndex(-1);
+          setShowSuggestions(e.target.value.trim().length >= 2);
+        }}
+        onFocus={() => {
+          if (value.trim().length >= 2) setShowSuggestions(true);
+        }}
+        onKeyDown={handleKeyDown}
+        aria-label="Search"
+        className={cn(
+          "pl-10 pr-4 h-9 rounded-full w-full",
+          "bg-muted/60 border-border/50",
+          "text-[13px] font-medium placeholder:text-muted-foreground/50",
+          "focus-visible:bg-background focus-visible:border-primary/40",
+          "focus-visible:ring-2 focus-visible:ring-primary/15",
+          "transition-all duration-200",
+        )}
+      />
+
+      {/* Autocomplete dropdown */}
+      <AnimatePresence>
+        {showSuggestions && value.trim().length >= 2 && (
+          <motion.div
+            ref={dropdownRef}
+            key="autocomplete-dropdown"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="absolute top-[calc(100%+6px)] left-0 w-[120%] xl:w-full z-50"
+          >
+            <SuggestionDropdown
+              suggestions={suggestions}
+              isLoading={isSuggesting && suggestions.length === 0}
+              query={value}
+              onSelect={handleSuggestionSelect}
+              activeIndex={suggestionIndex}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </form>
+  );
+});
 DesktopSearchBar.displayName = "DesktopSearchBar";
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -68,6 +68,11 @@ const sidebarGroups = [
         path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.VIDEO_MOOD}`,
         icon: TvMinimalPlay,
       },
+      {
+        label: "Shorts",
+        path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.SHORTS}`,
+        icon: TvMinimalPlay, // Or some other icon like PlaySquare
+      },
     ],
   },
   {

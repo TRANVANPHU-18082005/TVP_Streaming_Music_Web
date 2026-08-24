@@ -60,14 +60,11 @@ const playlistBaseSchema = z.object({
     .max(200, "Mô tả không được vượt quá 200 ký tự")
     .optional(),
 
-  publishAt: z.preprocess(
-    emptyToUndefined,
-    z.string().optional().refine((val) => {
-      if (!val) return true;
-      const date = new Date(val);
-      return !isNaN(date.getTime()) && date > new Date(Date.now() - 5000);
-    }, "Ngày phát hành không được ở quá khứ"),
-  ),
+  publishAt: z
+    .string()
+    .trim()
+    .optional(),
+
 
   tracks: formDataArrayHelper(objectIdSchema).optional(),
   tags: tagsSchema.default([]),

@@ -66,6 +66,12 @@ const trackApi = {
   // 3. CHARTS (Bảng xếp hạng)
   // ==========================================
 
+  // Lấy 1 bài hát ngẫu nhiên
+  getRandomTrack: async () => {
+    const { data } = await api.get<ApiResponse<ITrack>>("/tracks/random");
+    return data;
+  },
+
   // Top 100 realtime chart
   getRealtimeChart: async () => {
     const { data } = await api.get<IChartResponse>("/tracks/charts/realtime");
@@ -174,10 +180,25 @@ const trackApi = {
     return data;
   },
 
+  bulkRetryAi: async (trackIds: string[]) => {
+    const { data } = await api.post<ApiResponse<any>>("/tracks/bulk/retry/ai", {
+      trackIds,
+    });
+    return data;
+  },
+
   bulkRetryFull: async (trackIds: string[]) => {
     const { data } = await api.post<ApiResponse<any>>(
       "/tracks/bulk/retry/full",
       { trackIds },
+    );
+    return data;
+  },
+
+  bulkRetryCustom: async (trackIds: string[], tasks: string[]) => {
+    const { data } = await api.post<ApiResponse<any>>(
+      "/tracks/bulk/retry/custom",
+      { trackIds, tasks },
     );
     return data;
   },
@@ -239,6 +260,14 @@ const trackApi = {
   retryMood: async (id: string) => {
     const { data } = await api.post<ApiResponse<ITrack>>(
       `/tracks/${id}/retry/mood`,
+      {},
+    );
+    return data;
+  },
+
+  retryAi: async (id: string) => {
+    const { data } = await api.post<ApiResponse<ITrack>>(
+      `/tracks/${id}/retry-ai`,
       {},
     );
     return data;

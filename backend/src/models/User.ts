@@ -14,7 +14,7 @@ export interface IUser extends Document {
   isActive: boolean;
   isVerified: boolean;
   mustChangePassword: boolean;
-  lastLogin?: Date; // 🔥 Thêm cái này để track user active
+  lastLogin?: Date;
 
   // Auth
   verificationCode?: string;
@@ -26,13 +26,7 @@ export interface IUser extends Document {
 
   // Relations
   artistProfile?: mongoose.Types.ObjectId;
-
-  // Liked Tracks thì OK vì user hiếm khi like quá 10.000 bài (vẫn nhẹ chán)
-  likedTracks: mongoose.Types.ObjectId[];
   lastOtpSentAt: Date;
-
-  // ❌ ĐÃ XÓA followers & following (Chuyển sang model Follow)
-
   matchPassword(enteredPass: string): Promise<boolean>;
 }
 
@@ -75,22 +69,30 @@ const UserSchema = new Schema<IUser>(
     verificationCodeExpires: { type: Date, select: false },
     lastOtpSentAt: { type: Date },
 
+    // Auth Provider (Deprecated: Dùng UserIdentity collection thay thế)
     authProvider: {
       type: String,
       enum: ["local", "google", "facebook"],
       default: "local",
     },
-    googleId: { type: String, index: true }, // Index để tìm user Google nhanh
-    facebookId: { type: String, index: true }, // Index để tìm user Facebook nhanh
+    googleId: { type: String, index: true }, // Deprecated: chuyển sang UserIdentity
+    facebookId: { type: String, index: true }, // Deprecated: chuyển sang UserIdentity
 
     artistProfile: { type: Schema.Types.ObjectId, ref: "Artist" },
-    likedTracks: [{ type: Schema.Types.ObjectId, ref: "Track" }],
   },
-  { timestamps: true },
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } },
 );
 
+// Virtual Relation: Lấy danh sách Identities của User
+UserSchema.virtual("identities", {
+  ref: "UserIdentity",
+  localField: "_id",
+  foreignField: "user_id",
+});
+
+
 // --- MIDDLEWARES ---
-UserSchema.pre("save", async function () {
+UserSchema.pre("save", async function (this: any) {
   if (!this.isModified("password")) return;
 
   const salt = await bcrypt.genSalt(10);

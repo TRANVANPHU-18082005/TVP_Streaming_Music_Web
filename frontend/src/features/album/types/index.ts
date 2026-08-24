@@ -8,7 +8,7 @@ export interface IAlbum {
   description?: string;
   coverImage: string;
   themeColor: string;
-  artist: IArtist;
+  artist: IArtist; // populated object hoặc raw ObjectId tuỳ context
   releaseDate: string;
   releaseYear: number;
   tags?: string[];

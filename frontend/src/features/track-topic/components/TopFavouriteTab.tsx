@@ -20,12 +20,11 @@ export function TopFavouriteTab({
   const { data, isLoading, error, refetch } = useTopFavouriteTracksInfinite(
     APP_CONFIG.PAGINATION_LIMIT,
   );
-
   const tracks = useMemo<ITrack[]>(
     () => data?.allTracks ?? [],
     [data?.allTracks],
   );
-  const totalItems = data?.totalItems ?? 0;
+  const totalItems = data?.meta.pageSize ?? 0;
 
   return (
     <TrackTabPanel

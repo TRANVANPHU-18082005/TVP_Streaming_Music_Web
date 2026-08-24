@@ -52,10 +52,19 @@ export const useTrackMutations = () => {
   const retryFullMutation = useMutation({
     mutationFn: (id: string) => trackApi.retryFull(id),
     onSuccess: () => {
-      toast.success("Đã gửi lệnh xử lý lại toàn bộ!");
+      toast.success("Đã gửi lệnh xử lý lại toàn bộ bài hát");
       invalidateList();
     },
-    onError: (err) => handleError(err, "Lỗi khi thử lại toàn bộ"),
+    onError: (err) => handleError(err, "Lỗi gửi lệnh retry full"),
+  });
+
+  const retryAiMutation = useMutation({
+    mutationFn: (id: string) => trackApi.retryAi(id),
+    onSuccess: () => {
+      toast.success("Đã gửi lệnh AI Analysis cho bài hát");
+      invalidateList();
+    },
+    onError: (err) => handleError(err, "Lỗi gửi lệnh AI Analysis"),
   });
 
   // Chỉ xử lý lại HLS (Âm thanh)
@@ -137,22 +146,6 @@ export const useTrackMutations = () => {
     onError: (err) => handleError(err, "Lỗi cập nhật trạng thái"),
   });
 
-  const bulkChangeStatusMutation = useMutation({
-    mutationFn: async ({
-      ids,
-      data,
-    }: {
-      ids: string[];
-      data: TrackChangeStatusFormValues;
-    }) => {
-      await Promise.all(ids.map((id) => trackApi.changeStatus(id, data)));
-    },
-    onSuccess: (_, vars) => {
-      toast.success(`Đã cập nhật trạng thái cho ${vars.ids.length} bài hát`);
-      invalidateList();
-    },
-    onError: (err) => handleError(err, "Lỗi cập nhật trạng thái hàng loạt"),
-  });
 
   // BULK RETRY MUTATIONS (Admin)
   const bulkRetryTranscodeMutation = useMutation({
@@ -200,6 +193,25 @@ export const useTrackMutations = () => {
     onError: (err) => handleError(err, "Lỗi gửi lệnh retry full"),
   });
 
+  const bulkRetryAiMutation = useMutation({
+    mutationFn: (ids: string[]) => trackApi.bulkRetryAi(ids),
+    onSuccess: () => {
+      toast.success("Đã gửi lệnh AI Analysis cho các bài hát đã chọn");
+      invalidateList();
+    },
+    onError: (err) => handleError(err, "Lỗi gửi lệnh AI Analysis"),
+  });
+
+  const bulkRetryCustomMutation = useMutation({
+    mutationFn: ({ ids, tasks }: { ids: string[]; tasks: string[] }) =>
+      trackApi.bulkRetryCustom(ids, tasks),
+    onSuccess: () => {
+      toast.success("Đã gửi lệnh Xử lý tuỳ chọn cho các bài hát đã chọn");
+      invalidateList();
+    },
+    onError: (err) => handleError(err, "Lỗi gửi lệnh Xử lý tuỳ chọn"),
+  });
+
   return {
     // Async Wrappers: Giúp Component gọi hàm trực tiếp với ID
     createTrackAsync: createMutation.mutateAsync,
@@ -223,11 +235,7 @@ export const useTrackMutations = () => {
       options?: Parameters<typeof changeStatusMutation.mutate>[1],
     ) => changeStatusMutation.mutate({ id, data }, options),
 
-    bulkChangeTrackStatus: (
-      ids: string[],
-      data: TrackChangeStatusFormValues,
-      options?: Parameters<typeof bulkChangeStatusMutation.mutate>[1],
-    ) => bulkChangeStatusMutation.mutate({ ids, data }, options),
+
 
     // Các lệnh Retry đa năng
     retryFull: (
@@ -250,6 +258,10 @@ export const useTrackMutations = () => {
       id: string,
       options?: Parameters<typeof retryMoodMutation.mutate>[1],
     ) => retryMoodMutation.mutate(id, options),
+    retryAi: (
+      id: string,
+      options?: Parameters<typeof retryAiMutation.mutate>[1],
+    ) => retryAiMutation.mutate(id, options),
 
     bulkUpdateTrack: bulkUpdateMutation.mutate,
 
@@ -274,6 +286,15 @@ export const useTrackMutations = () => {
       ids: string[],
       options?: Parameters<typeof bulkRetryFullMutation.mutate>[1],
     ) => bulkRetryFullMutation.mutate(ids, options),
+    bulkRetryAi: (
+      ids: string[],
+      options?: Parameters<typeof bulkRetryAiMutation.mutate>[1],
+    ) => bulkRetryAiMutation.mutate(ids, options),
+    bulkRetryCustom: (
+      ids: string[],
+      tasks: string[],
+      options?: Parameters<typeof bulkRetryCustomMutation.mutate>[1],
+    ) => bulkRetryCustomMutation.mutate({ ids, tasks }, options),
 
     // Trạng thái Loading tổng hợp
     isMutating:
@@ -287,12 +308,14 @@ export const useTrackMutations = () => {
       retryMoodMutation.isPending ||
       bulkUpdateMutation.isPending ||
       bulkDeleteMutation.isPending ||
-      bulkChangeStatusMutation.isPending ||
       bulkRetryTranscodeMutation.isPending ||
       bulkRetryLyricsMutation.isPending ||
       bulkRetryKaraokeMutation.isPending ||
       bulkRetryMoodMutation.isPending ||
-      bulkRetryFullMutation.isPending,
+      bulkRetryFullMutation.isPending ||
+      bulkRetryAiMutation.isPending ||
+      bulkRetryCustomMutation.isPending ||
+      retryAiMutation.isPending,
 
     // Trạng thái Loading cụ thể cho từng nút bấm [cite: 1]
     isUploading: createMutation.isPending,

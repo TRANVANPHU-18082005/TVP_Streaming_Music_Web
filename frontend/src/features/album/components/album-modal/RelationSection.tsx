@@ -33,9 +33,10 @@ const RelationSection: React.FC<RelationSectionProps> = ({ form }) => {
                 singleSelect
                 value={field.value ? [field.value] : []}
                 onChange={(ids) => {
-                  field.onChange(ids[0] || "");
-                  // THÊM DÒNG NÀY ĐỂ ÉP DIRTY:
-                  form.setValue("artist", ids[0] || "", { shouldDirty: true });
+                  form.setValue("artist", ids[0] || "", {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  });
                 }}
                 error={fieldState.error?.message}
               />

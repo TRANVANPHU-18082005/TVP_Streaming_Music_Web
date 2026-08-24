@@ -13,6 +13,8 @@
 
 import mongoose, { Types } from "mongoose";
 import Track from "../models/Track";
+import Album from "../models/Album";
+import Playlist from "../models/Playlist";
 import Like from "../models/Like";
 import PlayLog from "../models/PlayLog";
 import { cacheRedis } from "../config/redis";
@@ -79,6 +81,7 @@ interface TrackDoc {
   playCount?: number;
   releaseDate?: Date;
   moodVideo?: any;
+  aiMetadata?: any;
   score?: number; // computed field, chỉ có sau re-scoring
 }
 
@@ -252,15 +255,31 @@ class RecommendationService {
       await PlayLog.aggregate([
         { $match: { userId: userObjId } },
         {
+          $addFields: {
+            daysAgo: {
+              $divide: [
+                { $subtract: [new Date(), "$listenedAt"] },
+                1000 * 60 * 60 * 24,
+              ],
+            },
+          },
+        },
+        {
+          $addFields: {
+            // Decay lambda = 0.1: weight = exp(-0.1 * daysAgo)
+            decayWeight: { $exp: { $multiply: [-0.1, "$daysAgo"] } },
+          },
+        },
+        {
           $group: {
             _id: "$trackId",
-            playCount: { $sum: 1 },
+            score: { $sum: "$decayWeight" },
           },
         },
         {
           $project: {
             trackId: "$_id",
-            score: "$playCount", // score = số lần nghe
+            score: 1,
             _id: 0,
           },
         },
@@ -300,13 +319,17 @@ class RecommendationService {
       _id: Types.ObjectId;
       genres: Types.ObjectId[];
       artist: Types.ObjectId;
+      aiMetadata?: any;
     }> = await Track.find({ _id: { $in: interactedIds }, isDeleted: false })
-      .select("genres artist")
+      .select("genres artist aiMetadata")
       .lean();
 
-    // ── Step C: Tổng hợp top genres & top artists (có trọng số) ──────────────
+    // ── Step C: Tổng hợp top genres & top artists & top moods ──────────────
     const genreWeight = new Map<string, number>();
     const artistWeight = new Map<string, number>();
+    const moodWeight = new Map<string, number>();
+    let totalEnergy = 0;
+    let energyWeightSum = 0;
 
     for (const track of interactedTracks) {
       const weight = scoreMap.get(track._id.toString()) ?? 1;
@@ -318,15 +341,27 @@ class RecommendationService {
 
       const aid = track.artist.toString();
       artistWeight.set(aid, (artistWeight.get(aid) ?? 0) + weight);
+
+      for (const mood of track.aiMetadata?.moods ?? []) {
+        moodWeight.set(mood, (moodWeight.get(mood) ?? 0) + weight);
+      }
+
+      if (typeof track.aiMetadata?.energy === "number") {
+        totalEnergy += track.aiMetadata.energy * weight;
+        energyWeightSum += weight;
+      }
     }
 
-    // Lấy top 5 genres & top 3 artists (đủ để candidate đa dạng)
+    const avgEnergy = energyWeightSum > 0 ? totalEnergy / energyWeightSum : 0.5;
+
+    // Lấy top 5 genres, top 3 artists, top 5 moods
     const topGenreIds = this.topEntries(genreWeight, 5).map(
       (id) => new Types.ObjectId(id),
     );
     const topArtistIds = this.topEntries(artistWeight, 3).map(
       (id) => new Types.ObjectId(id),
     );
+    const topMoods = this.topEntries(moodWeight, 5);
 
     // ── Step D: Tìm candidates ────────────────────────────────────────────────
     // Loại bỏ:
@@ -353,6 +388,7 @@ class RecommendationService {
         $or: [
           { genres: { $in: topGenreIds } },
           { artist: { $in: topArtistIds } },
+          { "aiMetadata.moods": { $in: topMoods } },
         ],
       })
         .select(TRACK_SELECT)
@@ -362,12 +398,16 @@ class RecommendationService {
         .lean(),
     );
 
-    // ── Step E: Re-score candidates theo mức độ overlap genre/artist ─────────
+    // ── Step E: Re-score candidates theo mức độ overlap genre/artist/mood ─────────
     const genreWeightTotal = [...genreWeight.values()].reduce(
       (a, b) => a + b,
       0,
     );
     const artistWeightTotal = [...artistWeight.values()].reduce(
+      (a, b) => a + b,
+      0,
+    );
+    const moodWeightTotal = [...moodWeight.values()].reduce(
       (a, b) => a + b,
       0,
     );
@@ -391,6 +431,32 @@ class RecommendationService {
       const artistW = artistWeight.get(aid) ?? 0;
       relevance +=
         artistWeightTotal > 0 ? (artistW / artistWeightTotal) * 0.5 : 0;
+
+      // Mood match bonus
+      for (const mood of track.aiMetadata?.moods ?? []) {
+        const w = moodWeight.get(mood) ?? 0;
+        relevance += moodWeightTotal > 0 ? (w / moodWeightTotal) * 0.4 : 0;
+      }
+
+      // Energy similarity bonus
+      if (typeof track.aiMetadata?.energy === 'number' && energyWeightSum > 0) {
+        const energyDiff = Math.abs(track.aiMetadata.energy - avgEnergy);
+        relevance += (1 - energyDiff) * 0.2; // Bonus up to 0.2 for close energy
+      }
+
+      // Context time-aware bonus
+      const currentHour = new Date().getHours();
+      if (track.aiMetadata?.contexts?.length) {
+        if (currentHour >= 22 || currentHour < 5) {
+          if (track.aiMetadata.contexts.includes('sleep') || track.aiMetadata.contexts.includes('chill')) {
+            relevance += 0.15;
+          }
+        } else if (currentHour >= 5 && currentHour < 9) {
+          if (track.aiMetadata.contexts.includes('morning') || track.aiMetadata.contexts.includes('energetic')) {
+            relevance += 0.15;
+          }
+        }
+      }
 
       // Popularity boost (log scale để tránh bias quá lớn)
       const popularityBonus = Math.log1p(track.playCount ?? 0) * 0.01;
@@ -985,6 +1051,252 @@ class RecommendationService {
         },
       };
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 3. GET RECOMMENDED ALBUMS
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async getRecommendedAlbums(userId: string, limit: number): Promise<any[]> {
+    const cacheKey = `recommend:albums:${userId}:limit${limit}`;
+    try {
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      if (cached) return JSON.parse(cached as string);
+    } catch {}
+
+    const userObjId = new mongoose.Types.ObjectId(userId);
+
+    const playLogScores = await PlayLog.aggregate([
+      { $match: { userId: userObjId } },
+      { $group: { _id: "$trackId", score: { $sum: 1 } } },
+    ]);
+    const likedTracks = await Like.find({
+      userId: userObjId,
+      targetType: "track",
+    })
+      .select("targetId")
+      .lean();
+
+    const scoreMap = new Map<string, number>();
+    for (const { _id, score } of playLogScores)
+      scoreMap.set(_id.toString(), score);
+    for (const { targetId } of likedTracks)
+      scoreMap.set(
+        targetId.toString(),
+        (scoreMap.get(targetId.toString()) ?? 0) + LIKE_WEIGHT,
+      );
+
+    const interactedIds = [...scoreMap.keys()].map(
+      (id) => new mongoose.Types.ObjectId(id),
+    );
+    const interactedTracks = await Track.find({
+      _id: { $in: interactedIds },
+      isDeleted: false,
+    })
+      .select("genres artist")
+      .lean();
+
+    const artistWeight = new Map<string, number>();
+
+    for (const track of interactedTracks) {
+      const weight = scoreMap.get(track._id.toString()) ?? 1;
+      if (track.artist) {
+        const aid = track.artist.toString();
+        artistWeight.set(aid, (artistWeight.get(aid) ?? 0) + weight);
+      }
+    }
+
+    const topArtistIds = this.topEntries(artistWeight, 5).map(
+      (id) => new mongoose.Types.ObjectId(id),
+    );
+
+    const likedAlbums = await Like.find({
+      userId: userObjId,
+      targetType: "album",
+    })
+      .select("targetId")
+      .lean();
+    const excludeIds = likedAlbums.map((l) => l.targetId);
+
+    let candidates = await Album.find({
+      isDeleted: false,
+      isPublic: true,
+      _id: { $nin: excludeIds },
+      artist: { $in: topArtistIds },
+    })
+      .sort({ playCount: -1, releaseDate: -1 })
+      .limit(limit * 2)
+      .populate("artist", "name slug avatar")
+      .lean();
+
+    if (candidates.length < limit) {
+      const needed = limit - candidates.length;
+      const extra = await Album.find({
+        isDeleted: false,
+        isPublic: true,
+        _id: { $nin: [...excludeIds, ...candidates.map((c) => c._id)] },
+      })
+        .sort({ playCount: -1, releaseDate: -1 })
+        .limit(needed)
+        .populate("artist", "name slug avatar")
+        .lean();
+      candidates = [...candidates, ...extra];
+    }
+
+    const result = shuffleArray(candidates).slice(0, limit);
+    const ttl = CACHE_TTL_BASE + Math.floor(Math.random() * CACHE_TTL_JITTER);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
+    ).catch(() => {});
+    return result;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 4. GET RECOMMENDED PLAYLISTS
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async getRecommendedPlaylists(userId: string, limit: number): Promise<any[]> {
+    const cacheKey = `recommend:playlists:${userId}:limit${limit}`;
+    try {
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      if (cached) return JSON.parse(cached as string);
+    } catch {}
+
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const likedPlaylists = await Like.find({
+      userId: userObjId,
+      targetType: "playlist",
+    })
+      .select("targetId")
+      .lean();
+    const excludeIds = likedPlaylists.map((l) => l.targetId);
+
+    const result = await Playlist.find({
+      visibility: "public",
+      isDeleted: false,
+      user: { $ne: userObjId },
+      _id: { $nin: excludeIds },
+    })
+      .sort({ playCount: -1 })
+      .limit(limit)
+      .populate("user", "username displayName avatar")
+      .lean();
+
+    const ttl = CACHE_TTL_BASE + Math.floor(Math.random() * CACHE_TTL_JITTER);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
+    ).catch(() => {});
+    return result;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 5. TRENDING ALBUMS & PLAYLISTS
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async getTrendingAlbums(limit: number): Promise<any[]> {
+    const cacheKey = `chart:trending:albums:limit${limit}`;
+    try {
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      if (cached) return JSON.parse(cached as string);
+    } catch {}
+
+    const result = await Album.find({ isPublic: true, isDeleted: false })
+      .sort({ playCount: -1, releaseDate: -1 })
+      .limit(limit)
+      .populate("artist", "name slug avatar")
+      .lean();
+
+    const ttl = 3600;
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
+    ).catch(() => {});
+    return result;
+  }
+
+  async getTrendingPlaylists(limit: number): Promise<any[]> {
+    const cacheKey = `chart:trending:playlists:limit${limit}`;
+    try {
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      if (cached) return JSON.parse(cached as string);
+    } catch {}
+
+    const result = await Playlist.find({
+      visibility: "public",
+      isDeleted: false,
+    })
+      .sort({ playCount: -1 })
+      .limit(limit)
+      .populate("user", "username displayName avatar")
+      .lean();
+
+    const ttl = 3600;
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(result), "EX", ttl),
+    ).catch(() => {});
+    return result;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 6. GET FOR YOU FEED (70% Tracks, 15% Albums, 15% Playlists)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async getForYouFeed(
+    userId: string | undefined | null,
+    limit: number = 20,
+  ): Promise<any[]> {
+    const resolvedUserId = userId ?? "guest";
+    const cacheKey = `recommend:foryou:${resolvedUserId}:limit${limit}`;
+    try {
+      const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
+      if (cached) return JSON.parse(cached as string);
+    } catch {}
+
+    const numTracks = Math.ceil(limit * 0.7);
+    const numAlbums = Math.floor(limit * 0.15);
+    const numPlaylists = limit - numTracks - numAlbums;
+
+    const [tracks, albums, playlists] = await Promise.all([
+      this.getRecommendedTracks(resolvedUserId, { limit: numTracks }),
+      userId
+        ? this.getRecommendedAlbums(userId, numAlbums)
+        : this.getTrendingAlbums(numAlbums),
+      userId
+        ? this.getRecommendedPlaylists(userId, numPlaylists)
+        : this.getTrendingPlaylists(numPlaylists),
+    ]);
+
+    const feed: any[] = [];
+
+    tracks.forEach((t) =>
+      feed.push({
+        type: "track",
+        data: t,
+        reason: "Dựa trên bài hát bạn đã nghe",
+      }),
+    );
+    albums.forEach((a) =>
+      feed.push({
+        type: "album",
+        data: a,
+        reason: "Album gợi ý cho bạn",
+      }),
+    );
+    playlists.forEach((p) =>
+      feed.push({
+        type: "playlist",
+        data: p,
+        reason: "Playlist nổi bật",
+      }),
+    );
+
+    const shuffledFeed = shuffleArray(feed);
+
+    const ttl = CACHE_TTL_BASE + Math.floor(Math.random() * CACHE_TTL_JITTER);
+    withCacheTimeout(() =>
+      cacheRedis.set(cacheKey, JSON.stringify(shuffledFeed), "EX", ttl),
+    ).catch(() => {});
+
+    return shuffledFeed;
   }
 }
 

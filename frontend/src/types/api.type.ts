@@ -8,12 +8,12 @@ export interface ApiResponse<T> {
 export interface ApiErrorResponse {
   response?: {
     data?: {
+      code: number; // HTTP status code
+      errors?: Array<{ field: string; message: string }>;
       success: boolean;
       message: string;
       errorCode?: string; // VD: 'UNVERIFIED_ACCOUNT'
-      data?: {
-        email?: string; // Trường hợp trả về email khi lỗi
-      };
+      stack?: string; // Chỉ có trong môi trường dev
     };
   };
 }

@@ -88,7 +88,34 @@ export const AmbientBackground = memo(
     );
   },
 );
+export const AnimatedBackground = () => (
+  <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#07070a] via-[#0b1020] to-[#040405]">
 
+    {/* Ánh sáng trung tâm */}
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.08),transparent_65%)]" />
+
+    {/* Blob trên phải */}
+    <div className="absolute -top-20 -right-20 w-[60vw] h-[60vw] md:w-[32vw] md:h-[32vw] rounded-full bg-indigo-500/12 blur-[120px] animate-blob" />
+
+    {/* Blob dưới trái */}
+    <div className="absolute -bottom-20 -left-20 w-[60vw] h-[60vw] md:w-[32vw] md:h-[32vw] rounded-full bg-purple-500/10 blur-[120px] animate-blob animation-delay-2000" />
+
+    {/* Blob nhỏ giữa */}
+    <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[35vw] h-[35vw] rounded-full bg-pink-400/6 blur-[140px] animate-pulse" />
+
+    {/* Noise */}
+    <div
+      className="absolute inset-0 opacity-[0.03] pointer-events-none"
+      style={{
+        backgroundImage:
+          "radial-gradient(rgba(255,255,255,0.15) 0.8px, transparent 0.8px)",
+        backgroundSize: "8px 8px",
+      }}
+    />
+    {/* Vignette tạo chiều sâu */}
+    <div className="absolute inset-0 bg-[radial-gradient(circle,transparent_45%,rgba(0,0,0,0.45)_100%)]" />
+  </div>
+);
 AmbientBackground.displayName = "AmbientBackground";
 
 // ─────────────────────────────────────────────────────────────────────────────

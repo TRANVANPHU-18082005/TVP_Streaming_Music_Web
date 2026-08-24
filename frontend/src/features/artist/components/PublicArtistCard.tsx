@@ -15,6 +15,7 @@ import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { FollowButton } from "@/features/interaction";
 import { IArtist } from "../types";
 import { useArtistPlayback } from "@/features/player/hooks/useArtistPlayback";
+import { useIsMobile } from "@/components/ui/use-mobile";
 import {
   PremiumMusicVisualizer,
   WaveformBars,
@@ -66,10 +67,11 @@ interface ArtistImageProps {
   isPlaying: boolean;
   isFetching: boolean;
   onPlay: (e: React.MouseEvent) => void;
+  isMobile: boolean;
 }
 
 const ArtistImage = memo(
-  ({ src, alt, isActive, isPlaying, isFetching, onPlay }: ArtistImageProps) => (
+  ({ src, alt, isActive, isPlaying, isFetching, onPlay, isMobile }: ArtistImageProps) => (
     <div className="relative aspect-square overflow-hidden bg-muted shrink-0">
       {/* Cover image — mirrors PublicAlbumCard: blur when active+playing */}
       <ImageWithFallback
@@ -111,10 +113,13 @@ const ArtistImage = memo(
       {/* ── Play / Pause button — mirrors PublicAlbumCard ── */}
       <div
         className={cn(
-          "absolute right-3 bottom-3 z-20 transition-all duration-300 ease-out",
+          "absolute right-2 bottom-4 sm:bottom-3 md:right-3 z-20 transition-all duration-300 ease-out",
           isActive || isFetching
             ? "translate-y-0 opacity-100 scale-100"
-            : "translate-y-3 opacity-0 scale-90 group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-100",
+            : cn(
+                "translate-y-3 opacity-0 scale-90",
+                isMobile ? "hidden" : "group-hover:translate-y-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 group-hover:scale-100"
+              )
         )}
       >
         <button
@@ -262,6 +267,7 @@ const PublicArtistCard: React.FC<PublicArtistCardProps> = ({
   className,
 }) => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const {
     togglePlayArtist,
@@ -295,7 +301,7 @@ const PublicArtistCard: React.FC<PublicArtistCardProps> = ({
 
   return (
     <motion.article
-      {...CARD_HOVER}
+      {...(isMobile ? {} : CARD_HOVER)}
       onClick={handleNavigate}
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -320,6 +326,7 @@ const PublicArtistCard: React.FC<PublicArtistCardProps> = ({
         isPlaying={isThisArtistPlaying}
         isFetching={isFetching}
         onPlay={handlePlay}
+        isMobile={isMobile}
       />
       <ArtistInfo
         artist={artist}

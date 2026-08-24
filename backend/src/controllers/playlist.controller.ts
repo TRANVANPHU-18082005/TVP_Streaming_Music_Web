@@ -202,9 +202,9 @@ export const editMyPlaylist = catchAsync(
       req.body, // title và visibility (nếu có)
     );
 
-    res.status(httpStatus.CREATED).json({
+    res.status(httpStatus.OK).json({
       success: true,
-      message: "Đã tạo danh sách phát mới",
+      message: "Đã cập nhật danh sách phát thành công",
       data: result,
     });
   },
@@ -220,7 +220,7 @@ export const togglePlaylistPrivacy = catchAsync(
 
     res.status(httpStatus.OK).json({
       success: true,
-      message: `Đã chuyển chế độ `,
+      message: `Đã chuyển danh sách phát sang chế độ ${result?.visibility === 'public' ? 'công khai' : result?.visibility === 'private' ? 'riêng tư' : 'không công khai'}`,
       data: { visibility: result?.visibility },
     });
   },

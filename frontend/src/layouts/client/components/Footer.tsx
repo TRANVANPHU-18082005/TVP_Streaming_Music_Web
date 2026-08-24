@@ -37,9 +37,8 @@ export function Footer() {
             </Link>
 
             <p className="text-muted-foreground text-sm leading-relaxed max-w-sm">
-              The ultimate platform for music lovers. Stream high-quality audio,
-              discover new artists, and connect with a global community of
-              enthusiasts.
+              Trang web nghe nhạc trực tuyến chất lượng cao. Khám phá âm
+              nhạc mới, nghệ sĩ tài năng và kết nối với cộng đồng yêu nhạc.
             </p>
 
             <div className="flex items-center gap-2">
@@ -60,15 +59,15 @@ export function Footer() {
           {/* 2. LINKS COLUMNS (2 + 2 cols) */}
           <div className="lg:col-span-2 space-y-6">
             <h4 className="font-bold text-base text-foreground tracking-wide">
-              Discover
+              Khám phá
             </h4>
             <ul className="space-y-3.5 text-sm text-muted-foreground">
               {[
-                { name: "Featured Albums", path: "/albums" },
-                { name: "Featured Playlists", path: "/playlists" },
-                { name: "Featured Artists", path: "/artists" },
-                { name: "Trending Genres", path: "/genres" },
-                { name: "Top Charts", path: "/chart-top" },
+                { name: "Album nổi bật", path: "/albums" },
+                { name: "Playlist nổi bật", path: "/playlists" },
+                { name: "Nghệ sĩ", path: "/artists" },
+                { name: "Thể loại", path: "/genres" },
+                { name: "Bảng xếp hạng", path: "/chart-top" },
               ].map((item) => (
                 <li key={item.name}>
                   <Link
@@ -84,15 +83,15 @@ export function Footer() {
 
           <div className="lg:col-span-2 space-y-6">
             <h4 className="font-bold text-base text-foreground tracking-wide">
-              Support
+              Hỗ trợ
             </h4>
             <ul className="space-y-3.5 text-sm text-muted-foreground">
               {[
-                { name: "Help Center", path: "/help" },
-                { name: "Contact Us", path: "/contact" },
-                { name: "Privacy Policy", path: "/privacy" },
-                { name: "Terms of Service", path: "/terms" },
-                { name: "Community Guidelines", path: "/guidelines" },
+                { name: "Trung tâm trợ giúp", path: "" },
+                { name: "Liên hệ với chúng tôi", path: "" },
+                { name: "Chính sách bảo mật", path: "" },
+                { name: "Điều khoản sử dụng", path: "" },
+                { name: "Hướng dẫn cộng đồng", path: "" },
               ].map((item) => (
                 <li key={item.name}>
                   <Link
@@ -110,11 +109,11 @@ export function Footer() {
           <div className="lg:col-span-4 space-y-6 bg-muted/30 p-6 rounded-2xl border border-border/50">
             <div>
               <h4 className="font-bold text-base text-foreground mb-2">
-                Stay Updated
+                Nhận tin tức
               </h4>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Join our newsletter to get the latest updates, exclusive
-                releases, and special offers.
+                Tham gia bản tin của chúng tôi để nhận thông tin mới nhất,
+                phát hành độc quyền và ưu đãi đặc biệt.
               </p>
             </div>
 
@@ -122,7 +121,7 @@ export function Footer() {
               <div className="flex gap-2">
                 <Input
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder="Nhập email của bạn"
                   className="flex-1 bg-background border-input focus-visible:ring-primary h-11 rounded-xl transition-all"
                   aria-label="Email Address"
                 />
@@ -135,7 +134,8 @@ export function Footer() {
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground/70">
-                By subscribing, you agree to our Privacy Policy. No spam, ever.
+                Bằng cách đăng ký, bạn đồng ý với Chính sách bảo mật của chúng
+                tôi.
               </p>
             </form>
           </div>
@@ -144,15 +144,15 @@ export function Footer() {
         {/* --- BOTTOM BAR --- */}
         <div className="border-t border-border/60 pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <p className="font-medium">
-            © {new Date().getFullYear()} MusicHub Inc. All rights reserved.
+            © {new Date().getFullYear()} TVP Music
           </p>
 
           <div className="flex items-center gap-6 sm:gap-8 font-medium">
             <Link to="#" className="hover:text-foreground transition-colors">
-              Privacy
+              Bảo mật
             </Link>
             <Link to="#" className="hover:text-foreground transition-colors">
-              Terms
+              Điều khoản
             </Link>
             <Link to="#" className="hover:text-foreground transition-colors">
               Cookies

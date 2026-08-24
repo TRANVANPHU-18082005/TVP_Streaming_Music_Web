@@ -8,9 +8,11 @@ interface AiHubModalProps {
   onClose: () => void;
   onOpenPlaylist: () => void;
   onOpenAnalysis: () => void;
+  onPlayRandomTrack: () => void;
+  onGenerateMashup: () => void;
 }
 
-const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist, onOpenAnalysis }: AiHubModalProps) => {
+const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist, onOpenAnalysis, onPlayRandomTrack, onGenerateMashup }: AiHubModalProps) => {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -90,6 +92,48 @@ const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist, onOpenAnalysis }: Ai
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                     Phân tích ý nghĩa sâu sắc của lời bài hát đang phát, phân loại cảm xúc và gợi ý các bài hát tương tự.
+                  </p>
+                </div>
+              </button>
+              
+              {/* Feature 3: Random Track */}
+              <button
+                onClick={onPlayRandomTrack}
+                className={cn(
+                  "flex items-start gap-4 p-4 rounded-xl border border-border/50 bg-card hover:bg-accent/50 transition-colors text-left",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                )}
+              >
+                <div className="flex items-center justify-center size-10 rounded-lg bg-primary/10 shrink-0">
+                  <ListMusic className="size-5 text-primary" /> {/* Using ListMusic or any available icon */}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    Phát bài hát ngẫu nhiên
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Khám phá kho nhạc với một lựa chọn hoàn toàn ngẫu nhiên để mang lại cảm giác bất ngờ.
+                  </p>
+                </div>
+              </button>
+
+              {/* Feature 4: AI Mashup */}
+              <button
+                onClick={onGenerateMashup}
+                className={cn(
+                  "flex items-start gap-4 p-4 rounded-xl border border-border/50 bg-card hover:bg-accent/50 transition-colors text-left",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                )}
+              >
+                <div className="flex items-center justify-center size-10 rounded-lg bg-primary/10 shrink-0">
+                  <Sparkles className="size-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    Auto DJ: AI Mashup
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Tự động tạo ra một bản Mashup ngẫu nhiên bằng cách ghép nối thông minh các đoạn nhạc phù hợp.
                   </p>
                 </div>
               </button>

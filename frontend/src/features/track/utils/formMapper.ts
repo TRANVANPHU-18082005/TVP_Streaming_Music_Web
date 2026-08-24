@@ -23,6 +23,19 @@ export const TRACK_DEFAULT_VALUES: TrackEditFormValues = {
   isrc: "",
   audio: null,
   coverImage: null,
+  aiMetadata: {
+    emotion: "",
+    musicalStyle: "",
+    meaning: "",
+    language: "",
+    era: "",
+    colorHex: "",
+    energy: 0,
+    tempo: 0,
+    moods: [],
+    contexts: [],
+    similarKeywords: [],
+  },
 };
 
 export const mapTrackToForm = (track?: ITrack | null): TrackEditFormValues => {
@@ -60,5 +73,19 @@ export const mapTrackToForm = (track?: ITrack | null): TrackEditFormValues => {
     isrc: track.isrc || "",
     audio: track.trackUrl, // Giữ URL để preview
     coverImage: track.coverImage,
+    
+    aiMetadata: {
+      emotion: track.aiMetadata?.emotion || "",
+      musicalStyle: track.aiMetadata?.musicalStyle || "",
+      meaning: track.aiMetadata?.meaning || "",
+      language: track.aiMetadata?.language || "",
+      era: track.aiMetadata?.era || "",
+      colorHex: track.aiMetadata?.colorHex || "",
+      energy: track.aiMetadata?.energy,
+      tempo: track.aiMetadata?.tempo,
+      moods: track.aiMetadata?.moods || [],
+      contexts: track.aiMetadata?.contexts || [],
+      similarKeywords: track.aiMetadata?.similarKeywords || [],
+    }
   };
 };

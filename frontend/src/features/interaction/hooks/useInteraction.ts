@@ -46,8 +46,15 @@ export const useInteraction = () => {
           try {
             if (targetType === "artist") {
               await interactionApi.toggleFollow(id);
+              toast.success(wasInteracted ? "Đã bỏ theo dõi nghệ sĩ" : "Đã theo dõi nghệ sĩ");
             } else {
               await interactionApi.toggleLike(id, targetType);
+              const targetName = targetType === "track" ? "bài hát" : targetType === "album" ? "album" : "playlist";
+              toast.success(
+                wasInteracted 
+                  ? `Đã xóa ${targetName} khỏi thư viện` 
+                  : `Đã thêm ${targetName} vào thư viện`
+              );
             }
           } catch (error) {
             handleError(error, "Cập nhật tương tác thất bại");
@@ -56,7 +63,7 @@ export const useInteraction = () => {
             dispatch(
               setInteractionStatus({ id, targetType, status: wasInteracted }),
             );
-            toast.error("Không thể cập nhật yêu thích");
+            toast.error(targetType === "artist" ? "Không thể cập nhật theo dõi" : "Không thể cập nhật yêu thích");
           } finally {
             // Giải phóng trạng thái Loading để người dùng có thể thao tác lượt tiếp theo
             dispatch(

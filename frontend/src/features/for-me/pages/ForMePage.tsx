@@ -4,8 +4,9 @@ import { FeedItem } from "../components/FeedItem";
 import { ForMeHeader } from "../components/ForMeHeader";
 import { useForMeFeed } from "../hooks/useForMeFeed";
 import { setQueue, jumpToIndex, selectPlayer } from "@/features/player/slice/playerSlice";
-import { Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { CLIENT_PATHS } from "@/config/paths";
+import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
 
 export const ForMePage = () => {
   const { data, isLoading, isError } = useForMeFeed(50);
@@ -21,9 +22,9 @@ export const ForMePage = () => {
   useEffect(() => {
     if (data?.data?.tracks && data.data.tracks.length > 0) {
       const newTracks = data.data.tracks;
-      const currentQueueMatches = player.currentSource?.id === `${CLIENT_PATHS.FOR_ME}` && 
-                                  player.activeQueueIds.length > 0 &&
-                                  player.activeQueueIds[0] === newTracks[0]._id;
+      const currentQueueMatches = player.currentSource?.id === `${CLIENT_PATHS.FOR_ME}` &&
+        player.activeQueueIds.length > 0 &&
+        player.activeQueueIds[0] === newTracks[0]._id;
 
       if (!currentQueueMatches) {
         dispatch(setQueue({
@@ -84,10 +85,10 @@ export const ForMePage = () => {
     if (player.currentSource?.id === `${CLIENT_PATHS.FOR_ME}` && player.currentIndex !== activeIndex && containerRef.current) {
       const container = containerRef.current;
       const targetScroll = player.currentIndex * container.clientHeight;
-      
+
       // Bật cờ programmatic scroll để chặn scroll event
       isProgrammaticScroll.current = true;
-      
+
       container.scrollTo({ top: targetScroll, behavior: 'smooth' });
       setActiveIndex(player.currentIndex);
 
@@ -104,7 +105,7 @@ export const ForMePage = () => {
       <div className="w-full h-screen flex flex-col items-center justify-center bg-black gap-4">
         {/* ForMeHeader hiển thị trong loading state */}
         <ForMeHeader />
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        <PremiumMusicVisualizer active={true} />
         <p className="text-white/80 text-sm">Đang tải đề xuất của bạn...</p>
       </div>
     );
