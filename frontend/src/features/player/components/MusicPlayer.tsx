@@ -28,7 +28,8 @@ export function MusicPlayer() {
   const { isPlaying, duration } = useSelector(selectPlayer);
   const [isExpanded, setIsExpanded] = useState(false);
   const location = useLocation();
-  const isHiddenPlayerPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}`;
+  const isMashupPage = location.pathname.includes("/mashups");
+  const isHiddenPlayerPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}` || isMashupPage
 
   // 2. DATA RESOLVER: Đặt lên đầu để đảm bảo metadata luôn được xử lý nếu cache miss
   // Resolver này sẽ kích hoạt fetch nếu currentTrackId có nhưng metadata chưa có.

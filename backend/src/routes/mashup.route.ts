@@ -13,7 +13,7 @@ router.post("/:id/share", mashupController.shareMashup);
 router.use(protect);
 
 router.get("/my", mashupController.getMyMashups);
-router.get("/ai-generate", mashupController.aiGenerateMashup);
+router.post("/ai-generate", mashupController.aiGenerateMashup);
 router.post("/suggest", mashupController.suggestShorts);
 router.post("/create", mashupController.createMashup);
 

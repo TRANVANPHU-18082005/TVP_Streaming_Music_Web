@@ -37,6 +37,7 @@ import {
   type LucideIcon,
   AudioWaveform,
   TvMinimalPlay,
+  Layers,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,8 @@ const NAV_ITEMS: readonly NavItemDef[] = [
   { label: "Bảng xếp hạng", shortLabel: "BXH", icon: ChartBar, path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.CHART_TOP}` },
   { label: "Dành cho tôi", shortLabel: "For Me", icon: AudioWaveform, path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.FOR_ME}` },
   { label: "Shorts", shortLabel: "Shorts", icon: TvMinimalPlay, path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.SHORTS}` },
+  { label: "Mashup", shortLabel: "Mashup", icon: Layers, path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.MASHUPS_FEED}` },
+
   { label: "Nghệ sĩ", shortLabel: "NS", icon: Users, path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.ARTISTS}` },
   { label: "Đĩa nhạc", shortLabel: "Đĩa", icon: Disc3, path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.ALBUMS}` },
   { label: "Playlist", shortLabel: "PL", icon: ListMusic, path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.PLAYLISTS}` },

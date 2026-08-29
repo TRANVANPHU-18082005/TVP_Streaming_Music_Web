@@ -15,7 +15,24 @@ class AiService {
   constructor() {
     const apiKey = config.geminiApiKey;
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  }
+
+  private async generateContentWithRetry(prompt: string, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await this.model.generateContent(prompt);
+      } catch (error: any) {
+        if (error?.status === 503 && i < maxRetries - 1) {
+          const delay = Math.pow(2, i) * 3000; // 3s, 6s, 12s...
+          console.warn(`[AI Service] 503 Gemini bị quá tải, thử lại lần ${i + 1}/${maxRetries} sau ${delay}ms...`);
+          await new Promise(res => setTimeout(res, delay));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error("Gemini is consistently returning 503 errors.");
   }
 
   public async generatePlaylist(prompt: string) {
@@ -38,7 +55,7 @@ Analyze the prompt and extract:
 Return ONLY a raw JSON object with keys: "genres", "keywords", "moods", "contexts", "energy", "language", "era", "emotion", "musicalStyle", "imagePrompt". No markdown formatting, no backticks.`;
 
     try {
-      const result = await this.model.generateContent(systemPrompt);
+      const result = await this.generateContentWithRetry(systemPrompt);
       const response = result.response.text();
       let parsedData: any = { genres: [], keywords: [] };
 
@@ -187,7 +204,7 @@ Extract:
 Return ONLY a raw JSON object with keys "genres", "keywords" and "moods", no markdown formatting.`;
 
     try {
-      const result = await this.model.generateContent(systemPrompt);
+      const result = await this.generateContentWithRetry(systemPrompt);
       const response = result.response.text();
       let parsedData: any = { genres: [], keywords: [] };
 
@@ -306,7 +323,7 @@ Return ONLY a raw JSON object. No markdown formatting, no backticks.`;
 
     // Bước 3: Gọi Gemini
     try {
-      const result = await this.model.generateContent(systemPrompt);
+      const result = await this.generateContentWithRetry(systemPrompt);
       const response = result.response.text();
       let parsedData: any = { meaning: "", emotion: "", musicalStyle: "", similarKeywords: [] };
 
@@ -411,7 +428,7 @@ Analyze the prompt and extract:
 Return ONLY a raw JSON object with keys: "genres", "moods", "energyProfile", "keywords". No markdown formatting, no backticks.`;
 
     try {
-      const result = await this.model.generateContent(systemPrompt);
+      const result = await this.generateContentWithRetry(systemPrompt);
       const response = result.response.text();
       let parsedData: any = { genres: [], moods: [], keywords: [] };
 
@@ -448,9 +465,9 @@ Return ONLY a raw JSON object with keys: "genres", "moods", "energyProfile", "ke
           // Implementation of full AI matching can be expanded here
         }
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error("Lỗi khi gọi AI Mashup:", error);
-      throw error;
+      return { success: false, message: error.message || "Lỗi khi gọi AI" };
     }
   }
 }

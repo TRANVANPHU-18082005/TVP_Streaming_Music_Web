@@ -3,7 +3,7 @@ import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
 import mashupService from "../services/mashup.service";
 import mongoose from "mongoose";
-
+import aiService from "../services/ai/ai.service";
 export const createMashup = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user?._id;
   // Auto-generate cover from first short if not provided
@@ -21,7 +21,7 @@ export const getMashup = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const getFeed = catchAsync(async (req: Request, res: Response) => {
-  const limit  = Math.min(Number(req.query.limit) || 10, 50);
+  const limit = Math.min(Number(req.query.limit) || 10, 50);
   const cursor = req.query.cursor as string | undefined;
   const { feed, nextCursor } = await mashupService.getFeed(limit, cursor);
   res.status(httpStatus.OK).json({ success: true, data: { feed, nextCursor } });
@@ -82,26 +82,91 @@ export const suggestShorts = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const aiGenerateMashup = catchAsync(async (req: Request, res: Response) => {
-  const randomShorts = await mongoose.model('TrackShort').aggregate([
-    { $match: { isPublished: true } },
-    { $sample: { size: 1 } }
-  ]);
-
-  if (!randomShorts || randomShorts.length === 0) {
-    return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "No shorts available" });
-  }
-  const short1 = await mongoose.model('TrackShort').findById(randomShorts[0]._id).populate('track').lean() as any;
-  if (!short1) return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "Short not found" });
-
-  const suggestions1 = await mashupService.suggestNextShorts([short1._id.toString()]);
-  const short2 = suggestions1.length > 0 ? suggestions1[0] : null;
-
-  let short3 = null;
-  if (short2) {
-    const suggestions2 = await mashupService.suggestNextShorts([short1._id.toString(), short2._id.toString()]);
-    short3 = suggestions2.length > 0 ? suggestions2[0] : null;
+  const { prompt } = req.body;
+  if (!prompt) {
+    return res.status(httpStatus.BAD_REQUEST).json({ success: false, message: "Prompt is required" });
   }
 
-  const aiShorts = [short1, short2, short3].filter(Boolean);
-  res.status(httpStatus.OK).json({ success: true, data: aiShorts });
+  // 1. Ask Gemini to analyze the prompt
+  const aiResult = await aiService.generateMashupPlan(prompt);
+  if (!aiResult.success) {
+    const isOverloaded = (aiResult as any).message?.includes('503') || (aiResult as any).message?.includes('high demand');
+    return res.status(isOverloaded ? httpStatus.SERVICE_UNAVAILABLE : httpStatus.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: (aiResult as any).message || "AI Analysis failed" });
+  }
+
+  const { moods = [], genres = [], keywords = [] } = aiResult?.data?.aiAnalysis || {};
+
+  // 2. Find tracks that match the criteria
+  const query: any = { isPublic: true, isDeleted: false, status: 'ready' };
+  const orConditions: any[] = [];
+
+  if (moods.length > 0) {
+    orConditions.push({ "aiMetadata.moods": { $in: moods } });
+  }
+  if (keywords.length > 0) {
+    orConditions.push({ $text: { $search: keywords.join(" ") } });
+  }
+  // We skip genres in OR condition for simplicity unless we resolve genre IDs, 
+  // but let's just use text search on keywords and moods.
+
+  if (orConditions.length > 0) {
+    query.$or = orConditions;
+  }
+
+  // Fetch candidate tracks
+  const trackCandidates = await mongoose.model('Track').find(query)
+    .sort({ playCount: -1 })
+    .limit(30)
+    .lean();
+
+  if (trackCandidates.length === 0) {
+    return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "No tracks match the given prompt" });
+  }
+
+  const trackIds = trackCandidates.map(t => t._id);
+
+  // 3. Find shorts for these tracks
+  const candidateShorts: any[] = await mongoose.model('TrackShort').find({
+    track: { $in: trackIds },
+    isPublished: true
+  }).populate('track').lean() as any[];
+
+  if (candidateShorts.length < 2) {
+    return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "Not enough shorts available for the given prompt" });
+  }
+
+  // 4. Select the best 3-5 shorts using compatibility score
+  // Start with a random one from the top matching shorts
+  const selectedShorts: any[] = [];
+  const firstShort = candidateShorts[Math.floor(Math.random() * Math.min(5, candidateShorts.length))];
+  selectedShorts.push(firstShort);
+
+  const NUM_SHORTS = Math.floor(Math.random() * 3) + 3; // 3 to 5 shorts
+
+  for (let i = 1; i < NUM_SHORTS; i++) {
+    const lastShort = selectedShorts[selectedShorts.length - 1];
+    if (!lastShort || !lastShort.track) break;
+
+    // Filter out already selected tracks
+    const selectedTrackIds = selectedShorts.map(s => s.track._id.toString());
+    const remaining = candidateShorts.filter(s => s.track && !selectedTrackIds.includes(s.track._id.toString()));
+
+    if (remaining.length === 0) break;
+
+    // Score remaining candidates against the last short
+    const scored = remaining.map(candidate => {
+      // @ts-ignore
+      const comp = mashupService.calculatePairCompatibility(lastShort.track, candidate.track);
+      return { ...candidate, compatibilityScore: comp.score };
+    });
+
+    // Sort by score
+    scored.sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+
+    // Pick the best one
+    selectedShorts.push(scored[0]);
+  }
+
+  res.status(httpStatus.OK).json({ success: true, data: selectedShorts });
 });

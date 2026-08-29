@@ -5,7 +5,7 @@ dist
 logs
 .env.development
 .env.production
-.env.example
+ 
 .combined.log
 .error.log
 .tmp

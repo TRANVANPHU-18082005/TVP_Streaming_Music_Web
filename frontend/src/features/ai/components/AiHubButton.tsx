@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import AiHubModal from "./AiHubModal";
 import AiPlaylistModal from "./AiPlaylistModal";
 import AiTrackAnalysisModal from "./AiTrackAnalysisModal";
+import AiMashupModal from "./AiMashupModal";
 import { useAppSelector } from "@/store/hooks";
 import { toast } from "sonner";
 import trackApi from "@/features/track/api/trackApi";
@@ -16,6 +17,7 @@ export const AiHubButton = memo(() => {
   const [isHubOpen, setIsHubOpen] = useState(false);
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
   const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
+  const [isMashupOpen, setIsMashupOpen] = useState(false);
 
   const currentTrackId = useAppSelector((state) => state.player.currentTrackId);
   const trackMetadataCache = useAppSelector((state) => state.player.trackMetadataCache);
@@ -29,7 +31,7 @@ export const AiHubButton = memo(() => {
     const loadingToast = toast.loading("Đang tìm một bài hát ngẫu nhiên...");
     try {
       const res = await trackApi.getRandomTrack();
-      if (res.isSuccess && res.data) {
+      if ((res.isSuccess || (res as any).success) && res.data) {
         toast.success(`Đang phát: ${res.data.title}`, { id: loadingToast });
         dispatch(setQueue({
           trackIds: [res.data._id],
@@ -38,25 +40,15 @@ export const AiHubButton = memo(() => {
           source: { id: "random", type: "suggestions", title: "Ai Hub" }
         }));
         dispatch(setIsPlaying(true));
+      } else {
+        toast.error("Không tìm thấy bài hát nào!", { id: loadingToast });
       }
     } catch (error) {
       toast.error("Không tìm thấy bài hát nào!", { id: loadingToast });
     }
   };
 
-  const handleGenerateMashup = async () => {
-    setIsHubOpen(false);
-    const loadingToast = toast.loading("AI đang chọn lọc và ghép nối bài hát...", { duration: 10000 });
-    try {
-      const res = await mashupApi.aiGenerateMashup();
-      if (res.success && res.data && res.data.length > 0) {
-        toast.dismiss(loadingToast);
-        navigate("/mashup/create", { state: { aiGeneratedShorts: res.data } });
-      }
-    } catch (error) {
-      toast.error("Không thể tạo Mashup lúc này, vui lòng thử lại sau!", { id: loadingToast });
-    }
-  };
+  // handleGenerateMashup logic moved to AiMashupModal
 
   return (
     <>
@@ -80,9 +72,9 @@ export const AiHubButton = memo(() => {
       </button>
 
       {/* Ai Hub Modal */}
-      <AiHubModal 
-        isOpen={isHubOpen} 
-        onClose={() => setIsHubOpen(false)} 
+      <AiHubModal
+        isOpen={isHubOpen}
+        onClose={() => setIsHubOpen(false)}
         onOpenPlaylist={() => {
           setIsHubOpen(false);
           setIsPlaylistOpen(true);
@@ -96,13 +88,16 @@ export const AiHubButton = memo(() => {
           setIsAnalysisOpen(true);
         }}
         onPlayRandomTrack={handlePlayRandomTrack}
-        onGenerateMashup={handleGenerateMashup}
+        onOpenAiMashup={() => {
+          setIsHubOpen(false);
+          setIsMashupOpen(true);
+        }}
       />
 
       {/* Ai Playlist Modal */}
-      <AiPlaylistModal 
-        isOpen={isPlaylistOpen} 
-        onClose={() => setIsPlaylistOpen(false)} 
+      <AiPlaylistModal
+        isOpen={isPlaylistOpen}
+        onClose={() => setIsPlaylistOpen(false)}
       />
 
       {/* Ai Track Analysis Modal */}
@@ -110,6 +105,12 @@ export const AiHubButton = memo(() => {
         isOpen={isAnalysisOpen}
         onClose={() => setIsAnalysisOpen(false)}
         track={currentTrack || null}
+      />
+
+      {/* Ai Mashup Modal */}
+      <AiMashupModal
+        isOpen={isMashupOpen}
+        onClose={() => setIsMashupOpen(false)}
       />
     </>
   );

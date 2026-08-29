@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
+import { playWakeLock, pauseWakeLock, destroyWakeLock } from "@/utils/audioWakeLock";
 import {
   selectPlayer,
   selectCurrentTrack,
@@ -216,14 +217,19 @@ export const useAudioPlayer = () => {
 
     if (Hls.isSupported() && src.endsWith(".m3u8")) {
       const hls = new Hls({
-        maxBufferLength: 60, // Tải trước tối đa 60 giây nhạc vào bộ đệm nền
-        maxMaxBufferLength: 120, // Giới hạn trần bộ đệm khi mạng siêu khỏe
-        enableWorker: true, // Chạy ngầm mượt bằng luồng Worker độc lập
-        highBufferWatchdogPeriod: 3, // Đợi tối đa 3 giây nếu đệm quá cao để đồng bộ
-        nudgeMaxRetry: 5, // 🚀 FIX ĐÚNG: Đổi từ 'nudgeMaxRetries' thành 'nudgeMaxRetry' (số ít)
-        manifestLoadingTimeOut: 15000,
+        // ── Buffer tối đa để chịu đựng mất mạng lâu / tắt màn hình ──
+        maxBufferLength: 300,        // Tải trước 5 phút nhạc (~1 bài hoàn chỉnh)
+        maxMaxBufferLength: 600,     // Giới hạn trần: 10 phút khi mạng rất khỏe
+        enableWorker: true,          // Worker độc lập, không bị main thread block
+        highBufferWatchdogPeriod: 3,
+        nudgeMaxRetry: 10,           // Tăng lên 10 lần để vượt qua đứt mạng ngắn
+        manifestLoadingTimeOut: 20000, // Chờ 20s khi mạng chập chờn (lên thang máy)
+        manifestLoadingMaxRetry: 6,  // Thử lại manifest 6 lần trước khi bỏ cuộc
+        levelLoadingMaxRetry: 6,     // Thử lại tải segment 6 lần
+        fragLoadingMaxRetry: 6,      // Thử lại tải fragment 6 lần
         abrEwmaDefaultEstimate: 500000,
         testBandwidth: false,
+        backBufferLength: 30,        // Giữ lại 30s audio đã phát trong bộ nhớ để tua lại mượt
       });
       hls.loadSource(src);
       hls.attachMedia(audio);
@@ -360,8 +366,12 @@ export const useAudioPlayer = () => {
 
     if (isPlaying) {
       audioRef.current.play().catch(() => dispatch(setIsPlaying(false)));
+      // 🔒 WakeLock: Khi phát nhạc → giữ OS khỏi kill tab
+      playWakeLock();
     } else {
       audioRef.current.pause();
+      // 🔒 WakeLock: Chỉ tắt khi user thực sự Pause (không tắt khi đang load/chuyển bài)
+      pauseWakeLock();
       // @fix #2 — không dispatch seekTo ở đây
     }
   }, [isPlaying, dispatch]);
@@ -597,6 +607,56 @@ export const useAudioPlayer = () => {
     // @note — dùng isPlayingRef để tránh isPlaying vào deps của callback
     // isPlaying thay đổi liên tục → callback mới liên tục nếu là dep trực tiếp
   }, [dispatch]);
+
+  // ==========================================================================
+  // J. AUTO-RESUME: Tự động phục hồi khi màn hình bật lại hoặc có mạng trở lại
+  // ==========================================================================
+
+  useEffect(() => {
+    const tryResume = () => {
+      const audio = audioRef.current;
+      if (!audio || !isPlayingRef.current) return;
+
+      // Nếu redux biết đang play nhưng audio thực tế đang paused/stalled → kickstart lại
+      if (audio.paused || audio.readyState < 2) {
+        if (hlsRef.current) {
+          // Khởi động lại HLS load từ vị trí hiện tại
+          hlsRef.current.startLoad(audio.currentTime);
+        }
+        audio.play().catch(() => {
+          // Autoplay bị chặn sau khi tab "đông cứng" — WakeLock sẽ xử lý lần sau
+          console.warn("[AutoResume] play() blocked after visibility change");
+        });
+        // Đảm bảo WakeLock cũng được phục hồi cùng lúc
+        playWakeLock();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        tryResume();
+      }
+    };
+
+    const handleOnline = () => {
+      tryResume();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, []); // Chỉ mount 1 lần — đọc state qua refs
+
+  // Cleanup WakeLock khi toàn bộ Player component unmount
+  useEffect(() => {
+    return () => {
+      destroyWakeLock();
+    };
+  }, []);
 
   // ==========================================================================
   // I. IMPERATIVE HELPERS

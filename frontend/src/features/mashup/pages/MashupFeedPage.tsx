@@ -150,14 +150,7 @@ export const MashupFeedPage = () => {
       {/* ForMeHeader nằm tuyệt đối trên cùng — visible cả mobile lẫn desktop */}
       <ForMeHeader />
 
-      {/* Floating Create Button */}
-      <button 
-        onClick={() => navigate("/mashups/create")}
-        className="fixed top-20 right-6 z-50 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(var(--primary),0.2)]"
-      >
-        <Layers className="w-4 h-4" />
-        <span className="font-semibold text-sm hidden md:inline">Tạo Mashup</span>
-      </button>
+
 
       {/* ── Desktop ambient backdrop ────────────────────────────────────── */}
       <div
@@ -231,11 +224,10 @@ export const MashupFeedPage = () => {
             return (
               <div
                 key={realIndex}
-                className={`rounded-full transition-all duration-300 ${
-                  realIndex === activeIndex
-                    ? "w-1.5 h-4 bg-white"
-                    : "w-1 h-1 bg-white/30"
-                }`}
+                className={`rounded-full transition-all duration-300 ${realIndex === activeIndex
+                  ? "w-1.5 h-4 bg-white"
+                  : "w-1 h-1 bg-white/30"
+                  }`}
               />
             );
           })}

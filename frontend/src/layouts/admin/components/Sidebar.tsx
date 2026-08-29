@@ -21,6 +21,7 @@ import {
   KeyboardMusic,
   UserCheck,
   TvMinimalPlay,
+  Layers,
 } from "lucide-react";
 import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
@@ -71,7 +72,12 @@ const sidebarGroups = [
       {
         label: "Shorts",
         path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.SHORTS}`,
-        icon: TvMinimalPlay, // Or some other icon like PlaySquare
+        icon: TvMinimalPlay,
+      },
+      {
+        label: "Mashups",
+        path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.MASHUPS}`,
+        icon: Layers,
       },
     ],
   },

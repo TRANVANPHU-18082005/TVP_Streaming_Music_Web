@@ -108,7 +108,7 @@ class SearchService {
       return result;
     } catch (err) {
       // fallback regex nhẹ
-      const regex = new RegExp(`^${escapeRegex(safe)}`, "i");
+      const regex = new RegExp(`${escapeRegex(safe)}`, "i");
       const [tracks, artists] = await Promise.all([
         Track.find({
           title: regex,

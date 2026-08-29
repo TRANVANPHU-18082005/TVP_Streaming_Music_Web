@@ -105,7 +105,7 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
   // --- 3. RENDER ---
   return (
     <div className={cn("space-y-2", className)}>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={setOpen} modal={true}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -155,12 +155,16 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
         </PopoverTrigger>
 
         {/* --- DROPDOWN CONTENT --- */}
-        <PopoverContent className="p-0 w-[400px] sm:w-[500px]" align="start">
+        <PopoverContent 
+          className="p-0 w-[300px] sm:w-[500px] md:w-[700px]" 
+          align="start"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           <Command shouldFilter={false}>
             {/* shouldFilter={false} là QUAN TRỌNG vì ta filter server-side */}
 
             <div className="flex items-center border-b px-3">
-              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
               <CommandInput
                 placeholder="Tìm tên bài hát, nghệ sĩ..."
                 value={searchTerm}
@@ -172,7 +176,7 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
               )}
             </div>
 
-            <CommandList>
+            <CommandList className="custom-scrollbar">
               {/* Empty State */}
               {!isLoading && tracks.length === 0 && (
                 <CommandEmpty className="py-6 text-center text-muted-foreground text-sm">
@@ -181,75 +185,73 @@ export const TrackSelector: React.FC<TrackSelectorProps> = ({
               )}
 
               <CommandGroup>
-                <ScrollArea className="h-[300px]">
-                  {tracks.map((track: ITrack) => {
-                    const active = isSelected(track._id);
-                    return (
-                      <CommandItem
-                        key={track._id}
-                        value={track._id} // Value cho command item
-                        onSelect={() => handleSelect(track)}
-                        className="cursor-pointer aria-selected:bg-accent/50"
-                      >
-                        <div className="flex items-center gap-3 w-full">
-                          {/* Check Icon */}
-                          <div
-                            className={cn(
-                              "flex items-center justify-center w-4 h-4 border rounded-sm transition-all",
-                              active
-                                ? "bg-primary border-primary text-primary-foreground"
-                                : "border-muted-foreground/30 opacity-50",
-                            )}
-                          >
-                            {active && <Check className="w-3 h-3" />}
-                          </div>
+                {tracks.map((track: ITrack) => {
+                  const active = isSelected(track._id);
+                  return (
+                    <CommandItem
+                      key={track._id}
+                      value={track._id} // Value cho command item
+                      onSelect={() => handleSelect(track)}
+                      className="cursor-pointer aria-selected:bg-accent/50"
+                    >
+                      <div className="flex items-center gap-3 w-full">
+                        {/* Check Icon */}
+                        <div
+                          className={cn(
+                            "flex items-center justify-center w-4 h-4 border rounded-sm transition-all",
+                            active
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "border-muted-foreground/30 opacity-50",
+                          )}
+                        >
+                          {active && <Check className="w-3 h-3" />}
+                        </div>
 
-                          {/* Track Image */}
-                          <div className="relative size-10 rounded overflow-hidden bg-muted shrink-0 border border-border">
-                              {track.coverImage ? (
-                              <ImageWithFallback
-                                src={track.coverImage}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Music className="w-5 h-5 text-muted-foreground/30" />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Track Info */}
-                          <div className="flex flex-col min-w-0 flex-1">
-                            <span className="font-medium text-sm truncate">
-                              {track.title}
-                            </span>
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
-                              <span className="truncate max-w-[150px]">
-                                {track.artist?.name || "Unknown"}
-                              </span>
-                              <span>•</span>
-                              <span className="font-mono">
-                                {formatDuration(track.duration)}
-                              </span>
+                        {/* Track Image */}
+                        <div className="relative size-10 rounded overflow-hidden bg-muted shrink-0 border border-border">
+                          {track.coverImage ? (
+                            <ImageWithFallback
+                              src={track.coverImage}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Music className="w-5 h-5 text-muted-foreground/30" />
                             </div>
-                          </div>
-
-                          {/* Album Hint (Optional) */}
-                          {track.album && (
-                            <Badge
-                              variant="outline"
-                              className="hidden sm:flex text-[10px] h-5 px-1.5 max-w-[100px] truncate text-muted-foreground/70"
-                            >
-                              <Disc className="w-3 h-3 mr-1" />
-                              {track.album.title}
-                            </Badge>
                           )}
                         </div>
-                      </CommandItem>
-                    );
-                  })}
-                </ScrollArea>
+
+                        {/* Track Info */}
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="font-medium w-[100px] md:w-full text-sm truncate">
+                            {track.title}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
+                            <span className="truncate w-[100px] md:w-full">
+                              {track.artist?.name || "Unknown"}
+                            </span>
+                            <span>•</span>
+                            <span className="font-mono">
+                              {formatDuration(track.duration)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Album Hint (Optional) */}
+                        {track.album && (
+                          <Badge
+                            variant="outline"
+                            className="hidden sm:flex text-[10px] h-5 px-1.5 max-w-[100px] truncate text-muted-foreground/70"
+                          >
+                            <Disc className="w-3 h-3 mr-1" />
+                            {track.album.title}
+                          </Badge>
+                        )}
+                      </div>
+                    </CommandItem>
+                  );
+                })}
               </CommandGroup>
             </CommandList>
           </Command>

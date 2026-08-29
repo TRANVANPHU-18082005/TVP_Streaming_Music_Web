@@ -4,6 +4,7 @@ import { artistRoutes } from "@/features/artist/routes";
 import { playlistRoutes } from "@/features/playlist/routes";
 import { forMeRoutes } from "@/features/for-me/routes";
 import { shortsAdminRoutes } from "@/features/shorts/routes/adminRoutes";
+import { mashupAdminRoutes } from "@/features/mashup/routes/adminRoutes";
 import { shortsRoutes } from "@/features/shorts/routes";
 import { mashupRoutes } from "@/features/mashup/routes";
 
@@ -143,6 +144,7 @@ export const router = createBrowserRouter([
                 element: <PlaylistManagementPage />,
               },
               ...shortsAdminRoutes,
+              ...mashupAdminRoutes,
               ...verifyArtistAdminRoutes,
             ],
           },

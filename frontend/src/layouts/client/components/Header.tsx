@@ -26,6 +26,7 @@ import {
   type LucideIcon,
   Settings,
   TvMinimalPlay,
+  Layers,
 } from "lucide-react";
 import {
   motion,
@@ -91,6 +92,12 @@ const NAV_ITEMS: readonly NavItemDef[] = [
     shortLabel: "S",
     icon: TvMinimalPlay,
     path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.SHORTS}`,
+  },
+  {
+    label: "Mashup",
+    shortLabel: "Mix",
+    icon: Layers,
+    path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.MASHUPS_FEED}`,
   },
   {
     label: "Nghệ sĩ",
@@ -376,7 +383,7 @@ const DesktopSearchBar = memo<{
 
   const { data: suggestionsData, isFetching: isSuggesting } = useSearchSuggestions(value);
   const suggestions = suggestionsData ?? [];
-
+  console.log(suggestions, "suggestions")
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -586,6 +593,9 @@ const MobileSearchOverlay = memo<{
 }>(({ value, onChange, onSubmit, onClose }) => {
   const focusRef = useFocusOnMount<HTMLInputElement>();
   useEscapeKey(onClose, true);
+  const navigate = useNavigate();
+  const { data: suggestionsData, isFetching: isSuggesting } = useSearchSuggestions(value);
+  const suggestions = suggestionsData ?? [];
 
   return (
     <motion.div
@@ -638,6 +648,25 @@ const MobileSearchOverlay = memo<{
               >
                 <X className="size-4" aria-hidden="true" />
               </motion.button>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {value.trim().length >= 2 && (
+              <SuggestionDropdown
+                suggestions={suggestions}
+                isLoading={isSuggesting && suggestions.length === 0}
+                query={value}
+                onSelect={(item) => {
+                  onChange(item.label);
+                  if (item.type === "artist") {
+                    navigate(`/artists/${item.slug}`);
+                  } else {
+                    navigate(`/search?q=${encodeURIComponent(item.label)}`);
+                  }
+                  onClose();
+                }}
+                activeIndex={-1}
+              />
             )}
           </AnimatePresence>
         </form>

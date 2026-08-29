@@ -56,4 +56,5 @@ export const ADMIN_PATHS = {
   // Track
   UPLOAD: "upload",
   SHORTS: "shorts",
+  MASHUPS: "mashups",
 } as const;

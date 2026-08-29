@@ -307,7 +307,6 @@ export function useSearchPage() {
     };
     return checks[activeTab];
   }, [data, isLoading, query, activeTab]);
-
   return {
     inputRef,
     dropdownRef,

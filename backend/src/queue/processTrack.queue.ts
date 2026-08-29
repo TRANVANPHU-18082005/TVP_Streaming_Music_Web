@@ -100,7 +100,11 @@ export async function addRetryAiJob(
 ): Promise<void> {
   await addJob(
     { trackId, fileUrl, type: "ai_only" },
-    { jobId: `retry-ai-${trackId}-${Date.now()}` },
+    { 
+      jobId: `retry-ai-${trackId}-${Date.now()}`,
+      attempts: 10,
+      backoff: { type: "exponential", delay: 10_000 }
+    },
     "retry:ai",
   );
 }

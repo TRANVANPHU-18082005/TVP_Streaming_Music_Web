@@ -9,10 +9,10 @@ interface AiHubModalProps {
   onOpenPlaylist: () => void;
   onOpenAnalysis: () => void;
   onPlayRandomTrack: () => void;
-  onGenerateMashup: () => void;
+  onOpenAiMashup: () => void;
 }
 
-const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist, onOpenAnalysis, onPlayRandomTrack, onGenerateMashup }: AiHubModalProps) => {
+const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist, onOpenAnalysis, onPlayRandomTrack, onOpenAiMashup }: AiHubModalProps) => {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -119,7 +119,7 @@ const AiHubModal = memo(({ isOpen, onClose, onOpenPlaylist, onOpenAnalysis, onPl
 
               {/* Feature 4: AI Mashup */}
               <button
-                onClick={onGenerateMashup}
+                onClick={onOpenAiMashup}
                 className={cn(
                   "flex items-start gap-4 p-4 rounded-xl border border-border/50 bg-card hover:bg-accent/50 transition-colors text-left",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"

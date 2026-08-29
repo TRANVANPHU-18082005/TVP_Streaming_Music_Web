@@ -27,6 +27,7 @@ import {
   Shield,
   Headphones,
   Users,
+  Layers,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -86,6 +87,7 @@ const PublicArtistCard = lazy(
 const LinkedAccountsTab = lazy(
   () => import("@/features/auth/components/LinkedAccountsTab").then((mod) => ({ default: mod.LinkedAccountsTab || mod.default })),
 );
+const UserMashupsTab = lazy(() => import("./profile/UserMashupsTab"));
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -330,7 +332,7 @@ const ProfilePage = () => {
 
   // Tab direction handling for animated slide transitions
   const tabOrder = useMemo(
-    () => ["overview", "playlists", "followed-artists", "library"],
+    () => ["overview", "playlists", "mashups", "followed-artists", "library"],
     [],
   );
   const prevTabRef = useRef<string>(activeTab);
@@ -543,6 +545,7 @@ const ProfilePage = () => {
                 [
                   { value: "overview", label: "Tổng quan", icon: BarChart3 },
                   { value: "playlists", label: "Playlist", icon: ListMusic },
+                  { value: "mashups", label: "Mashups", icon: Layers },
                   {
                     value: "followed-artists",
                     label: "Nghệ sĩ theo dõi",
@@ -878,6 +881,33 @@ const ProfilePage = () => {
                   </div>
                 </motion.div>
               )}
+
+              {/* ══ MASHUPS ═════════════════════════════════════════════ */}
+              {activeTab === "mashups" && (
+                <motion.div
+                  tabIndex={-1}
+                  key="mashups"
+                  variants={slideVariants}
+                  custom={direction}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="space-y-7"
+                >
+                  <Suspense
+                    fallback={
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <CardSkeleton key={i} />
+                        ))}
+                      </div>
+                    }
+                  >
+                    <UserMashupsTab />
+                  </Suspense>
+                </motion.div>
+              )}
+
               {/* ══ FOLLOWED ARTISTS ═══════════════════════════════════════════ */}
               {activeTab === "followed-artists" && (
                 <motion.div

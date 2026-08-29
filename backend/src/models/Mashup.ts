@@ -4,7 +4,7 @@ import { generateUniqueSlug } from "../utils/slug";
 export interface IMashupShort {
   short: mongoose.Types.ObjectId;
   order: number;
-  transitionType: 'crossfade' | 'cut' | 'beatmatch';
+  transitionType: 'crossfade' | 'cut' | 'beatmatch' | 'echo-out' | 'filter-sweep' | 'stutter' | 'build-drop' | 'vinyl-scratch';
   transitionDuration: number;
 }
 
@@ -45,7 +45,7 @@ export interface IMashup extends Document {
 const MashupShortSchema = new Schema<IMashupShort>({
   short: { type: Schema.Types.ObjectId, ref: 'TrackShort', required: true },
   order: { type: Number, required: true },
-  transitionType: { type: String, enum: ['crossfade', 'cut', 'beatmatch'], default: 'crossfade' },
+  transitionType: { type: String, enum: ['crossfade', 'cut', 'beatmatch', 'echo-out', 'filter-sweep', 'stutter', 'build-drop', 'vinyl-scratch'], default: 'crossfade' },
   transitionDuration: { type: Number, default: 2000 }
 }, { _id: false });
 
@@ -88,7 +88,7 @@ const MashupSchema = new Schema<IMashup>(
 );
 
 // Auto-generate slug
-MashupSchema.pre("save", async function () {
+MashupSchema.pre("validate", async function () {
   const mashup = this as any;
   if (mashup.isModified("title") && !mashup.slug) {
     const MashupModel = mashup.constructor as mongoose.Model<IMashup>;

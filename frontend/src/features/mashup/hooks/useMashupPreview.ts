@@ -46,8 +46,10 @@ export const useMashupPreview = (shorts: IMashupShort[]) => {
       const audio = audioRefs.current[index];
       if (!audio) return;
 
-      const startSec = (item.short.startTime > 10000) ? item.short.startTime / 1000 : item.short.startTime;
-      const endSec = (item.short.endTime > 10000) ? item.short.endTime / 1000 : item.short.endTime;
+      const rawStart = item.trimStart ?? item.short.startTime;
+      const rawEnd = item.trimEnd ?? item.short.endTime;
+      const startSec = (rawStart > 10000) ? rawStart / 1000 : rawStart;
+      const endSec = (rawEnd > 10000) ? rawEnd / 1000 : rawEnd;
       const durationSec = endSec - startSec;
       const transSec = item.transitionDuration / 1000;
 

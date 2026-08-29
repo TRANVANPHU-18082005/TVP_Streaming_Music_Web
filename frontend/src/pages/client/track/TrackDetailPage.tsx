@@ -20,7 +20,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import MusicResult from "@/components/ui/Result";
-import AiTrackAnalysisModal from "@/features/ai/components/AiTrackAnalysisModal";
 
 import {
   usePublicTrackDetail,
@@ -416,6 +415,102 @@ const TrackDetailArtistCard = React.memo(
   ),
 );
 // ─────────────────────────────────────────────────────────────────────────────
+// LYRICS SECTION
+// ─────────────────────────────────────────────────────────────────────────────
+const LyricsSection = memo(({ lyrics, paletteHex, paletteR }: { lyrics?: string; paletteHex: string; paletteR: (alpha: number) => string }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  if (!lyrics) return null;
+
+  return (
+    <motion.section variants={STAGGER_ITEM} className="relative mt-2 mb-12">
+      <div className="flex items-center gap-2 mb-4 px-1 text-[15px] font-bold text-foreground">
+        <h2>Lời bài hát</h2>
+      </div>
+      <div
+        className={cn(
+          "relative overflow-hidden transition-all duration-500 ease-out",
+          isExpanded ? "max-h-[2000px]" : "max-h-[280px]"
+        )}
+      >
+        <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground/80 md:text-base font-medium px-1">
+          {lyrics}
+        </p>
+
+        {/* Gradient Mask for collapsed state */}
+        {!isExpanded && (
+          <div className="absolute bottom-0 inset-x-0 h-32 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+        )}
+      </div>
+
+      <div className="mt-4 flex justify-center">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-sm font-bold px-6 py-2 rounded-full border bg-background/50 backdrop-blur-md hover:bg-muted/80 transition-colors shadow-sm"
+          style={{ borderColor: paletteR(0.15), color: paletteHex }}
+        >
+          {isExpanded ? "Thu gọn" : "Xem thêm"}
+        </button>
+      </div>
+    </motion.section>
+  );
+});
+LyricsSection.displayName = "LyricsSection";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI INSIGHTS CARD
+// ─────────────────────────────────────────────────────────────────────────────
+const AiInsightsCard = memo(({ metadata, paletteHex }: { metadata: ITrack["aiMetadata"]; paletteHex: string }) => {
+  if (!metadata || (!metadata.meaning && !metadata.emotion && !metadata.musicalStyle)) return null;
+
+  const color = metadata.colorHex || paletteHex;
+  console.log("metadata", metadata, "color", color);
+  return (
+    <motion.section variants={STAGGER_ITEM} className="mb-12">
+      <div
+        className="relative overflow-hidden rounded-2xl p-6 sm:p-8 border shadow-sm backdrop-blur-xl"
+        style={{
+          backgroundColor: `${color}08`, // very light background
+          borderColor: `${color}20`,
+        }}
+      >
+        {/* Glow effect */}
+        <div
+          className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-[80px] pointer-events-none opacity-40"
+          style={{ backgroundColor: color }}
+        />
+
+        <div className="flex items-center gap-2 mb-6">
+          <Sparkles className="size-5" style={{ color }} />
+          <h2 className="text-[15px] font-bold text-foreground">Góc nhìn AI</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+          {metadata.emotion && (
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cảm xúc</h3>
+              <p className="text-[15px] font-semibold text-foreground/90">{metadata.emotion}</p>
+            </div>
+          )}
+          {metadata.musicalStyle && (
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Phong cách</h3>
+              <p className="text-[15px] font-semibold text-foreground/90 leading-snug">{metadata.musicalStyle}</p>
+            </div>
+          )}
+          {metadata.meaning && (
+            <div className="space-y-1.5 md:col-span-2 mt-2">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Ý nghĩa</h3>
+              <p className="text-[15px] font-medium text-foreground/80 leading-relaxed">{metadata.meaning}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.section>
+  );
+});
+AiInsightsCard.displayName = "AiInsightsCard";
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 const TrackDetailPage = () => {
@@ -508,9 +603,7 @@ const TrackDetailPage = () => {
     }
   }, [track]);
 
-  const [isAnalysisOpen, setIsAnalysisOpen] = React.useState(false);
-
-  // ── Render States ─────────────────────────────────────────────────────────
+  // share state
   if (isLoading || !track)
     return <WaveformLoader glass={false} text="Đang tải bài hát" />;
   if (!isOnline) {
@@ -729,14 +822,6 @@ const TrackDetailPage = () => {
             </button>
 
             <button
-              onClick={() => setIsAnalysisOpen(true)}
-              className="rounded-full flex items-center justify-center border border-primary/20 size-10 bg-primary/10 backdrop-blur-sm text-primary hover:bg-primary/20 active:scale-90 transition-all shadow-sm shadow-primary/10"
-              aria-label="Phân tích bài hát"
-            >
-              <Sparkles className="size-4" />
-            </button>
-
-            <button
               onClick={() => handleMoreOptions(track)}
               className="rounded-full flex items-center justify-center border border-border/50 size-10 bg-background/30 backdrop-blur-sm text-foreground/70 hover:text-foreground hover:bg-muted/60 hover:border-border active:scale-90 transition-all"
               aria-label="Khác"
@@ -785,12 +870,17 @@ const TrackDetailPage = () => {
         {/* ── Track Details & Recommendations ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 mt-8">
           {/* Main Content Area */}
-          <div className="lg:col-span-2 space-y-12">
-            <RecommendedSection
-              excludeTrackId={track._id}
-              onPlay={handlePlayTrack}
-            />
-            <SimilarSection trackId={track._id} onPlay={handlePlayTrack} />
+          <div className="lg:col-span-2 space-y-2">
+            <AiInsightsCard metadata={track.aiMetadata} paletteHex={palette.hex} />
+            <LyricsSection lyrics={track.plainLyrics} paletteHex={palette.hex} paletteR={palette.r} />
+
+            <div className="space-y-12">
+              <RecommendedSection
+                excludeTrackId={track._id}
+                onPlay={handlePlayTrack}
+              />
+              <SimilarSection trackId={track._id} onPlay={handlePlayTrack} />
+            </div>
           </div>
 
           {/* Sidebar Area */}
@@ -851,12 +941,32 @@ const TrackDetailPage = () => {
                 </div>
               </dl>
             </div>
+
+            {/* AI Vibe Tags */}
+            {track.aiMetadata && (track.aiMetadata.moods?.length || track.aiMetadata.contexts?.length) ? (
+              <div className="p-5 rounded-2xl bg-card border shadow-sm">
+                <h3 className="text-sm font-bold mb-4">Vibe & Khung cảnh</h3>
+                <div className="flex flex-wrap gap-2">
+                  {track.aiMetadata.moods?.map(mood => (
+                    <Badge key={mood} variant="secondary" className="px-3 py-1 font-medium bg-secondary/50 hover:bg-secondary text-secondary-foreground text-xs shadow-none">
+                      {mood}
+                    </Badge>
+                  ))}
+                  {track.aiMetadata.contexts?.map(ctx => (
+                    <Badge key={ctx} variant="outline" className="px-3 py-1 font-medium border-border/60 text-muted-foreground text-xs shadow-none">
+                      {ctx}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {/* Artist, Album, Lyrics sections could go here in the future */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5 rounded-2xl bg-card border shadow-sm">
               {typeof track.artist === "object" && (
                 <TrackDetailArtistCard
                   artist={track.artist}
-                  onClick={() => {}}
+                  onClick={() => { }}
                 />
               )}
 
@@ -908,11 +1018,6 @@ const TrackDetailPage = () => {
           </p>
         </footer>
       </div>
-      <AiTrackAnalysisModal
-        isOpen={isAnalysisOpen}
-        onClose={() => setIsAnalysisOpen(false)}
-        track={track}
-      />
     </main>
   );
 };

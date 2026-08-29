@@ -11,6 +11,7 @@ const RecentlyListenedTrack = lazy(() => import("./RecentlyListenedTrack"));
 const LibrarySection = lazy(() => import("./LibrarySection"));
 const TrackSection = lazy(() => import("./TrackSection"));
 
+
 function SectionSkeleton({ height = 48 }: { height?: number }) {
   return (
     <div className="section-container">
@@ -41,6 +42,9 @@ export function HomePage() {
       <Suspense fallback={<SectionSkeleton height={220} />}>
         <TrackSection />
       </Suspense>
+
+
+
       <Suspense fallback={<SectionSkeleton height={220} />}>
         <FeaturedAlbums />
       </Suspense>

@@ -9,7 +9,7 @@ const ClientLayout = () => {
   // Hook tính toán khoảng cách an toàn cho Player bar
   const playerPaddingClass = usePlayerPadding(120);
   const location = useLocation();
-  const isHiddenHeaderPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}`;
+  const isHiddenHeaderPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}` || location.pathname === `/${CLIENT_PATHS.MASHUPS_FEED}`;
 
   return (
     <div
