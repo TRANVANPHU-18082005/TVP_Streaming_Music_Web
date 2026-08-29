@@ -15,12 +15,7 @@ export async function fetchLyrics(
     syncedLines: [],
     plainLyrics: "",
   };
-  trackTitle = "Tìm Em";
-  artistName = "Hngle & Bảo Anh";
-  duration = 274;
 
-
-  console.log(trackTitle, artistName, duration);
   try {
     // --- BƯỚC 1: Thử gọi lệnh GET (Yêu cầu khớp chính xác duration) ---
     console.log(`[Job ${jobId}] 🔍 LRCLIB: Trying precise GET...`);
