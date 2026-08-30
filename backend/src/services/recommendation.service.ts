@@ -613,9 +613,15 @@ class RecommendationService {
    * Dùng cho widget "Bài hát liên quan" hoặc autoplay queue.
    *
    * Thuật toán:
-   *   1. Lấy genres & artist của track gốc.
-   *   2. Tìm bài cùng genre hoặc artist, sắp theo playCount.
-   *   3. Ưu tiên: cùng artist > cùng genre.
+   *   1. Lấy genres, artist, và aiMetadata (moods, energy) của track gốc.
+   *   2. Tìm các bài hát có cùng artist, hoặc chung genres, hoặc chung moods.
+   *   3. Chấm điểm (re-score) các bài hát ứng viên dựa trên độ tương đồng:
+   *      - Trùng artist: +0.3
+   *      - Trùng thể loại: cộng điểm theo tỉ lệ trùng khớp
+   *      - Trùng mood: cộng điểm theo tỉ lệ trùng khớp
+   *      - Energy: thưởng điểm nếu energy gần nhau
+   *      - Độ phổ biến: thưởng điểm nhẹ dựa vào playCount
+   *   4. Sắp xếp và trả về danh sách.
    */
   async getSimilarTracks(
     trackId: string,
@@ -631,58 +637,93 @@ class RecommendationService {
     } catch {}
 
     const source = await Track.findById(trackId)
-      .select("genres artist album")
+      .select("genres artist aiMetadata")
       .lean();
 
     if (!source) return [];
 
     const artistId = source.artist;
     const genreIds = source.genres ?? [];
+    const sourceMoods = source.aiMetadata?.moods ?? [];
+    const sourceEnergy = source.aiMetadata?.energy;
+    
     const excludeId = new Types.ObjectId(trackId);
 
-    const [sameArtist, sameGenre] = await Promise.all([
-      // Same artist – up to 5 bài
-      Track.find({
-        artist: artistId,
-        _id: { $ne: excludeId },
+    // Lấy pool ứng viên (nhiều hơn limit để re-score)
+    const fetchLimit = limit * 5;
+
+    const orConditions: any[] = [];
+    if (artistId) orConditions.push({ artist: artistId });
+    if (genreIds.length > 0) orConditions.push({ genres: { $in: genreIds } });
+    if (sourceMoods.length > 0) orConditions.push({ "aiMetadata.moods": { $in: sourceMoods } });
+
+    // Nếu không có điều kiện nào (bài hát không có artist, genre, mood), fallback về bài hot
+    if (orConditions.length === 0) {
+       return this.getTrendingTracks(limit);
+    }
+
+    const candidates = castLean(
+      await Track.find({
         isDeleted: false,
         isPublic: true,
         status: "ready",
+        _id: { $ne: excludeId },
+        $or: orConditions,
       })
         .select(TRACK_SELECT)
         .populate(TRACK_POPULATE as any)
         .sort({ playCount: -1, releaseDate: -1 })
-        .limit(5)
+        .limit(fetchLimit)
         .lean()
-        .then(castLean),
-
-      // Same genre – fill phần còn lại
-      genreIds.length > 0
-        ? Track.find({
-            genres: { $in: genreIds },
-            artist: { $ne: artistId }, // Tránh trùng với sameArtist
-            _id: { $ne: excludeId },
-            isDeleted: false,
-            isPublic: true,
-            status: "ready",
-          })
-            .select(TRACK_SELECT)
-            .populate(TRACK_POPULATE as any)
-            .sort({ playCount: -1, releaseDate: -1 })
-            .limit(limit)
-            .lean()
-            .then(castLean)
-        : Promise.resolve([] as TrackDoc[]),
-    ]);
-
-    const combined = deduplicateTracks([...sameArtist, ...sameGenre]).slice(
-      0,
-      limit,
     );
+
+    // Re-score candidates
+    const scored = candidates.map((track) => {
+      let relevance = 0;
+
+      // 1. Artist Match
+      const tArtistId = track.artist && typeof track.artist === "object"
+          ? (track.artist._id?.toString() ?? "")
+          : (track.artist?.toString() ?? "");
+      const sArtistId = artistId?.toString() ?? "";
+      if (sArtistId && tArtistId === sArtistId) {
+        relevance += 0.3;
+      }
+
+      // 2. Genre Overlap
+      const tGenres = track.genres?.map(g => typeof g === "object" ? (g._id?.toString() ?? "") : g.toString()) ?? [];
+      const sGenres = genreIds.map((g: any) => g.toString());
+      if (sGenres.length > 0 && tGenres.length > 0) {
+        const overlap = sGenres.filter(g => tGenres.includes(g)).length;
+        relevance += (overlap / Math.max(sGenres.length, tGenres.length)) * 0.25;
+      }
+
+      // 3. Mood Overlap
+      const tMoods = track.aiMetadata?.moods ?? [];
+      if (sourceMoods.length > 0 && tMoods.length > 0) {
+        const overlap = sourceMoods.filter((m: string) => tMoods.includes(m)).length;
+        relevance += (overlap / Math.max(sourceMoods.length, tMoods.length)) * 0.25;
+      }
+
+      // 4. Energy Similarity
+      if (typeof sourceEnergy === 'number' && typeof track.aiMetadata?.energy === 'number') {
+        const diff = Math.abs(sourceEnergy - track.aiMetadata.energy);
+        relevance += (1 - diff) * 0.15;
+      }
+
+      // 5. Popularity Boost
+      const popularityBonus = Math.log1p(track.playCount ?? 0) * 0.01;
+
+      return { ...track, score: relevance + popularityBonus };
+    });
+
+    scored.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+
+    const combined = deduplicateTracks(scored).slice(0, limit);
 
     const ttl = CACHE_TTL_BASE + Math.floor(Math.random() * CACHE_TTL_JITTER);
     withCacheTimeout(() =>
-      cacheRedis.set(cacheKey, JSON.stringify(combined), { ex: ttl } as any),
+      cacheRedis.set(cacheKey, JSON.stringify(combined), "EX", ttl),
     ).catch(() => {});
 
     return combined;
