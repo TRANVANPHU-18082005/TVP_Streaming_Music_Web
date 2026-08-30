@@ -15,11 +15,13 @@ export const useShortAudio = (
   startTime: number,
   endTime: number,
   isActive: boolean,
+  onEnd?: () => void,
 ) => {
   const audioRef      = useRef<HTMLAudioElement | null>(null);
   const playPromiseRef = useRef<Promise<void> | null>(null); // Tracking play() promise
   const activeRef     = useRef(isActive);                    // Luôn ref mới nhất, tránh stale closure
   const srcRef        = useRef(src);
+  const onEndRef      = useRef(onEnd);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress,  setProgress]  = useState(0);
@@ -28,6 +30,7 @@ export const useShortAudio = (
   // Sync refs
   activeRef.current = isActive;
   srcRef.current    = src;
+  onEndRef.current  = onEnd;
 
   // ── 1. Khởi tạo Audio Element (1 lần duy nhất per hook instance) ─────────
   useEffect(() => {
@@ -78,13 +81,20 @@ export const useShortAudio = (
       const rawProgress = ((audio.currentTime - startTime) / duration) * 100;
       setProgress(Math.max(0, Math.min(100, rawProgress)));
 
-      // Auto-loop trong khoảng [startTime, endTime]
+      // Auto-loop trong khoảng [startTime, endTime] nếu không có onEnd
       if (audio.currentTime >= endTime) {
-        audio.currentTime = startTime;
-        // Dùng playPromiseRef để track promise mới khi loop
-        playPromiseRef.current = audio.play().catch(() => {
+        if (onEndRef.current) {
+          audio.pause();
           if (activeRef.current) setIsPlaying(false);
-        });
+          playPromiseRef.current = null;
+          onEndRef.current();
+        } else {
+          audio.currentTime = startTime;
+          // Dùng playPromiseRef để track promise mới khi loop
+          playPromiseRef.current = audio.play().catch(() => {
+            if (activeRef.current) setIsPlaying(false);
+          });
+        }
       }
     };
 

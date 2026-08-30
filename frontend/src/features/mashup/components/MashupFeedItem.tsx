@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useLongPress } from "@/hooks/useLongPress";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
-import { Share2, FileText, Wand2 } from "lucide-react";
+import { Share2, FileText, Wand2, Repeat, ChevronDown } from "lucide-react";
 import { MashupTransitionEffect } from "./MashupTransitionEffect";
 import { MashupWaveformBar } from "./MashupWaveformBar";
 import { CLIENT_PATHS } from "@/config/paths";
@@ -18,6 +18,9 @@ import { CLIENT_PATHS } from "@/config/paths";
 interface MashupFeedItemProps {
   mashup: IMashup;
   isActive: boolean;
+  onEnd?: () => void;
+  isAutoNext?: boolean;
+  onToggleAutoNext?: () => void;
 }
 
 /** Countdown "3 2 1" shown in the last 3s before a transition */
@@ -38,7 +41,7 @@ const CountdownDot = ({ seconds }: { seconds: number }) => (
   </AnimatePresence>
 );
 
-export const MashupFeedItem = ({ mashup, isActive }: MashupFeedItemProps) => {
+export const MashupFeedItem = ({ mashup, isActive, onEnd, isAutoNext, onToggleAutoNext }: MashupFeedItemProps) => {
   const navigate = useNavigate();
   const [countdown, setCountdown] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -67,7 +70,7 @@ export const MashupFeedItem = ({ mashup, isActive }: MashupFeedItemProps) => {
     analyserNode,
     togglePlay,
     skipTo,
-  } = useMashupPlayer(mashup, isActive, onTransitionStart);
+  } = useMashupPlayer(mashup, isActive, onTransitionStart, onEnd);
 
   useEffect(() => {
     return () => {
@@ -402,6 +405,30 @@ export const MashupFeedItem = ({ mashup, isActive }: MashupFeedItemProps) => {
                 <span className="text-xs text-muted-foreground">Xem tất cả các track được mix</span>
               </div>
             </button>
+            
+            {/* Nút Toggle Tự động lướt */}
+            {onToggleAutoNext && (
+              <button
+                onClick={() => {
+                  onToggleAutoNext();
+                  setIsDrawerOpen(false);
+                }}
+                className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
+              >
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isAutoNext ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                  {isAutoNext ? <ChevronDown className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
+                </div>
+                <div className="flex flex-col flex-1">
+                  <span className="text-sm font-bold">
+                    {isAutoNext ? 'Tự động lướt: Đang BẬT' : 'Tự động lướt: Đang TẮT'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {isAutoNext ? 'Tự động sang Mashup tiếp theo' : 'Lặp lại Mashup hiện tại'}
+                  </span>
+                </div>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`);

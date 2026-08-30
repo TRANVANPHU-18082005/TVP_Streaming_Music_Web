@@ -26,6 +26,7 @@ export const useMashupPlayer = (
   mashup: IMashup | null,
   shouldPlay: boolean,
   onTransitionStart?: (fromIdx: number, toIdx: number, type: TransitionType) => void,
+  onEnd?: () => void,
 ) => {
   const audioCtxRef     = useRef<AudioContext | null>(null);
   const analyserRef     = useRef<AnalyserNode | null>(null);
@@ -45,6 +46,9 @@ export const useMashupPlayer = (
   const [transitionState, setTransitionState] = useState<TransitionState>('idle');
   const [activeTransitionType, setActiveTransitionType] = useState<TransitionType | null>(null);
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+
+  const onEndRef = useRef(onEnd);
+  onEndRef.current = onEnd;
 
   activeRef.current = shouldPlay;
 
@@ -355,6 +359,9 @@ export const useMashupPlayer = (
           setProgress(100);
           setTransitionState('idle');
           setActiveTransitionType(null);
+          if (onEndRef.current) {
+            onEndRef.current();
+          }
           return; // Stop RAF
         }
       }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { shortsApi } from "../api/shortsApi";
 import { ShortFeedItem } from "../components/ShortFeedItem";
-import { Loader2, Music2, ChevronUp, ChevronDown, TvMinimalPlay } from "lucide-react";
+import { Loader2, Music2, ChevronUp, ChevronDown, TvMinimalPlay, Repeat } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ForMeHeader } from "@/features/for-me/components/ForMeHeader";
 import { useDispatch, useSelector } from "react-redux";
@@ -24,6 +24,7 @@ const ShortShimmer = () => (
 export const ShortsPage = () => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [showSwipeHint, setShowSwipeHint] = useState(true);
+  const [isAutoNext, setIsAutoNext] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -218,6 +219,8 @@ export const ShortsPage = () => {
           />
         </div>
 
+
+
         {/* ── Swipe Up Hint ─────────────────────────────────────────────── */}
         <AnimatePresence>
           {showSwipeHint && allShorts.length > 1 && (
@@ -253,7 +256,9 @@ export const ShortsPage = () => {
               key={short._id}
               short={short}
               isActive={index === activeIndex}
-
+              onEnd={isAutoNext ? handleNext : undefined}
+              isAutoNext={isAutoNext}
+              onToggleAutoNext={() => setIsAutoNext(!isAutoNext)}
             />
           ))}
 

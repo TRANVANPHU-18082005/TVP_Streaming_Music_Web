@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useMashupFeed } from "../hooks/useMashups";
 import { MashupFeedItem } from "../components/MashupFeedItem";
-import { Loader2, Music2, ChevronUp, ChevronDown, Layers } from "lucide-react";
+import { Loader2, Music2, ChevronUp, ChevronDown, Layers, Repeat } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ForMeHeader } from "@/features/for-me/components/ForMeHeader";
 import { useDispatch, useSelector } from "react-redux";
@@ -12,6 +12,7 @@ const BATCH_SIZE = 10;
 
 export const MashupFeedPage = () => {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isAutoNext, setIsAutoNext] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -167,6 +168,8 @@ export const MashupFeedPage = () => {
         md:shadow-[0_0_80px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.06)]
       ">
 
+
+
         {/* Snap Scroll Container */}
         <div
           ref={containerRef}
@@ -180,6 +183,9 @@ export const MashupFeedPage = () => {
               key={mashup._id}
               mashup={mashup}
               isActive={index === activeIndex}
+              onEnd={isAutoNext ? handleNext : undefined}
+              isAutoNext={isAutoNext}
+              onToggleAutoNext={() => setIsAutoNext(!isAutoNext)}
             />
           ))}
 

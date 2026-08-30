@@ -9,15 +9,18 @@ import { MarqueeText } from "@/features/player/components/MarqueeText";
 import { Link, useNavigate } from "react-router-dom";
 import { useLongPress } from "@/hooks/useLongPress";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
-import { Share2, FileText, Zap, Wand2 } from "lucide-react";
+import { Share2, FileText, Zap, Wand2, Repeat, ChevronDown } from "lucide-react";
 import { CLIENT_PATHS } from "@/config/paths";
 
 interface ShortFeedItemProps {
   short: ITrackShort;
   isActive: boolean;
+  onEnd?: () => void;
+  isAutoNext?: boolean;
+  onToggleAutoNext?: () => void;
 }
 
-export const ShortFeedItem = ({ short, isActive }: ShortFeedItemProps) => {
+export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAutoNext }: ShortFeedItemProps) => {
   const { track, moodVideo } = short;
   const navigate = useNavigate();
 
@@ -27,6 +30,7 @@ export const ShortFeedItem = ({ short, isActive }: ShortFeedItemProps) => {
     short.startTime,
     short.endTime,
     isActive,
+    onEnd
   );
 
   // ── Seekbar drag state ────────────────────────────────────────────────────
@@ -324,6 +328,30 @@ export const ShortFeedItem = ({ short, isActive }: ShortFeedItemProps) => {
                 <span className="text-xs text-muted-foreground">Xem bài hát gốc</span>
               </div>
             </button>
+            
+            {/* Nút Toggle Tự động lướt */}
+            {onToggleAutoNext && (
+              <button
+                onClick={() => {
+                  onToggleAutoNext();
+                  setIsDrawerOpen(false);
+                }}
+                className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
+              >
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isAutoNext ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                  {isAutoNext ? <ChevronDown className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
+                </div>
+                <div className="flex flex-col flex-1">
+                  <span className="text-sm font-bold">
+                    {isAutoNext ? 'Tự động lướt: Đang BẬT' : 'Tự động lướt: Đang TẮT'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {isAutoNext ? 'Tự động sang video tiếp theo' : 'Lặp lại video hiện tại'}
+                  </span>
+                </div>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`);
