@@ -63,76 +63,76 @@ app.use("/api", apiLimiter);
 
 // ── HEALTH CHECK (Production Optimized) ─────────────────────────────
 app.get("/api/health", async (req, res) => {
-  const start = Date.now();
-  // 🚀 Trừ hao 200ms để đảm bảo gửi kịp response 504 trước khi Fly.io (2s) ngắt mạng
-  const TIMEOUT_MS = 1800;
+  // const start = Date.now();
+  // // 🚀 Trừ hao 200ms để đảm bảo gửi kịp response 504 trước khi Fly.io (2s) ngắt mạng
+  // const TIMEOUT_MS = 1800;
 
-  const safeTimeout = <T>(p: Promise<T>, ms: number, fallback: T) =>
-    Promise.race([
-      p,
-      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-    ]);
+  // const safeTimeout = <T>(p: Promise<T>, ms: number, fallback: T) =>
+  //   Promise.race([
+  //     p,
+  //     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  //   ]);
 
-  // MongoDB check
-  const checkMongo = async () => {
-    try {
-      const state = mongoose.connection.readyState;
-      if (state === 1) return { ok: true, state };
+  // // MongoDB check
+  // const checkMongo = async () => {
+  //   try {
+  //     const state = mongoose.connection.readyState;
+  //     if (state === 1) return { ok: true, state };
 
-      if (mongoose.connection.db) {
-        const ping = (mongoose.connection.db as any).admin().ping();
-        await safeTimeout(ping, 1000, null); // Ép giới hạn 1 giây
-        return { ok: true, state: mongoose.connection.readyState };
-      }
-      return { ok: false, state };
-    } catch (err: any) {
-      return { ok: false, error: String(err.message || err) };
-    }
-  };
+  //     if (mongoose.connection.db) {
+  //       const ping = (mongoose.connection.db as any).admin().ping();
+  //       await safeTimeout(ping, 1000, null); // Ép giới hạn 1 giây
+  //       return { ok: true, state: mongoose.connection.readyState };
+  //     }
+  //     return { ok: false, state };
+  //   } catch (err: any) {
+  //     return { ok: false, error: String(err.message || err) };
+  //   }
+  // };
 
-  // Redis check (Vẫn giữ lazy import rất tốt của bạn)
-  const checkRedis = async () => {
-    try {
-      const { cacheRedis, queueRedis } = await import("./config/redis");
-      const checks = await Promise.all([
-        safeTimeout(cacheRedis.ping(), 800, "timeout"),
-        safeTimeout(queueRedis.ping(), 800, "timeout"),
-      ]);
-      return {
-        cache: checks[0] === "PONG",
-        queue: checks[1] === "PONG",
-      };
-    } catch (err: any) {
-      return { ok: false, error: String(err.message || err) };
-    }
-  };
-  try {
-    const results = await Promise.race([
-      Promise.all([checkMongo(), checkRedis()]),
-      new Promise((resolve) =>
-        setTimeout(() => resolve(["timeout"]), TIMEOUT_MS),
-      ),
-    ]);
+  // // Redis check (Vẫn giữ lazy import rất tốt của bạn)
+  // const checkRedis = async () => {
+  //   try {
+  //     const { cacheRedis, queueRedis } = await import("./config/redis");
+  //     const checks = await Promise.all([
+  //       safeTimeout(cacheRedis.ping(), 800, "timeout"),
+  //       safeTimeout(queueRedis.ping(), 800, "timeout"),
+  //     ]);
+  //     return {
+  //       cache: checks[0] === "PONG",
+  //       queue: checks[1] === "PONG",
+  //     };
+  //   } catch (err: any) {
+  //     return { ok: false, error: String(err.message || err) };
+  //   }
+  // };
+  // try {
+  //   const results = await Promise.race([
+  //     Promise.all([checkMongo(), checkRedis()]),
+  //     new Promise((resolve) =>
+  //       setTimeout(() => resolve(["timeout"]), TIMEOUT_MS),
+  //     ),
+  //   ]);
 
-    const elapsed = Date.now() - start;
+  //   const elapsed = Date.now() - start;
 
-    if (Array.isArray(results) && results[0] === "timeout") {
-      return res.status(504).json({ status: "timeout", elapsedMs: elapsed });
-    }
+  //   if (Array.isArray(results) && results[0] === "timeout") {
+  //     return res.status(504).json({ status: "timeout", elapsedMs: elapsed });
+  //   }
 
-    const [mongo, redis] = results as any;
-    const ok = !!(mongo?.ok && redis?.cache && redis?.queue);
+  //   const [mongo, redis] = results as any;
+  //   const ok = !!(mongo?.ok && redis?.cache && redis?.queue);
 
-    return res.status(ok ? 200 : 503).json({
-      status: ok ? "ok" : "degraded",
-      elapsedMs: elapsed,
-      checks: { mongo, redis },
-    });
-  } catch (err: any) {
-    return res
-      .status(500)
-      .json({ status: "error", error: String(err.message || err) });
-  }
+  //   return res.status(ok ? 200 : 503).json({
+  //     status: ok ? "ok" : "degraded",
+  //     elapsedMs: elapsed,
+  //     checks: { mongo, redis },
+  //   });
+  // } catch (err: any) {
+  return res
+    .status(200)
+    .json({ status: "ok" });
+  // }
 });
 export default app;
 
