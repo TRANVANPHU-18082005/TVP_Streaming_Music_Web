@@ -39,6 +39,7 @@ export const CLIENT_PATHS = {
   MASHUPS_FEED: "mashups/feed",
   MASHUPS_CREATE: "mashups/create",
   MASHUPS_DETAIL: (id: string) => `mashups/${id}`,
+  ROOMS: "rooms",
 } as const;
 export const ADMIN_PATHS = {
   ADMIN: "/admin",

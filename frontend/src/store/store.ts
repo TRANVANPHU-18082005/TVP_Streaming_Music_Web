@@ -15,6 +15,7 @@ import storage from "redux-persist/lib/storage";
 import authReducer from "@/features/auth/slice/authSlice";
 import playerReducer from "@/features/player/slice/playerSlice";
 import interactionReducer from "@/features/interaction/slice/interactionSlice"; // Import reducer mới
+import roomReducer from "@/features/music-room/store/roomSlice";
 
 import { injectStore, setGlobalAccessToken } from "@/lib/axios";
 
@@ -38,6 +39,7 @@ const appReducer = combineReducers({
   auth: authReducer,
   player: persistReducer(playerPersistConfig, playerReducer),
   interaction: persistReducer(interactionPersistConfig, interactionReducer),
+  room: roomReducer, // Không persist (realtime state)
 });
 
 // 2. Định nghĩa Root Reducer với Type chuẩn

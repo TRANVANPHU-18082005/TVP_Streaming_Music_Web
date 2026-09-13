@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAppDispatch } from "@/store/hooks";
 import { loginUser } from "../slice/authSlice";
@@ -10,6 +10,7 @@ import { loginSchema, type LoginInput } from "../schemas/auth.schema";
 
 export const useLogin = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const [showPassword, setShowPassword] = useState(false);
   const [requiredProviders, setRequiredProviders] = useState<string[]>([]);
@@ -36,7 +37,9 @@ export const useLogin = () => {
       toast.success("Xin chào!", {
         description: `Đã đăng nhập với tư cách ${user.fullName}`,
       });
-      navigate("/");
+      // Redirect về trang được yêu cầu (VD: /rooms/:code) hoặc trang chủ
+      const nextUrl = searchParams.get("next");
+      navigate(nextUrl && nextUrl.startsWith("/") ? nextUrl : "/");
     } else {
       const errorPayload = resultAction.payload as any;
       handleAuthError(errorPayload, form, navigate, setRequiredProviders);

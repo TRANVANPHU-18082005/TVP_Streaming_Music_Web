@@ -15,7 +15,7 @@ export async function connectWithRetry(): Promise<void> {
 
   for (let attempt = 1; attempt <= DB_CONNECT_RETRIES; attempt++) {
     try {
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 5_000 });
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: 5_000, family: 4 });
       console.log("📦 Worker DB Connected");
       return;
     } catch (err) {

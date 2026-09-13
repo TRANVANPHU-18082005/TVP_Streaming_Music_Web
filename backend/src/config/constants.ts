@@ -24,3 +24,13 @@ export const TRACK_POPULATE = [
     model: "TrackMoodVideo",
   },
 ] as const;
+
+export enum RoomErrorCode {
+  UNAUTHORIZED = "UNAUTHORIZED",
+  NOT_FOUND = "NOT_FOUND",
+  WRONG_PASSWORD = "WRONG_PASSWORD",
+  ROOM_FULL = "ROOM_FULL",
+  RATE_LIMITED = "RATE_LIMITED",
+  UNKNOWN = "UNKNOWN",
+
+}

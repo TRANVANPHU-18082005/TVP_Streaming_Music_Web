@@ -19,7 +19,14 @@ export const APP_CONFIG = {
   VIRTUALIZER_LIMIT: 50,
   MAX_LIMIT: 1000,
 } as const;
-
+export enum RoomErrorCode {
+  UNAUTHORIZED = "UNAUTHORIZED",
+  NOT_FOUND = "NOT_FOUND",
+  WRONG_PASSWORD = "WRONG_PASSWORD",
+  ROOM_FULL = "ROOM_FULL",
+  RATE_LIMITED = "RATE_LIMITED",
+  UNKNOWN = "UNKNOWN",
+}
 export const DEFAULT_GRID_META = {
   totalPages: 1,
   totalItems: 0,

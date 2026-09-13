@@ -27,6 +27,7 @@ import {
   Settings,
   TvMinimalPlay,
   Layers,
+  Radio,
 } from "lucide-react";
 import {
   motion,
@@ -98,6 +99,12 @@ const NAV_ITEMS: readonly NavItemDef[] = [
     shortLabel: "Mix",
     icon: Layers,
     path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.MASHUPS_FEED}`,
+  },
+  {
+    label: "Phòng nhạc",
+    shortLabel: "Phòng",
+    icon: Radio,
+    path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.ROOMS}`,
   },
   {
     label: "Nghệ sĩ",

@@ -14,11 +14,22 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   > | null>(null);
 
   const [isConnected, setIsConnected] = useState(false);
-  const { token } = useAppSelector((state) => state.auth);
+  const { token, user } = useAppSelector((state) => state.auth);
 
+  // Ngăn chặn race condition: khi user thay đổi (đăng nhập/đăng xuất), 
+  // reset state socket ngay lập tức trước khi render children
+  const currentUserId = user?._id || user?.id;
+  const [prevUserId, setPrevUserId] = useState(currentUserId);
+  if (currentUserId !== prevUserId) {
+    setPrevUserId(currentUserId);
+    setIsConnected(false);
+    setSocket(null);
+  }
+  console.log(user)
   useEffect(() => {
     // 1. Khởi tạo instance
     const socketInstance = io(SOCKET_URL, {
+      forceNew: true, // Thêm dòng này để KHÔNG dùng lại kết nối cũ
       transports: ["websocket"],
       autoConnect: false,
       reconnection: true,
@@ -26,6 +37,9 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       reconnectionDelay: 1000,
       auth: {
         token: token ? `Bearer ${token}` : null,
+      },
+      query: {
+        userId: currentUserId || "",
       },
     });
 
@@ -54,7 +68,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       socketInstance.removeAllListeners();
       socketInstance.disconnect();
     };
-  }, [token]);
+  }, [token, currentUserId]);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>

@@ -40,6 +40,68 @@ export interface ServerToClientEvents {
 
   // Các thông báo lỗi hệ thống (nếu có)
   socket_error: (error: { message: string; code?: string }) => void;
+
+  // ── MUSIC ROOM EVENTS (Server → Client) ——————————————————————————————————
+  /** Full state khi join phòng — dùng để sync playback */
+  "room:state": (data: {
+    room: {
+      roomCode: string;
+      name: string;
+      theme: string;
+      host: { _id: string; fullName: string; username: string; avatar: string };
+      isPublic: boolean;
+      memberCount: number;
+      queue: any[];
+    };
+    playbackState: {
+      currentTrackId: string | null;
+      startedAt: number | null;
+      isPaused: boolean;
+      pausedAt: number;
+    };
+    isHost: boolean;
+  }) => void;
+  /** Playback cập nhật (skip/pause/resume) */
+  "room:playback_update": (data: {
+    currentTrackId: string | null;
+    startedAt: number | null;
+    isPaused: boolean;
+    pausedAt: number;
+  }) => void;
+  /** Queue cập nhật (vote/add/remove) */
+  "room:queue_update": (data: { queue: any[] }) => void;
+  /** Thành viên mới vào */
+  "room:member_joined": (data: { userId: string; memberCount: number }) => void;
+  /** Thành viên rời */
+  "room:member_left": (data: { userId: string; memberCount: number }) => void;
+  /** Tin nhắn chat mới */
+  "room:new_message": (data: any) => void;
+  /** Reaction emoji */
+  "room:reaction": (data: { userId: string; emoji: string }) => void;
+  /** Host thay đổi */
+  "room:host_changed": (data: { newHostId: string }) => void;
+  /** Phòng bị đóng */
+  "room:closed": (data: { roomCode: string; reason?: string }) => void;
+  /** Bị kick */
+  "room:kicked": (data: { roomCode: string; reason?: string }) => void;
+  /** Lỗi */
+  "room:error": (data: { message: string, errorCode: string }) => void;
+  /** Vote ACK */
+  "room:vote_ack": (data: { trackId: string; voted: boolean }) => void;
+  /** Heartbeat — sync memberCount */
+  "room:heartbeat": (data: { roomCode: string; memberCount: number }) => void;
+  /** Request List Update */
+  "room:request_list": (requests: any[]) => void;
+  /** Theme thay đổi */
+  "room:theme_changed": (data: { roomCode: string; theme: string }) => void;
+  /** Mood video thay đổi */
+  "room:mood_video_changed": (data: { roomCode: string; currentMoodVideo: any }) => void;
+  /** Bị cấm chat */
+  "room:user_muted": (data: { targetUserId: string }) => void;
+  /** Được mở cấm chat */
+  "room:user_unmuted": (data: { targetUserId: string }) => void;
+  /** Queue trống */
+  "room:queue_empty": (data: { message: string }) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,7 +138,38 @@ export interface ClientToServerEvents {
 
   // Gia nhập phòng riêng (Thường tự động dựa trên userId khi connect)
   join_room: (roomName: string) => void;
+
+  // ── MUSIC ROOM EVENTS (Client → Server) ——————————————————————————————————
+  /** Vào phòng (có thể kèm mật khẩu cho private room) */
+  "room:join": (data: { roomCode: string; password?: string }) => void;
+  /** Rời phòng */
+  "room:leave": (data: { roomCode: string }) => void;
+  /** Gửi tin nhắn chat */
+  "room:message": (data: { roomCode: string; content: string }) => void;
+  /** Gửi reaction emoji */
+  "room:react": (data: { roomCode: string; emoji: string }) => void;
+  /** Host: Phát bài tiếp theo */
+  "room:play_next": (data: { roomCode: string }) => void;
+  /** Host: Pause/Resume */
+  "room:toggle_pause": (data: { roomCode: string; currentPosition: number }) => void;
+  /** Vote bài tiếp theo */
+  "room:vote": (data: { roomCode: string; trackId: string }) => void;
+  /** Yêu cầu bài hát */
+  "room:request_track": (data: { roomCode: string; trackId: string }) => void;
+  /** Host xử lý yêu cầu bài hát */
+  "room:handle_request": (data: { roomCode: string; trackId: string; action: "approve" | "reject" }) => void;
+  /** Host đổi không gian phòng */
+  "room:change_theme": (data: { roomCode: string; theme: string }) => void;
+  /** Thay đổi video nền phòng (Host) */
+  "room:set_mood_video": (data: { roomCode: string; videoId: string | null }) => void;
+  /** Host cấm chat */
+  "room:mute_user": (data: { roomCode: string; targetUserId: string }) => void;
+  /** Host mở cấm chat */
+  "room:unmute_user": (data: { roomCode: string; targetUserId: string }) => void;
+  /** Host xóa tin nhắn */
+  "room:delete_message": (data: { roomCode: string; messageId: string }) => void;
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. SOCKET DATA (Dành cho Backend - socket.data)

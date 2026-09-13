@@ -29,6 +29,8 @@ import {
   TrackManagementPage,
   UsersManagementPage,
 } from "@/pages";
+import MusicRoomsPage from "@/pages/client/MusicRoomsPage";
+import MusicRoomPage from "@/pages/client/MusicRoomPage";
 import { GuestRoute } from "@/app/routes/GuestRoute";
 import { guestAuthRoutes, protectedAuthRoutes } from "@/features/auth/routes";
 import { ADMIN_PATHS, CLIENT_PATHS } from "@/config/paths";
@@ -74,6 +76,10 @@ export const router = createBrowserRouter([
           ...forMeRoutes,
           ...shortsRoutes,
           ...mashupRoutes,
+
+          // ── Music Rooms ──────────────────────────────────────────────
+          { path: CLIENT_PATHS.ROOMS, element: <MusicRoomsPage /> },
+          { path: `${CLIENT_PATHS.ROOMS}/:roomCode`, element: <MusicRoomPage /> },
           {
             path: CLIENT_PATHS.TRACK_DETAIL(":id"),
             element: <TrackDetailPage />,

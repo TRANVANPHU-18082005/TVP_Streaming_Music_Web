@@ -18,6 +18,7 @@ import moodVideoRoutes from "./moodVideo.route";
 import aiRoutes from "./ai.routes";
 import trackShortRoutes from "./trackShort.route";
 import mashupRoutes from "./mashup.route";
+import musicRoomRoutes from "./musicRoom.route";
 
 const router = express.Router();
 router.use("/auth", authRoutes);
@@ -38,5 +39,6 @@ router.use("/mood-videos", moodVideoRoutes);
 router.use("/ai", aiRoutes);
 router.use("/shorts", trackShortRoutes);
 router.use("/mashups", mashupRoutes);
+router.use("/rooms", musicRoomRoutes);
 
 export default router;

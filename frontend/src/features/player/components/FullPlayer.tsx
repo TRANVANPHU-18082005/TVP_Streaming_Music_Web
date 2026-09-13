@@ -33,6 +33,7 @@ import {
   ListMusic,
   Loader2,
   Focus,
+  Film,
 } from "lucide-react";
 import { Clock } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
@@ -81,6 +82,11 @@ const TrackDetailPanelLazy = lazy(() =>
 );
 const QueuePanelLazy = lazy(() =>
   import("./Queuepanel").then((m) => ({ default: m.QueuePanel ?? m.default })),
+);
+const CinematicMoodOverlayLazy = lazy(() =>
+  import("./CinematicMoodOverlay").then((m) => ({
+    default: m.CinematicMoodOverlay ?? m.default,
+  })),
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -782,6 +788,10 @@ interface ToolbarProps {
   focusMode: boolean;
   onToggleFocus: () => void;
   bitrate: number;
+  // Cinematic Mood Video
+  hasMoodVideo: boolean;
+  isCinematic: boolean;
+  onToggleCinematic: () => void;
 }
 
 const Toolbar = memo(
@@ -791,6 +801,9 @@ const Toolbar = memo(
     focusMode,
     onToggleFocus,
     bitrate = 320,
+    hasMoodVideo,
+    isCinematic,
+    onToggleCinematic,
   }: ToolbarProps) => {
     const dispatch = useDispatch();
     const autoplayEnabled = useSelector(
@@ -851,6 +864,20 @@ const Toolbar = memo(
       },
     ];
 
+    // Cinematic button items — always show to allow picking any mood video
+    const cinematicItem = {
+      icon: <Film className="size-5" />,
+      label: isCinematic ? "Thoát Cinematic" : "Cinematic",
+      title: isCinematic
+        ? "Thoát chế độ toàn cảnh"
+        : hasMoodVideo
+        ? "Xem toàn cảnh Mood Video"
+        : "Xem toàn cảnh (chọn video)",
+      active: isCinematic,
+      onClick: onToggleCinematic,
+      disabled: false,
+    };
+
     return (
       <div
         className="fp-stagger flex items-center justify-between pt-3"
@@ -910,6 +937,25 @@ const Toolbar = memo(
             {icon}
           </motion.button>
         ))}
+
+        {/* ── Cinematic Mood Video button ── */}
+        <motion.button
+          whileHover={{ scale: 1.12 }}
+          whileTap={{ scale: 0.86 }}
+          transition={SP.snappy}
+          onClick={(e) => { e.stopPropagation(); cinematicItem.onClick(); }}
+          title={cinematicItem.title}
+          aria-label={cinematicItem.label}
+          aria-pressed={cinematicItem.active}
+          className={cn(
+            "p-2 rounded-xl transition-colors",
+            cinematicItem.active
+              ? "text-primary bg-primary/12 shadow-[0_0_12px_hsl(var(--brand-glow)/0.2)]"
+              : "text-[var(--fp-fg-faint)] hover:text-[var(--fp-fg-muted)] hover:bg-[var(--fp-hover-bg)]",
+          )}
+        >
+          {cinematicItem.icon}
+        </motion.button>
       </div>
     );
   },
@@ -1309,6 +1355,7 @@ const FullPlayerComponent = ({
   const [swipeDir, setSwipeDir] = useState(0);
   const [showQueue, setShowQueue] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [isCinematic, setIsCinematic] = useState(false);
   // Keep-alive: track views đã mount, không bao giờ unmount sau lần đầu
   const [mountedViews, setMountedViews] = useState<Set<PlayerView>>(
     () => new Set<PlayerView>(["artwork"]),
@@ -1409,6 +1456,7 @@ const FullPlayerComponent = ({
   const swipeHandlers = useHorizontalSwipe(handleViewSwipe);
   const toggleQueue = useCallback(() => setShowQueue((v) => !v), []);
   const toggleFocus = useCallback(() => setFocusMode((v) => !v), []);
+  const toggleCinematic = useCallback(() => setIsCinematic((v) => !v), []);
   const isArtwork = currentView === "artwork";
   if (isLoading) {
     return <FullPlayerSkeleton key="skeleton" />;
@@ -1514,6 +1562,9 @@ const FullPlayerComponent = ({
                     onToggleQueue={toggleQueue}
                     focusMode={focusMode}
                     onToggleFocus={toggleFocus}
+                    hasMoodVideo={!!track.moodVideo?.videoUrl}
+                    isCinematic={isCinematic}
+                    onToggleCinematic={toggleCinematic}
                   />
                 )}
               </div>
@@ -1587,6 +1638,9 @@ const FullPlayerComponent = ({
                     onToggleQueue={toggleQueue}
                     focusMode={focusMode}
                     onToggleFocus={toggleFocus}
+                    hasMoodVideo={!!track.moodVideo?.videoUrl}
+                    isCinematic={isCinematic}
+                    onToggleCinematic={toggleCinematic}
                   />
                 </div>
               )}
@@ -1604,6 +1658,24 @@ const FullPlayerComponent = ({
       </div> */}
 
       {/* OptionSheet handled globally by ContextSheetProvider */}
+
+      {/* ── CINEMATIC MOOD VIDEO OVERLAY ── */}
+      <AnimatePresence>
+        {isCinematic && (
+          <Suspense fallback={null}>
+            <CinematicMoodOverlayLazy
+              track={track}
+              isPlaying={isPlaying}
+              duration={duration}
+              getCurrentTime={getCurrentTime}
+              onSeek={onSeek}
+              onClose={() => setIsCinematic(false)}
+              lyrics={lyrics}
+              accentColor={accentColor}
+            />
+          </Suspense>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
