@@ -120,7 +120,7 @@ const trackBaseSchema = z.object({
   aiMetadata: z.object({
     emotion: optionalString(200, "Cảm xúc không được vượt quá 200 ký tự"),
     musicalStyle: optionalString(500, "Phong cách âm nhạc không được vượt quá 500 ký tự"),
-    meaning: optionalString(1000, "Ý nghĩa không được vượt quá 1000 ký tự"),
+    meaning: optionalString(5000, "Ý nghĩa không được vượt quá 5000 ký tự"),
     language: optionalString(50, "Ngôn ngữ không được vượt quá 50 ký tự"),
     era: optionalString(50, "Thập niên không được vượt quá 50 ký tự"),
     colorHex: optionalString(10, "Mã màu không được vượt quá 10 ký tự"),
@@ -165,13 +165,13 @@ export const trackEditSchema = trackBaseSchema
     audio: z
       .union([
         audioFileSchema,
-        z.string().url("Đường dẫn nhạc không hợp lệ"),
+        z.string(),
         z.null(),
       ])
       .optional(),
     coverImage: z
       .union([
-        z.string().url("Đường dẫn ảnh không hợp lệ"),
+        z.string(),
         imageFileSchema,
         z.null(),
       ])

@@ -133,68 +133,77 @@ export const useTrackForm = ({
   );
 
   // ── Submit handler ─────────────────────────────────────────────────────────
-  const handleSubmit = form.handleSubmit(async (values) => {
-    const { dirtyFields } = form.formState;
+  const handleSubmit = form.handleSubmit(
+    async (values) => {
+      const { dirtyFields } = form.formState;
 
-    // Tối ưu băng thông: Edit mode + không có thay đổi → skip
-    if (isEditMode) {
-      const hasNewAudio = values.audio instanceof File;
-      const hasNewImage = (values as any).coverImage instanceof File;
-      const hasDirtyFields = Object.keys(dirtyFields).length > 0;
+      // Tối ưu băng thông: Edit mode + không có thay đổi → skip
+      if (isEditMode) {
+        const hasNewAudio = values.audio instanceof File;
+        const hasNewImage = (values as any).coverImage instanceof File;
+        const hasDirtyFields = Object.keys(dirtyFields).length > 0;
 
-      if (!hasDirtyFields && !hasNewAudio && !hasNewImage) {
-        // Không throw, không toast — gọi callback để component tự xử lý (đóng modal,...)
-        console.warn("[TrackForm] No changes detected, skipping API call.");
-        return;
-      }
-    }
-
-    // Build payload — chỉ gửi dirtyFields khi Edit, gửi tất cả khi Create
-    const payload = buildTrackPayload(values as any, dirtyFields, isEditMode);
-
-    try {
-      await onSubmit(payload);
-    } catch (err: any) {
-      // Map server-side validation errors to form fields where possible.
-      const resp = err?.response?.data || err?.response || null;
-
-      let handled = false;
-
-      const maybeFieldMap = resp?.data ?? resp?.errors ?? resp;
-      if (maybeFieldMap && typeof maybeFieldMap === "object") {
-        if (Array.isArray(maybeFieldMap)) {
-          for (const item of maybeFieldMap) {
-            if (!item) continue;
-            if (typeof item === "string") {
-              toast.error(item);
-            } else if (item.field && (item.message || item.msg)) {
-              form.setError(item.field as any, {
-                type: "server",
-                message: item.message || item.msg,
-              });
-              handled = true;
-            }
-          }
-        } else {
-          Object.entries(maybeFieldMap).forEach(([k, v]) => {
-            if (!k) return;
-            const msg = Array.isArray(v) ? v.join(" ") : String(v || "");
-            if (k === "message" || k === "errorCode") return;
-            form.setError(k as any, { type: "server", message: msg });
-            handled = true;
-          });
+        if (!hasDirtyFields && !hasNewAudio && !hasNewImage) {
+          // Không throw, không toast — gọi callback để component tự xử lý (đóng modal,...)
+          console.warn("[TrackForm] No changes detected, skipping API call.");
+          return;
         }
       }
 
-      if (!handled) {
-        const message = resp?.message || err?.message || "Lỗi lưu bài hát";
-        toast.error(message);
-      }
+      // Build payload — chỉ gửi dirtyFields khi Edit, gửi tất cả khi Create
+      const payload = buildTrackPayload(values as any, dirtyFields, isEditMode);
 
-      // Keep modal open for user to fix errors — swallow the error here.
-      return;
+      try {
+        await onSubmit(payload);
+      } catch (err: any) {
+        // Map server-side validation errors to form fields where possible.
+        const resp = err?.response?.data || err?.response || null;
+
+        let handled = false;
+
+        const maybeFieldMap = resp?.data ?? resp?.errors ?? resp;
+        if (maybeFieldMap && typeof maybeFieldMap === "object") {
+          if (Array.isArray(maybeFieldMap)) {
+            for (const item of maybeFieldMap) {
+              if (!item) continue;
+              if (typeof item === "string") {
+                toast.error(item);
+              } else if (item.field && (item.message || item.msg)) {
+                form.setError(item.field as any, {
+                  type: "server",
+                  message: item.message || item.msg,
+                });
+                handled = true;
+              }
+            }
+          } else {
+            Object.entries(maybeFieldMap).forEach(([k, v]) => {
+              if (!k) return;
+              const msg = Array.isArray(v) ? v.join(" ") : String(v || "");
+              if (k === "message" || k === "errorCode") return;
+              form.setError(k as any, { type: "server", message: msg });
+              handled = true;
+            });
+          }
+        }
+
+        if (!handled) {
+          const message = resp?.message || err?.message || "Lỗi lưu bài hát";
+          toast.error(message);
+        }
+
+        // Keep modal open for user to fix errors — swallow the error here.
+        return;
+      }
+    },
+    (errors) => {
+      console.error("[TrackForm] Validation failed:", errors);
+      const errorKeys = Object.keys(errors);
+      if (errorKeys.length > 0) {
+        toast.error(`Vui lòng kiểm tra lại thông tin bị lỗi!`);
+      }
     }
-  });
+  );
 
   return {
     form,
