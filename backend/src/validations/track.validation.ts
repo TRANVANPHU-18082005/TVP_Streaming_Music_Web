@@ -283,3 +283,10 @@ export const getTopTracksSchema = z.object({
 });
 
 export type TopTrackFilterInput = z.infer<typeof getTopTracksSchema>["query"];
+
+// --- 11. GET TOP SEVEN TRACKS ---
+export const getTopSevenSchema = z.object({
+  query: z.object({
+    period: z.enum(["day", "week", "month"]).default("day"),
+  }),
+});

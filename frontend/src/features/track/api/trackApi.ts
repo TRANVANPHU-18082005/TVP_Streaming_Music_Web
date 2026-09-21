@@ -100,6 +100,14 @@ const trackApi = {
     return data;
   },
 
+  // Lấy Top 7 tracks theo ngày / tuần / tháng
+  getTopSeven: async (period: 'day' | 'week' | 'month' = 'day') => {
+    const { data } = await api.get<ApiResponse<ITrack[]>>("/tracks/top/seven", {
+      params: { period },
+    });
+    return data;
+  },
+
   // ==========================================
   // 4. MUTATIONS (Thêm / Sửa / Xóa)
   // ==========================================

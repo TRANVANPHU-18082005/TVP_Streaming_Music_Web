@@ -19,6 +19,7 @@ export * from "./hooks/useTrackForm";
 export * from "./hooks/useTrackMutations";
 export * from "./hooks/useTrackParams";
 export * from "./hooks/useTracksQuery";
+export * from "./hooks/useTopSeven";
 
 export * from "./schemas/track.schema";
 export * from "./types/index";

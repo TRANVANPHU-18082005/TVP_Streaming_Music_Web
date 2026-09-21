@@ -27,6 +27,7 @@ import {
   deleteTrackSchema,
   processTrackBulkSchema,
   processTrackCustomBulkSchema,
+  getTopSevenSchema,
 } from "../validations/track.validation";
 
 const router = express.Router();
@@ -37,6 +38,11 @@ const router = express.Router();
 
 // 1. Static Paths - Phải đặt trên cùng
 router.get("/charts/realtime", trackController.getTopChart);
+router.get(
+  "/top/seven",
+  validate(getTopSevenSchema),
+  trackController.getTopSeven
+);
 router.get(
   "/top/hot-today",
   optionalAuth,

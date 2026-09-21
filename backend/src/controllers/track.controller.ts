@@ -15,7 +15,7 @@ import {
   ChangeStatusInput,
 } from "../validations/track.validation";
 
-import { getRealtimeChart } from "../services/chart.service";
+import { getRealtimeChart, getTopSevenTracks } from "../services/chart.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. UPLOAD TRACK
@@ -300,5 +300,11 @@ export const retryAi = catchAsync(async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const getTopChart = catchAsync(async (req: Request, res: Response) => {
   const data = await getRealtimeChart();
+  res.status(httpStatus.OK).json({ success: true, data });
+});
+
+export const getTopSeven = catchAsync(async (req: Request, res: Response) => {
+  const period = (req.query.period as 'day' | 'week' | 'month') || 'day';
+  const data = await getTopSevenTracks(period);
   res.status(httpStatus.OK).json({ success: true, data });
 });

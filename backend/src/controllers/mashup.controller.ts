@@ -115,25 +115,45 @@ export const aiGenerateMashup = catchAsync(async (req: Request, res: Response) =
   }
 
   // Fetch candidate tracks
-  const trackCandidates = await mongoose.model('Track').find(query)
+  let trackCandidates = await mongoose.model('Track').find(query)
     .sort({ playCount: -1 })
     .limit(30)
     .lean();
 
   if (trackCandidates.length === 0) {
-    return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "No tracks match the given prompt" });
+    // Fallback: If AI search yields nothing, just get popular tracks
+    trackCandidates = await mongoose.model('Track').find({ isPublic: true, isDeleted: false, status: 'ready' })
+      .sort({ playCount: -1 })
+      .limit(30)
+      .lean();
+      
+    if (trackCandidates.length === 0) {
+      return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "No tracks available in the system" });
+    }
   }
 
   const trackIds = trackCandidates.map(t => t._id);
 
   // 3. Find shorts for these tracks
-  const candidateShorts: any[] = await mongoose.model('TrackShort').find({
+  let candidateShorts: any[] = await mongoose.model('TrackShort').find({
     track: { $in: trackIds },
     isPublished: true
   }).populate('track').lean() as any[];
 
   if (candidateShorts.length < 2) {
-    return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "Not enough shorts available for the given prompt" });
+    // Fallback: Get ANY published shorts in the system
+    candidateShorts = await mongoose.model('TrackShort').find({
+      isPublished: true
+    }).populate('track').lean() as any[];
+    
+    if (candidateShorts.length < 2) {
+      // Final fallback: Get ANY shorts (even unpublished) for dev testing
+      candidateShorts = await mongoose.model('TrackShort').find({}).populate('track').lean() as any[];
+      
+      if (candidateShorts.length < 2) {
+        return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "Hệ thống chưa có đủ video (TrackShort) để tạo mashup. Vui lòng tạo ít nhất 2 short video trước!" });
+      }
+    }
   }
 
   // 4. Select the best 3-5 shorts using compatibility score

@@ -320,3 +320,249 @@ const getChartDataForTop3 = async (top3Ids: any[], startTime: Date) => {
     return point;
   });
 };
+
+/**
+ * Lấy Top 7 Tracks theo Day / Week / Month
+ */
+export const getTopSevenTracks = async (period: 'day' | 'week' | 'month' = 'day') => {
+  const cacheKey = `top7:${period}`;
+  const CACHE_TTL = 300; // 5 minutes
+
+  try {
+    const cached = await cacheRedis.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (e) {
+    console.error(`Redis Cache GET Error (${cacheKey})`, e);
+  }
+
+  const now = new Date();
+  let finalTracks = [];
+
+  if (period === 'month') {
+    // For month, fallback to track.playCount since PlayLog TTL is 8 days
+    const startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    finalTracks = await Track.find({
+      isPublic: true,
+      isDeleted: { $ne: true },
+      status: "ready",
+      releaseDate: { $gte: startTime }
+    })
+      .sort({ playCount: -1 })
+      .limit(7)
+      .select(TRACK_SELECT)
+      .populate(TRACK_POPULATE as any)
+      .lean();
+
+    // If not enough tracks released in last 30 days, fallback to all time top
+    if (finalTracks.length < 7) {
+        const needed = 7 - finalTracks.length;
+        const existingIds = finalTracks.map(t => t._id);
+        const fallbackTracks = await Track.find({
+          _id: { $nin: existingIds },
+          isPublic: true,
+          isDeleted: { $ne: true },
+          status: "ready",
+        })
+          .sort({ playCount: -1 })
+          .limit(needed)
+          .select(TRACK_SELECT)
+          .populate(TRACK_POPULATE as any)
+          .lean();
+        finalTracks = [...finalTracks, ...fallbackTracks];
+    }
+  } else {
+    // Day or Week
+    const days = period === 'week' ? 7 : 1;
+    const startTime = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+    const aggregatedTracks = await PlayLog.aggregate([
+      { $match: { listenedAt: { $gte: startTime } } },
+      // Dedup unique listeners
+      {
+        $group: {
+          _id: {
+            trackId: "$trackId",
+            listener: { $ifNull: ["$userId", "$ip"] },
+            hourSlot: { $dateToString: { format: "%Y-%m-%d-%H", date: "$listenedAt", timezone: "+07:00" } },
+          },
+        },
+      },
+      // Sum points
+      {
+        $group: {
+          _id: "$_id.trackId",
+          score: { $sum: 1 },
+        },
+      },
+      { $sort: { score: -1, _id: 1 } },
+      { $limit: 20 }, // Get some extra before filtering
+      {
+        $lookup: {
+          from: "tracks",
+          localField: "_id",
+          foreignField: "_id",
+          as: "track",
+        },
+      },
+      { $unwind: "$track" },
+      {
+        $match: {
+          "track.isDeleted": { $ne: true },
+          "track.isPublic": true,
+          "track.status": "ready",
+        },
+      },
+      { $limit: 7 },
+      {
+        $lookup: {
+          from: "albums",
+          localField: "track.album",
+          foreignField: "_id",
+          as: "albumDetails",
+        },
+      },
+      { $unwind: { path: "$albumDetails", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "genres",
+          localField: "track.genres",
+          foreignField: "_id",
+          as: "genreDetails",
+        },
+      },
+      { $unwind: { path: "$genreDetails", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "moodVideo",
+          localField: "track.moodVideo",
+          foreignField: "_id",
+          as: "moodVideoDetails",
+        },
+      },
+      { $unwind: { path: "$moodVideoDetails", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: "$track._id",
+          score: { $first: "$score" },
+          track: { $first: "$track" },
+          albumDetails: { $first: "$albumDetails" },
+          genreDetails: { $first: "$genreDetails" },
+          moodVideoDetails: { $first: "$moodVideoDetails" },
+          artistDetails: { $first: "$artistDetails" },
+          featuringDetails: { $first: "$featuringDetails" },
+        },
+      },
+      {
+        $addFields: {
+          track: "$track",
+          albumDetails: "$albumDetails",
+          genreDetails: "$genreDetails",
+          moodVideoDetails: "$moodVideoDetails",
+          artistDetails: "$artistDetails",
+          featuringDetails: "$featuringDetails",
+          score: "$score",
+        },
+      },
+      {
+        $lookup: {
+          from: "artists",
+          localField: "track.artist",
+          foreignField: "_id",
+          as: "artistDetails",
+        },
+      },
+      { $unwind: { path: "$artistDetails", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "artists",
+          localField: "track.featuringArtists",
+          foreignField: "_id",
+          as: "featuringDetails",
+        },
+      },
+      {
+        $project: {
+          _id: "$track._id",
+          title: "$track.title",
+          slug: "$track.slug",
+          duration: "$track.duration",
+          coverImage: "$track.coverImage",
+          playCount: "$track.playCount",
+          score: "$score",
+          lyricUrl: "$track.lyricUrl",
+          hlsUrl: "$track.hlsUrl",
+          bitrate: "$track.bitrate",
+          description: "$track.description",
+          lyricType: "$track.lyricType",
+          isExplicit: "$track.isExplicit",
+          releaseDate: "$track.releaseDate",
+          plainLyrics: "$track.plainLyrics",
+          lyricPreview: "$track.lyricPreview",
+          likeCount: "$track.likeCount",
+          featuringArtists: {
+            $map: {
+              input: "$featuringDetails",
+              as: "feat",
+              in: {
+                _id: "$$feat._id",
+                name: "$$feat.name",
+                slug: "$$feat.slug",
+                avatar: "$$feat.avatar",
+              },
+            },
+          },
+          genres: {
+            name: "$genreDetails.name",
+            slug: "$genreDetails.slug",
+          },
+          album: {
+            _id: "$albumDetails._id",
+            title: "$albumDetails.title",
+            slug: "$albumDetails.slug",
+          },
+          moodVideo: {
+            videoUrl: "$moodVideoDetails.videoUrl",
+            loop: "$moodVideoDetails.loop",
+            thumbnailUrl: "$moodVideoDetails.thumbnailUrl",
+          },
+          artist: {
+            _id: "$artistDetails._id",
+            name: "$artistDetails.name",
+            avatar: "$artistDetails.avatar",
+            slug: "$artistDetails.slug",
+          },
+        },
+      },
+    ]);
+
+    finalTracks = [...aggregatedTracks];
+
+    // Fallback if not enough tracks
+    if (finalTracks.length < 7) {
+      const needed = 7 - finalTracks.length;
+      const existingIds = finalTracks.map((t) => t._id);
+
+      const fallbackTracks = await Track.find({
+        _id: { $nin: existingIds },
+        isDeleted: { $ne: true },
+        isPublic: true,
+        status: "ready",
+      })
+        .sort({ playCount: -1 })
+        .limit(needed)
+        .select(TRACK_SELECT)
+        .populate(TRACK_POPULATE as any)
+        .lean();
+
+      finalTracks = [...finalTracks, ...fallbackTracks];
+    }
+  }
+
+  // Set Cache
+  cacheRedis
+    .setex(cacheKey, CACHE_TTL, JSON.stringify(finalTracks))
+    .catch((err) => console.error(`Redis Cache SET Error (${cacheKey})`, err));
+
+  return finalTracks;
+};

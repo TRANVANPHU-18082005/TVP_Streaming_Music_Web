@@ -101,8 +101,8 @@ const getRankCfg = (rank: number): RankCfg =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface RankBadgeProps {
-  trend: RankedTrack["trend"];
-  rankDelta: number;
+  trend?: RankedTrack["trend"];
+  rankDelta?: number;
 }
 
 const BADGE_SPRING = {
@@ -111,7 +111,7 @@ const BADGE_SPRING = {
   damping: 22,
 } as const;
 
-const RankBadge = memo(({ trend, rankDelta }: RankBadgeProps) => {
+const RankBadge = memo(({ trend = "same", rankDelta = 0 }: RankBadgeProps) => {
   if (trend === "new") {
     return (
       <motion.span

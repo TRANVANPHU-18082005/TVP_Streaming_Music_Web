@@ -10,7 +10,7 @@ const TopFeaturedTracks = lazy(() => import("./TopFeaturedTracks"));
 const RecentlyListenedTrack = lazy(() => import("./RecentlyListenedTrack"));
 const LibrarySection = lazy(() => import("./LibrarySection"));
 const TrackSection = lazy(() => import("./TrackSection"));
-
+const TopSevenSection = lazy(() => import("./TopSevenSection"));
 
 function SectionSkeleton({ height = 48 }: { height?: number }) {
   return (
@@ -43,7 +43,9 @@ export function HomePage() {
         <TrackSection />
       </Suspense>
 
-
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <TopSevenSection />
+      </Suspense>
 
       <Suspense fallback={<SectionSkeleton height={220} />}>
         <FeaturedAlbums />
