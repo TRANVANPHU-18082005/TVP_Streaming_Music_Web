@@ -15,6 +15,9 @@ export async function fetchLyrics(
     syncedLines: [],
     plainLyrics: "",
   };
+  // trackTitle = "冬眠"
+  // artistName = "司南"
+  // duration = 270
 
   try {
     // --- BƯỚC 1: Thử gọi lệnh GET (Yêu cầu khớp chính xác duration) ---

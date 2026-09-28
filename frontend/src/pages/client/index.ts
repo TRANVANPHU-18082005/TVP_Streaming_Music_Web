@@ -10,3 +10,4 @@ export * from "./artist";
 export * from "./playlists";
 export * from "./home";
 export * from "./track";
+export const KaraokePage = lazy(() => import("./KaraokePage"));

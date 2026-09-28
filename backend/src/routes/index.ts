@@ -19,6 +19,7 @@ import aiRoutes from "./ai.routes";
 import trackShortRoutes from "./trackShort.route";
 import mashupRoutes from "./mashup.route";
 import musicRoomRoutes from "./musicRoom.route";
+import karaokeRoutes from "./karaoke.route";
 
 const router = express.Router();
 router.use("/auth", authRoutes);
@@ -40,5 +41,6 @@ router.use("/ai", aiRoutes);
 router.use("/shorts", trackShortRoutes);
 router.use("/mashups", mashupRoutes);
 router.use("/rooms", musicRoomRoutes);
+router.use("/karaoke", karaokeRoutes);
 
 export default router;

@@ -22,8 +22,10 @@ export interface PagedResponse<T> {
   data: T[];
   meta: {
     totalItems: number;
+    total?: number;
     page: number;
     pageSize?: number;
+    limit?: number;
     totalPages: number;
     hasNextPage: boolean;
   };

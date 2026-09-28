@@ -11,6 +11,7 @@ import type { RoomMessage, QueueItem } from "../types/room.types";
 import { getMembers } from "../api/room.api";
 import { useEffect } from "react";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { RoomKaraokeMode } from "./RoomKaraokeMode";
 
 interface Props {
   roomCode: string;
@@ -34,6 +35,12 @@ interface Props {
   currentTrack: any;
   playbackState: any;
   moodVideoUrl?: string;
+  karaokeMode: boolean;
+  currentKaraokeVideoId?: string;
+  karaokeQueue: any[];
+  currentSinger?: any;
+  onAddKaraokeQueue: (videoId: string, title: string) => void;
+  onShareKaraokeRecording: (recordingId: string, url: string, title: string) => void;
 }
 
 export const ListenerView = ({
@@ -58,6 +65,12 @@ export const ListenerView = ({
   currentTrack,
   playbackState,
   moodVideoUrl,
+  karaokeMode,
+  currentKaraokeVideoId,
+  karaokeQueue,
+  currentSinger,
+  onAddKaraokeQueue,
+  onShareKaraokeRecording,
 }: Props) => {
   const [activeModal, setActiveModal] = useState<"queue" | "request" | "chat" | null>(null);
   const [members, setMembers] = useState<any[]>([]);
@@ -144,7 +157,19 @@ export const ListenerView = ({
 
       {/* ── CENTER: IMMERSIVE PLAYER ── */}
       <main className="flex-1 flex flex-col items-center justify-center relative z-10 px-6 py-4 overflow-hidden">
-        {currentTrack ? (
+        {karaokeMode ? (
+           <div className="w-full max-w-5xl h-[80%] my-auto">
+             <RoomKaraokeMode
+                videoId={currentKaraokeVideoId}
+                karaokeQueue={karaokeQueue}
+                currentSinger={currentSinger}
+                isHost={false}
+                onAddQueue={onAddKaraokeQueue}
+                onNextSinger={() => {}} // Listener cannot next
+                onShareRecording={onShareKaraokeRecording}
+             />
+           </div>
+        ) : currentTrack ? (
           <div className="w-full max-w-[320px] sm:max-w-[380px] flex flex-col items-center gap-6">
 
             {/* ── Vinyl / Album Art with Glow ── */}

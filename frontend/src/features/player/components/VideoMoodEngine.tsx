@@ -354,6 +354,7 @@ export const VideoMoodEngine = memo(
       <div className="vme-container">
         {slots.a && (
           <VideoSlot
+            key={`a-${slots.a}`}
             src={slots.a}
             isPlaying={isPlaying}
             visible={slots.active === "a" && slots.aReady}
@@ -364,6 +365,7 @@ export const VideoMoodEngine = memo(
         )}
         {slots.b && (
           <VideoSlot
+            key={`b-${slots.b}`}
             src={slots.b}
             isPlaying={isPlaying}
             visible={slots.active === "b" && slots.bReady}

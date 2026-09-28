@@ -52,6 +52,14 @@ export interface QueueItem {
   voters: string[];
 }
 
+export interface IKaraokeQueueItem {
+  _id: string;
+  user: RoomHost;
+  youtubeVideoId: string;
+  youtubeTitle: string;
+  addedAt: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOM
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +83,13 @@ export interface MusicRoom {
   maxMembers: number;
   isActive: boolean;
   memberCount: number;
+  
+  // Karaoke
+  karaokeMode: boolean;
+  currentKaraokeVideoId?: string;
+  karaokeQueue: IKaraokeQueueItem[];
+  currentSinger?: RoomHost;
+
   currentTrack?: RoomTrackMini;
   currentMoodVideo?: RoomMoodVideoMini;
   queue: QueueItem[];

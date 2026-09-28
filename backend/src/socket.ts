@@ -606,6 +606,52 @@ export const initSocket = (httpServer: HttpServer): Server => {
       }
     });
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // KARAOKE MODE EVENTS
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    socket.on("room:karaoke_toggle", async ({ roomCode, enabled }: { roomCode: string, enabled: boolean }) => {
+      if (!roomCode || isGuest) return;
+      try {
+        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        await musicRoomService.toggleKaraokeMode(roomCode, fakeUser, enabled);
+      } catch (err: any) {
+        socket.emit("room:error", { message: err.message ?? "Lỗi khi bật/tắt Karaoke" });
+      }
+    });
+
+    socket.on("room:karaoke_add_queue", async ({ roomCode, youtubeVideoId, youtubeTitle }: { roomCode: string, youtubeVideoId: string, youtubeTitle: string }) => {
+      if (!roomCode || !youtubeVideoId || isGuest) return;
+      try {
+        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        await musicRoomService.addKaraokeQueue(roomCode, fakeUser, youtubeVideoId, youtubeTitle);
+      } catch (err: any) {
+        socket.emit("room:error", { message: err.message ?? "Lỗi khi thêm bài hát Karaoke" });
+      }
+    });
+
+    socket.on("room:karaoke_next", async ({ roomCode }: { roomCode: string }) => {
+      if (!roomCode || isGuest) return;
+      try {
+        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        await musicRoomService.nextKaraokeSinger(roomCode, fakeUser);
+      } catch (err: any) {
+        socket.emit("room:error", { message: err.message ?? "Lỗi khi chuyển bài Karaoke" });
+      }
+    });
+
+    socket.on("room:karaoke_share", async ({ roomCode, recordingId, audioUrl, title }: { roomCode: string, recordingId: string, audioUrl: string, title: string }) => {
+      if (!roomCode || isGuest) return;
+      try {
+        const user = await User.findById(currentUserId).lean();
+        if (user) {
+           await musicRoomService.shareKaraokeRecording(roomCode, user as any, recordingId, audioUrl, title);
+        }
+      } catch (err: any) {
+        socket.emit("room:error", { message: err.message ?? "Lỗi khi chia sẻ bản thu" });
+      }
+    });
+
     /**
      * Host thay đổi theme phòng
      */

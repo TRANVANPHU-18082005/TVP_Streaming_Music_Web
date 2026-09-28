@@ -24,6 +24,10 @@ interface RoomState {
   > & {
     currentTrack?: any;
     currentMoodVideo?: any;
+    karaokeMode?: boolean;
+    karaokeQueue?: any[];
+    currentKaraokeVideoId?: string;
+    currentSinger?: any;
   } | null;
 
   // Quyền trong phòng
@@ -163,6 +167,41 @@ const roomSlice = createSlice({
       }
     },
 
+    // ── Karaoke ──────────────────────────────────────────────────────────────
+    setKaraokeMode(state, action: PayloadAction<boolean>) {
+      if (state.currentRoom) {
+        state.currentRoom.karaokeMode = action.payload;
+        if (!action.payload) {
+          state.currentRoom.currentKaraokeVideoId = "";
+          state.currentRoom.currentSinger = undefined;
+          state.currentRoom.karaokeQueue = [];
+        }
+      }
+    },
+    appendKaraokeQueue(state, action: PayloadAction<any>) {
+      if (state.currentRoom) {
+        if (!state.currentRoom.karaokeQueue) {
+           state.currentRoom.karaokeQueue = [];
+        }
+        state.currentRoom.karaokeQueue.push(action.payload);
+      }
+    },
+    setNextKaraokeSinger(state, action: PayloadAction<{ videoId: string, singer: any }>) {
+      if (state.currentRoom) {
+        state.currentRoom.currentKaraokeVideoId = action.payload.videoId;
+        state.currentRoom.currentSinger = action.payload.singer;
+        if (state.currentRoom.karaokeQueue && state.currentRoom.karaokeQueue.length > 0) {
+           state.currentRoom.karaokeQueue.shift();
+        }
+      }
+    },
+    setKaraokeEnded(state) {
+      if (state.currentRoom) {
+        state.currentRoom.currentKaraokeVideoId = "";
+        state.currentRoom.currentSinger = undefined;
+      }
+    },
+
     // ── Chat ─────────────────────────────────────────────────────────────────
 
     prependMessages(state, action: PayloadAction<RoomMessage[]>) {
@@ -248,6 +287,10 @@ export const {
   setTrackRequests,
   setRoomTheme,
   moodVideoUpdated,
+  setKaraokeMode,
+  appendKaraokeQueue,
+  setNextKaraokeSinger,
+  setKaraokeEnded,
 } = roomSlice.actions;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,5 +308,9 @@ export const selectIsJoining = (state: RootState) => state.room.isJoining;
 export const selectRoomQueue = (state: RootState) =>
   state.room.currentRoom?.queue ?? [];
 export const selectTrackRequests = (state: RootState) => state.room.trackRequests;
+export const selectKaraokeMode = (state: RootState) => state.room.currentRoom?.karaokeMode ?? false;
+export const selectKaraokeQueue = (state: RootState) => state.room.currentRoom?.karaokeQueue ?? [];
+export const selectCurrentKaraokeVideoId = (state: RootState) => state.room.currentRoom?.currentKaraokeVideoId;
+export const selectCurrentSinger = (state: RootState) => state.room.currentRoom?.currentSinger;
 
 export default roomSlice.reducer;

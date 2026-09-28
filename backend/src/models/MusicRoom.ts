@@ -17,6 +17,13 @@ export interface IQueueItem {
   voters: mongoose.Types.ObjectId[];
 }
 
+export interface IKaraokeQueueItem {
+  user: mongoose.Types.ObjectId;
+  youtubeVideoId: string;
+  youtubeTitle: string;
+  addedAt: Date;
+}
+
 export interface IMusicRoom extends Document {
   roomCode: string;       // Mã phòng 6 ký tự (uppercase)
   name: string;
@@ -37,6 +44,12 @@ export interface IMusicRoom extends Document {
 
   // Queue bài hát
   queue: IQueueItem[];
+
+  // ── Karaoke Mode ─────────────────────────────────────────────────────────────
+  karaokeMode: boolean;
+  currentKaraokeVideoId?: string;
+  karaokeQueue: IKaraokeQueueItem[];
+  currentSinger?: mongoose.Types.ObjectId;
 
   // Trạng thái phát nhạc (để người join sau sync được ngay)
   currentTrack?: mongoose.Types.ObjectId;
@@ -69,6 +82,16 @@ const QueueItemSchema = new Schema<IQueueItem>(
     addedAt: { type: Date, default: Date.now },
     votes: { type: Number, default: 0 },
     voters: [{ type: Schema.Types.ObjectId, ref: "User" }],
+  },
+  { _id: true },
+);
+
+const KaraokeQueueItemSchema = new Schema<IKaraokeQueueItem>(
+  {
+    user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    youtubeVideoId: { type: String, required: true },
+    youtubeTitle: { type: String, required: true },
+    addedAt: { type: Date, default: Date.now },
   },
   { _id: true },
 );
@@ -106,6 +129,11 @@ const MusicRoomSchema = new Schema<IMusicRoom>(
     memberCount: { type: Number, default: 0, min: 0 },
 
     queue: { type: [QueueItemSchema], default: [] },
+
+    karaokeMode: { type: Boolean, default: false },
+    currentKaraokeVideoId: { type: String, default: "" },
+    karaokeQueue: { type: [KaraokeQueueItemSchema], default: [] },
+    currentSinger: { type: Schema.Types.ObjectId, ref: "User", default: null },
 
     currentTrack: {
       type: Schema.Types.ObjectId,

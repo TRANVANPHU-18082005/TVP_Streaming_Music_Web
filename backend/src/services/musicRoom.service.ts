@@ -788,6 +788,122 @@ export const cleanupInactiveRooms = async () => {
   return { cleaned: codes.length };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// KARAOKE MODE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const toggleKaraokeMode = async (roomCode: string, user: IUser, enabled: boolean) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+  if (room.host.toString() !== user._id.toString()) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Host mới có quyền chuyển chế độ Karaoke");
+  }
+
+  room.karaokeMode = enabled;
+  if (!enabled) {
+    room.currentKaraokeVideoId = "";
+    room.currentSinger = undefined;
+    room.karaokeQueue = [];
+  }
+  await room.save();
+
+  const io = getIO();
+  io.to(`music_room:${roomCode}`).emit("room:karaoke_toggled", { enabled });
+
+  return room;
+};
+
+export const addKaraokeQueue = async (
+  roomCode: string,
+  user: IUser,
+  youtubeVideoId: string,
+  youtubeTitle: string
+) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+  if (!room.karaokeMode) throw new ApiError(httpStatus.BAD_REQUEST, "Phòng chưa bật Karaoke Mode");
+
+  room.karaokeQueue.push({
+    user: user._id,
+    youtubeVideoId,
+    youtubeTitle,
+    addedAt: new Date(),
+  } as any);
+
+  await room.save();
+
+  const populatedRoom = await MusicRoom.findById(room._id).populate("karaokeQueue.user", "username fullName avatar");
+  const newlyAdded = populatedRoom!.karaokeQueue[populatedRoom!.karaokeQueue.length - 1];
+
+  const io = getIO();
+  io.to(`music_room:${roomCode}`).emit("room:karaoke_queue_added", { queueItem: newlyAdded });
+
+  return newlyAdded;
+};
+
+export const nextKaraokeSinger = async (roomCode: string, user: IUser) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+  if (room.host.toString() !== user._id.toString()) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Host mới có quyền chuyển bài hát");
+  }
+  if (!room.karaokeMode) throw new ApiError(httpStatus.BAD_REQUEST, "Phòng chưa bật Karaoke Mode");
+
+  if (room.karaokeQueue.length === 0) {
+    room.currentKaraokeVideoId = "";
+    room.currentSinger = undefined;
+    await room.save();
+    getIO().to(`music_room:${roomCode}`).emit("room:karaoke_ended");
+    return null;
+  }
+
+  const nextItem = room.karaokeQueue.shift()!;
+  room.currentKaraokeVideoId = nextItem.youtubeVideoId;
+  room.currentSinger = nextItem.user;
+  await room.save();
+
+  const populatedRoom = await MusicRoom.findById(room._id).populate("currentSinger", "username fullName avatar");
+  
+  getIO().to(`music_room:${roomCode}`).emit("room:karaoke_next", {
+    videoId: nextItem.youtubeVideoId,
+    singer: populatedRoom!.currentSinger,
+  });
+
+  return nextItem;
+};
+
+export const shareKaraokeRecording = async (roomCode: string, user: IUser, recordingId: string, audioUrl: string, title: string) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+  
+  getIO().to(`music_room:${roomCode}`).emit("room:karaoke_shared", {
+    userId: user._id,
+    user: { fullName: user.fullName, avatar: user.avatar, username: user.username },
+    recordingId,
+    audioUrl,
+    title
+  });
+  
+  const msg = new RoomMessage({
+    roomCode,
+    sender: user._id,
+    content: `Đã chia sẻ bản thu âm Karaoke: ${title}`,
+    isSystemMsg: true,
+  });
+  await msg.save();
+
+  getIO().to(`music_room:${roomCode}`).emit("room:message", {
+    _id: msg._id,
+    sender: { _id: "system", fullName: "Hệ thống", username: "system", avatar: "" },
+    content: `🎤 ${user.fullName} vừa chia sẻ một bản thu âm Karaoke: ${title}. Nhấn Play để cùng nghe nhé!`,
+    isSystemMsg: true,
+    createdAt: msg.createdAt,
+    metadata: { recordingId, audioUrl, title }
+  });
+
+  return true;
+};
+
 const musicRoomService = {
   createRoom,
   getPublicRooms,
@@ -809,6 +925,10 @@ const musicRoomService = {
   getTrackRequests,
   handleRequest,
   getMembers,
+  toggleKaraokeMode,
+  addKaraokeQueue,
+  nextKaraokeSinger,
+  shareKaraokeRecording
 };
 
 export default musicRoomService;

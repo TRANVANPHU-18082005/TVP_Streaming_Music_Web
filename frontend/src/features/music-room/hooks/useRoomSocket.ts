@@ -23,6 +23,10 @@ import {
   setTrackRequests,
   setRoomTheme,
   moodVideoUpdated,
+  setKaraokeMode,
+  appendKaraokeQueue,
+  setNextKaraokeSinger,
+  setKaraokeEnded,
   selectCurrentRoom,
   selectIsHost,
 } from "../store/roomSlice";
@@ -166,7 +170,6 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     };
 
     const onError = ({ message, errorCode }: { message: string, errorCode: string }) => {
-      // Lỗi "cần đăng nhập" → redirect thay vì hiển thị error thô
       if (errorCode === RoomErrorCode.UNAUTHORIZED) {
         dispatch(setRoomError(null));
         toast.error(message);
@@ -202,6 +205,8 @@ export const useRoomSocket = (roomCode: string | undefined) => {
       toast.info(message, { duration: 5000 });
     };
 
+
+
     // Đăng ký listeners
     socket.on("room:state", onRoomState);
     socket.on("room:playback_update", onPlaybackUpdate);
@@ -220,6 +225,15 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     socket.on("room:closed", onRoomClosed);
     socket.on("room:kicked", onKicked);
     socket.on("room:error", onError);
+    
+    socket.on("room:karaoke_mode_toggled", ({ karaokeMode }) => dispatch(setKaraokeMode(karaokeMode)));
+    socket.on("room:karaoke_add_queue", (queueItem) => dispatch(appendKaraokeQueue(queueItem)));
+    socket.on("room:karaoke_next", ({ currentKaraokeVideoId, currentSinger }) => dispatch(setNextKaraokeSinger({ videoId: currentKaraokeVideoId, singer: currentSinger })));
+    socket.on("room:karaoke_ended", () => dispatch(setKaraokeEnded()));
+    socket.on("room:karaoke_share", ({ recording }) => {
+      // Could show a notification
+      toast.info(`${recording?.user?.fullName || 'Ai đó'} vừa chia sẻ một bản thu âm Karaoke!`);
+    });
 
     return () => {
       socket.off("room:state", onRoomState);
@@ -239,6 +253,12 @@ export const useRoomSocket = (roomCode: string | undefined) => {
       socket.off("room:closed", onRoomClosed);
       socket.off("room:kicked", onKicked);
       socket.off("room:error", onError);
+      
+      socket.off("room:karaoke_mode_toggled");
+      socket.off("room:karaoke_add_queue");
+      socket.off("room:karaoke_next");
+      socket.off("room:karaoke_ended");
+      socket.off("room:karaoke_share");
     };
   }, [socket, dispatch, navigate, roomCode, currentUserId]);
 
@@ -277,6 +297,28 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     [socket, roomCode]
   );
 
+  // ── KARAOKE ───────────────────────────────────────────────────────────────
+  
+  const toggleKaraokeMode = useCallback((enabled: boolean) => {
+    if (!socket || !roomCode || !isHost) return;
+    socket.emit("room:karaoke_toggle", { roomCode, enabled });
+  }, [socket, roomCode, isHost]);
+
+  const addKaraokeQueue = useCallback((youtubeVideoId: string, youtubeTitle: string) => {
+    if (!socket || !roomCode) return;
+    socket.emit("room:karaoke_add_queue", { roomCode, youtubeVideoId, youtubeTitle });
+  }, [socket, roomCode]);
+
+  const nextKaraokeSinger = useCallback(() => {
+    if (!socket || !roomCode || !isHost) return;
+    socket.emit("room:karaoke_next", { roomCode });
+  }, [socket, roomCode, isHost]);
+
+  const shareKaraokeRecording = useCallback((recordingId: string, audioUrl: string, title: string) => {
+    if (!socket || !roomCode) return;
+    socket.emit("room:karaoke_share", { roomCode, recordingId, audioUrl, title });
+  }, [socket, roomCode]);
+
   return {
     joinRoom,
     leaveRoom: leaveRoomSocket,
@@ -289,6 +331,10 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     handleRequest,
     changeTheme,
     handleChangeMoodVideo,
+    toggleKaraokeMode,
+    addKaraokeQueue,
+    nextKaraokeSinger,
+    shareKaraokeRecording,
     currentRoom,
     isHost,
   };

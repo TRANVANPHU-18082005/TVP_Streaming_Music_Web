@@ -102,6 +102,12 @@ export interface ServerToClientEvents {
   "room:user_unmuted": (data: { targetUserId: string }) => void;
   /** Queue trống */
   "room:queue_empty": (data: { message: string }) => void;
+  /** Karaoke events */
+  "room:karaoke_mode_toggled": (data: { karaokeMode: boolean }) => void;
+  "room:karaoke_add_queue": (data: { user: any; videoId: string; videoTitle: string; channelTitle: string; thumbnail: string; }) => void;
+  "room:karaoke_next": (data: { currentSinger: any, currentKaraokeVideoId: string }) => void;
+  "room:karaoke_ended": () => void;
+  "room:karaoke_share": (data: { recording: any }) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,6 +174,11 @@ export interface ClientToServerEvents {
   "room:unmute_user": (data: { roomCode: string; targetUserId: string }) => void;
   /** Host xóa tin nhắn */
   "room:delete_message": (data: { roomCode: string; messageId: string }) => void;
+  /** Karaoke events */
+  "room:karaoke_toggle": (data: { roomCode: string; enabled: boolean }) => void;
+  "room:karaoke_add_queue": (data: { roomCode: string; youtubeVideoId: string; youtubeTitle: string; }) => void;
+  "room:karaoke_next": (data: { roomCode: string }) => void;
+  "room:karaoke_share": (data: { roomCode: string; recordingId: string; audioUrl: string; title: string; }) => void;
 }
 
 

@@ -79,6 +79,11 @@ const sidebarGroups = [
         path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.MASHUPS}`,
         icon: Layers,
       },
+      {
+        label: "Karaoke",
+        path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.KARAOKE}`,
+        icon: Mic2, // Reusing Mic2 or another icon
+      },
     ],
   },
   {

@@ -57,6 +57,10 @@ const MusicRoomPage = () => {
     handleRequest,
     changeTheme,
     handleChangeMoodVideo,
+    toggleKaraokeMode,
+    addKaraokeQueue,
+    nextKaraokeSinger,
+    shareKaraokeRecording,
     currentRoom,
     isHost,
   } = useRoomSocket(roomCode);
@@ -261,6 +265,12 @@ const MusicRoomPage = () => {
     onVote: handleVote,
     onSendReaction: sendReaction,
     onLeaveRoom: () => { leaveRoom(); navigate("/rooms"); },
+    
+    // Karaoke
+    karaokeMode: currentRoom?.karaokeMode ?? false,
+    currentKaraokeVideoId: currentRoom?.currentKaraokeVideoId,
+    karaokeQueue: currentRoom?.karaokeQueue ?? [],
+    currentSinger: currentRoom?.currentSinger,
   };
 
   if (isHost) {
@@ -276,6 +286,11 @@ const MusicRoomPage = () => {
         currentTheme={theme}
         onChangeMoodVideo={handleChangeMoodVideo}
         currentMoodVideoId={(currentRoom as any)?.currentMoodVideo?._id ?? null}
+        
+        onToggleKaraokeMode={toggleKaraokeMode}
+        onAddKaraokeQueue={addKaraokeQueue}
+        onNextKaraokeSinger={nextKaraokeSinger}
+        onShareKaraokeRecording={shareKaraokeRecording}
       />
     );
   }
@@ -294,6 +309,9 @@ const MusicRoomPage = () => {
       currentTrack={currentTrackObj}
       playbackState={playbackState}
       moodVideoUrl={moodVideoUrl}
+      
+      onAddKaraokeQueue={addKaraokeQueue}
+      onShareKaraokeRecording={shareKaraokeRecording}
     />
   );
 };

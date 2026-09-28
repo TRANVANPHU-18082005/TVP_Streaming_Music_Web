@@ -18,6 +18,8 @@ import {
   DashboardPage,
   GenreManagementPage,
   HomePage,
+  KaraokePage,
+  KaraokeManagementPage,
   MoodVideoManagementPage,
   NotFoundPage,
   PlaylistManagementPage,
@@ -91,6 +93,7 @@ export const router = createBrowserRouter([
             element: <ProtectedRoute />,
             children: [
               { path: CLIENT_PATHS.PROFILE, element: <ProfilePage /> },
+              { path: CLIENT_PATHS.KARAOKE_STUDIO, element: <KaraokePage /> },
               // {
               //   path: CLIENT_PATHS.CLAIM_PROFILE,
               //   element: <ClaimProfilePage />,
@@ -140,6 +143,10 @@ export const router = createBrowserRouter([
               {
                 path: ADMIN_PATHS.VIDEO_MOOD,
                 element: <MoodVideoManagementPage />,
+              },
+              {
+                path: ADMIN_PATHS.KARAOKE,
+                element: <KaraokeManagementPage />,
               },
               {
                 path: ADMIN_PATHS.SETTINGS,

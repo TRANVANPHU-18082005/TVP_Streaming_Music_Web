@@ -107,6 +107,12 @@ const NAV_ITEMS: readonly NavItemDef[] = [
     path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.ROOMS}`,
   },
   {
+    label: "Karaoke",
+    shortLabel: "Kara",
+    icon: Mic2,
+    path: `${CLIENT_PATHS.CLIENT}${CLIENT_PATHS.KARAOKE_STUDIO}`,
+  },
+  {
     label: "Nghệ sĩ",
     shortLabel: "NS",
     icon: Users,

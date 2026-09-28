@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Users, Music, Settings, ListVideo, LogOut, Check, X, ShieldAlert, MessageSquare, PlaySquare, ListMusic, Radio, Plus } from "lucide-react";
+import { Users, Music, Settings, ListVideo, LogOut, Check, X, ShieldAlert, MessageSquare, PlaySquare, ListMusic, Radio, Plus, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HostMemberManager } from "./HostMemberManager";
 import RoomQueue from "./RoomQueue";
@@ -9,6 +9,7 @@ import RoomReactions, { ReactionButtons } from "./RoomReactions";
 import { RoomAddTrack } from "./RoomAddTrack";
 import RoomThemeBackground from "./RoomThemeBackground";
 import RoomMoodVideoSelector from "./RoomMoodVideoSelector";
+import { RoomKaraokeMode } from "./RoomKaraokeMode";
 import type { RoomMessage, QueueItem, TrackRequest } from "../types/room.types";
 import { ROOM_THEMES } from "../types/room.types";
 
@@ -39,6 +40,14 @@ interface Props {
   currentTheme: string;
   onChangeMoodVideo: (videoId: string | null) => void;
   currentMoodVideoId: string | null;
+  karaokeMode: boolean;
+  currentKaraokeVideoId?: string;
+  karaokeQueue: any[];
+  currentSinger?: any;
+  onToggleKaraokeMode: (enabled: boolean) => void;
+  onAddKaraokeQueue: (videoId: string, title: string) => void;
+  onNextKaraokeSinger: () => void;
+  onShareKaraokeRecording: (recordingId: string, url: string, title: string) => void;
 }
 
 export const HostDashboard = ({
@@ -68,8 +77,16 @@ export const HostDashboard = ({
   currentTheme,
   onChangeMoodVideo,
   currentMoodVideoId,
+  karaokeMode,
+  currentKaraokeVideoId,
+  karaokeQueue,
+  currentSinger,
+  onToggleKaraokeMode,
+  onAddKaraokeQueue,
+  onNextKaraokeSinger,
+  onShareKaraokeRecording,
 }: Props) => {
-  const [activeTab, setActiveTab] = useState<"player" | "queue" | "requests" | "add" | "settings" | "chat">("player");
+  const [activeTab, setActiveTab] = useState<"player" | "queue" | "requests" | "add" | "settings" | "chat" | "karaoke">("player");
 
   const desktopMainTab = ["player", "chat"].includes(activeTab) ? "queue" : activeTab;
 
@@ -131,39 +148,53 @@ export const HostDashboard = ({
       {/* ── MAIN GRID LAYOUT ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 flex-1 overflow-hidden relative z-10">
 
-        {/* ── PANEL 1: Player + Reactions ── */}
-        <aside className={cn(
-          "flex-col border-border/50 dark:border-border/20",
-          "lg:flex lg:col-span-3 lg:border-r",
-          activeTab === "player" ? "flex col-span-1" : "hidden"
-        )}>
-          {/* Glass sidebar background */}
-          <div className="absolute inset-0 glass-frosted pointer-events-none lg:w-[25%]" />
-
-          <div className="relative flex-1 overflow-y-auto p-4 scrollbar-thin">
-            {/* Section label */}
-            <div className="flex items-center gap-2 mb-5">
-              <Music className="size-3.5 text-muted-foreground" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Now Playing</span>
-            </div>
-            <RoomPlayer onPlayNext={onPlayNext} onTogglePause={onTogglePause} />
+        {karaokeMode ? (
+          <div className="flex-col bg-background/30 backdrop-blur-sm min-h-0 overflow-hidden lg:flex lg:col-span-9 p-4">
+            <RoomKaraokeMode
+              videoId={currentKaraokeVideoId}
+              karaokeQueue={karaokeQueue}
+              currentSinger={currentSinger}
+              isHost={true}
+              onAddQueue={onAddKaraokeQueue}
+              onNextSinger={onNextKaraokeSinger}
+              onShareRecording={onShareKaraokeRecording}
+            />
           </div>
+        ) : (
+          <>
+            {/* ── PANEL 1: Player + Reactions ── */}
+            <aside className={cn(
+              "flex-col border-border/50 dark:border-border/20",
+              "lg:flex lg:col-span-3 lg:border-r",
+              activeTab === "player" ? "flex col-span-1" : "hidden"
+            )}>
+              {/* Glass sidebar background */}
+              <div className="absolute inset-0 glass-frosted pointer-events-none lg:w-[25%]" />
 
-          <div className="relative p-4 border-t border-border/50 dark:border-border/20 bg-background/30 backdrop-blur-md shrink-0">
-            <div className="flex items-center gap-2 mb-3">
-              <Radio className="size-3 text-muted-foreground" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Reactions</span>
-            </div>
-            <ReactionButtons onReact={onSendReaction} />
-          </div>
-        </aside>
+              <div className="relative flex-1 overflow-y-auto p-4 scrollbar-thin">
+                {/* Section label */}
+                <div className="flex items-center gap-2 mb-5">
+                  <Music className="size-3.5 text-muted-foreground" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Now Playing</span>
+                </div>
+                <RoomPlayer onPlayNext={onPlayNext} onTogglePause={onTogglePause} />
+              </div>
 
-        {/* ── PANEL 2: Queue / Requests / Add / Settings ── */}
-        <main className={cn(
-          "flex-col bg-background/30 backdrop-blur-sm min-h-0 overflow-hidden",
-          "lg:flex lg:col-span-6",
-          ["queue", "requests", "settings", "add"].includes(activeTab) ? "flex col-span-1" : "hidden"
-        )}>
+              <div className="relative p-4 border-t border-border/50 dark:border-border/20 bg-background/30 backdrop-blur-md shrink-0">
+                <div className="flex items-center gap-2 mb-3">
+                  <Radio className="size-3 text-muted-foreground" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Reactions</span>
+                </div>
+                <ReactionButtons onReact={onSendReaction} />
+              </div>
+            </aside>
+
+            {/* ── PANEL 2: Queue / Requests / Add / Settings ── */}
+            <main className={cn(
+              "flex-col bg-background/30 backdrop-blur-sm min-h-0 overflow-hidden",
+              "lg:flex lg:col-span-6",
+              ["queue", "requests", "settings", "add"].includes(activeTab) ? "flex col-span-1" : "hidden"
+            )}>
           {/* Tab bar */}
           <div className="flex items-center gap-1 p-2 sm:p-3 border-b border-border/50 dark:border-border/20 glass-heavy overflow-x-auto no-scrollbar shrink-0">
             {/* Main tabs */}
@@ -331,11 +362,39 @@ export const HostDashboard = ({
                     onChangeMoodVideo={onChangeMoodVideo}
                     accentColor={themeAccent}
                   />
+
+                  {/* Karaoke Mode Toggle */}
+                  <div className="mt-6 pt-6 border-t border-border/50 dark:border-border/20">
+                     <div className="flex items-center justify-between mb-4">
+                        <div>
+                           <h3 className="text-base font-bold flex items-center gap-2">
+                              <Mic className="size-4" style={{ color: themeAccent }} />
+                              Chế độ Karaoke
+                           </h3>
+                           <p className="text-xs text-muted-foreground mt-1">Bật để chuyển phòng sang dạng sân khấu Karaoke YouTube.</p>
+                        </div>
+                        <button
+                           onClick={() => onToggleKaraokeMode(!karaokeMode)}
+                           className={cn(
+                              "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2",
+                              karaokeMode ? "bg-primary" : "bg-muted"
+                           )}
+                           style={{ backgroundColor: karaokeMode ? themeAccent : undefined }}
+                        >
+                           <span className={cn(
+                              "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                              karaokeMode ? "translate-x-6" : "translate-x-1"
+                           )} />
+                        </button>
+                     </div>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </main>
+        </>
+        )}
 
         {/* ── PANEL 3: Members + Chat ── */}
         <aside className={cn(
