@@ -49,7 +49,9 @@ export const deleteMashup = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const likeMashup = catchAsync(async (req: Request, res: Response) => {
-  const result = await mashupService.toggleLike(req.params.id as string);
+  const userId = (req as any).user?._id?.toString();
+  if (!userId) return res.status(httpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized" });
+  const result = await mashupService.toggleLike(userId, req.params.id as string);
   res.status(httpStatus.OK).json({ success: true, data: result });
 });
 

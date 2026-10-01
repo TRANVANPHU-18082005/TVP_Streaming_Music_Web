@@ -1,6 +1,12 @@
 import { Types } from "mongoose";
-import { subDays, format, eachDayOfInterval } from "date-fns";
 import { ChartData } from "../dtos/dashboard.dto";
+
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** Calendar day in Asia/Ho_Chi_Minh, independent of the process timezone. */
+export function formatVnChartDay(date: Date): string {
+  return new Date(date.getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
+}
 export const parseGenreIds = (input: any): Types.ObjectId[] => {
   if (!input || input === "null" || input === "undefined") return [];
 
@@ -63,23 +69,21 @@ export const calculateGrowth = (current: number, previous: number): number => {
 };
 export const fillMissingDates = (
   data: { _id: string; count: number }[],
-  days: number
+  days: number,
 ): ChartData[] => {
-  const endDate = new Date();
-  const startDate = subDays(endDate, days - 1); // Trừ days-1 để tính cả hôm nay
-
-  // Tạo danh sách tất cả các ngày trong khoảng
-  const dateRange = eachDayOfInterval({ start: startDate, end: endDate });
-
-  // Tạo Map để tra cứu nhanh: "2024-05-20" => 10
-  // Dùng Map giúp độ phức tạp giảm từ O(N^2) xuống O(N)
+  const endKey = formatVnChartDay(new Date());
+  const [year, month, day] = endKey.split("-").map(Number);
+  const endUtc = Date.UTC(year, month - 1, day);
   const dataMap = new Map(data.map((item) => [item._id, item.count]));
 
-  return dateRange.map((date) => {
-    const dateStr = format(date, "yyyy-MM-dd");
+  return Array.from({ length: days }, (_, index) => {
+    const offset = days - 1 - index;
+    const dateStr = new Date(endUtc - offset * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     return {
-      _id: dateStr, // 🔥 SỬA: Đổi 'date' thành '_id' cho khớp DTO
-      count: dataMap.get(dateStr) || 0, // 🔥 SỬA: Đổi 'value' thành 'count' cho khớp DTO
+      _id: dateStr,
+      count: dataMap.get(dateStr) || 0,
     };
   });
 };

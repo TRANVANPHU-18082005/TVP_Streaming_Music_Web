@@ -35,6 +35,64 @@ export const buildCacheKey = (
 // TIMEOUT WRAPPER
 // ─────────────────────────────────────────────────────────────────────────────
 
+const inflightReads = new Map<string, Promise<unknown>>();
+const CACHE_VALUE_MAX_CHARS = 400_000;
+
+/**
+ * Read-through JSON cache. A Redis miss or timeout falls through to `loader`.
+ * One in-flight loader per key per process. Values above 400KB are not stored.
+ */
+export async function rememberJson<T>(
+  key: string,
+  ttlSeconds: number,
+  loader: () => Promise<T>,
+): Promise<T> {
+  const existing = inflightReads.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const pending = (async () => {
+    const cached = await withCacheTimeout(() => cacheRedis.get(key), 800);
+    if (cached) {
+      try {
+        return JSON.parse(cached) as T;
+      } catch {
+        cacheRedis.del(key).catch(() => {});
+      }
+    }
+
+    const value = await loader();
+    if (value === undefined) return value;
+
+    const serialized = JSON.stringify(value);
+    if (serialized.length > CACHE_VALUE_MAX_CHARS) return value;
+
+    const jitter = Math.floor(
+      Math.random() * Math.max(1, Math.round(ttlSeconds * 0.1)),
+    );
+    cacheRedis
+      .set(key, serialized, "EX", ttlSeconds + jitter)
+      .catch((err) => {
+        console.error(
+          `[Redis Error] Failed to set cache for ${key}:`,
+          err?.message,
+        );
+      });
+    return value;
+  })().finally(() => {
+    inflightReads.delete(key);
+  });
+
+  inflightReads.set(key, pending);
+  return pending;
+}
+
+/** Delete keys by Redis glob. Failures are logged and do not throw. */
+export function invalidateCachePrefixes(patterns: string[]): void {
+  void scanAndDeleteMany(patterns).catch((err) => {
+    console.error("[Cache] invalidateCachePrefixes error:", err);
+  });
+}
+
 export const withCacheTimeout = async <T>(
   fn: () => Promise<T>,
   timeoutMs = 2_000,
@@ -175,6 +233,8 @@ function buildPatternsForTrack(
 
   p.add("track:list:*");
   p.add("track:search:*");
+  p.add("search:*");
+  p.add("suggest:*");
 
   if (rel.artist) p.add(`artist:tracks:${rel.artist}:*`);
   if (rel.album) p.add(`album:tracks:${rel.album}:*`);
@@ -218,6 +278,8 @@ export async function invalidateTrackCache(trackId: string): Promise<void> {
           `track:detail:${trackId}:*`,
           "track:list:*",
           "track:search:*",
+          "search:*",
+          "suggest:*",
         ]);
 
     const deleted = await scanAndDeleteMany(patterns);
@@ -261,6 +323,8 @@ export async function invalidateTracksCache(trackIds: string[]): Promise<void> {
 
     allPatterns.add("track:list:*");
     allPatterns.add("track:search:*");
+    allPatterns.add("search:*");
+    allPatterns.add("suggest:*");
 
     // Detail patterns cho tracks không còn trong DB (đã hard-delete)
     const foundIds = new Set(relations.map((r) => r._id));

@@ -8,6 +8,7 @@ import { generateSafeSlug } from "../utils/slug";
 import { sendEmail } from "../utils/sendEmail";
 import { welcomeAdminCreatedEmail } from "../utils/emailTemplates";
 import { deleteFileFromCloud } from "../utils/cloudinary";
+import { rememberJson, invalidateCachePrefixes } from "../utils/cacheHelper";
 import {
   UpdateProfileInput,
   ChangePasswordInput,
@@ -22,13 +23,14 @@ class UserService {
    * Lấy thông tin public + Check xem mình có follow họ chưa
    */
   async getPublicProfile(targetUserId: string, currentUserId?: string) {
-    const user = await User.findById(targetUserId)
-      .select("-password -refreshToken -email -verificationCode")
-      .populate("artistProfile");
+    const user = await rememberJson(`user:public:${targetUserId}`, 120, async () => {
+      const doc = await User.findById(targetUserId)
+        .select("-password -refreshToken -email -verificationCode")
+        .populate("artistProfile");
+      if (!doc) throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+      return doc.toObject();
+    });
 
-    if (!user) throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-
-    // Check trạng thái follow (nếu đã login)
     let isFollowing = false;
     if (currentUserId) {
       isFollowing = !!(await Follow.exists({
@@ -37,7 +39,7 @@ class UserService {
       }));
     }
 
-    return { ...user.toObject(), isFollowing };
+    return { ...user, isFollowing };
   }
 
   /**
@@ -68,6 +70,7 @@ class UserService {
       runValidators: true,
     }).select("-password");
 
+    invalidateCachePrefixes([`user:public:${userId}`]);
     return updatedUser;
   }
 
@@ -256,6 +259,7 @@ class UserService {
     if (file && oldImage) {
       deleteFileFromCloud(oldImage, "image").catch(console.error);
     }
+    invalidateCachePrefixes([`user:public:${id}`]);
     return updatedUser;
   }
 
@@ -301,6 +305,7 @@ class UserService {
 
     // 5. Xóa User
     await user.deleteOne();
+    invalidateCachePrefixes([`user:public:${id}`]);
     return { message: "Xóa user thành công" };
   }
   async toggleBlockUser(userId: string) {
@@ -316,7 +321,7 @@ class UserService {
 
     user.isActive = !user.isActive;
     await user.save();
-
+    invalidateCachePrefixes([`user:public:${userId}`]);
     return user;
   }
   // Helper gửi mail

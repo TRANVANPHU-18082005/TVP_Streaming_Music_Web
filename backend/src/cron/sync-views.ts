@@ -75,6 +75,15 @@ interface ParsedViewKey {
   id: string;
 }
 
+/** Atomic lifetime increment. Callers must not $set playCount from PlayLog. */
+export function buildLifetimePlayInc(views: number): { $inc: { playCount: number } } {
+  return { $inc: { playCount: views } };
+}
+
+export function applyLifetimePlayInc(current: number, views: number): number {
+  return current + buildLifetimePlayInc(views).$inc.playCount;
+}
+
 /**
  * Parse key pattern `views:<type>:<objectId>`
  * Trả về null nếu key không hợp lệ.
@@ -95,6 +104,60 @@ function parseViewKey(key: string): ParsedViewKey | null {
 
 // ─── Batch Processing ─────────────────────────────────────────────────────────
 
+export interface ViewFlushPlan {
+  groups: Map<SupportedModelType, GroupedOps>;
+  skipped: number;
+  processed: number;
+}
+
+/**
+ * Turn a Redis `views:*` batch into lifetime `$inc` ops.
+ * The 5-minute job reads the keys, then calls this before bulkWrite.
+ */
+export function planViewFlush(
+  keys: string[],
+  values: Array<string | null>,
+): ViewFlushPlan {
+  const groups = new Map<SupportedModelType, GroupedOps>();
+  let skipped = 0;
+  let processed = 0;
+
+  for (let i = 0; i < keys.length; i++) {
+    const views = parseInt(values[i] ?? "0", 10);
+
+    if (isNaN(views) || views <= 0) {
+      skipped++;
+      continue;
+    }
+
+    const parsed = parseViewKey(keys[i]);
+    if (!parsed) {
+      skipped++;
+      logger.warn("[SyncView] Invalid key format, skipping", { key: keys[i] });
+      continue;
+    }
+
+    const { type, id } = parsed;
+
+    if (!groups.has(type)) {
+      groups.set(type, { ops: [], redisKeys: [], redisViews: [] });
+    }
+
+    const group = groups.get(type)!;
+    group.ops.push({
+      updateOne: {
+        filter: { _id: id },
+        update: buildLifetimePlayInc(views),
+      },
+    });
+    group.redisKeys.push(keys[i]);
+    group.redisViews.push(views);
+    processed++;
+  }
+
+  return { groups, skipped, processed };
+}
+
 async function processBatch(
   keys: string[],
   metrics: SyncMetrics,
@@ -103,46 +166,13 @@ async function processBatch(
 
   // Lấy tất cả view counts trong 1 round-trip
   const values = await cacheRedis.mget(keys);
-
-  // Group ops theo model type
-  const groupedOps = new Map<SupportedModelType, GroupedOps>();
-
-  for (let i = 0; i < keys.length; i++) {
-    const views = parseInt(values[i] ?? "0", 10);
-
-    if (isNaN(views) || views <= 0) {
-      metrics.skippedKeys++;
-      continue;
-    }
-
-    const parsed = parseViewKey(keys[i]);
-    if (!parsed) {
-      metrics.skippedKeys++;
-      logger.warn("[SyncView] Invalid key format, skipping", { key: keys[i] });
-      continue;
-    }
-
-    const { type, id } = parsed;
-
-    if (!groupedOps.has(type)) {
-      groupedOps.set(type, { ops: [], redisKeys: [], redisViews: [] });
-    }
-
-    const group = groupedOps.get(type)!;
-    group.ops.push({
-      updateOne: {
-        filter: { _id: id },
-        update: { $inc: { playCount: views } },
-      },
-    });
-    group.redisKeys.push(keys[i]);
-    group.redisViews.push(views);
-    metrics.processedKeys++;
-  }
+  const plan = planViewFlush(keys, values);
+  metrics.skippedKeys += plan.skipped;
+  metrics.processedKeys += plan.processed;
 
   // Flush mỗi model type song song
   await Promise.allSettled(
-    Array.from(groupedOps.entries()).map(([type, data]) =>
+    Array.from(plan.groups.entries()).map(([type, data]) =>
       flushModelGroup(type, data, metrics),
     ),
   );

@@ -1,14 +1,12 @@
 // src/config/b2.ts
 import B2 from "backblaze-b2";
-import dotenv from "dotenv";
-
-dotenv.config();
+import config from "./env";
 
 // 1. Kiểm tra biến môi trường
-const applicationKeyId = process.env.B2_KEY_ID || "";
-const applicationKey = process.env.B2_APP_KEY || "";
-const bucketId = process.env.B2_BUCKET_ID || "";
-const bucketName = process.env.B2_BUCKET_NAME || "";
+const applicationKeyId = config.b2.keyId;
+const applicationKey = config.b2.appKey;
+const bucketId = config.b2.bucketId;
+const bucketName = config.b2.bucketName;
 
 if (!applicationKeyId || !applicationKey || !bucketId || !bucketName) {
   console.warn("⚠️ B2 Credentials missing in .env");

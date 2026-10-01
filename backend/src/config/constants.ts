@@ -12,7 +12,11 @@ export const APP_CONFIG = {
   DUMMY_HASH: "$2b$10$2b102b102b102b102b102uX/fakestringtofoolhacker...",
 } as const;
 export const TRACK_SELECT =
-  "title slug artist featuringArtists album genres coverImage duration lyricUrl bitrate description hlsUrl lyricType isExplicit playCount releaseDate moodVideo plainLyrics lyricPreview likeCount";
+  "title slug artist featuringArtists album genres coverImage duration lyricUrl bitrate description hlsUrl lyricType isExplicit playCount releaseDate moodVideo lyricPreview likeCount";
+
+/** Admin list keeps lyrics and processing fields. The edit form reads this row. */
+export const ADMIN_TRACK_LIST_SELECT =
+  `${TRACK_SELECT} plainLyrics status isPublic errorReason trackUrl tags aiMetadata createdAt updatedAt uploader`;
 export const TRACK_POPULATE = [
   { path: "artist", select: "name avatar slug" },
   { path: "featuringArtists", select: "name slug avatar" },

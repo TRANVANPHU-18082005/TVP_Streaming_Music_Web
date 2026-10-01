@@ -5,6 +5,7 @@ import DailyStats from "../models/DailyStats";
 import mongoose from "mongoose";
 import recommendationService from "../services/recommendation.service";
 import logger from "../utils/logger";
+import { listenAuditFields, workerErrorFields } from "./viewLog";
 
 // Định nghĩa Interface cho Job Data để chặt chẽ về Type
 interface ILogListenJob {
@@ -14,13 +15,28 @@ interface ILogListenJob {
   timestamp: string | Date;
 }
 
+/** Audit row for one listen. This does not update Track.playCount. */
+export function buildListenPlayLog(input: {
+  trackId: string;
+  userId?: string | null;
+  ip?: string;
+  timestamp: string | Date;
+}) {
+  return {
+    trackId: new mongoose.Types.ObjectId(input.trackId),
+    userId: input.userId ? new mongoose.Types.ObjectId(input.userId) : null,
+    ip: input.ip || "unknown",
+    listenedAt: new Date(input.timestamp),
+    source: "web" as const,
+  };
+}
+
 export const startViewWorker = () => {
   const worker = new Worker(
     "view-updates",
     async (job: Job<ILogListenJob>) => {
       if (job.name === "log-listen-history") {
         const { trackId, userId, ip, timestamp } = job.data;
-        console.log(trackId, userId, ip, timestamp);
         // 1. XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7)
         // Dùng toLocaleDateString với timezone cố định để lấy chính xác YYYY-MM-DD tại VN
         const listenDate = new Date(timestamp);
@@ -31,17 +47,14 @@ export const startViewWorker = () => {
         try {
           // 2. TẠO CÁC PROMISE XỬ LÝ SONG SONG
           logger.info(
-            `[SyncView] Scheduled view sync job: trackId=${trackId}, userId=${userId}, ip=${ip}, timestamp=${timestamp}`,
+            "[SyncView] Scheduled view sync job",
+            listenAuditFields({ trackId, userId, ip }),
           );
 
           // Task A: Ghi Log thô (Audit Trail)
-          const logPromise = PlayLog.create({
-            trackId: new mongoose.Types.ObjectId(trackId),
-            userId: userId ? new mongoose.Types.ObjectId(userId) : null,
-            ip: ip || "unknown",
-            listenedAt: listenDate,
-            source: "web",
-          });
+          const logPromise = PlayLog.create(
+            buildListenPlayLog({ trackId, userId, ip, timestamp: listenDate }),
+          );
           recommendationService.invalidateUserRecommendCache(userId);
 
           // Task C: Cập nhật Daily Stats (Cho User Chart)
@@ -65,10 +78,10 @@ export const startViewWorker = () => {
           await Promise.all([logPromise, statsPromise]);
 
           console.log(
-            `✅ [Worker] Processed: ${trackId} | User: ${userId || "Guest"} | Date: ${vnDateStr}`,
+            `✅ [Worker] Processed: ${trackId} | Date: ${vnDateStr}`,
           );
         } catch (error) {
-          console.error("❌ [Worker] Critical Error:", error);
+          logger.error("[Worker] Critical Error", workerErrorFields(error));
           throw error; // Đẩy lại để BullMQ retry
         }
       }
@@ -86,6 +99,6 @@ export const startViewWorker = () => {
   });
 
   worker.on("failed", (job, err) => {
-    console.error(`⚠️ Job ${job?.id} failed: ${err.message}`);
+    logger.error(`[Worker] Job ${job?.id} failed`, workerErrorFields(err));
   });
 };

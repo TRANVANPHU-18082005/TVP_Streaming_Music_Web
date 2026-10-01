@@ -12,10 +12,13 @@ import {
   UpdateMoodVideoInput,
 } from "../validations/moodVideo.validation";
 import { parseTags } from "../utils/helper";
-import { cacheRedis } from "../config/redis";
-import { invalidateTracksCache } from "../utils/cacheHelper";
+import { invalidateTracksCache, invalidateCachePrefixes, rememberJson, buildCacheKey } from "../utils/cacheHelper";
 import escapeStringRegexp from "escape-string-regexp";
 import { number } from "zod";
+
+function invalidateMoodCaches(): void {
+  invalidateCachePrefixes(["mood:list:*", "mood:detail:*"]);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -74,6 +77,7 @@ class MoodVideoService {
         usageCount: 0,
       });
 
+      invalidateMoodCaches();
       return moodVideo;
     } catch (error) {
       // Cleanup Cloudinary nếu DB fail
@@ -135,10 +139,10 @@ class MoodVideoService {
       const trackIds = affectedTracks.map((t) => t._id.toString());
 
       if (trackIds.length > 0) {
-        // Dùng Pipeline để xóa track:detail nhanh chóng
         await invalidateTracksCache(trackIds);
       }
 
+      invalidateMoodCaches();
       return video;
     } catch (error) {
       // Nếu DB fail mà đã lỡ upload file mới -> Xóa file mới để tránh rác
@@ -156,6 +160,15 @@ class MoodVideoService {
    * prefix regex khi có sort. Consistent với album/artist/track/genre services.
    */
   async getMoodVideos(filter: MoodVideoFilterInput) {
+    const cacheKey = buildCacheKey(
+      "mood:list",
+      "public",
+      filter as unknown as Record<string, unknown>,
+    );
+    return rememberJson(cacheKey, 300, () => this.loadMoodVideos(filter));
+  }
+
+  private async loadMoodVideos(filter: MoodVideoFilterInput) {
     const { page, limit, keyword, isActive, sort } = filter;
     const skip = (page - 1) * limit;
     const query: Record<string, any> = {};
@@ -228,6 +241,10 @@ class MoodVideoService {
    * options.limit: 10 + sort: createdAt -1 được truyền vào populate options.
    */
   async getMoodVideoDetail(id: string) {
+    return rememberJson(`mood:detail:${id}`, 300, () => this.loadMoodVideoDetail(id));
+  }
+
+  private async loadMoodVideoDetail(id: string) {
     // NÂNG CẤP C: populate virtual "tracks" thay vì query riêng
     const video = await TrackMoodVideo.findById(id)
       .populate({
@@ -267,6 +284,7 @@ class MoodVideoService {
 
     const videoUrl = video.videoUrl;
     await video.deleteOne();
+    invalidateMoodCaches();
     // 3. DỌN DẸP CACHE (Sau khi xóa DB thành công)
 
     // Post-delete: cleanup Cloudinary — fire-and-forget

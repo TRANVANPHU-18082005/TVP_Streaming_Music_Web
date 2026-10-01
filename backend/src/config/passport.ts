@@ -5,39 +5,46 @@ import config from "./env";
 import AuthService from "../services/auth.service"; // Import Service chúng ta vừa viết
 import logger from "./logger";
 
-// 2. Kiểm tra an toàn (Fail Fast)
-if (!config.googleClientId || !config.googleClientSecret) {
-  throw new Error(
-    "❌ Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET trong cấu hình",
+// Google is optional. requiredInProd does not include these keys, and local
+// login works without them. Register the strategy only when both are set so
+// a missing env cannot throw before the process listens.
+if (config.googleOAuthEnabled) {
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: config.googleClientId,
+        clientSecret: config.googleClientSecret,
+        // URL này phải khớp y hệt những gì bạn đăng ký trên Google Console
+        callbackURL: config.googleCallbackUrl || "/api/auth/google/callback",
+        passReqToCallback: true, // Để sau này có thể lấy req nếu cần
+      },
+      async (req, accessToken, refreshToken, profile, done) => {
+        logger.info("Google profile received", { providerId: profile.id });
+
+        try {
+          // 3. Gọi Service để xử lý logic nghiệp vụ (Tìm, Tạo, hoặc Gộp tài khoản)
+          const user = await AuthService.loginWithGoogle(profile);
+
+          logger.info("Google auth success", { userId: String(user._id) });
+
+          // 4. Trả user về cho Controller (googleCallbackHandler)
+          return done(null, user);
+        } catch (error) {
+          logger.error("Google auth error", {
+            name: error instanceof Error ? error.name : "Error",
+            message:
+              error instanceof Error ? error.message : "Google auth failed",
+          });
+          return done(error, undefined);
+        }
+      },
+    ),
+  );
+} else {
+  logger.warn(
+    "GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set; Google login disabled",
   );
 }
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: config.googleClientId,
-      clientSecret: config.googleClientSecret,
-      // URL này phải khớp y hệt những gì bạn đăng ký trên Google Console
-      callbackURL: config.googleCallbackUrl || "/api/auth/google/callback",
-      passReqToCallback: true, // Để sau này có thể lấy req nếu cần
-    },
-    async (req, accessToken, refreshToken, profile, done) => {
-      logger.info("Google Profile Received: %s", profile.id);
-
-      try {
-        // 3. Gọi Service để xử lý logic nghiệp vụ (Tìm, Tạo, hoặc Gộp tài khoản)
-        const user = await AuthService.loginWithGoogle(profile);
-
-        logger.info("Google Auth Success for: %s", user.email);
-
-        // 4. Trả user về cho Controller (googleCallbackHandler)
-        return done(null, user);
-      } catch (error) {
-        logger.error("Google Auth Error:", error);
-        return done(error, undefined);
-      }
-    },
-  ),
-);
 
 // Lưu ý: Vì chúng ta dùng JWT (session: false) nên không cần serializeUser/deserializeUser
 
@@ -59,16 +66,20 @@ if (config.facebookAppId && config.facebookAppSecret) {
         profile: any,
         done: any,
       ) => {
-        console.log("🔥 Facebook Profile Received:", profile.id);
+        logger.info("Facebook profile received", { providerId: profile.id });
 
         try {
           const user = await AuthService.loginWithFacebook(profile);
 
-          console.log("✅ Facebook Auth Success for:", user.email);
+          logger.info("Facebook auth success", { userId: String(user._id) });
 
           return done(null, user);
         } catch (error) {
-          console.error("❌ Facebook Auth Error:", error);
+          logger.error("Facebook auth error", {
+            name: error instanceof Error ? error.name : "Error",
+            message:
+              error instanceof Error ? error.message : "Facebook auth failed",
+          });
           return done(error, undefined);
         }
       },

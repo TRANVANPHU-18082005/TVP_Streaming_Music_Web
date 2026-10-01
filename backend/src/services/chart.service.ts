@@ -2,6 +2,12 @@ import PlayLog from "../models/PlayLog";
 import Track from "../models/Track";
 import { cacheRedis } from "../config/redis";
 import { TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
+import {
+  lifetimePlayCountProjection,
+  lifetimePlayCountSort,
+} from "./playCount";
+
+export { lifetimePlayCountProjection, lifetimePlayCountSort };
 
 const CACHE_KEY = "chart:live:top100";
 const CACHE_TTL = 30;
@@ -160,7 +166,7 @@ export const getRealtimeChart = async () => {
         slug: "$track.slug",
         duration: "$track.duration",
         coverImage: "$track.coverImage",
-        playCount: "$track.playCount",
+        playCount: lifetimePlayCountProjection(),
         score: "$score",
         lyricUrl: "$track.lyricUrl",
         hlsUrl: "$track.hlsUrl",
@@ -223,7 +229,7 @@ export const getRealtimeChart = async () => {
       isPublic: true,
       status: "ready",
     })
-      .sort({ playCount: -1 })
+      .sort(lifetimePlayCountSort())
       .limit(needed)
       .select(TRACK_SELECT)
       .populate(TRACK_POPULATE as any)
@@ -321,6 +327,13 @@ const getChartDataForTop3 = async (top3Ids: any[], startTime: Date) => {
   });
 };
 
+/** Day, week, and month all rank from PlayLog. Month is 30 days, matching the log TTL. */
+export function topSevenWindowDays(period: "day" | "week" | "month"): number {
+  if (period === "month") return 30;
+  if (period === "week") return 7;
+  return 1;
+}
+
 /**
  * Lấy Top 7 Tracks theo Day / Week / Month
  */
@@ -336,45 +349,9 @@ export const getTopSevenTracks = async (period: 'day' | 'week' | 'month' = 'day'
   }
 
   const now = new Date();
+  const days = topSevenWindowDays(period);
+  const startTime = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   let finalTracks = [];
-
-  if (period === 'month') {
-    // For month, fallback to track.playCount since PlayLog TTL is 8 days
-    const startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    finalTracks = await Track.find({
-      isPublic: true,
-      isDeleted: { $ne: true },
-      status: "ready",
-      releaseDate: { $gte: startTime }
-    })
-      .sort({ playCount: -1 })
-      .limit(7)
-      .select(TRACK_SELECT)
-      .populate(TRACK_POPULATE as any)
-      .lean();
-
-    // If not enough tracks released in last 30 days, fallback to all time top
-    if (finalTracks.length < 7) {
-        const needed = 7 - finalTracks.length;
-        const existingIds = finalTracks.map(t => t._id);
-        const fallbackTracks = await Track.find({
-          _id: { $nin: existingIds },
-          isPublic: true,
-          isDeleted: { $ne: true },
-          status: "ready",
-        })
-          .sort({ playCount: -1 })
-          .limit(needed)
-          .select(TRACK_SELECT)
-          .populate(TRACK_POPULATE as any)
-          .lean();
-        finalTracks = [...finalTracks, ...fallbackTracks];
-    }
-  } else {
-    // Day or Week
-    const days = period === 'week' ? 7 : 1;
-    const startTime = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
     const aggregatedTracks = await PlayLog.aggregate([
       { $match: { listenedAt: { $gte: startTime } } },
@@ -488,7 +465,7 @@ export const getTopSevenTracks = async (period: 'day' | 'week' | 'month' = 'day'
           slug: "$track.slug",
           duration: "$track.duration",
           coverImage: "$track.coverImage",
-          playCount: "$track.playCount",
+          playCount: lifetimePlayCountProjection(),
           score: "$score",
           lyricUrl: "$track.lyricUrl",
           hlsUrl: "$track.hlsUrl",
@@ -549,7 +526,7 @@ export const getTopSevenTracks = async (period: 'day' | 'week' | 'month' = 'day'
         isPublic: true,
         status: "ready",
       })
-        .sort({ playCount: -1 })
+        .sort(lifetimePlayCountSort())
         .limit(needed)
         .select(TRACK_SELECT)
         .populate(TRACK_POPULATE as any)
@@ -557,7 +534,6 @@ export const getTopSevenTracks = async (period: 'day' | 'week' | 'month' = 'day'
 
       finalTracks = [...finalTracks, ...fallbackTracks];
     }
-  }
 
   // Set Cache
   cacheRedis

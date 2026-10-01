@@ -38,6 +38,11 @@ export const protect = catchAsync(
     try {
       const decoded: any = jwt.verify(token, config.jwtSecret!);
 
+      // Every authenticated request loads the user so a role change or
+      // lock applies on the next call. This repository has no timing, trace,
+      // or load measurement that shows the lookup is a hot path, so it stays
+      // uncached. Do not add a cache without that measurement and an
+      // invalidation path for role and isActive.
       const currentUser = await UserModel.findById(decoded.id).populate(
         "artistProfile"
       ); // Dùng UserModel
@@ -49,13 +54,15 @@ export const protect = catchAsync(
           )
         );
       }
-      // 🛑 CHECK BANNED TẠI ĐÂY
+      // Locked accounts use ApiError so errorHandler owns the refresh cookie.
       if (!currentUser.isActive) {
-        return res.status(403).json({
-          success: false,
-          errorCode: "ACCOUNT_LOCKED", // <--- Frontend dựa vào cái này
-          message: "Tài khoản của bạn đã bị khóa.",
-        });
+        return next(
+          new ApiError(
+            httpStatus.FORBIDDEN,
+            "Tài khoản của bạn đã bị khóa.",
+            "ACCOUNT_LOCKED",
+          ),
+        );
       }
       // Gán user vào request
       // Lúc này TS hiểu req.user có kiểu là Express.User (cũng là IUser)
@@ -96,13 +103,13 @@ export const optionalAuth = async (
 
   try {
     const decoded: any = jwt.verify(token, config.jwtSecret!);
+    // Same uncached read as protect. No measured hot path in this repository.
     const currentUser = await UserModel.findById(decoded.id).populate(
       "artistProfile"
     );
 
-    // Nếu tìm thấy thì gán, không thì gán undefined
-    // (TypeScript sẽ không báo lỗi nữa vì Express.User tương thích với IUser)
-    req.user = currentUser || undefined;
+    // Inactive accounts stay anonymous so public routes keep working.
+    req.user = currentUser && currentUser.isActive ? currentUser : undefined;
   } catch (error) {
     req.user = undefined;
   }

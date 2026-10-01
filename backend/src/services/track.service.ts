@@ -16,13 +16,14 @@ import { generateUniqueSlug } from "../utils/slug";
 import {
   BulkUpdateTrackInput,
   ChangeStatusInput,
+  CreateTrackInput,
   TrackFilterInput,
+  UpdateTrackInput,
 } from "../validations/track.validation";
 import { deleteFolderFromB2, deleteFromB2 } from "../utils/fileCleanup";
 import { cacheRedis } from "../config/redis";
 import { notifyQueue } from "../queue/notify.queue";
 import { addCustomJob } from "../queue/processTrack.queue";
-import { CreateTrackDTO, UpdateTrackDTO } from "../dtos/track.dto";
 import { CounterTrack } from "../utils/counter";
 import { TRACK_POPULATE } from "../config/constants";
 
@@ -41,15 +42,13 @@ import {
   invalidateArtistCache,
   invalidateTrackCache,
   invalidateTracksCache,
+  rememberJson,
   withCacheTimeout,
 } from "../utils/cacheHelper";
 import recommendationService from "./recommendation.service";
 import { parseGenreIds } from "../utils/helper";
 
-import { APP_CONFIG } from "../config/constants";
-import PlayLog from "../models/PlayLog";
-import Like from "../models/Like";
-import { TRACK_SELECT } from "../config/constants";
+import { APP_CONFIG, ADMIN_TRACK_LIST_SELECT, TRACK_SELECT } from "../config/constants";
 import config from "../config/env";
 import { toCdnUrl } from "../utils/url.utils";
 
@@ -99,7 +98,7 @@ class TrackService {
    */
   async createTrack(
     currentUser: IUser,
-    data: CreateTrackDTO,
+    data: CreateTrackInput,
     files: { [fieldname: string]: Express.Multer.File[] },
   ): Promise<ITrack> {
     // ── Artist resolution ────────────────────────────────────────────────────
@@ -273,7 +272,7 @@ class TrackService {
   async updateTrack(
     trackId: string,
     currentUser: IUser,
-    data: UpdateTrackDTO,
+    data: UpdateTrackInput,
     files: { [fieldname: string]: Express.Multer.File[] },
   ) {
     const track = await Track.findById(trackId);
@@ -634,6 +633,21 @@ class TrackService {
 
   // ── 4. GET TRACKS ─────────────────────────────────────────────────────────
   async getTracks(filter: TrackFilterInput, currentUser?: IUser) {
+    const isAdmin = currentUser?.role === "admin";
+    const limitNum = Number((filter as { limit?: number }).limit ?? APP_CONFIG.PAGINATION_LIMIT);
+    const cacheable = limitNum > 0 && limitNum <= 50;
+    const cacheKey = buildCacheKey(
+      "track:list",
+      isAdmin ? "admin" : "public",
+      filter as unknown as Record<string, unknown>,
+    );
+
+    const load = () => this.loadTracks(filter, isAdmin);
+    if (!cacheable) return load();
+    return rememberJson(cacheKey, isAdmin ? 45 : 180, load);
+  }
+
+  private async loadTracks(filter: TrackFilterInput, isAdmin: boolean) {
     // 3. BUILD QUERY
     const {
       page = 1,
@@ -696,6 +710,7 @@ class TrackService {
 
     // 5. EXECUTE QUERY & POPULATE
     let baseQuery = Track.find(query)
+      .select(isAdmin ? ADMIN_TRACK_LIST_SELECT : TRACK_SELECT)
       .populate("artist", "name avatar slug")
       .populate("featuringArtists", "name slug avatar")
       .populate("album", "title coverImage slug")

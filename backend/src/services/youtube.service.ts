@@ -1,6 +1,7 @@
 import ytSearch from "yt-search";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
+import { rememberJson } from "../utils/cacheHelper";
 
 /**
  * Interface cho kết quả tìm kiếm Youtube
@@ -24,6 +25,16 @@ export interface YoutubeSearchResult {
 export const searchYoutube = async (
   query: string,
   limit: number = 10
+): Promise<YoutubeSearchResult[]> => {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return [];
+  const cacheKey = `youtube:karaoke:${normalized}:${limit}`;
+  return rememberJson(cacheKey, 600, () => loadYoutube(query, limit));
+};
+
+const loadYoutube = async (
+  query: string,
+  limit: number,
 ): Promise<YoutubeSearchResult[]> => {
   try {
     if (!query || query.trim() === "") {

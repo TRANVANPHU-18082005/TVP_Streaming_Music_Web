@@ -10,6 +10,7 @@ import {
 import { createModuleLogger } from "../utils/logger";
 import mongoose from "mongoose";
 import recommendationService from "./recommendation.service";
+import { invalidateCachePrefixes } from "../utils/cacheHelper";
 
 const log = createModuleLogger("InteractionService");
 
@@ -120,6 +121,11 @@ class InteractionService {
       attemptedAt: Date.now(),
     });
     recommendationService.invalidateUserRecommendCache(userId);
+    invalidateCachePrefixes([
+      `profile:library:${userId}:*`,
+      `profile:liked:${userId}:*`,
+      `profile:liked-content:${userId}:*`,
+    ]);
     log.debug("toggleLike success", { userId, targetId, newStatus });
     return {
       isLiked: newStatus,

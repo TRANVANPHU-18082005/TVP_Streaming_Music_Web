@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 import logger from "../config/logger";
+import { redactLogValue } from "../utils/logRedact";
 import { clearRefreshTokenCookie } from "../utils/token";
 import { isDev } from "../config/env";
 
@@ -31,9 +32,8 @@ export const errorHandler = (
     ...(isDev() && { stack: err.stack }),
   };
 
-  // Log lỗi ra console nếu là dev
   if (isDev()) {
-    logger.error("💥 ERROR:", err);
+    logger.error("Request failed", { err: redactLogValue(err) });
   }
 
   res.status(statusCode).json(response);

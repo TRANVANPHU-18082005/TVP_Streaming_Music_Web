@@ -1,26 +1,17 @@
-import Redis, { RedisOptions } from "ioredis";
-import dotenv from "dotenv";
-
-dotenv.config();
-
-// Helper: Tự động bật TLS nếu URL là rediss://
-const getTlsConfig = (url: string) => {
-  return url.startsWith("rediss://")
-    ? { rejectUnauthorized: false }
-    : undefined;
-};
+import Redis from "ioredis";
+import config from "./env";
+import { redisTlsOptions } from "./redisTls";
 
 // =========================================================
 // 1. CACHE REDIS (Dùng cho API - Kết nối Upstash)
 // =========================================================
-import config from "./env";
 
 const cacheUrl = config.upstashRedisUrl || process.env.UPSTASH_REDIS_URL || "redis://localhost:6379";
 
 export const cacheRedis = new Redis(cacheUrl, {
   lazyConnect: true,
   retryStrategy: (times) => Math.min(times * 50, 2000),
-  tls: getTlsConfig(cacheUrl),
+  tls: redisTlsOptions(cacheUrl),
   maxRetriesPerRequest: 3, // sau 3 lần fail → throw, không retry mãi
   connectTimeout: 5000, // 5s không connect được → throw
 });
@@ -43,7 +34,7 @@ export const queueRedis = new Redis(queueUrl, {
   keepAlive: 10000,
   enableReadyCheck: false,
   retryStrategy: (times) => Math.min(times * 50, 2000),
-  tls: getTlsConfig(queueUrl),
+  tls: redisTlsOptions(queueUrl),
 });
 
 queueRedis.on("connect", () => console.log("🟢 [Queue] Redis Cloud connected"));

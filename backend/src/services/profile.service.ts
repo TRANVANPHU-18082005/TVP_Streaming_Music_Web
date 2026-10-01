@@ -9,12 +9,24 @@ import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 import logger from "../utils/logger";
 import Track from "../models/Track";
+import { rememberJson, invalidateCachePrefixes } from "../utils/cacheHelper";
 
 class ProfileService {
   /**
    * 1. THỐNG KÊ PHÂN TÍCH (7 ngày gần nhất)
    */
   async getListeningAnalytics(
+    userId: string,
+    timezone: string = "Asia/Ho_Chi_Minh",
+  ) {
+    return rememberJson(
+      `profile:analytics:${userId}:${timezone}`,
+      300,
+      () => this.loadListeningAnalytics(userId, timezone),
+    );
+  }
+
+  private async loadListeningAnalytics(
     userId: string,
     timezone: string = "Asia/Ho_Chi_Minh",
   ) {
@@ -52,6 +64,19 @@ class ProfileService {
    * 3. LẤY NỘI DUNG ĐÃ LIKE (Nâng cấp Phân trang & Lean)
    */
   async getLikedContent(
+    userId: string,
+    type: "track" | "album" | "playlist",
+    page: number = 1,
+    limit: number = 10,
+  ) {
+    return rememberJson(
+      `profile:liked-content:${userId}:${type}:${page}:${limit}`,
+      30,
+      () => this.loadLikedContent(userId, type, page, limit),
+    );
+  }
+
+  private async loadLikedContent(
     userId: string,
     type: "track" | "album" | "playlist",
     page: number = 1,
@@ -150,7 +175,14 @@ class ProfileService {
     const totalItems = await Like.countDocuments({ userId, targetType: type });
 
     return {
-      data: result.map((r) => ({ ...r.item, likedAt: r.likedAt })),
+      data: result.map((r) => {
+        const item = { ...r.item, likedAt: r.likedAt };
+        delete item.plainLyrics;
+        delete item.lyricPreview;
+        delete item.aiMetadata;
+        delete item.description;
+        return item;
+      }),
       meta: {
         totalItems,
         page,
@@ -171,9 +203,23 @@ class ProfileService {
     }).select("-password");
     if (!user)
       throw new ApiError(httpStatus.NOT_FOUND, "Người dùng không tồn tại");
+    invalidateCachePrefixes([`user:public:${userId}`]);
     return user;
   }
   async getLikedTracks(
+    userId: string,
+    filter: { page?: number; limit?: number },
+  ) {
+    const page = Number(filter.page) || 1;
+    const limit = Number(filter.limit) || 20;
+    return rememberJson(
+      `profile:liked:${userId}:${page}:${limit}`,
+      30,
+      () => this.loadLikedTracks(userId, filter),
+    );
+  }
+
+  private async loadLikedTracks(
     userId: string,
     filter: { page?: number; limit?: number },
   ) {
@@ -339,6 +385,12 @@ class ProfileService {
     };
   }
   async getLibrary(userId: string, limit: number = 20) {
+    return rememberJson(`profile:library:${userId}:${limit}`, 60, () =>
+      this.loadLibrary(userId, limit),
+    );
+  }
+
+  private async loadLibrary(userId: string, limit: number = 20) {
     // Lấy 8 bài hát và 6 album mới nhất đã like làm bản xem trước (preview)
     const [likedTracks, likedAlbums, likedPlaylists] = await Promise.all([
       this.getLikedContent(userId, "track", 1, limit),
@@ -360,6 +412,19 @@ class ProfileService {
   }
   //
   async getRecentlyPlayed(
+    userId: string,
+    filter: { page?: number; limit?: number },
+  ) {
+    const page = Number(filter.page) || 1;
+    const limit = Number(filter.limit) || 20;
+    return rememberJson(
+      `profile:recent:${userId}:${page}:${limit}`,
+      45,
+      () => this.loadRecentlyPlayed(userId, filter),
+    );
+  }
+
+  private async loadRecentlyPlayed(
     userId: string,
     filter: { page?: number; limit?: number },
   ) {

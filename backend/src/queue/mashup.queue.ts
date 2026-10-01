@@ -1,25 +1,22 @@
-import { Queue, JobsOptions } from "bullmq";
-import { queueRedis } from "../config/redis";
+import { JobsOptions } from "bullmq";
 
 export interface ProcessMashupJobData {
   mashupId: string;
 }
 
-export const mashupQueue = new Queue<ProcessMashupJobData>("mashup-processing", {
-  connection: queueRedis,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: "exponential", delay: 5_000 },
-    removeOnComplete: { count: 10, age: 3_600 },
-    removeOnFail: { count: 20, age: 86_400 },
-  },
-});
-
+/**
+ * Server-side mashup audio stitching is not running.
+ * The placeholder worker is intentionally not started, so this refuses
+ * to enqueue `mashup-processing` jobs that nothing would consume.
+ */
 export async function addProcessMashupJob(
   mashupId: string,
-  opts: JobsOptions = {}
+  _opts: JobsOptions = {},
 ): Promise<void> {
-  const jobId = opts.jobId ?? `mashup-${mashupId}-${Date.now()}`;
-  await mashupQueue.add("process", { mashupId }, { ...opts, jobId });
-  console.log(`📥 [Queue] Job process added for mashup ${mashupId}`);
+  console.error(
+    `[Queue] Refusing mashup-processing job for ${mashupId}: worker is not running`,
+  );
+  throw new Error(
+    "Mashup processing worker is not running; refusing to enqueue",
+  );
 }

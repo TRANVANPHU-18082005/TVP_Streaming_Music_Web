@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import httpStatus from "http-status";
 import Track from "../models/Track";
-import { cacheRedis } from "../config/redis";
+import { invalidateTrackCache } from "../utils/cacheHelper";
 import { deleteFolderFromB2 } from "../utils/fileCleanup";
 import ApiError from "../utils/ApiError";
 import {
@@ -52,7 +52,7 @@ async function guardTrack(trackId: string) {
 }
 
 async function invalidateCache(trackId: string): Promise<void> {
-  await cacheRedis.del(`track:detail:${trackId}`).catch(() => {});
+  await invalidateTrackCache(trackId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

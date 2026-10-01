@@ -6,9 +6,16 @@ import MusicRoom, { IMusicRoom, IQueueItem } from "../models/MusicRoom";
 import RoomMessage from "../models/RoomMessage";
 import Track from "../models/Track";
 import User, { IUser } from "../models/User";
+import { RoomErrorCode } from "../config/constants";
 import ApiError from "../utils/ApiError";
 import { cacheRedis } from "../config/redis";
 import { getIO } from "../socket";
+import { hashRoomPassword, roomPasswordMatches } from "../utils/roomPassword";
+import {
+  buildCacheKey,
+  invalidateCachePrefixes,
+  rememberJson,
+} from "../utils/cacheHelper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // REDIS KEY HELPERS
@@ -113,17 +120,29 @@ export const createRoom = async (user: IUser, dto: CreateRoomDto) => {
   };
 
   if (!isPublic && dto.password) {
-    roomData.password = dto.password;
+    roomData.password = await hashRoomPassword(dto.password);
   }
 
   const room = await MusicRoom.create(roomData);
-  return room;
+  const safeRoom = room.toObject();
+  delete safeRoom.password;
+  if (isPublic) invalidateCachePrefixes(["room:public:*"]);
+  return safeRoom;
 };
 
 /**
  * Lấy danh sách phòng public đang hoạt động.
  */
 export const getPublicRooms = async (page = 1, limit = 20, search?: string) => {
+  const cacheKey = buildCacheKey("room:public", "guest", {
+    page,
+    limit,
+    search: search ?? "",
+  });
+  return rememberJson(cacheKey, 20, () => loadPublicRooms(page, limit, search));
+};
+
+const loadPublicRooms = async (page = 1, limit = 20, search?: string) => {
   const skip = (page - 1) * limit;
 
   const filter: any = { isPublic: true, isActive: true };
@@ -179,9 +198,14 @@ export const getRoomByCode = async (roomCode: string, password?: string) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại hoặc đã đóng");
   }
 
-  // Kiểm tra password cho private room
-  if (!room.isPublic && password !== room.password) {
-    throw new ApiError(httpStatus.FORBIDDEN, "Mật khẩu phòng không đúng");
+  // Private rooms accept a bcrypt hash only. Plaintext rows fail closed
+  // until `npm run migrate:room-passwords` rewrites them.
+  if (!room.isPublic && !(await roomPasswordMatches(room.password, password))) {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      "Mật khẩu phòng không đúng",
+      RoomErrorCode.WRONG_PASSWORD,
+    );
   }
 
   // Lấy playback state từ Redis (ưu tiên Redis vì realtime hơn)
@@ -217,6 +241,7 @@ export const deleteRoom = async (roomCode: string, user: IUser) => {
 
   room.isActive = false;
   await room.save();
+  if (room.isPublic) invalidateCachePrefixes(["room:public:*"]);
 
   // Dọn Redis
   await Promise.all([

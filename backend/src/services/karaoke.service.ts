@@ -15,6 +15,15 @@ import type {
   AdminRecordingFilterInput,
   PermissionFilterInput,
 } from "../validations/karaoke.validation";
+import {
+  buildCacheKey,
+  invalidateCachePrefixes,
+  rememberJson,
+} from "../utils/cacheHelper";
+
+function invalidateKaraokePublic(): void {
+  invalidateCachePrefixes(["karaoke:public:*"]);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -301,6 +310,15 @@ const getMyRecordings = async (userId: string, filter: RecordingFilterInput) => 
  * Lấy recordings public (cộng đồng).
  */
 const getPublicRecordings = async (filter: RecordingFilterInput) => {
+  const cacheKey = buildCacheKey(
+    "karaoke:public",
+    "guest",
+    filter as unknown as Record<string, unknown>,
+  );
+  return rememberJson(cacheKey, 60, () => loadPublicRecordings(filter));
+};
+
+const loadPublicRecordings = async (filter: RecordingFilterInput) => {
   const { page, limit, keyword, sort, userId } = filter;
   const skip = (page - 1) * limit;
 
@@ -445,6 +463,7 @@ const deleteRecording = async (user: IUser, recordingId: string) => {
   // TODO: Xóa file audio trên B2 (gọi deleteFromB2 utility)
 
   await recording.deleteOne();
+  invalidateKaraokePublic();
 
   // Giảm counter uploads nếu owner xóa
   if (isOwner) {
@@ -539,6 +558,7 @@ const adminReviewRecording = async (
   }
 
   await recording.save();
+  invalidateKaraokePublic();
 
   // TODO: Gửi notification cho user qua Socket.IO / Notify model
 
@@ -611,6 +631,7 @@ const toggleLike = async (userId: string, recordingId: string) => {
   }
 
   await recording.save();
+  invalidateKaraokePublic();
   return { hasLiked: !hasLiked, likeCount: recording.likeCount };
 };
 

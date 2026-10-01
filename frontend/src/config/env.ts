@@ -7,7 +7,7 @@ export const env = {
   APP_NAME: (import.meta.env.VITE_APP_NAME as string) || "Music App",
   NODE_ENV,
   SOCKET_URL: (import.meta.env.VITE_SOCKET_URL as string) || "https://tvp-backend.fly.dev",
-  CDN_DOMAIN: (import.meta.env.VITE_CDN_DOMAIN as string) || "https://cdn.tvpmusic.site",
+  CDN_DOMAIN: (import.meta.env.VITE_CDN_URL as string) || "https://cdn.tvpmusic.site",
   // Cấu hình upload (nếu cần check size ở frontend)
   MAX_FILE_SIZE: 50 * 1024 * 1024, // 50MB
 };

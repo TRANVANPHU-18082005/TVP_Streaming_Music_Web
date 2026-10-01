@@ -53,6 +53,7 @@ import {
 import { ProgressBar } from "./ProgressBar";
 import { ILyricLine, ITrack } from "@/features/track";
 import { useLyrics } from "../hooks/useLyrics";
+import { usePlainLyrics } from "../hooks/usePlainLyrics";
 import { MarqueeText } from "./MarqueeText";
 import { PlayerBackground } from "@/components/PlayerBackground";
 import { TrackLikeButton } from "@/features/interaction/components/LikeButton";
@@ -1106,6 +1107,7 @@ interface SwipeableViewsProps {
   swipeHandlers: ReturnType<typeof useHorizontalSwipe>;
   onSeek: (t: number) => void;
   focusMode: boolean;
+  plainLyrics?: string;
 }
 
 const SwipeableViews = memo(
@@ -1124,6 +1126,7 @@ const SwipeableViews = memo(
     swipeHandlers,
     onSeek,
     focusMode,
+    plainLyrics,
   }: SwipeableViewsProps) => (
     <main
       className="relative flex-1 overflow-hidden touch-pan-y bg-transparent"
@@ -1181,7 +1184,7 @@ const SwipeableViews = memo(
                 paddingForMe={36}
                 isPlaying={isPlaying}
                 lyricType={track.lyricType}
-                plainLyrics={track.plainLyrics}
+                plainLyrics={plainLyrics}
                 syncedLines={lyrics ?? []}
                 karaokeLines={lyrics ?? []}
                 currentTime={currentTime}
@@ -1395,6 +1398,7 @@ const FullPlayerComponent = ({
   const rawLyricSrc = track.lyricUrl;
   const LyricSrc = rawLyricSrc;
   const { lyrics, loading } = useLyrics(LyricSrc, lyricsEnabled);
+  const plainLyrics = usePlainLyrics(track, lyricsEnabled);
 
   // Lazy mount: khi chuyển view, thêm vào Set (không bao giờ unmount)
   useEffect(() => {
@@ -1530,6 +1534,7 @@ const FullPlayerComponent = ({
             swipeHandlers={swipeHandlers}
             onSeek={onSeek}
             focusMode={focusMode}
+            plainLyrics={plainLyrics}
           />
 
           {/* ── MOBILE CONTROLS ── */}

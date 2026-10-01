@@ -1,9 +1,7 @@
 import fs from "fs";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import config from "../config/env";
 import { s3 } from "../config/storage"; // Import client S3 đã cấu hình ở bước trước
-import dotenv from "dotenv";
-
-dotenv.config();
 
 /**
  * Upload file từ Local lên Backblaze B2
@@ -23,7 +21,7 @@ export const uploadToB2 = async (
   const key = `${targetFolder}/${fileName}`;
 
   const command = new PutObjectCommand({
-    Bucket: process.env.B2_BUCKET_NAME,
+    Bucket: config.b2.bucketName,
     Key: key,
     Body: fileStream,
     ContentType: contentType,

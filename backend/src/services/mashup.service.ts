@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
 import Mashup, { IMashup, IMashupShort } from "../models/Mashup";
+import Like from "../models/Like";
 import TrackShort from "../models/TrackShort";
 import Track from "../models/Track";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
-import { addProcessMashupJob } from "../queue/mashup.queue";
-
+import { invalidateCachePrefixes, rememberJson } from "../utils/cacheHelper";
 interface CompatibilityResult {
   score: number;
   tempoScore: number;
@@ -184,14 +184,13 @@ class MashupService {
       ...metadata,
       ...(userId ? { createdBy: userId } : {}),
       creationType: (userId ? 'manual' : 'auto') as 'manual' | 'auto',
-      status: 'ready' as 'ready' // Tạm thời ready ngay cho client-side. Nếu Phase 2 thì 'generating'
+      // Saved composition for the client. Server-side audio stitching is not running.
+      status: 'ready' as 'ready'
     };
 
     const mashup = await Mashup.create(mashupData);
-    
-    // Đẩy vào queue xử lý FFmpeg (Phase 2)
-    await addProcessMashupJob(mashup._id.toString());
-    
+    invalidateCachePrefixes(["mashup:feed:*"]);
+
     return mashup.populate([
       { path: 'createdBy', select: 'name avatar' },
       { path: 'shorts.short', populate: { path: 'track', populate: { path: 'artist' } } },
@@ -212,6 +211,14 @@ class MashupService {
   }
 
   async getFeed(
+    limit: number = 10,
+    cursor?: string,
+  ): Promise<{ feed: IMashup[]; nextCursor: string | null }> {
+    const cacheKey = `mashup:feed:${Number(limit)}:${cursor ?? "start"}`;
+    return rememberJson(cacheKey, 60, () => this.loadFeed(limit, cursor));
+  }
+
+  private async loadFeed(
     limit: number = 10,
     cursor?: string,
   ): Promise<{ feed: IMashup[]; nextCursor: string | null }> {
@@ -308,18 +315,48 @@ class MashupService {
     }
 
     Object.assign(mashup, data);
+    invalidateCachePrefixes(["mashup:feed:*"]);
     return mashup.save();
   }
 
   async deleteMashup(id: string, userId: string): Promise<void> {
     const result = await Mashup.findOneAndDelete({ _id: id, createdBy: userId });
     if (!result) throw new ApiError(httpStatus.NOT_FOUND, 'Mashup not found or no permission');
+    invalidateCachePrefixes(["mashup:feed:*"]);
   }
 
-  async toggleLike(id: string): Promise<{ likeCount: number }> {
-    const mashup = await Mashup.findByIdAndUpdate(id, { $inc: { likeCount: 1 } }, { new: true });
+  async toggleLike(userId: string, id: string): Promise<{ likeCount: number; liked: boolean }> {
+    const mashup = await Mashup.findById(id);
     if (!mashup) throw new ApiError(httpStatus.NOT_FOUND, 'Mashup not found');
-    return { likeCount: mashup.likeCount };
+
+    const filter = { userId, targetId: id, targetType: "mashup" as const };
+    const existing = await Like.findOne(filter);
+
+    if (existing) {
+      const deleted = await Like.deleteOne({ _id: existing._id });
+      if (deleted.deletedCount > 0) {
+        const updated = await Mashup.findOneAndUpdate(
+          { _id: id, likeCount: { $gt: 0 } },
+          { $inc: { likeCount: -1 } },
+          { new: true },
+        );
+        return { likeCount: updated?.likeCount ?? mashup.likeCount, liked: false };
+      }
+    }
+
+    try {
+      await Like.create(filter);
+    } catch (err: unknown) {
+      const code = (err as { code?: number })?.code;
+      if (code === 11000) {
+        const current = await Mashup.findById(id);
+        return { likeCount: current?.likeCount ?? mashup.likeCount, liked: true };
+      }
+      throw err;
+    }
+
+    const updated = await Mashup.findByIdAndUpdate(id, { $inc: { likeCount: 1 } }, { new: true });
+    return { likeCount: updated?.likeCount ?? mashup.likeCount + 1, liked: true };
   }
 
   async recordShare(id: string): Promise<void> {
@@ -333,6 +370,7 @@ class MashupService {
       { new: true }
     );
     if (!mashup) throw new ApiError(httpStatus.NOT_FOUND, 'Mashup not found or no permission');
+    invalidateCachePrefixes(["mashup:feed:*"]);
     return mashup;
   }
 }

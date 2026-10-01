@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import passport from "passport";
 import httpStatus from "http-status"; // Import thêm enum status
@@ -15,11 +15,27 @@ import User, { IUser } from "../models/User";
 import crypto from "crypto";
 import { cacheRedis } from "../config/redis";
 
+const redirectGoogleDisabled = (res: Response) => {
+  res.redirect(
+    `${config.clientUrl}/login?error=OAUTH_PROVIDER_ERROR&provider=google&reason=${encodeURIComponent("Đăng nhập Google chưa được cấu hình")}`,
+  );
+};
+
 // 1. Google Auth (Start)
-export const googleAuth = passport.authenticate("google", {
-  scope: ["profile", "email"],
-  session: false,
-});
+export const googleAuth = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (!config.googleOAuthEnabled) {
+    redirectGoogleDisabled(res);
+    return;
+  }
+  return passport.authenticate("google", {
+    scope: ["profile", "email"],
+    session: false,
+  })(req, res, next);
+};
 
 // 2. Google Callback (End)
 export const googleCallbackHandler = async (req: Request, res: Response) => {

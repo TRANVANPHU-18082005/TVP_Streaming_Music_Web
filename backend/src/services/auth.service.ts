@@ -9,7 +9,6 @@ import config from "../config/env";
 import { generateUniqueSlug } from "../utils/slug";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import interactionService from "./interaction.service";
 import { cacheRedis } from "../config/redis";
 import UserIdentity, { AuthProviderType } from "../models/UserIdentity";
 import { AuthErrorCode } from "../types/auth.types";
@@ -34,6 +33,27 @@ class AuthService {
     const sessionKey = `session:${userId}:${hashedToken}`;
     await cacheRedis.del(sessionKey);
     await cacheRedis.srem(`user_sessions:${userId}`, sessionKey);
+  }
+
+  // Revoke every refresh session for a user. Used when a locked account
+  // presents a still-valid refresh JWT so no device can mint a new access token.
+  private async revokeAllSessions(userId: string, refreshToken?: string) {
+    const userSessionsKey = `user_sessions:${userId}`;
+    const sessionKeys = await cacheRedis.smembers(userSessionsKey);
+    const keys = new Set<string>(sessionKeys);
+
+    if (refreshToken) {
+      const hashedToken = crypto
+        .createHash("sha256")
+        .update(refreshToken)
+        .digest("hex");
+      keys.add(`session:${userId}:${hashedToken}`);
+    }
+
+    if (keys.size > 0) {
+      await cacheRedis.del(...keys);
+    }
+    await cacheRedis.del(userSessionsKey);
   }
 
   // --- HELPER: Tạo OTP 6 số ---
@@ -461,6 +481,19 @@ class AuthService {
         "+isActive +role",
       );
 
+      if (user && !user.isActive) {
+        try {
+          await this.revokeAllSessions(String(userId), cookieToken);
+        } catch (revokeError) {
+          console.error("[Refresh] Failed to revoke sessions for locked account:", revokeError);
+        }
+        throw new ApiError(
+          httpStatus.FORBIDDEN,
+          "Tài khoản bị khóa",
+          AuthErrorCode.ACCOUNT_LOCKED,
+        );
+      }
+
       const hashedToken = crypto.createHash("sha256").update(cookieToken).digest("hex");
       const sessionKey = `session:${userId}:${hashedToken}`;
       const sessionExists = await cacheRedis.get(sessionKey);
@@ -472,9 +505,6 @@ class AuthService {
           "Token không hợp lệ hoặc phiên đã hết hạn (Reuse detected)",
         );
       }
-
-      if (!user.isActive)
-        throw new ApiError(httpStatus.FORBIDDEN, "Tài khoản bị khóa");
 
       const { accessToken, refreshToken } = generateTokens(
         user._id.toString(),
@@ -488,6 +518,12 @@ class AuthService {
 
       return { accessToken, refreshToken, user };
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.errorCode === AuthErrorCode.ACCOUNT_LOCKED
+      ) {
+        throw error;
+      }
       throw new ApiError(httpStatus.FORBIDDEN, "Phiên đăng nhập hết hạn");
     }
   }
@@ -1045,7 +1081,8 @@ class AuthService {
   }
 
   async logout(userId: string, specificToken?: string) {
-    // Dọn dẹp Redis Interaction để tránh lệch data cho user sau
+    // Load on logout so importing AuthService does not start the interaction queue.
+    const { default: interactionService } = await import("./interaction.service");
     await interactionService.clearUserCache(userId);
 
     // Thu hồi refresh token trong Redis session

@@ -1,3 +1,6 @@
+// Not registered in routes/index.ts.
+// cron/maintenance.ts calls systemService.syncAll() at 03:00 Asia/Ho_Chi_Minh.
+// Mount this router only if a task explicitly adds a second trigger for that sync.
 import express from "express";
 import { protect, authorize } from "../middlewares/auth.middleware";
 import { syncSystemStats } from "../controllers/system.controller";

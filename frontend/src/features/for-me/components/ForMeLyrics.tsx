@@ -1,5 +1,6 @@
 import { memo, useEffect, useState, useCallback } from "react";
 import { useLyrics } from "@/features/player/hooks/useLyrics";
+import { usePlainLyrics } from "@/features/player/hooks/usePlainLyrics";
 import LyricsView from "@/features/player/components/LyricEngine";
 import { useAppDispatch } from "@/store/hooks";
 import { seekTo } from "@/features/player/slice/playerSlice";
@@ -16,6 +17,7 @@ interface ForMeLyricsProps {
 export const ForMeLyrics = memo(({ track, isActive, isPlaying, accentColor }: ForMeLyricsProps) => {
   // Only enable lyrics fetching if this feed item is active to save bandwidth
   const { lyrics, loading } = useLyrics(track.lyricUrl, isActive);
+  const plainLyrics = usePlainLyrics(track, isActive);
   const dispatch = useAppDispatch();
   const [currentTime, setCurrentTime] = useState(0);
   const isMobile = useIsMobile();
@@ -76,7 +78,7 @@ export const ForMeLyrics = memo(({ track, isActive, isPlaying, accentColor }: Fo
         <LyricsView
           paddingForMe={isMobile ? 7 : 36}
           lyricType={track.lyricType || "synced"}
-          plainLyrics={track.plainLyrics}
+          plainLyrics={plainLyrics}
           syncedLines={lyrics}
           karaokeLines={lyrics}
           currentTime={currentTime}

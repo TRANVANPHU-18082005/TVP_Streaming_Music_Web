@@ -4,6 +4,7 @@ import Track from "../models/Track";
 import TrackMoodVideo from "../models/TrackMoodVideo";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
+import { rememberJson, invalidateCachePrefixes } from "../utils/cacheHelper";
 
 class TrackShortService {
   async createShort(data: Partial<ITrackShort>): Promise<ITrackShort> {
@@ -18,6 +19,7 @@ class TrackShortService {
     }
 
     const short = await TrackShort.create(data);
+    invalidateCachePrefixes(["short:feed:*"]);
     return short.populate(["track", "moodVideo"]);
   }
 
@@ -28,6 +30,7 @@ class TrackShortService {
     if (!short) {
       throw new ApiError(httpStatus.NOT_FOUND, "TrackShort not found");
     }
+    invalidateCachePrefixes(["short:feed:*"]);
     return short;
   }
 
@@ -36,6 +39,7 @@ class TrackShortService {
     if (!short) {
       throw new ApiError(httpStatus.NOT_FOUND, "TrackShort not found");
     }
+    invalidateCachePrefixes(["short:feed:*"]);
   }
 
   async getShortById(id: string): Promise<ITrackShort> {
@@ -73,6 +77,14 @@ class TrackShortService {
   }
 
   async getShortsFeed(
+    limit: number = 10,
+    cursor?: string,
+  ): Promise<{ feed: ITrackShort[]; nextCursor: string | null }> {
+    const cacheKey = `short:feed:${Number(limit)}:${cursor ?? "start"}`;
+    return rememberJson(cacheKey, 60, () => this.loadShortsFeed(limit, cursor));
+  }
+
+  private async loadShortsFeed(
     limit: number = 10,
     cursor?: string,
   ): Promise<{ feed: ITrackShort[]; nextCursor: string | null }> {
@@ -118,6 +130,7 @@ class TrackShortService {
     if (!short) {
       throw new ApiError(httpStatus.NOT_FOUND, "TrackShort not found");
     }
+    invalidateCachePrefixes(["short:feed:*"]);
     return short;
   }
 

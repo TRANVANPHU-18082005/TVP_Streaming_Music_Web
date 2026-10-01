@@ -20,6 +20,12 @@ import PlayLog from "../models/PlayLog";
 import { cacheRedis } from "../config/redis";
 import { withCacheTimeout } from "../utils/cacheHelper";
 import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
+import {
+  lifetimePlayCountSort,
+  lifetimePlayCountWithReleaseSort,
+} from "./playCount";
+
+export { lifetimePlayCountSort, lifetimePlayCountWithReleaseSort };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & TYPES
@@ -30,6 +36,9 @@ const PERSONALIZED_THRESHOLD = 5;
 
 /** Trọng số: 1 Like tương đương N lượt nghe */
 const LIKE_WEIGHT = 5;
+
+/** Trending stays a week. PlayLog retention is 30 days and is not this window. */
+export const TRENDING_WINDOW_DAYS = 7;
 
 /** Tỉ lệ bài "mới phát hành" trong danh sách cuối (Tier 3 Discovery Mix) */
 const DISCOVERY_RATIO = 0.2;
@@ -475,8 +484,8 @@ class RecommendationService {
   // ────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Trả về các bài hát trending (nhiều lượt nghe nhất) trong 8 ngày gần đây
-   * (phù hợp với TTL của PlayLog).
+   * Trả về các bài hát trending trong 7 ngày gần đây.
+   * PlayLog giữ 30 ngày cho thống kê tháng. Trending không lấy cả cửa sổ đó.
    *
    * Nếu userId được cung cấp, sẽ loại bỏ các bài user đã nghe.
    */
@@ -484,8 +493,7 @@ class RecommendationService {
     limit: number,
     userId?: string,
   ): Promise<TrackDoc[]> {
-    // Tính top tracks trong window PlayLog (8 ngày)
-    const since = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
     const topTrackIds: Array<{ _id: Types.ObjectId; count: number }> =
       await PlayLog.aggregate([
@@ -543,7 +551,7 @@ class RecommendationService {
       })
         .select(TRACK_SELECT)
         .populate(TRACK_POPULATE as any)
-        .sort({ playCount: -1, releaseDate: -1 })
+        .sort(lifetimePlayCountWithReleaseSort())
         .limit(limit)
         .lean(),
     );
@@ -949,7 +957,7 @@ class RecommendationService {
           isPublic: true,
           status: "ready",
         })
-          .sort({ playCount: -1 })
+          .sort(lifetimePlayCountSort())
           .limit(totalNeeded - hotIds.length)
           .select("_id")
           .lean();

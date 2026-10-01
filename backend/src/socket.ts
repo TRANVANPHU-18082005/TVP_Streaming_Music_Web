@@ -10,9 +10,27 @@ import config from "./config/env";
 import { PlayInteraction } from "./types/interaction.type";
 import musicRoomService from "./services/musicRoom.service";
 import MusicRoom from "./models/MusicRoom";
+import { roomPasswordMatches } from "./utils/roomPassword";
 import RoomMessage from "./models/RoomMessage";
 import User from "./models/User";
 import { RoomErrorCode } from "./config/constants";
+import {
+  applyConnectionIdentity,
+  authenticateSocketToken,
+  canClientJoinRoom,
+  canJoinAdminDashboard,
+  isRoomHost,
+  isSocketInMusicRoom,
+  privateNotificationRoom,
+  readVerifiedUserId,
+  resolveActivityUserId,
+  resolveConnectionIdentity,
+  resolvePlayRateLimitIdentity,
+  resolvePlayUserId,
+  selectNextHostId,
+  type HandshakeAuthResult,
+  type SocketUserRecord,
+} from "./socket/identity";
 
 let io: Server;
 
@@ -37,6 +55,26 @@ export const getIO = (): Server => {
   return io;
 };
 
+async function findSocketUser(id: string): Promise<SocketUserRecord | null> {
+  const user = await User.findById(id)
+    .select("role fullName avatar isActive")
+    .lean<{
+      _id: { toString(): string };
+      role: SocketUserRecord["role"];
+      fullName?: string;
+      avatar?: string;
+      isActive?: boolean;
+    }>();
+  if (!user) return null;
+  return {
+    id: user._id.toString(),
+    role: user.role,
+    fullName: user.fullName,
+    avatar: user.avatar,
+    isActive: user.isActive === true,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -52,30 +90,55 @@ export const initSocket = (httpServer: HttpServer): Server => {
     transports: ["websocket", "polling"],
   });
 
+  io.use(async (socket, next) => {
+    try {
+      // handshake.query.userId is client-controlled and is never an identity.
+      const result = await authenticateSocketToken(
+        socket.handshake.auth?.token,
+        config.jwtSecret || "",
+        findSocketUser,
+      );
+      if (result.status === "rejected") {
+        next(new Error(result.reason));
+        return;
+      }
+      socket.data.authResult = result;
+      next();
+    } catch (error) {
+      next(error instanceof Error ? error : new Error("SOCKET_AUTH_FAILED"));
+    }
+  });
+
   io.on("connection", (socket: Socket) => {
     const userIp = getClientIp(socket);
 
-    // userId từ query: MongoId (authenticated) hoặc absent (guest)
-    // FIX: dùng "guest_<socketId>" cho khách vãng lai để phù hợp với analyticsService
-    const rawUserId = socket.handshake.query.userId as string | undefined;
-    const userId =
-      rawUserId && rawUserId !== "undefined" && rawUserId.trim()
-        ? rawUserId.trim()
-        : `guest_${socket.id}`;
-
-    const isGuest = userId.startsWith("guest_");
-    console.log("isGuest", isGuest, userId)
-    // ── Private notification room (chỉ cho authenticated user) ──────────────
-    if (!isGuest) {
-      socket.join(userId);
+    const authResult = (socket.data.authResult ?? {
+      status: "guest",
+    }) as HandshakeAuthResult;
+    const identity = resolveConnectionIdentity(authResult, socket.id);
+    applyConnectionIdentity(socket.data, identity);
+    const isGuest = identity.isGuest;
+    const notificationRoom = privateNotificationRoom(identity);
+    if (notificationRoom) {
+      socket.join(notificationRoom);
     }
 
-    // Biến lưu trữ ID hiện tại của socket này (có thể cập nhật qua heartbeat nếu frontend gửi ID ẩn danh khác)
-    let currentUserId = userId;
+    const connectionUserId = (): string => {
+      const stored = socket.data.userId;
+      if (typeof stored === "string" && stored.length > 0) return stored;
+      return `guest_${socket.id}`;
+    };
+    const callerIsHost = (hostId: unknown): boolean => {
+      const actor = socket.data.user;
+      if (!actor || socket.data.userId !== actor.id) return false;
+      return isRoomHost(hostId, actor);
+    };
+    const joinedMusicRoom = (roomCode: string): boolean =>
+      isSocketInMusicRoom(socket.rooms, roomCode);
 
     void analyticsService.touchSession({
       socketId: socket.id,
-      userId: currentUserId,
+      userId: connectionUserId(),
       ip: userIp,
     });
 
@@ -83,11 +146,13 @@ export const initSocket = (httpServer: HttpServer): Server => {
     // EVENTS
     // ─────────────────────────────────────────────────────────────────────────
 
-    /** Tham gia phòng chat / sự kiện chung */
+    /**
+     * Client-supplied room names are not trusted.
+     * Chart, track, and music-room membership use their own events.
+     */
     socket.on("join_room", (room: string) => {
-      if (typeof room === "string" && room.length < 100) {
-        socket.join(room);
-      }
+      if (!canClientJoinRoom(room)) return;
+      socket.join(room);
     });
 
     /**
@@ -113,10 +178,19 @@ export const initSocket = (httpServer: HttpServer): Server => {
       io.to(newRoom).emit("listeners_count", count);
     });
 
+    /**
+     * Heartbeat: Client gửi mỗi 30s để duy trì trạng thái online.
+     * FIX: userId từ payload có thể là guest_ → analyticsService xử lý được.
+     */
     socket.on("client_heartbeat", ({ trackId }) => {
+      const activityUserId = resolveActivityUserId(
+        socket.data.user,
+        undefined,
+        socket.id,
+      );
       void analyticsService.touchSession({
         socketId: socket.id,
-        userId: currentUserId,
+        userId: activityUserId,
         trackId: typeof trackId === "string" ? trackId : "",
         ip: userIp,
       });
@@ -124,7 +198,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
     socket.on("interact_play", async (data: PlayInteraction) => {
       try {
-        const { targetId, targetType, userId } = data;
+        const { targetId, targetType } = data;
 
         // 1. Validate cơ bản
         if (
@@ -137,7 +211,11 @@ export const initSocket = (httpServer: HttpServer): Server => {
         }
 
         // 2. Chống spam (Dùng chung key hoặc tách theo loại)
-        const identity = userId || userIp || socket.id;
+        const identity = resolvePlayRateLimitIdentity(
+          socket.data.user,
+          socket.id,
+          userIp,
+        );
         const spamKey = `limit:play:${targetType}:${targetId}:${identity}`;
 
         if (await cacheRedis.get(spamKey)) return;
@@ -157,7 +235,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
             "log-listen-history",
             {
               trackId: targetId,
-              userId: userId || null, // Có thể null cho guest
+              userId: resolvePlayUserId(socket.data.user),
               ip: userIp,
               timestamp: new Date(),
             },
@@ -181,6 +259,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
     /** Join admin dashboard — nhận push update mỗi 5s */
     socket.on("join_admin_dashboard", () => {
+      if (!canJoinAdminDashboard(socket.data.user)) return;
       socket.join("admin_room");
       analyticsService
         .getStats()
@@ -224,13 +303,13 @@ export const initSocket = (httpServer: HttpServer): Server => {
             
             (async () => {
               try {
-                const count = await cacheRedis.hincrby(`room:sessions:${oldCode}`, currentUserId, -1);
+                const count = await cacheRedis.hincrby(`room:sessions:${oldCode}`, connectionUserId(), -1);
                 if (count <= 0) {
-                  await cacheRedis.hdel(`room:sessions:${oldCode}`, currentUserId);
+                  await cacheRedis.hdel(`room:sessions:${oldCode}`, connectionUserId());
                   const newCount = await cacheRedis.hlen(`room:sessions:${oldCode}`);
                   await MusicRoom.updateOne({ roomCode: oldCode }, { memberCount: newCount });
                   io.to(room).emit("room:member_left", {
-                    userId: currentUserId,
+                    userId: connectionUserId(),
                     memberCount: newCount,
                   });
                 }
@@ -263,7 +342,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
           return;
         }
 
-        if (!room.isPublic && password !== room.password) {
+        if (!room.isPublic && !(await roomPasswordMatches(room.password, password))) {
           socket.emit("room:error", { message: "Mật khẩu phòng không đúng", errorCode: RoomErrorCode.WRONG_PASSWORD });
           return;
         }
@@ -276,7 +355,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
         }
 
         socket.join(roomSocketKey);
-        const sessionCount = await cacheRedis.hincrby(`room:sessions:${roomCode}`, currentUserId, 1);
+        const sessionCount = await cacheRedis.hincrby(`room:sessions:${roomCode}`, connectionUserId(), 1);
 
         // Cập nhật memberCount
         const newCount = await cacheRedis.hlen(`room:sessions:${roomCode}`);
@@ -304,10 +383,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
             currentMoodVideo: room.currentMoodVideo ?? null,
           },
           playbackState,
-          isHost: room.host.toString() === currentUserId,
+          isHost: callerIsHost(room.host.toString()),
         });
 
-        if (room.host.toString() === currentUserId) {
+        if (callerIsHost(room.host.toString())) {
           const requests = await musicRoomService.getTrackRequests(roomCode);
           socket.emit("room:request_list", requests);
         }
@@ -315,7 +394,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
         // Broadcast cho phòng (nếu là thiết bị đầu tiên)
         if (sessionCount === 1) {
           socket.to(roomSocketKey).emit("room:member_joined", {
-            userId: currentUserId,
+            userId: connectionUserId(),
             memberCount: newCount,
           });
 
@@ -345,22 +424,22 @@ export const initSocket = (httpServer: HttpServer): Server => {
       try {
         socket.leave(roomSocketKey);
 
-        const count = await cacheRedis.hincrby(`room:sessions:${roomCode}`, currentUserId, -1);
+        const count = await cacheRedis.hincrby(`room:sessions:${roomCode}`, connectionUserId(), -1);
         if (count > 0) {
            // User vẫn còn kết nối khác trong phòng
            return;
         }
 
         // Hết kết nối -> User thực sự rời phòng
-        await cacheRedis.hdel(`room:sessions:${roomCode}`, currentUserId);
+        await cacheRedis.hdel(`room:sessions:${roomCode}`, connectionUserId());
         const newCount = await cacheRedis.hlen(`room:sessions:${roomCode}`);
         await MusicRoom.updateOne({ roomCode }, { memberCount: newCount });
 
-        const leaver = isGuest ? null : await User.findById(currentUserId).select("fullName").lean();
+        const leaver = isGuest ? null : await User.findById(connectionUserId()).select("fullName").lean();
         const leaverName = leaver?.fullName || "Khách ẩn danh";
 
         io.to(roomSocketKey).emit("room:member_left", {
-          userId: currentUserId,
+          userId: connectionUserId(),
           memberCount: newCount,
         });
 
@@ -378,19 +457,14 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
         // Nếu Host rời → auto-transfer
         const room = await MusicRoom.findOne({ roomCode, isActive: true }).lean();
-        if (room && room.host.toString() === currentUserId) {
-          // Tìm member còn lại trong phòng
+        if (room && callerIsHost(room.host.toString())) {
           const remaining = Array.from(io.sockets.adapter.rooms.get(roomSocketKey) ?? []);
-          let nextUserId: string | undefined;
-
-          for (const socketId of remaining) {
-             const sock = io.sockets.sockets.get(socketId);
-             const uid = sock?.handshake.query.userId as string | undefined;
-             if (uid && uid !== "undefined" && uid !== currentUserId) {
-                 nextUserId = uid;
-                 break;
-             }
-          }
+          const nextUserId = selectNextHostId(
+            remaining.map((socketId) =>
+              readVerifiedUserId(io.sockets.sockets.get(socketId)?.data),
+            ),
+            connectionUserId(),
+          );
 
           if (nextUserId) {
             await musicRoomService.transferHost(roomCode, nextUserId);
@@ -418,17 +492,17 @@ export const initSocket = (httpServer: HttpServer): Server => {
         // Chỉ cho phép nếu socket đang trong phòng
         if (!socket.rooms.has(`music_room:${roomCode}`)) return;
 
-        // Tìm user info từ DB (đã được authenticate qua protect middleware)
+        // Tên hiển thị lấy từ user đã xác thực ở handshake, hoặc từ DB theo id đó.
         const room = await MusicRoom.findOne({ roomCode, isActive: true }).lean();
         if (!room) return;
 
-        if (room.mutedUsers && room.mutedUsers.map(String).includes(currentUserId)) {
+        if (room.mutedUsers && room.mutedUsers.map(String).includes(connectionUserId())) {
           socket.emit("room:error", { message: "Bạn đã bị cấm chat trong phòng này" });
           return;
         }
 
         // Tạo message trực tiếp (tránh lookup user lại)
-        const rateKey = `room:ratelimit:msg:${currentUserId}`;
+        const rateKey = `room:ratelimit:msg:${connectionUserId()}`;
         const count = await cacheRedis.incr(rateKey);
         if (count === 1) await cacheRedis.expire(rateKey, 5);
         if (count > 5) {
@@ -439,8 +513,8 @@ export const initSocket = (httpServer: HttpServer): Server => {
         let senderName = socket.data.fullName ?? "Ẩn danh";
         let senderAvatar = socket.data.avatar ?? "";
 
-        if (!isGuest && currentUserId && !socket.data.fullName) {
-          const user = await User.findById(currentUserId).select("fullName avatar").lean();
+        if (!isGuest && connectionUserId() && !socket.data.fullName) {
+          const user = await User.findById(connectionUserId()).select("fullName avatar").lean();
           if (user) {
             senderName = user.fullName;
             senderAvatar = user.avatar ?? "";
@@ -451,7 +525,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
         const msg = await RoomMessage.create({
           room: room._id,
-          sender: isGuest ? undefined : currentUserId,
+          sender: isGuest ? undefined : connectionUserId(),
           senderName,
           senderAvatar,
           content: String(content).slice(0, 300),
@@ -476,7 +550,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
       if (!allowed.includes(emoji)) return;
 
       io.to(`music_room:${roomCode}`).emit("room:reaction", {
-        userId: currentUserId,
+        userId: connectionUserId(),
         emoji,
       });
     });
@@ -486,10 +560,11 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("room:play_next", async ({ roomCode }: { roomCode: string }) => {
       if (!roomCode || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
 
       try {
         const room = await MusicRoom.findOne({ roomCode, isActive: true }).lean();
-        if (!room || room.host.toString() !== currentUserId) {
+        if (!room || !callerIsHost(room.host.toString())) {
           socket.emit("room:error", { message: "Chỉ Host mới có thể điều khiển phát nhạc" });
           return;
         }
@@ -502,7 +577,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
         }
 
         // Lấy user object tối giản
-        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        const fakeUser = { _id: connectionUserId(), role: "user" } as any;
         const playbackState = await musicRoomService.playNext(roomCode, fakeUser);
 
         io.to(`music_room:${roomCode}`).emit("room:playback_update", playbackState);
@@ -516,15 +591,16 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("room:toggle_pause", async ({ roomCode, currentPosition }: { roomCode: string; currentPosition: number }) => {
       if (!roomCode || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
 
       try {
         const room = await MusicRoom.findOne({ roomCode, isActive: true }).lean();
-        if (!room || room.host.toString() !== currentUserId) {
+        if (!room || !callerIsHost(room.host.toString())) {
           socket.emit("room:error", { message: "Chỉ Host mới có thể điều khiển phát nhạc" });
           return;
         }
 
-        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        const fakeUser = { _id: connectionUserId(), role: "user" } as any;
         const playbackState = await musicRoomService.togglePause(roomCode, fakeUser, currentPosition ?? 0);
 
         io.to(`music_room:${roomCode}`).emit("room:playback_update", playbackState);
@@ -541,7 +617,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
       if (!socket.rooms.has(`music_room:${roomCode}`)) return;
 
       try {
-        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        const fakeUser = { _id: connectionUserId(), role: "user" } as any;
         const result = await musicRoomService.voteTrack(roomCode, trackId, fakeUser);
 
         socket.emit("room:vote_ack", { trackId, voted: result.voted });
@@ -558,7 +634,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
       if (!socket.rooms.has(`music_room:${roomCode}`)) return;
 
       try {
-        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        const fakeUser = { _id: connectionUserId(), role: "user" } as any;
         await musicRoomService.requestTrack(roomCode, trackId, fakeUser);
         
         // Cập nhật danh sách request cho Host
@@ -568,7 +644,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
           // Gửi cho Host (vì Host có thể có nhiều session/tab)
           const hostSockets = await io.in(`music_room:${roomCode}`).fetchSockets();
           for (const s of hostSockets) {
-            const uid = s.handshake.query.userId as string;
+            const uid = readVerifiedUserId(s.data);
             if (uid === room.host.toString()) {
               s.emit("room:request_list", requests);
             }
@@ -586,9 +662,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("room:handle_request", async ({ roomCode, trackId, action }: { roomCode: string; trackId: string; action: "approve" | "reject" }) => {
       if (!roomCode || !trackId || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       
       try {
-        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        const fakeUser = { _id: connectionUserId(), role: "user" } as any;
         await musicRoomService.handleRequest(roomCode, trackId, action, fakeUser);
         
         // Gửi lại danh sách cập nhật cho Host
@@ -605,8 +682,9 @@ export const initSocket = (httpServer: HttpServer): Server => {
     
     socket.on("room:karaoke_toggle", async ({ roomCode, enabled }: { roomCode: string, enabled: boolean }) => {
       if (!roomCode || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
-        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        const fakeUser = { _id: connectionUserId(), role: "user" } as any;
         await musicRoomService.toggleKaraokeMode(roomCode, fakeUser, enabled);
       } catch (err: any) {
         socket.emit("room:error", { message: err.message ?? "Lỗi khi bật/tắt Karaoke" });
@@ -615,8 +693,9 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
     socket.on("room:karaoke_add_queue", async ({ roomCode, youtubeVideoId, youtubeTitle }: { roomCode: string, youtubeVideoId: string, youtubeTitle: string }) => {
       if (!roomCode || !youtubeVideoId || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
-        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        const fakeUser = { _id: connectionUserId(), role: "user" } as any;
         await musicRoomService.addKaraokeQueue(roomCode, fakeUser, youtubeVideoId, youtubeTitle);
       } catch (err: any) {
         socket.emit("room:error", { message: err.message ?? "Lỗi khi thêm bài hát Karaoke" });
@@ -625,8 +704,9 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
     socket.on("room:karaoke_next", async ({ roomCode }: { roomCode: string }) => {
       if (!roomCode || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
-        const fakeUser = { _id: currentUserId, role: "user" } as any;
+        const fakeUser = { _id: connectionUserId(), role: "user" } as any;
         await musicRoomService.nextKaraokeSinger(roomCode, fakeUser);
       } catch (err: any) {
         socket.emit("room:error", { message: err.message ?? "Lỗi khi chuyển bài Karaoke" });
@@ -635,8 +715,9 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
     socket.on("room:karaoke_share", async ({ roomCode, recordingId, audioUrl, title }: { roomCode: string, recordingId: string, audioUrl: string, title: string }) => {
       if (!roomCode || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
-        const user = await User.findById(currentUserId).lean();
+        const user = await User.findById(connectionUserId()).lean();
         if (user) {
            await musicRoomService.shareKaraokeRecording(roomCode, user as any, recordingId, audioUrl, title);
         }
@@ -650,9 +731,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("room:change_theme", async ({ roomCode, theme }: { roomCode: string; theme: string }) => {
       if (!roomCode || !theme || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
         const room = await MusicRoom.findOne({ roomCode, isActive: true });
-        if (!room || room.host.toString() !== currentUserId) {
+        if (!room || !callerIsHost(room.host.toString())) {
           throw new Error("Không có quyền đổi không gian phòng");
         }
         
@@ -671,9 +753,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("room:set_mood_video", async ({ roomCode, videoId }: { roomCode: string; videoId: string | null }) => {
       if (!roomCode || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
         const room = await MusicRoom.findOne({ roomCode, isActive: true });
-        if (!room || room.host.toString() !== currentUserId) {
+        if (!room || !callerIsHost(room.host.toString())) {
           throw new Error("Không có quyền đổi video nền");
         }
         
@@ -695,9 +778,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("room:delete_message", async ({ roomCode, messageId }: { roomCode: string; messageId: string }) => {
       if (!roomCode || !messageId || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
         const room = await MusicRoom.findOne({ roomCode, isActive: true });
-        if (!room || room.host.toString() !== currentUserId) {
+        if (!room || !callerIsHost(room.host.toString())) {
           throw new Error("Không có quyền thao tác");
         }
         await RoomMessage.findByIdAndDelete(messageId);
@@ -712,9 +796,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("room:mute_user", async ({ roomCode, targetUserId }: { roomCode: string; targetUserId: string }) => {
       if (!roomCode || !targetUserId || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
         const room = await MusicRoom.findOne({ roomCode, isActive: true });
-        if (!room || room.host.toString() !== currentUserId) {
+        if (!room || !callerIsHost(room.host.toString())) {
           throw new Error("Không có quyền thao tác");
         }
         if (!room.mutedUsers.includes(targetUserId as any)) {
@@ -732,9 +817,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("room:unmute_user", async ({ roomCode, targetUserId }: { roomCode: string; targetUserId: string }) => {
       if (!roomCode || !targetUserId || isGuest) return;
+      if (!joinedMusicRoom(roomCode)) return;
       try {
         const room = await MusicRoom.findOne({ roomCode, isActive: true });
-        if (!room || room.host.toString() !== currentUserId) {
+        if (!room || !callerIsHost(room.host.toString())) {
           throw new Error("Không có quyền thao tác");
         }
         if (room.mutedUsers.includes(targetUserId as any)) {
@@ -771,32 +857,30 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
           (async () => {
              try {
-                const count = await cacheRedis.hincrby(`room:sessions:${roomCode}`, currentUserId, -1);
+                const count = await cacheRedis.hincrby(`room:sessions:${roomCode}`, connectionUserId(), -1);
                 if (count > 0) return; // Vẫn còn kết nối khác
 
-                await cacheRedis.hdel(`room:sessions:${roomCode}`, currentUserId);
+                await cacheRedis.hdel(`room:sessions:${roomCode}`, connectionUserId());
                 const nextSize = await cacheRedis.hlen(`room:sessions:${roomCode}`);
                 await MusicRoom.updateOne({ roomCode }, { memberCount: nextSize });
 
                 io.to(room).emit("room:member_left", {
-                  userId: currentUserId,
+                  userId: connectionUserId(),
                   memberCount: nextSize,
                 });
 
                 // Gửi thông báo hệ thống nếu user này là Host và cần transfer
                 const roomInfo = await MusicRoom.findOne({ roomCode, isActive: true }).lean();
-                if (roomInfo && roomInfo.host.toString() === currentUserId) {
+                if (roomInfo && callerIsHost(roomInfo.host.toString())) {
                    const remaining = Array.from(io.sockets.adapter.rooms.get(room) ?? []);
-                   let nextUserId: string | undefined;
-                   for (const socketId of remaining) {
-                      if (socketId === socket.id) continue;
-                      const sock = io.sockets.sockets.get(socketId);
-                      const uid = sock?.handshake.query.userId as string | undefined;
-                      if (uid && uid !== "undefined" && uid !== currentUserId) {
-                          nextUserId = uid;
-                          break;
-                      }
-                   }
+                   const nextUserId = selectNextHostId(
+                     remaining
+                       .filter((socketId) => socketId !== socket.id)
+                       .map((socketId) =>
+                         readVerifiedUserId(io.sockets.sockets.get(socketId)?.data),
+                       ),
+                     connectionUserId(),
+                   );
                    if (nextUserId) {
                      await musicRoomService.transferHost(roomCode, nextUserId);
                      io.to(room).emit("room:host_changed", { newHostId: nextUserId });
@@ -819,11 +903,11 @@ export const initSocket = (httpServer: HttpServer): Server => {
      */
     socket.on("disconnect", async () => {
       try {
-        await analyticsService.endSession(socket.id, currentUserId);
+        await analyticsService.endSession(socket.id, connectionUserId());
       } catch (err) {
         console.error("[Socket] analytics end session error:", err);
       }
-      console.log(`❌ Socket disconnected: ${socket.id} (User: ${userId})`);
+      console.log(`❌ Socket disconnected: ${socket.id} (User: ${connectionUserId()})`);
     });
   });
 

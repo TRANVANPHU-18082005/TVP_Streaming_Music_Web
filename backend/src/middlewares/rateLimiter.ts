@@ -3,6 +3,14 @@ import { RedisStore } from "rate-limit-redis";
 import { cacheRedis } from "../config/redis";
 import httpStatus from "http-status";
 
+function redisStore(prefix: string) {
+  return new RedisStore({
+    // @ts-expect-error - ioredis call() matches the RedisStore command client
+    sendCommand: (...args: string[]) => cacheRedis.call(...args),
+    prefix,
+  });
+}
+
 /**
  * 1. API LIMITER CHUNG
  */
@@ -11,7 +19,8 @@ export const apiLimiter = rateLimit({
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
-
+  store: redisStore("rl:api:"),
+  passOnStoreError: true,
   message: {
     code: 429,
     message: "Quá nhiều request từ IP này, vui lòng thử lại sau 15 phút.",
@@ -26,13 +35,14 @@ export const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore("rl:auth:"),
+  skipSuccessfulRequests: true,
   handler: (req, res) => {
     res.status(httpStatus.TOO_MANY_REQUESTS).json({
       code: httpStatus.TOO_MANY_REQUESTS,
       message: "Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 15 phút.",
     });
   },
-  skipSuccessfulRequests: true,
 });
 
 /**
@@ -43,6 +53,7 @@ export const otpLimiter = rateLimit({
   max: 3,
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore("rl:otp:"),
   handler: (req, res) => {
     res.status(httpStatus.TOO_MANY_REQUESTS).json({
       code: httpStatus.TOO_MANY_REQUESTS,
@@ -61,11 +72,7 @@ export const interactionLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // 🚀 TỐI ƯU: Lưu số lần đếm vào Redis thay vì bộ nhớ RAM của Node.js
-  store: new RedisStore({
-    // @ts-expect-error - ioredis compatibility
-    sendCommand: (...args: string[]) => cacheRedis.call(...args),
-    prefix: "rl:interaction:",
-  }),
+  store: redisStore("rl:interaction:"),
   // Định danh theo userId nếu đã login, nếu không thì dùng IP
   keyGenerator: (req: any) => {
     if (req.user?._id) return `user:${req.user._id}`;

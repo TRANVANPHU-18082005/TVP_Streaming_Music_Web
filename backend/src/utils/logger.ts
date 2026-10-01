@@ -1,12 +1,22 @@
 import winston from "winston";
 import path from "path";
 import config, { isProd } from "../config/env";
+import { isSensitiveKey, redactLogValue } from "./logRedact";
 
 // ============================================================
 // CONSTANTS
 // ============================================================
 
 const { combine, timestamp, errors, json, colorize, printf } = winston.format;
+
+const redactFormat = winston.format((info) => {
+  for (const key of Object.keys(info)) {
+    info[key] = (
+      isSensitiveKey(key) ? "[Redacted]" : redactLogValue(info[key])
+    ) as typeof info[typeof key];
+  }
+  return info;
+});
 
 const LOG_DIR = path.resolve(process.cwd(), "logs");
 const IS_PRODUCTION = isProd();
@@ -43,6 +53,7 @@ const devConsoleFormat = printf(
 const productionFormat = combine(
   timestamp({ format: "YYYY-MM-DDTHH:mm:ss.SSSZ" }),
   errors({ stack: true }), // Ghi đầy đủ stack trace vào JSON
+  redactFormat(),
   json(),
 );
 
@@ -50,8 +61,71 @@ const developmentFormat = combine(
   colorize({ all: true }),
   timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
   errors({ stack: true }),
+  redactFormat(),
   devConsoleFormat,
 );
+
+export const ROTATING_LOG_FILES = [
+  { filename: "combined.log", maxsize: 20 * 1024 * 1024, maxFiles: 14 },
+  {
+    filename: "error.log",
+    level: "error",
+    maxsize: 10 * 1024 * 1024,
+    maxFiles: 30,
+  },
+  { filename: "exceptions.log", maxsize: 10 * 1024 * 1024, maxFiles: 14 },
+  { filename: "rejections.log", maxsize: 10 * 1024 * 1024, maxFiles: 14 },
+] as const;
+
+export function rotatingFileOptions(entry: {
+  filename: string;
+  maxsize: number;
+  maxFiles: number;
+}) {
+  if (!Number.isFinite(entry.maxsize) || entry.maxsize <= 0) {
+    throw new Error(`Unbounded log file refused: ${entry.filename}`);
+  }
+  if (!Number.isFinite(entry.maxFiles) || entry.maxFiles <= 0) {
+    throw new Error(`Unbounded log file refused: ${entry.filename}`);
+  }
+  return {
+    maxsize: entry.maxsize,
+    maxFiles: entry.maxFiles,
+    tailable: true as const,
+  };
+}
+
+function rotatingFile(entry: {
+  filename: string;
+  level?: string;
+  maxsize: number;
+  maxFiles: number;
+}) {
+  const bounds = rotatingFileOptions(entry);
+  return new winston.transports.File({
+    filename: path.join(LOG_DIR, entry.filename),
+    level: entry.level,
+    format: productionFormat,
+    maxsize: bounds.maxsize,
+    maxFiles: bounds.maxFiles,
+    tailable: bounds.tailable,
+  });
+}
+
+const MESSAGE = Symbol.for("message");
+
+/** JSON line after the same redaction used by the runtime logger. */
+export function renderSafeLog(fields: Record<string, unknown>): string {
+  const message = typeof fields.message === "string" ? fields.message : "log";
+  const transformed = productionFormat.transform({
+    level: "error",
+    ...fields,
+    message,
+  });
+  if (!transformed || typeof transformed === "boolean") return "";
+  const line = (transformed as { [MESSAGE]?: unknown })[MESSAGE];
+  return typeof line === "string" ? line : JSON.stringify(transformed);
+}
 
 // ============================================================
 // TRANSPORTS
@@ -68,28 +142,8 @@ const transports: winston.transport[] = [
 
 // --- 2. File transports (chỉ bật ở production hoặc khi có LOG_TO_FILE) ---
 if (IS_PRODUCTION || config.logToFile) {
-  // Tất cả logs từ level "info" trở lên
-  transports.push(
-    new winston.transports.File({
-      filename: path.join(LOG_DIR, "combined.log"),
-      format: productionFormat,
-      maxsize: 20 * 1024 * 1024, // 20MB mỗi file
-      maxFiles: 14, // Giữ tối đa 14 file (rotate)
-      tailable: true, // File mới nhất luôn là combined.log
-    }),
-  );
-
-  // Chỉ errors — dễ alert & monitor
-  transports.push(
-    new winston.transports.File({
-      filename: path.join(LOG_DIR, "error.log"),
-      level: "error",
-      format: productionFormat,
-      maxsize: 10 * 1024 * 1024, // 10MB
-      maxFiles: 30, // Giữ 30 file error (lâu hơn để audit)
-      tailable: true,
-    }),
-  );
+  transports.push(rotatingFile(ROTATING_LOG_FILES[0]));
+  transports.push(rotatingFile(ROTATING_LOG_FILES[1]));
 }
 
 // ============================================================
@@ -111,18 +165,8 @@ const logger = winston.createLogger({
   // Bắt unhandled exception & rejection tự động log vào file riêng
   // (chỉ nên bật ở production để tránh nhiễu test)
   ...(IS_PRODUCTION && {
-    exceptionHandlers: [
-      new winston.transports.File({
-        filename: path.join(LOG_DIR, "exceptions.log"),
-        format: productionFormat,
-      }),
-    ],
-    rejectionHandlers: [
-      new winston.transports.File({
-        filename: path.join(LOG_DIR, "rejections.log"),
-        format: productionFormat,
-      }),
-    ],
+    exceptionHandlers: [rotatingFile(ROTATING_LOG_FILES[2])],
+    rejectionHandlers: [rotatingFile(ROTATING_LOG_FILES[3])],
   }),
 });
 

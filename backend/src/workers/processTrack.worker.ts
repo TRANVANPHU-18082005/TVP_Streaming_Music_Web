@@ -7,7 +7,6 @@ import path from "path";
 import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
-import dotenv from "dotenv";
 import config from "../config/env";
 import { queueRedis, cacheRedis } from "../config/redis";
 import Track from "../models/Track";
@@ -42,7 +41,6 @@ import { AudioAnalysisService } from "../services/audio/audio-analysis.service";
 import AiService from "../services/ai/ai.service";
 
 const ffprobeStatic = require("ffprobe-static");
-dotenv.config();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STARTUP GUARDS

@@ -1,4 +1,4 @@
-FROM node:18-bullseye-slim AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 # Install full dependencies and build
@@ -7,7 +7,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:18-bullseye-slim AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y ca-certificates --no-install-recommends
 
 # Install only production deps
 COPY package*.json ./
-RUN npm ci --production
+RUN npm ci --omit=dev
 
 # Copy built artifacts
 COPY --from=builder /app/dist ./dist

@@ -17,8 +17,8 @@ const BATCH_SIZE = 1000;
 
 /**
  * Khoảng thời gian tính monthlyListeners (30 ngày gần nhất).
- * PlayLog có TTL 8 ngày, nên thực tế chỉ cover ~8 ngày —
- * nhưng service vẫn set 30 ngày để tương thích khi TTL tăng lên sau này.
+ * PlayLog giữ 2592000 giây, nên cửa sổ này nằm trọn trong log còn sống
+ * sau khi `migrate:playlog-ttl` đã chạy. Log bị TTL cũ xóa thì không còn.
  */
 const MONTHLY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -61,6 +61,14 @@ interface FullSyncResult {
   trackStats: SyncResult;
   playlistStats: SyncResult;
   timestamp: Date;
+}
+
+/**
+ * Fields the 03:00 track sync may write.
+ * `playCount` is the lifetime listen counter and is not one of them.
+ */
+export function buildTrackStatsSet(likeCount: number): { likeCount: number } {
+  return { likeCount };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -449,17 +457,22 @@ class StatsService {
 
   // ───────────────────────────────────────────────────────────────────────────
   // 4. TRACK STATS
-  // Fields: playCount, likeCount
+  // Fields: likeCount
+  // playCount is lifetime and is written only by cron/sync-views.ts ($inc).
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
-   * Đồng bộ thống kê cho tất cả Track.
+   * Đồng bộ likeCount cho tất cả Track.
    *
-   * playCount:
-   * - Đếm tổng số lượt play từ PlayLog (không giới hạn thời gian).
-   * - Note: PlayLog có TTL 8 ngày, nên playCount từ service này chỉ phản ánh
-   *   8 ngày gần nhất. Nếu muốn playCount lifetime, cần lưu snapshot riêng
-   *   hoặc tắt TTL index trên PlayLog.
+   * playCount là bộ đếm lifetime. Cron 5 phút (`cron/sync-views.ts`) là writer
+   * duy nhất: `$inc` từ Redis `views:track:*`. PlayLog hết hạn sau 2592000 giây
+   * (30 ngày), nên job này không `$set` playCount từ aggregate PlayLog.
+   *
+   * Hành vi cố ý: bản ghi đã bị job cũ ghi đè giữ đúng giá trị 8 ngày đó
+   * làm mốc, vì PlayLog không còn lịch sử để dựng lại lifetime. Từ lần nghe
+   * sau, counter chỉ tăng. Dashboard top tracks và trang bài hát đọc cùng
+   * field này, nên số hiển thị không còn bị kéo về cửa sổ PlayLog mỗi 03:00.
+   * Chart ngày/tuần vẫn xếp hạng bằng score trên PlayLog.
    *
    * likeCount:
    * - Đếm từ Like collection với targetType="track".
@@ -469,26 +482,14 @@ class StatsService {
     let totalUpdated = 0;
 
     try {
-      const [playAgg, likeAgg] = await Promise.all([
-        // Total play count per track từ PlayLog
-        PlayLog.aggregate(
-          [{ $group: { _id: "$trackId", playCount: { $sum: 1 } } }],
-          { allowDiskUse: true },
-        ),
-
-        // Like count per track
-        Like.aggregate(
-          [
-            { $match: { targetType: "track" } },
-            { $group: { _id: "$targetId", count: { $sum: 1 } } },
-          ],
-          { allowDiskUse: true },
-        ),
-      ]);
-
-      const playMap = new Map<string, number>(
-        playAgg.map((i) => [i._id?.toString(), i.playCount]),
+      const likeAgg = await Like.aggregate(
+        [
+          { $match: { targetType: "track" } },
+          { $group: { _id: "$targetId", count: { $sum: 1 } } },
+        ],
+        { allowDiskUse: true },
       );
+
       const likeMap = new Map<string, number>(
         likeAgg.map((i) => [i._id?.toString(), i.count]),
       );
@@ -503,10 +504,7 @@ class StatsService {
           updateOne: {
             filter: { _id: track._id },
             update: {
-              $set: {
-                playCount: playMap.get(id) ?? 0,
-                likeCount: likeMap.get(id) ?? 0,
-              },
+              $set: buildTrackStatsSet(likeMap.get(id) ?? 0),
             },
           },
         });

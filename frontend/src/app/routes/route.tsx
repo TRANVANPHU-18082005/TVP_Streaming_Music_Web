@@ -110,7 +110,7 @@ export const router = createBrowserRouter([
       // ===================================================
       {
         path: ADMIN_PATHS.ADMIN,
-        element: <ProtectedRoute />,
+        element: <ProtectedRoute requiredRole="admin" />,
         children: [
           {
             element: <AdminLayout />,

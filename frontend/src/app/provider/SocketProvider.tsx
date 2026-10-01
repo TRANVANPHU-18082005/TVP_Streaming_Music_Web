@@ -25,7 +25,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     setIsConnected(false);
     setSocket(null);
   }
-  console.log(user)
   useEffect(() => {
     // 1. Khởi tạo instance
     const socketInstance = io(SOCKET_URL, {

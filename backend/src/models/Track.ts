@@ -136,6 +136,7 @@ const TrackSchema = new Schema<ITrack>(
     format: { type: String, trim: true },
     bitrate: { type: Number, default: 0 },
 
+    // Lifetime listens. Written only by cron/sync-views.ts ($inc).
     playCount: { type: Number, default: 0 },
     likeCount: { type: Number, default: 0 },
     errorReason: { type: String, default: "" },

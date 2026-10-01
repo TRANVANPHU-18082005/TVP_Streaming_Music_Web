@@ -11,20 +11,26 @@ if (nodeEnv !== "production") {
   dotenv.config({ path: `.env.production` });
 }
 
-// Required in production — add keys here if your app needs them
-const requiredInProd = [
-  // Core
-  "MONGO_URI",
-  "JWT_SECRET",
-  "JWT_REFRESH_SECRET",
-  // Queue / Storage
-  // "QUEUE_REDIS_URL",
-  // "B2_KEY_ID",
-  // "B2_APP_KEY",
-];
+// Required in production. Google OAuth is optional and must not be added here.
+const requiredInProd = ["MONGO_URI", "JWT_SECRET", "JWT_REFRESH_SECRET"];
+
+/**
+ * Production boot keys. Cache Redis accepts either URL. Queue Redis is separate.
+ * Development keeps the localhost fallbacks in config/redis.ts.
+ */
+export function missingProductionEnv(env: NodeJS.ProcessEnv): string[] {
+  const missing = requiredInProd.filter((key) => !env[key]);
+  if (!env.UPSTASH_REDIS_URL && !env.REDIS_URL) {
+    missing.push("UPSTASH_REDIS_URL or REDIS_URL");
+  }
+  if (!env.QUEUE_REDIS_URL) {
+    missing.push("QUEUE_REDIS_URL");
+  }
+  return missing;
+}
 
 if (nodeEnv === "production") {
-  const missing = requiredInProd.filter((k) => !process.env[k]);
+  const missing = missingProductionEnv(process.env);
   if (missing.length) {
     console.error("❌ Missing required env vars:", missing.join(", "));
     throw new Error("Missing required env vars: " + missing.join(", "));
@@ -85,10 +91,14 @@ export const config = {
   // CDN (optional, used in production)
   cdnDomain: process.env.CDN_DOMAIN || "",
 
-  // OAuth
+  // OAuth. Google is optional, same as Facebook: local login does not need it.
+  // Missing Google keys must not be added to requiredInProd.
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
   googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL || "/api/auth/google/callback",
+  googleOAuthEnabled: Boolean(
+    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
+  ),
   facebookAppId: process.env.FACEBOOK_APP_ID || "",
   facebookAppSecret: process.env.FACEBOOK_APP_SECRET || "",
   facebookCallbackUrl:

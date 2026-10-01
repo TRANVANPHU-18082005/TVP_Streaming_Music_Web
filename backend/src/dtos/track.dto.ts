@@ -1,16 +1,5 @@
-import { z } from "zod";
-import {
-  createTrackSchema,
-  updateTrackSchema,
-  getTracksSchema,
-} from "../validations/track.validation";
-
-// ==========================================
-// INPUT DTOs (Data from Client)
-// ==========================================
-export type CreateTrackDTO = z.infer<typeof createTrackSchema>["body"];
-export type UpdateTrackDTO = z.infer<typeof updateTrackSchema>["body"];
-export type TrackFilterDTO = z.infer<typeof getTracksSchema>["query"];
+// Request bodies are CreateTrackInput and UpdateTrackInput in
+// validations/track.validation.ts (z.infer of the route schemas).
 
 // ==========================================
 // SUB-INTERFACES

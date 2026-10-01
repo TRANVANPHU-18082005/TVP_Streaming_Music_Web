@@ -6,6 +6,11 @@ import validate from "../middlewares/validate"; // Middleware quan trọng nhấ
 import { authLimiter, otpLimiter } from "../middlewares/rateLimiter";
 import { requireSameOrigin } from "../middlewares/csrf.middleware";
 import config from "../config/env";
+import logger from "../config/logger";
+import {
+  oauthCallbackLogFields,
+  oauthProviderErrorFields,
+} from "../utils/oauthLog";
 
 // Import Zod Schemas (Đã define ở các bước trước)
 import {
@@ -25,7 +30,11 @@ const router = express.Router();
 router.get("/google", authController.googleAuth);
 
 router.get("/google/callback", (req: any, res: any, next: any) => {
-  console.log("[DEBUG] Google callback query:", req.query);
+  const callbackLog = oauthCallbackLogFields(req.query);
+  logger.info("Google OAuth callback", {
+    provider: "google",
+    hasError: callbackLog.hasError,
+  });
 
   // 1. Kiểm tra nếu người dùng chủ động bấm Hủy / Từ chối cấp quyền từ Google
   if (
@@ -33,17 +42,27 @@ router.get("/google/callback", (req: any, res: any, next: any) => {
     req.query.error === "user_cancelled" ||
     req.query.error === "consent_required"
   ) {
-    console.warn("[WARN] Google login cancelled by user.");
+    logger.warn("Google login cancelled by user");
     return res.redirect(`${config.clientUrl}/login?error=OAUTH_USER_CANCELLED&provider=google`);
   }
 
   // 2. Kiểm tra các lỗi khác trả về từ nhà cung cấp Google
   if (req.query.error) {
-    console.error("[ERROR] Google provider error:", req.query.error, req.query.error_description);
+    const providerError = oauthProviderErrorFields(req.query);
+    logger.error("Google provider error", {
+      provider: "google",
+      error: providerError.error,
+    });
     return res.redirect(
       `${config.clientUrl}/login?error=OAUTH_PROVIDER_ERROR&provider=google&reason=${encodeURIComponent(
         req.query.error_description || req.query.error || "Lỗi từ Google"
       )}`
+    );
+  }
+
+  if (!config.googleOAuthEnabled) {
+    return res.redirect(
+      `${config.clientUrl}/login?error=OAUTH_PROVIDER_ERROR&provider=google&reason=${encodeURIComponent("Đăng nhập Google chưa được cấu hình")}`,
     );
   }
 
@@ -56,7 +75,12 @@ router.get("/google/callback", (req: any, res: any, next: any) => {
     },
     (err: any, user: any, info: any) => {
       if (err) {
-        console.error("[ERROR] Google auth error:", err);
+        logger.error("Google auth error", {
+          provider: "google",
+          name: err?.name,
+          message: err?.message,
+          errorCode: err?.errorCode,
+        });
         const errorCode =
           err.errorCode || (err.name === "TokenError" ? "OAUTH_TOKEN_EXCHANGE_FAILED" : "OAUTH_ERROR");
         const reason = err.message || "Xác thực Google thất bại";
@@ -83,7 +107,11 @@ router.get("/google/callback", (req: any, res: any, next: any) => {
 router.get("/facebook", authController.facebookAuth);
 
 router.get("/facebook/callback", (req: any, res: any, next: any) => {
-  console.log("[DEBUG] Facebook callback query:", req.query);
+  const callbackLog = oauthCallbackLogFields(req.query);
+  logger.info("Facebook OAuth callback", {
+    provider: "facebook",
+    hasError: callbackLog.hasError,
+  });
 
   // 1. Kiểm tra nếu người dùng chủ động bấm Hủy / Từ chối cấp quyền từ Facebook
   if (
@@ -92,13 +120,17 @@ router.get("/facebook/callback", (req: any, res: any, next: any) => {
     req.query.error === "user_cancelled" ||
     String(req.query.error_code) === "200"
   ) {
-    console.warn("[WARN] Facebook login cancelled by user.");
+    logger.warn("Facebook login cancelled by user");
     return res.redirect(`${config.clientUrl}/login?error=OAUTH_USER_CANCELLED&provider=facebook`);
   }
 
   // 2. Kiểm tra các lỗi khác trả về từ nhà cung cấp Facebook
   if (req.query.error) {
-    console.error("[ERROR] Facebook provider error:", req.query.error, req.query.error_description);
+    const providerError = oauthProviderErrorFields(req.query);
+    logger.error("Facebook provider error", {
+      provider: "facebook",
+      error: providerError.error,
+    });
     return res.redirect(
       `${config.clientUrl}/login?error=OAUTH_PROVIDER_ERROR&provider=facebook&reason=${encodeURIComponent(
         req.query.error_description || req.query.error || "Lỗi từ Facebook"
@@ -115,7 +147,12 @@ router.get("/facebook/callback", (req: any, res: any, next: any) => {
     },
     (err: any, user: any, info: any) => {
       if (err) {
-        console.error("[ERROR] Facebook auth error:", err);
+        logger.error("Facebook auth error", {
+          provider: "facebook",
+          name: err?.name,
+          message: err?.message,
+          errorCode: err?.errorCode,
+        });
         const errorCode =
           err.errorCode || (err.name === "TokenError" ? "OAUTH_TOKEN_EXCHANGE_FAILED" : "OAUTH_ERROR");
         const reason = err.message || "Xác thực Facebook thất bại";
