@@ -2,69 +2,43 @@ import { useEffect, useRef } from "react";
 import { useSelector } from "react-redux";
 import { selectPlayer } from "@/features/player/slice/playerSlice";
 import { useSocket } from "@/hooks/useSocket";
-import { useAppSelector } from "@/store/hooks";
-import { getAnonymousId } from "@/utils/analytics-identity";
 
 export const useTrackAnalytics = () => {
   const { socket, isConnected } = useSocket();
   const { currentTrackId, isPlaying } = useSelector(selectPlayer);
-  const { user } = useAppSelector((state) => state.auth);
 
-  // Ref giúp setInterval luôn đọc được giá trị mới nhất mà không bị "stale closure"
   const infoRef = useRef({
-    userId: user?.id || user?._id || null,
     trackId: currentTrackId,
-    isPlaying: isPlaying,
+    isPlaying,
   });
 
-  // Cập nhật ref mỗi khi state thay đổi
   useEffect(() => {
     infoRef.current = {
-      userId: user?.id || user?._id || null,
       trackId: currentTrackId,
-      isPlaying: isPlaying,
+      isPlaying,
     };
-  }, [user, currentTrackId, isPlaying]);
+  }, [currentTrackId, isPlaying]);
 
   useEffect(() => {
     if (!socket || !isConnected) return;
 
-    // Lấy ID ẩn danh cố định từ sessionStorage (đã giải thích ở lượt trước)
-    const anonId = getAnonymousId();
-
     const emitHeartbeat = () => {
-      // Bỏ check visibilityState để cho phép gửi heartbeat ngay cả khi app đang chạy ngầm (ví dụ: nghe nhạc nền)
-      // Điều này rất quan trọng để Dashboard báo cáo chính xác "Now Listening"
-      
-      const { userId, trackId, isPlaying } = infoRef.current;
-      const finalUserId = userId || anonId;
-
+      const { trackId, isPlaying: playing } = infoRef.current;
       socket.emit("client_heartbeat", {
-        userId: finalUserId,
-        trackId: isPlaying ? (trackId ?? "") : "",
+        trackId: playing && trackId ? trackId : "",
       });
     };
 
-    // 1. Gửi ngay lập tức khi mount hoặc trạng thái Play/Pause thay đổi
     emitHeartbeat();
-
-    // 2. Thiết lập chu kỳ gửi định kỳ (15s) để bám sát chu kỳ flush 10s của backend
-    const interval = setInterval(emitHeartbeat, 15000);
-
-    // 3. Xử lý khi quay lại tab (User quay lại là phải báo Online ngay)
+    const interval = setInterval(emitHeartbeat, 15_000);
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        emitHeartbeat();
-      }
+      if (document.visibilityState === "visible") emitHeartbeat();
     };
-
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-    // Dependency: Thêm isPlaying và currentTrackId vào đây để reset interval
-    // và gửi tin nhắn mới ngay khi người dùng nhấn nút hoặc đổi bài.
   }, [socket, isConnected, isPlaying, currentTrackId]);
 };

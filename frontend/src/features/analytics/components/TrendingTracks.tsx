@@ -1,11 +1,15 @@
 // features/analytics/components/TrendingTracks.tsx
 
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Radio, Music, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { ChartTrack } from "@/features/track";
+import { ADMIN_PATHS } from "@/config/paths";
+import type { AnalyticsRankedTrack } from "../types";
+
+const TRACK_ADMIN_PATH = `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.SONGS}`;
 
 // ─── Rank medal colors (dùng wave tokens từ design system) ───────
 const RANK_STYLES = [
@@ -22,7 +26,7 @@ const TrackRow = ({
   index,
   maxScore,
 }: {
-  item: ChartTrack;
+  item: AnalyticsRankedTrack;
   index: number;
   maxScore: number;
 }) => {
@@ -30,14 +34,7 @@ const TrackRow = ({
   const rank = RANK_STYLES[index] ?? RANK_STYLES[4];
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ delay: index * 0.045, duration: 0.22, ease: "easeOut" }}
-      className="track-row group"
-    >
+    <Link to={TRACK_ADMIN_PATH} className="track-row group">
       {/* Rank number */}
       <div
         className={cn(
@@ -73,7 +70,7 @@ const TrackRow = ({
 
         <div className="flex items-center gap-2">
           <p className="text-track-meta truncate w-20 shrink-0">
-            {item.artist?.name ?? "Unknown"}
+            {item.artist?.name ?? "Không rõ"}
           </p>
           {/* Heat bar */}
           <div className="flex-1 h-[3px] bg-muted rounded-full overflow-hidden">
@@ -94,26 +91,13 @@ const TrackRow = ({
           </div>
         </div>
       </div>
-    </motion.div>
+    </Link>
   );
 };
 
 // ─── NowListeningRow ─────────────────────────────────────────────
-const NowListeningRow = ({
-  item,
-  index,
-}: {
-  item: ChartTrack;
-  index: number;
-}) => (
-  <motion.div
-    layout
-    initial={{ opacity: 0, x: -10 }}
-    animate={{ opacity: 1, x: 0 }}
-    exit={{ opacity: 0 }}
-    transition={{ delay: index * 0.05, duration: 0.2 }}
-    className="track-row group"
-  >
+const NowListeningRow = ({ item }: { item: AnalyticsRankedTrack }) => (
+  <Link to={TRACK_ADMIN_PATH} className="track-row group">
     {/* Cover */}
     <div className="size-9 rounded-xl overflow-hidden shrink-0 border border-border/20 shadow-card">
       <ImageWithFallback
@@ -130,7 +114,7 @@ const NowListeningRow = ({
         {item.title}
       </p>
       <p className="text-track-meta truncate">
-        {item.artist?.name ?? "Unknown"}
+        {item.artist?.name ?? "Không rõ"}
       </p>
     </div>
 
@@ -145,7 +129,7 @@ const NowListeningRow = ({
         {item.score.toLocaleString()}
       </span>
     </div>
-  </motion.div>
+  </Link>
 );
 
 // ─── Section header ───────────────────────────────────────────────
@@ -239,7 +223,7 @@ const TabToggle = ({
         {tab === "trending" ? (
           <>
             <Radio size={11} />
-            Trending
+            Hot trong giờ
           </>
         ) : (
           <>
@@ -247,7 +231,7 @@ const TabToggle = ({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full size-1.5 bg-emerald-500" />
             </span>
-            Live
+            Đang phát
           </>
         )}
       </button>
@@ -257,8 +241,8 @@ const TabToggle = ({
 
 // ─── Main component ───────────────────────────────────────────────
 interface TrendingTracksProps {
-  trendingData: ChartTrack[];
-  nowListeningData: ChartTrack[];
+  trendingData: AnalyticsRankedTrack[];
+  nowListeningData: AnalyticsRankedTrack[];
 }
 
 const TrendingTracks = ({
@@ -300,9 +284,9 @@ const TrendingTracks = ({
         >
           <SectionHeader
             icon={Radio}
-            title="Trending"
-            subtitle="Top this hour"
-            badge="1H"
+            title="Hot trong giờ này"
+            subtitle="Lượt nghe từ đầu giờ"
+            badge="1 giờ"
             iconBg="bg-primary/10"
             iconColor="text-primary"
             badgeClass="badge-muted"
@@ -322,7 +306,7 @@ const TrendingTracks = ({
                     />
                   ))
               ) : (
-                <EmptyState icon={Music} label="Collecting data..." />
+                <EmptyState icon={Music} label="Chưa có lượt nghe trong giờ này" />
               )}
             </AnimatePresence>
           </div>
@@ -337,9 +321,9 @@ const TrendingTracks = ({
         >
           <SectionHeader
             icon={Headphones}
-            title="Now Playing"
-            subtitle="Live listeners"
-            badge="LIVE"
+            title="Đang phát"
+            subtitle="Số người đang nghe"
+            badge="Trực tiếp"
             iconBg="bg-success/10"
             iconColor="text-emerald-600 dark:text-emerald-400"
             badgeClass="badge-live"
@@ -350,11 +334,11 @@ const TrendingTracks = ({
               {nowListeningData?.length > 0 ? (
                 nowListeningData
                   .slice(0, 5)
-                  .map((item, i) => (
-                    <NowListeningRow key={item._id} item={item} index={i} />
+                  .map((item) => (
+                    <NowListeningRow key={item._id} item={item} />
                   ))
               ) : (
-                <EmptyState icon={Headphones} label="No active listeners" />
+                <EmptyState icon={Headphones} label="Chưa có người đang nghe" />
               )}
             </AnimatePresence>
           </div>

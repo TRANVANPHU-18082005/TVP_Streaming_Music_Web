@@ -27,38 +27,19 @@ class AnalyticsController {
    * [POST] /api/analytics/heartbeat
    * API dự phòng cho Socket (hoặc dùng song song) để báo User đang online
    */
-  async userHeartbeat(req: Request, res: Response) {
-    try {
-      const { trackId } = req.body;
-      const userId = (req as any).user?._id; // Lấy từ protect middleware
-
-      if (userId) {
-        analyticsService.pingUserActivity(userId.toString(), trackId);
-      }
-
-      return res.status(204).send(); // Trả về No Content cho nhẹ
-    } catch (error) {
-      return res.status(500).json({ success: false });
-    }
+  async userHeartbeat(_req: Request, res: Response) {
+    return res.status(204).send();
   }
 
   /**
    * [POST] /api/analytics/sync-now
    */
-  async forceSyncViews(req: Request, res: Response) {
-    try {
-      await analyticsService.forceFlush();
-      return res.status(200).json({
-        success: true,
-        message: "Đã đồng bộ dữ liệu thống kê xuống Database thành công!",
-      });
-    } catch (error) {
-      console.error("❌ Force Sync Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Đồng bộ thất bại.",
-      });
-    }
+  async forceSyncViews(_req: Request, res: Response) {
+    return res.status(200).json({
+      success: true,
+      message:
+        "Lượt nghe được ghi trực tiếp. Bộ đếm dài hạn vẫn do tiến trình đồng bộ 5 phút đảm nhiệm.",
+    });
   }
   /**
    * [GET] /api/analytics/my-summary

@@ -8,7 +8,7 @@ import { scaleLinear } from "d3-scale";
 import { GeoLocation } from "@/features/analytics/types";
 import { ISO_MAPPING } from "@/utils/isoMapping";
 import { feature } from "topojson-client";
-const GEO_URL = "../../../../public/world-countries.json";
+const GEO_URL = "/world-countries.json";
 /* ── Color ramp — dùng brand token từ design system ─────────────
    Light: gray-200 → brand-500 (violet-indigo)
    Dark:  brand-800 (very dark) → brand-500 (luminous violet)

@@ -73,11 +73,11 @@ export const initSocket = (httpServer: HttpServer): Server => {
     // Biến lưu trữ ID hiện tại của socket này (có thể cập nhật qua heartbeat nếu frontend gửi ID ẩn danh khác)
     let currentUserId = userId;
 
-    // ── Geo tracking ─────────────────────────────────────────────────────────
-    analyticsService.trackUserLocation(currentUserId, userIp);
-
-    // ── Heartbeat ngay khi connect (khởi tạo trạng thái online) ─────────────
-    analyticsService.pingUserActivity(socket.id, currentUserId);
+    void analyticsService.touchSession({
+      socketId: socket.id,
+      userId: currentUserId,
+      ip: userIp,
+    });
 
     // ─────────────────────────────────────────────────────────────────────────
     // EVENTS
@@ -113,22 +113,13 @@ export const initSocket = (httpServer: HttpServer): Server => {
       io.to(newRoom).emit("listeners_count", count);
     });
 
-    /**
-     * Heartbeat: Client gửi mỗi 30s để duy trì trạng thái online.
-     * FIX: userId từ payload có thể là guest_ → analyticsService xử lý được.
-     */
-    socket.on("client_heartbeat", ({ userId, trackId }) => {
-      const userIp = getClientIp(socket);
-      // FIX C: Ghi đè currentUserId bằng ID từ Frontend (quan trọng cho Guest)
-      let currentUserId = userId;
-      if (!currentUserId && socket.data.user) {
-        currentUserId = socket.data.user.id;
-      }
-      if (!currentUserId) {
-        currentUserId = `guest_${socket.id}`;
-      }
-
-      analyticsService.pingUserActivity(socket.id, currentUserId, trackId);
+    socket.on("client_heartbeat", ({ trackId }) => {
+      void analyticsService.touchSession({
+        socketId: socket.id,
+        userId: currentUserId,
+        trackId: typeof trackId === "string" ? trackId : "",
+        ip: userIp,
+      });
     });
 
     socket.on("interact_play", async (data: PlayInteraction) => {
@@ -157,7 +148,11 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
         // 4. CHỈ Log lịch sử nếu là Track
         if (targetType === "track") {
-          analyticsService.trackPlay(targetId);
+          try {
+            await analyticsService.recordHourPlay(targetId);
+          } catch (error) {
+            console.error("[Socket] hour play error:", error);
+          }
           await viewQueue.add(
             "log-listen-history",
             {
@@ -189,9 +184,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
       socket.join("admin_room");
       analyticsService
         .getStats()
-        .then((stats) =>
-          socket.emit("admin_analytics_update", buildLiveStats(stats)),
-        )
+        .then((stats) => socket.emit("admin_analytics_update", stats))
         .catch(console.error);
     });
 
@@ -825,13 +818,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
      * Dọn dẹp trạng thái Online vĩnh viễn
      */
     socket.on("disconnect", async () => {
-      // FIX B: Xoá dứt điểm Ghost User khi tab đóng
-      analyticsService.removeUserActivity(socket.id);
       try {
-        // Xóa khỏi Redis ngay lập tức để Dashboard Admin cập nhật chính xác
-        await cacheRedis.zrem("online_users", currentUserId);
+        await analyticsService.endSession(socket.id, currentUserId);
       } catch (err) {
-        console.error("[Socket] Redis zrem error:", err);
+        console.error("[Socket] analytics end session error:", err);
       }
       console.log(`❌ Socket disconnected: ${socket.id} (User: ${userId})`);
     });
@@ -849,7 +839,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
     try {
       const stats = await analyticsService.getStats();
-      io.to("admin_room").emit("admin_analytics_update", buildLiveStats(stats));
+      io.to("admin_room").emit("admin_analytics_update", stats);
     } catch (error) {
       console.error("[Socket] Admin push error:", error);
     }
@@ -897,29 +887,3 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
   return io;
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// INTERNAL: build liveStats payload cho admin
-// Gộp analytics service data + socket-level counters
-// ─────────────────────────────────────────────────────────────────────────────
-
-function buildLiveStats(
-  stats: Awaited<ReturnType<typeof analyticsService.getStats>>,
-) {
-  // Tổng số socket kết nối (guest + auth)
-  const activeNow = io.sockets.sockets.size;
-
-  // Số người đang nghe nhạc (socket trong bất kỳ track: room nào)
-  const listeningNow = Array.from(io.sockets.adapter.rooms.keys())
-    .filter((key) => key.startsWith("track:"))
-    .reduce(
-      (acc, key) => acc + (io.sockets.adapter.rooms.get(key)?.size ?? 0),
-      0,
-    );
-
-  return {
-    ...stats, // activeUsers, activeGuests, nowListening, trending, geoData
-    activeNow, // tổng socket kết nối
-    listeningNow, // đang trong track room
-  };
-}

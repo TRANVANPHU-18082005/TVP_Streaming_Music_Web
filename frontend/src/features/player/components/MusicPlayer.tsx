@@ -17,6 +17,7 @@ const FullPlayerLazy = lazy(() =>
   import("./FullPlayer").then((m) => ({ default: m.FullPlayer ?? m.default })),
 );
 import { useTrackListeners } from "../hooks/useTrackListeners";
+import { useTrackAnalytics } from "@/features/analytics/hooks/useTrackAnalytics";
 
 import { WaveformBars } from "@/components/MusicVisualizer";
 import { CLIENT_PATHS } from "@/config/paths";
@@ -45,6 +46,7 @@ export function MusicPlayer() {
 
   // Tự động đếm lượt nghe khi track thay đổi và đang phát
   const listenCount = useTrackListeners(currentTrack?._id, isPlaying);
+  useTrackAnalytics();
 
   useEffect(() => {
     if (!isExpanded) return;

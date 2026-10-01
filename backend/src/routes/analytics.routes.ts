@@ -2,6 +2,8 @@
 import { Router } from "express";
 import analyticsController from "../controllers/analytics.controller";
 import { authorize, protect } from "../middlewares/auth.middleware";
+import validate from "../middlewares/validate";
+import { heartbeatSchema } from "../validations/analytics.validation";
 
 const router = Router();
 
@@ -20,6 +22,6 @@ router.post(
 );
 router.get("/my-profile", protect, analyticsController.getFullUserProfile);
 // Route cho Client (User thường) - Cực kỳ quan trọng để đếm Online
-router.post("/heartbeat", protect, analyticsController.userHeartbeat);
+router.post("/heartbeat", protect, validate(heartbeatSchema), analyticsController.userHeartbeat);
 
 export default router;

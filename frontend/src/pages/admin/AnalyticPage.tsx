@@ -1,103 +1,80 @@
-// features/analytics/pages/AnalyticPage.tsx
-
-import React from "react";
 import PageHeader from "@/components/ui/PageHeader";
-import { DashboardSkeleton } from "@/features/dashboard/components/DashboardSkeleton";
 import ActiveUsersCard from "@/features/analytics/components/ActiveUsersCard";
-import TrendingTracks from "@/features/analytics/components/TrendingTracks";
+import AnalyticsSkeleton from "@/features/analytics/components/AnalyticsSkeleton";
 import GeographySection from "@/features/analytics/components/GeographySection";
+import TrendingTracks from "@/features/analytics/components/TrendingTracks";
+import { LiveBadge } from "@/features/analytics/components/AnalyticsShared";
 import { useRealtimeStats } from "@/features/analytics/hooks/useRealtimeStats";
-import { Activity, Globe, WifiOff } from "lucide-react";
+import { WifiOff } from "lucide-react";
+
+function formatSnapshot(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
 
 const AnalyticPage = () => {
-  const { data: realtimeData, loading, isConnected } = useRealtimeStats();
+  const { data, loading, error, isConnected } = useRealtimeStats();
+  const snapshot = formatSnapshot(data?.snapshotAt);
 
-  if (loading) return <DashboardSkeleton />;
+  if (loading && !data) return <AnalyticsSkeleton />;
 
   return (
-    <div className="space-y-8 pb-20 font-sans animate-in fade-in duration-500">
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8 pb-20 font-sans">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
-          title="Analytics Dashboard"
-          subtitle="Platform performance overview & real-time insights."
+          title="Phân tích trực tiếp"
+          subtitle="Người dùng, bài đang phát và lượt nghe theo giờ Việt Nam."
         />
-
-        {/* Connection status badge */}
-        {!isConnected && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-xs font-semibold">
-            <WifiOff size={13} />
-            Disconnected — data may be stale
-          </div>
-        )}
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          {isConnected ? <LiveBadge /> : (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive">
+              <WifiOff size={13} />
+              Mất kết nối — số liệu có thể đã cũ
+            </div>
+          )}
+          {snapshot && (
+            <p className="text-xs text-muted-foreground">Cập nhật {snapshot}</p>
+          )}
+        </div>
       </div>
 
-      {/* ── Real-time section ── */}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      <ActiveUsersCard
+        activeUsers={data?.activeUsers ?? 0}
+        activeGuests={data?.activeGuests ?? 0}
+        listeningNow={data?.listeningNow ?? 0}
+        playsThisHour={data?.playsThisHour ?? 0}
+      />
+
+      <TrendingTracks
+        trendingData={data?.trending ?? []}
+        nowListeningData={data?.nowListening ?? []}
+      />
+
       <section className="space-y-4">
-        <SectionHeader
-          icon={<Activity className="size-5 text-emerald-500" />}
-          title="Real-time Overview"
-          live={isConnected}
-        />
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-          {/* Active Users — tách authenticated vs guest (NEW) */}
-          <div className="lg:col-span-1">
-            <ActiveUsersCard
-              activeUsers={realtimeData?.activeUsers ?? 0}
-              activeGuests={realtimeData?.activeGuests ?? 0}
-              listeningNow={realtimeData?.listeningNow ?? 0}
-              activeNow={realtimeData?.activeNow ?? 0}
-            />
-          </div>
-
-          {/* Trending + Now Listening split panel (NEW layout) */}
-          <div className="lg:col-span-2">
-            <TrendingTracks
-              trendingData={realtimeData?.trending ?? []}
-              nowListeningData={realtimeData?.nowListening ?? []}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* ── Geography ── */}
-      <section className="space-y-4">
-        <SectionHeader
-          icon={<Globe className="size-5 text-blue-500" />}
-          title="Demographics & Geography"
-        />
-        <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden p-1">
-          <GeographySection data={realtimeData?.geoData ?? []} />
+        <h2 className="border-b border-border/50 pb-2 text-lg font-bold text-foreground/90">
+          Khu vực đang nghe
+        </h2>
+        <div className="overflow-hidden rounded-xl border border-border bg-card p-1">
+          <GeographySection data={data?.geoData ?? []} />
         </div>
       </section>
     </div>
   );
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SUB: Section header with optional live ping
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SectionHeader = ({
-  icon,
-  title,
-  live,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  live?: boolean;
-}) => (
-  <div className="flex items-center gap-2 text-lg font-bold text-foreground/90 pb-2 border-b border-border/50">
-    {icon}
-    <h2>{title}</h2>
-    {live && (
-      <span className="relative flex h-2.5 w-2.5 ml-1">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-      </span>
-    )}
-  </div>
-);
 
 export default AnalyticPage;

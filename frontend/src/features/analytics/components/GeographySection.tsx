@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Globe, TrendingUp } from "lucide-react";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 import GeoMap from "./GeoMap";
 import { GeoLocation } from "../types";
@@ -77,7 +77,7 @@ const LocationRow = ({
               "group-hover:text-primary transition-colors duration-150",
             )}
           >
-            {item.name}
+            {item.name || item.id}
           </span>
         </div>
 
@@ -161,19 +161,19 @@ const GeographySection = ({ data }: { data: GeoLocation[] }) => {
 
         {/* Stats row below map */}
         <div className="flex items-center gap-2 flex-wrap">
-          <StatPill label="Active Regions" value={sortedData.length.toString()} />
+          <StatPill label="Khu vực" value={sortedData.length.toString()} />
           <StatPill
-            label="Active Users"
+            label="Người nghe"
             value={
               total >= 1000 ? `${(total / 1000).toFixed(1)}k` : total.toString()
             }
           />
-          <StatPill label="Top share" value={`${topShare}%`} />
+          <StatPill label="Nhiều nhất" value={`${topShare}%`} />
           {sortedData[0] && (
             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/8 border border-primary/15 text-primary">
               <TrendingUp size={12} />
               <span className="text-[11px] font-bold">
-                {sortedData[0].name}
+                {sortedData[0].name || sortedData[0].id}
               </span>
             </div>
           )}
@@ -198,16 +198,16 @@ const GeographySection = ({ data }: { data: GeoLocation[] }) => {
               <Globe size={14} />
             </div>
             <div className="leading-none">
-              <h3 className="text-section-title text-sm">Live Locations</h3>
+              <h3 className="text-section-title text-sm">Quốc gia</h3>
               <p className="text-section-subtitle text-[10px] mt-0.5">
-                Real-time regional distribution
+                Người đang nghe theo quốc gia
               </p>
             </div>
           </div>
 
           {/* Total count badge */}
           <span className="badge badge-muted text-[10px]">
-            {sortedData.length} regions
+            {sortedData.length} quốc gia
           </span>
         </div>
 
@@ -233,10 +233,10 @@ const GeographySection = ({ data }: { data: GeoLocation[] }) => {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground/60">
-                  No active listeners
+                  Chưa có người đang nghe
                 </p>
                 <p className="text-xs text-muted-foreground/40 mt-0.5">
-                  Locations will appear as users connect
+                  Quốc gia hiện khi có người kết nối
                 </p>
               </div>
             </div>
@@ -247,8 +247,7 @@ const GeographySection = ({ data }: { data: GeoLocation[] }) => {
         {sortedData.length > 0 && (
           <div className="px-4 py-2.5 border-t border-border/40 shrink-0">
             <p className="text-[10px] text-muted-foreground/50 text-center">
-              Showing {Math.min(sortedData.length, 10)} of {sortedData.length}{" "}
-              regions
+              {sortedData.length} quốc gia đang có người nghe
             </p>
           </div>
         )}
