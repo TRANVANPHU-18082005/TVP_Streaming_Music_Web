@@ -2,6 +2,7 @@
 import { createContext, useContext } from "react";
 
 export type Theme = "dark" | "light" | "system";
+export type ResolvedTheme = "dark" | "light";
 export type Skin =
   | "obsidian" // Mặc định
   | "tokyo" // Neon Cyberpunk
@@ -23,6 +24,7 @@ export type Skin =
   | "dusk"; // Arctic Light (New)
 export type ThemeProviderState = {
   theme: Theme;
+  resolvedTheme: ResolvedTheme;
   skin: Skin;
   setTheme: (theme: Theme) => void;
   setSkin: (skin: Skin) => void; // Thêm dòng này
@@ -30,6 +32,7 @@ export type ThemeProviderState = {
 
 export const initialState: ThemeProviderState = {
   theme: "system",
+  resolvedTheme: "dark",
   skin: "obsidian",
   setTheme: () => null,
   setSkin: () => null,

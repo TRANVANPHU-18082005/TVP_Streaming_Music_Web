@@ -11,7 +11,23 @@ import {
   calculatePercent,
 } from "../utils/helper";
 import { audioQueue } from "../queue/processTrack.queue";
-import { getActiveNowCount } from "../socket";
+
+export const DASHBOARD_CHART_TIMEZONE = "+07:00";
+
+/** A byte cap from external health. Missing or non-positive values are not a limit. */
+export function resolveExternalByteLimit(limit: unknown): number | null {
+  return typeof limit === "number" && Number.isFinite(limit) && limit > 0
+    ? limit
+    : null;
+}
+
+const chartDay = {
+  $dateToString: {
+    format: "%Y-%m-%d",
+    date: "$createdAt",
+    timezone: DASHBOARD_CHART_TIMEZONE,
+  },
+};
 
 // --- CONFIGURATION ---
 const DASHBOARD_CACHE_TTL = 600; // 10 phút
@@ -275,7 +291,7 @@ export const getDashboardData = async (
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL: buildDashboardData (chạy khi cache miss hoặc revalidate)
 // ─────────────────────────────────────────────────────────────────────────────
-async function buildDashboardData(days: number): Promise<DashboardData> {
+export async function buildDashboardData(days: number): Promise<DashboardData> {
   const today = new Date();
   const startDate = subDays(today, days);
 
@@ -285,13 +301,13 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
     counters,
     prevTotalUsers,
     prevTotalTracks,
+    prevTotalAlbums,
     prevTotalPlaysAgg,
     userGrowthAgg,
     trackGrowthAgg,
     topTracks,
     topArtistsAgg,
     trackStatusStats,
-    activeUsersCount,
     queueStats,
     redisInfo,
     externalHealth, // Đọc từ cache, không gọi API trực tiếp (xem external.job.ts)
@@ -302,6 +318,7 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
     // Snapshots for growth calculation
     User.countDocuments({ createdAt: { $lt: startDate } }),
     Track.countDocuments({ createdAt: { $lt: startDate }, isDeleted: false }),
+    Album.countDocuments({ createdAt: { $lt: startDate } }),
     Track.aggregate([
       { $match: { createdAt: { $lt: startDate }, isDeleted: false } },
       {
@@ -314,7 +331,7 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
       { $match: { createdAt: { $gte: startDate, $lte: today } } },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id: chartDay,
           count: { $sum: 1 },
         },
       },
@@ -329,14 +346,16 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
       },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id: chartDay,
           count: { $sum: 1 },
         },
       },
       { $sort: { _id: 1 } },
     ]),
 
-    // Top lists
+    // Top lists. playCount here is lifetime listens (5-minute $inc).
+    // The 03:00 sync no longer replaces it with a PlayLog window total.
+    // Day/week charts still rank from PlayLog and are unchanged.
     Track.find({ isPublic: true, isDeleted: false })
       .sort({ playCount: -1 })
       .limit(5)
@@ -374,7 +393,6 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
 
     // System stats
     Track.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
-    User.countDocuments({ updatedAt: { $gte: subDays(new Date(), 1) } }),
 
     // Queue
     audioQueue
@@ -408,19 +426,28 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
   const totalStorageBytes = counters.audioBytes + counters.imageBytes;
 
   // ── Storage Velocity ──
-  const cloudinaryLimit = externalHealth?.cloudinary?.storage?.limit ?? null;
+  const storageLimit = resolveExternalByteLimit(
+    externalHealth?.cloudinary?.storage?.limit,
+  );
   const storageVelocity = await getStorageVelocity(
     totalStorageBytes,
-    cloudinaryLimit,
+    storageLimit,
   );
+  const publishedVelocity = storageLimit
+    ? storageVelocity
+    : {
+        ...storageVelocity,
+        daysUntilFull: null,
+        projectedFullDate: null,
+      };
 
   // ── Format Cloudinary data ──
   let cloudinaryFormatted = null;
   if (externalHealth?.cloudinary) {
     const c = externalHealth.cloudinary;
     const bandwidthLimit =
-      c.bandwidth.limit > 0 ? c.bandwidth.limit : 26843545600;
-    const storageLimit = c.storage.limit > 0 ? c.storage.limit : 26843545600;
+      resolveExternalByteLimit(c.bandwidth?.limit) ?? 0;
+    const boundedStorageLimit = storageLimit ?? 0;
 
     cloudinaryFormatted = {
       plan: c.plan,
@@ -434,11 +461,11 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
       storage: {
         usage: c.storage.usage,
         usageReadable: formatBytes(c.storage.usage),
-        limit: storageLimit,
-        limitReadable: formatBytes(storageLimit),
-        percent: calculatePercent(c.storage.usage, storageLimit),
+        limit: boundedStorageLimit,
+        limitReadable: formatBytes(boundedStorageLimit),
+        percent: calculatePercent(c.storage.usage, boundedStorageLimit),
       },
-      velocity: storageVelocity, // 🆕 Storage velocity ngay trong Cloudinary block
+      velocity: publishedVelocity,
     };
   }
 
@@ -473,13 +500,14 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
         value: counters.totalTracks,
         growth: calculateGrowth(counters.totalTracks, prevTotalTracks),
       },
-      albums: { value: counters.totalAlbums, growth: 0 },
+      albums: {
+        value: counters.totalAlbums,
+        growth: calculateGrowth(counters.totalAlbums, prevTotalAlbums),
+      },
       plays: {
         value: counters.totalPlays,
         growth: calculateGrowth(counters.totalPlays, prevTotalPlays),
       },
-      activeUsers24h: activeUsersCount,
-      activeNow: getActiveNowCount(),
     },
     systemHealth: {
       storage: {
@@ -490,7 +518,7 @@ async function buildDashboardData(days: number): Promise<DashboardData> {
         imageReadable: formatBytes(counters.imageBytes),
         totalBytes: totalStorageBytes,
         totalReadable: formatBytes(totalStorageBytes),
-        velocity: storageVelocity, // 🆕 Dự báo
+        velocity: publishedVelocity,
         b2Status: externalHealth?.b2 || null,
         cloudinary: cloudinaryFormatted,
       },

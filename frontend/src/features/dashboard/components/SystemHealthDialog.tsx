@@ -252,7 +252,7 @@ export const SystemHealthDialog = ({
                         </>
                       ) : (
                         <div className="text-xs text-muted-foreground italic bg-muted/30 p-2 rounded text-center">
-                          Data Unavailable
+                          Chưa có số liệu Cloudinary
                         </div>
                       )}
                     </div>
@@ -342,7 +342,7 @@ export const SystemHealthDialog = ({
                       <div className="flex items-center justify-center gap-2 text-amber-600 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-lg text-sm border border-amber-200 dark:border-amber-800">
                         <AlertTriangle className="w-4 h-4" />
                         <span className="font-medium">
-                          Restricted API Access
+                          Chưa có số liệu Upstash
                         </span>
                       </div>
                     )}

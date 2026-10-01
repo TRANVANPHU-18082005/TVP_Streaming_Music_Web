@@ -129,26 +129,6 @@ export interface TopArtist {
 
 // ── Root DTO ──────────────────────────────────────────────────────────────────
 
-export interface DashboardData {
-  overview: {
-    users: StatItem;
-    tracks: StatItem;
-    albums: StatItem;
-    plays: StatItem;
-    activeUsers24h: number;
-  };
-  systemHealth: SystemHealthData;
-  charts: {
-    userGrowth: ChartDashbordDataPoint[];
-    trackGrowth: ChartDashbordDataPoint[];
-  };
-  topLists: {
-    topTracks: TopTrack[];
-    topArtists: TopArtist[];
-  };
-}
-
-// NEW: _meta carries SWR state from backend
 export interface DashboardMeta {
   isStale: boolean;
 }
@@ -159,7 +139,6 @@ export interface DashboardData {
     tracks: StatItem;
     albums: StatItem;
     plays: StatItem;
-    activeUsers24h: number;
   };
   systemHealth: SystemHealthData;
   charts: {
@@ -170,7 +149,7 @@ export interface DashboardData {
     topTracks: TopTrack[];
     topArtists: TopArtist[];
   };
-  _meta: DashboardMeta; // NEW: SWR staleness flag
+  _meta: DashboardMeta;
 }
 
 // API wrapper (JSend)

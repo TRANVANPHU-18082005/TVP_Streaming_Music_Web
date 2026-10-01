@@ -1,6 +1,11 @@
 "use client";
 
-import { ThemeProviderContext, type Theme, type Skin } from "@/hooks/useTheme";
+import {
+  ThemeProviderContext,
+  type ResolvedTheme,
+  type Theme,
+  type Skin,
+} from "@/hooks/useTheme";
 import { useEffect, useState, useMemo } from "react";
 
 type ThemeProviderProps = {
@@ -22,6 +27,9 @@ export function ThemeProvider({
   // 1. Khởi tạo state an toàn cho SSR (Tránh lỗi Hydration)
   const [theme, setTheme] = useState<Theme>(defaultTheme);
   const [skin, setSkin] = useState<Skin>(defaultSkin);
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(
+    defaultTheme === "light" ? "light" : "dark",
+  );
   const [isMounted, setIsMounted] = useState(false);
 
   // 2. Load dữ liệu từ localStorage sau khi Component đã mount (Client-side)
@@ -40,32 +48,29 @@ export function ThemeProvider({
     if (!isMounted) return;
 
     const root = window.document.documentElement;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
 
-    // --- Xử lý Mode (Light/Dark) ---
-    root.classList.remove("light", "dark");
+    const apply = () => {
+      const resolved: ResolvedTheme =
+        theme === "system" ? (media.matches ? "dark" : "light") : theme;
 
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
+      root.classList.remove("light", "dark");
+      root.classList.add(resolved);
+      root.setAttribute("data-theme", skin);
+      root.style.colorScheme = theme === "system" ? "light dark" : theme;
+      setResolvedTheme(resolved);
+    };
 
-    // --- Xử lý Skin (Appearance) ---
-    // Gán trực tiếp vào data-theme để kích hoạt bộ Skin Engine V4 trong index.css
-    root.setAttribute("data-theme", skin);
-
-    // Hint: Thêm color-scheme cho trình duyệt để đồng bộ scrollbar và form elements
-    root.style.colorScheme = theme === "system" ? "light dark" : theme;
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
   }, [theme, skin, isMounted]);
 
   // 4. Memoize value để tránh re-render Provider vô ích
   const value = useMemo(
     () => ({
       theme,
+      resolvedTheme,
       skin,
       setTheme: (t: Theme) => {
         localStorage.setItem(storageKey, t);
@@ -76,7 +81,7 @@ export function ThemeProvider({
         setSkin(s);
       },
     }),
-    [theme, skin, storageKey, skinStorageKey],
+    [theme, resolvedTheme, skin, storageKey, skinStorageKey],
   );
 
   // 5. Ngăn chặn Flash bằng cách return null hoặc một Fragment trong lúc chờ mount

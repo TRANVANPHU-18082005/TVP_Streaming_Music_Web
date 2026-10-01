@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/hooks/useTheme";
 import { ADMIN_PATHS } from "@/config/paths";
 import { cn } from "@/lib/utils";
 import {
@@ -27,12 +27,17 @@ import Avatar, { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const sidebarGroups = [
   {
-    title: "Overview",
+    title: "Tổng quan",
     items: [
       {
-        label: "Dashboard",
+        label: "Tổng quan",
         path: `${ADMIN_PATHS.ADMIN}`,
         icon: LayoutDashboard,
+      },
+      {
+        label: "Phân tích trực tiếp",
+        path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.ANALYTICS}`,
+        icon: BarChart3,
       },
     ],
   },
@@ -105,11 +110,6 @@ const sidebarGroups = [
   {
     title: "System",
     items: [
-      {
-        label: "Analytics",
-        path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.ANALYTICS}`,
-        icon: BarChart3,
-      },
       {
         label: "Settings",
         path: `${ADMIN_PATHS.ADMIN}/${ADMIN_PATHS.SETTINGS}`,
@@ -267,7 +267,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
 
   return (
     <aside
@@ -386,8 +386,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Theme toggle */}
         <button
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          title={theme === "dark" ? "Giao diện sáng" : "Giao diện tối"}
+          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          title={resolvedTheme === "dark" ? "Giao diện sáng" : "Giao diện tối"}
           className={cn(
             "flex items-center rounded-xl text-sm font-medium",
             "text-sidebar-foreground/50 hover:text-sidebar-accent-foreground",
@@ -402,7 +402,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <Moon className="absolute inset-0 rotate-90 scale-0 transition-all duration-300 dark:rotate-0 dark:scale-100" />
           </div>
           {!isCollapsed && (
-            <span>{theme === "dark" ? "Giao diện sáng" : "Giao diện tối"}</span>
+            <span>{resolvedTheme === "dark" ? "Giao diện sáng" : "Giao diện tối"}</span>
           )}
         </button>
       </div>

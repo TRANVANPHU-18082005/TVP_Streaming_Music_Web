@@ -109,7 +109,6 @@ export interface Overview {
   tracks: MetricWithGrowth;
   albums: MetricWithGrowth;
   plays: MetricWithGrowth;
-  activeUsers24h: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
