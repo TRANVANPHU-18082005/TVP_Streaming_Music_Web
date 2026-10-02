@@ -256,6 +256,10 @@ const createRecording = async (
     audioSize,
     description: dto.description || "",
     tags: dto.tags || [],
+    backingVolume: dto.backingVolume,
+    voiceVolume: dto.voiceVolume,
+    syncOffsetMs: dto.syncOffsetMs,
+    startAtSec: dto.startAtSec,
     status: "uploaded", // Chưa gửi duyệt
     isPublic: false,
   });
@@ -406,6 +410,10 @@ const updateRecording = async (
   if (dto.title) recording.title = dto.title;
   if (dto.description !== undefined) recording.description = dto.description;
   if (dto.tags) recording.tags = dto.tags;
+  if (dto.backingVolume !== undefined) recording.backingVolume = dto.backingVolume;
+  if (dto.voiceVolume !== undefined) recording.voiceVolume = dto.voiceVolume;
+  if (dto.syncOffsetMs !== undefined) recording.syncOffsetMs = dto.syncOffsetMs;
+  if (dto.startAtSec !== undefined) recording.startAtSec = dto.startAtSec;
 
   // Nếu từ rejected → chuyển lại uploaded để có thể gửi duyệt lại
   if (recording.status === "rejected") {

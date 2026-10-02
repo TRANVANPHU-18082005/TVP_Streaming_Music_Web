@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { CheckCircle, XCircle, Search, Clock, MessageSquareText, PlayCircle } from "lucide-react";
+import { KaraokePlaybackModal } from "../KaraokePlaybackModal";
 import { useAdminRecordings } from "../../hooks/useKaraokeQueries";
 import { useAdminReviewRecording } from "../../hooks/useKaraokeMutations";
 import { IKaraokeRecording } from "../../types";
@@ -38,11 +39,12 @@ const KaraokeRecordingsTab = () => {
   const [status, setStatus] = useState<string>("all");
   const [keyword, setKeyword] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [playingRec, setPlayingRec] = useState<IKaraokeRecording | null>(null);
 
   const { data, isLoading } = useAdminRecordings({
     page,
     limit: 10,
-    status: status !== "all" ? (status as any) : undefined,
+    status: status !== "all" ? (status as IKaraokeRecording["status"]) : undefined,
     keyword: keyword || undefined,
   });
 
@@ -155,10 +157,14 @@ const KaraokeRecordingsTab = () => {
                       <span className="text-xs text-muted-foreground flex items-center gap-1 truncate">
                         YouTube: {record.youtubeTitle}
                       </span>
-                      {record.audioUrl && (
-                        <a href={record.audioUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 mt-1">
-                          <PlayCircle className="h-3 w-3" /> Nghe thử
-                        </a>
+                      {record.audioUrl && record.youtubeVideoId && (
+                        <button
+                          type="button"
+                          onClick={() => setPlayingRec(record)}
+                          className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <PlayCircle className="h-3 w-3" /> Nghe mix
+                        </button>
                       )}
                     </div>
                   </TableCell>
@@ -225,6 +231,9 @@ const KaraokeRecordingsTab = () => {
           totalItems={data.data.meta.total || data.data.meta.totalItems || 0}
           pageSize={data.data.meta.limit || data.data.meta.pageSize || 10}
         />
+      )}
+      {playingRec && (
+        <KaraokePlaybackModal recording={playingRec} onClose={() => setPlayingRec(null)} />
       )}
     </div>
   );

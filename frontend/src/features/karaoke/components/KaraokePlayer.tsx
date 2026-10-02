@@ -1,319 +1,710 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Mic, Square, Play, Pause, Upload, Youtube, RefreshCcw, Loader2 } from "lucide-react";
-
-
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Headphones, Loader2, Mic, Pause, Play, RotateCcw, Square, Upload, Youtube } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
-import PageHeader from "@/components/ui/PageHeader";
-import { useKaraokeRecorder } from "../hooks/useKaraokeRecorder";
+import { cn } from "@/lib/utils";
 import { useMyKaraokePermission } from "../hooks/useKaraokeQueries";
-import { useUploadRecording } from "../hooks/useKaraokeMutations";
+import { useSubmitForReview, useUpdateRecording, useUploadRecording } from "../hooks/useKaraokeMutations";
+import { useKaraokeRecorder } from "../hooks/useKaraokeRecorder";
+import { clampSyncOffset, formatClock, loadYoutubeIframeApi, readApiError, syncVoiceElement, type YoutubePlayerHandle } from "../utils/mixSync";
+import { KaraokeOffsetSlider, KaraokeVolumeSlider } from "./KaraokeMixControls";
 import { KaraokeYoutubeSearch } from "./KaraokeYoutubeSearch";
 
-// Cần regex để bóc video ID từ URL youtube
-const extractYoutubeId = (url: string) => {
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : null;
+type StudioPhase = "pick" | "ready" | "countdown" | "recording" | "review";
+
+const STEPS = [
+  { id: "pick", label: "Chọn beat" },
+  { id: "ready", label: "Chuẩn bị" },
+  { id: "recording", label: "Thu" },
+  { id: "review", label: "Nghe lại" },
+] as const;
+
+const applyBackingVolume = (player: YoutubePlayerHandle | null, volume: number) => {
+  if (!player) return;
+  player.setVolume(volume);
+  if (volume > 0) player.unMute();
 };
 
-const formatTime = (secs: number) => {
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-};
-
-export const KaraokePlayer = () => {
-  // 1. YouTube & Search State
+export const KaraokePlayer = ({ initialQuery }: { initialQuery?: string }) => {
   const [videoId, setVideoId] = useState<string | null>(null);
-  const [videoTitle, setVideoTitle] = useState<string>("");
-  const playerRef = useRef<any>(null); // Reference to YT Player object
-
-  // 2. Recorder Hook
-  const {
-    isRecording,
-    audioUrl,
-    audioBlob,
-    recordingTime,
-    startRecording,
-    stopRecording,
-    clearRecording,
-  } = useKaraokeRecorder();
-
-  // 3. Audio Preview State
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [videoTitle, setVideoTitle] = useState("");
+  const [backingVolume, setBackingVolume] = useState(100);
+  const [voiceVolume, setVoiceVolume] = useState(100);
+  const [syncOffsetMs, setSyncOffsetMs] = useState(0);
+  const [startAtSec, setStartAtSec] = useState(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [awaitingBlob, setAwaitingBlob] = useState(false);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
-
-  // 4. Upload & Permission State
-  const { data: permissionData, isLoading: permissionLoading } = useMyKaraokePermission();
-  const { mutateAsync: uploadAudio, isPending: isUploading } = useUploadRecording();
+  const [playerReady, setPlayerReady] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
-  // Load YouTube IFrame API script
-  useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName("script")[0];
-      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+  const playerRef = useRef<YoutubePlayerHandle | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const mixRef = useRef({ backingVolume, voiceVolume, syncOffsetMs, startAtSec });
+  const startAtSecRef = useRef(0);
+  const isRecordingRef = useRef(false);
+  const isPausedRef = useRef(false);
+  const previewingRef = useRef(false);
+  const intentionalStopRef = useRef(false);
+  const awaitingLatencyRef = useRef(false);
+  const armedAtRef = useRef(0);
+  const sessionRef = useRef(0);
+  const countdownTimerRef = useRef<number | null>(null);
+  const handleYtStateRef = useRef<(state: number) => void>(() => undefined);
+
+  const {
+    isRecording,
+    isPaused,
+    audioBlob,
+    audioUrl,
+    recordingTime,
+    micLevel,
+    micReady,
+    monitorVolume,
+    setMonitorVolume,
+    enableMic,
+    startRecording,
+    stopRecording,
+    pauseRecording,
+    resumeRecording,
+    clearRecording,
+    error: micError,
+  } = useKaraokeRecorder();
+
+  const { data: permissionData, isLoading: permissionLoading } = useMyKaraokePermission();
+  const uploadAudio = useUploadRecording();
+  const updateDraft = useUpdateRecording();
+  const submitReview = useSubmitForReview();
+  const permission = permissionData?.data;
+  const maxDuration = permission?.maxDuration ?? 0;
+
+  mixRef.current = { backingVolume, voiceVolume, syncOffsetMs, startAtSec };
+  startAtSecRef.current = startAtSec;
+  isRecordingRef.current = isRecording;
+  isPausedRef.current = isPaused;
+
+  const phase: StudioPhase = !videoId
+    ? "pick"
+    : countdown !== null
+      ? "countdown"
+      : isRecording || awaitingBlob
+        ? "recording"
+        : audioBlob
+          ? "review"
+          : "ready";
+
+  const activeStep = phase === "countdown" ? "ready" : phase === "review" ? "review" : phase;
+
+  const resetTake = (announceDraft: boolean) => {
+    sessionRef.current += 1;
+    if (countdownTimerRef.current !== null) {
+      window.clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
     }
-  }, []);
-
-  // Initialize YT Player khi có videoId mới
-  useEffect(() => {
-    if (!videoId || !window.YT || !window.YT.Player) return;
-
-    // Cleanup player cũ
-    if (playerRef.current) {
-      playerRef.current.destroy();
+    intentionalStopRef.current = true;
+    previewingRef.current = false;
+    awaitingLatencyRef.current = false;
+    isRecordingRef.current = false;
+    isPausedRef.current = false;
+    if (isRecording) stopRecording();
+    playerRef.current?.pauseVideo?.();
+    setCountdown(null);
+    setAwaitingBlob(false);
+    setIsPlayingPreview(false);
+    setSyncOffsetMs(0);
+    clearRecording();
+    if (announceDraft && savedId) {
+      toast.info("Bản nháp trước vẫn nằm trong Bản thu của tôi");
     }
+    setSavedId(null);
+    setSubmitted(false);
+  };
 
-    playerRef.current = new window.YT.Player("youtube-player", {
-      height: "390",
-      width: "100%",
-      videoId: videoId,
-      playerVars: {
-        controls: 1,
-        rel: 0,
-        modestbranding: 1,
-      },
-      events: {
-        onStateChange: (event: any) => {
-          // Nếu đang preview mà video pause, pause luôn audio
-          if (audioUrl && previewAudioRef.current) {
-            if (event.data === window.YT.PlayerState.PLAYING) {
-              previewAudioRef.current.play();
-              setIsPlayingPreview(true);
-            } else if (
-              event.data === window.YT.PlayerState.PAUSED ||
-              event.data === window.YT.PlayerState.ENDED
-            ) {
-              previewAudioRef.current.pause();
-              setIsPlayingPreview(false);
-            }
-          }
+  const handleSelectVideo = (id: string, selectedTitle: string) => {
+    if (id === videoId && !audioBlob && !isRecording) {
+      setVideoTitle(selectedTitle);
+      setTitle(selectedTitle);
+      return;
+    }
+    resetTake(Boolean(savedId));
+    setVideoId(id);
+    setVideoTitle(selectedTitle);
+    setTitle(selectedTitle);
+    setStartAtSec(0);
+  };
+
+  useEffect(() => {
+    if (!videoId) return;
+    let cancelled = false;
+    let player: YoutubePlayerHandle | undefined;
+
+    const init = () => {
+      if (cancelled || !window.YT?.Player) return;
+      const mount = document.getElementById("youtube-player");
+      if (!mount) return;
+      const created = new window.YT.Player(mount, {
+        width: "100%",
+        height: "100%",
+        videoId,
+        playerVars: {
+          controls: 1,
+          rel: 0,
+          modestbranding: 1,
         },
-      },
+        events: {
+          onReady: (event: { target: YoutubePlayerHandle }) => {
+            if (cancelled) return;
+            playerRef.current = event.target;
+            setPlayerReady(true);
+            applyBackingVolume(event.target, mixRef.current.backingVolume);
+          },
+          onStateChange: (event: { data: number }) => {
+            handleYtStateRef.current(event.data);
+          },
+        },
+      }) as YoutubePlayerHandle;
+      player = created;
+      playerRef.current = created;
+    };
+
+    void loadYoutubeIframeApi().then(() => {
+      if (!cancelled) init();
     });
 
     return () => {
-      if (playerRef.current) playerRef.current.destroy();
+      cancelled = true;
+      setPlayerReady(false);
+      playerRef.current = null;
+      try {
+        player?.destroy();
+      } catch {
+        /* Player có thể đã bị gỡ khỏi DOM khi đổi video. */
+      }
     };
-  }, [videoId, audioUrl]);
+  }, [videoId]);
 
-  // Load video
-  const handleSelectVideo = (id: string, selectedTitle: string) => {
-    setVideoId(id);
-    setVideoTitle(selectedTitle);
-    setTitle(selectedTitle); // Tự động điền tiêu đề bài hát
-    clearRecording();
-  };
+  useEffect(() => {
+    handleYtStateRef.current = (state: number) => {
+      const playing = state === window.YT?.PlayerState?.PLAYING;
+      const paused = state === window.YT?.PlayerState?.PAUSED;
+      const buffering = state === window.YT?.PlayerState?.BUFFERING;
+      const ended = state === window.YT?.PlayerState?.ENDED;
+      const player = playerRef.current;
 
-  // Recording Controls
-  const handleStartRecord = () => {
-    // Đeo tai nghe là bắt buộc để tránh dội âm
-    if (!window.confirm("Vui lòng đảm bảo bạn đang ĐEO TAI NGHE để mic không thu âm lại nhạc từ video. Bắt đầu?")) {
+      if (playing && isRecordingRef.current && awaitingLatencyRef.current && player) {
+        const wallMs = performance.now() - armedAtRef.current;
+        const progressMs = (player.getCurrentTime() - startAtSecRef.current) * 1000;
+        if (progressMs >= -300 && progressMs <= wallMs + 500) {
+          awaitingLatencyRef.current = false;
+          setSyncOffsetMs(clampSyncOffset(wallMs - progressMs));
+        }
+      }
+
+      if (playing && isRecordingRef.current && isPausedRef.current) {
+        isPausedRef.current = false;
+        resumeRecording();
+      }
+
+      if (paused && isRecordingRef.current && !isPausedRef.current && !intentionalStopRef.current) {
+        isPausedRef.current = true;
+        pauseRecording();
+      }
+
+      if (ended && isRecordingRef.current) {
+        intentionalStopRef.current = true;
+        isRecordingRef.current = false;
+        setAwaitingBlob(true);
+        stopRecording();
+      }
+
+      const audio = previewAudioRef.current;
+      if (buffering && previewingRef.current) {
+        audio?.pause();
+        return;
+      }
+
+      if (!previewingRef.current || !audio || !player) {
+        if (paused || ended) audio?.pause();
+        return;
+      }
+
+      if (playing) {
+        setIsPlayingPreview(true);
+        audio.volume = mixRef.current.voiceVolume / 100;
+        const action = syncVoiceElement(audio, player.getCurrentTime(), mixRef.current);
+        if (action === "play") void audio.play().catch(() => undefined);
+        return;
+      }
+
+      audio.pause();
+      setIsPlayingPreview(false);
+      if (ended) previewingRef.current = false;
+    };
+  }, [pauseRecording, resumeRecording, stopRecording]);
+
+  useEffect(() => {
+    applyBackingVolume(playerRef.current, backingVolume);
+  }, [backingVolume, playerReady]);
+
+  useEffect(() => {
+    if (audioBlob) setAwaitingBlob(false);
+  }, [audioBlob]);
+
+  useEffect(() => {
+    if (!isRecording || maxDuration <= 0) return;
+    if (recordingTime < maxDuration) return;
+    intentionalStopRef.current = true;
+    isRecordingRef.current = false;
+    setAwaitingBlob(true);
+    stopRecording();
+    playerRef.current?.pauseVideo?.();
+    toast.info("Đã dừng vì hết thời lượng cho phép");
+  }, [isRecording, maxDuration, recordingTime, stopRecording]);
+
+  useEffect(() => {
+    if (!isPlayingPreview) return;
+    const timer = window.setInterval(() => {
+      const player = playerRef.current;
+      const audio = previewAudioRef.current;
+      if (!previewingRef.current || !player || !audio) return;
+      if (player.getPlayerState() !== window.YT?.PlayerState?.PLAYING) return;
+      const action = syncVoiceElement(audio, player.getCurrentTime(), mixRef.current);
+      if (action === "play" && audio.paused) void audio.play().catch(() => undefined);
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, [isPlayingPreview]);
+
+  useEffect(() => {
+    const audio = previewAudioRef.current;
+    const player = playerRef.current;
+    if (!audio || !isPlayingPreview || !player) return;
+    audio.volume = voiceVolume / 100;
+    const action = syncVoiceElement(
+      audio,
+      player.getCurrentTime(),
+      mixRef.current,
+      { force: true },
+    );
+    if (action === "play") void audio.play().catch(() => undefined);
+  }, [syncOffsetMs, voiceVolume, isPlayingPreview]);
+
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current !== null) window.clearInterval(countdownTimerRef.current);
+    };
+  }, []);
+
+  const beginRecording = async (token: number) => {
+    const player = playerRef.current;
+    if (!player) {
+      setCountdown(null);
+      toast.error("Video chưa sẵn sàng. Hãy đợi một chút.");
       return;
     }
-    clearRecording();
-    startRecording();
-    if (playerRef.current && typeof playerRef.current.seekTo === "function") {
-      playerRef.current.seekTo(0);
-      playerRef.current.playVideo();
+
+    const started = await startRecording();
+    if (sessionRef.current !== token) {
+      if (started) stopRecording();
+      return;
     }
+    if (!started) {
+      setCountdown(null);
+      return;
+    }
+
+    isRecordingRef.current = true;
+    isPausedRef.current = false;
+    intentionalStopRef.current = false;
+    previewingRef.current = false;
+    player.seekTo(startAtSecRef.current, true);
+    applyBackingVolume(player, mixRef.current.backingVolume);
+    armedAtRef.current = performance.now();
+    awaitingLatencyRef.current = true;
+    player.playVideo();
+    setCountdown(null);
   };
 
-  const handleStopRecord = () => {
+  const handleStart = async () => {
+    if (!playerRef.current) {
+      toast.error("Video chưa sẵn sàng. Hãy đợi một chút.");
+      return;
+    }
+    const micOk = micReady || (await enableMic());
+    if (!micOk) return;
+
+    const token = sessionRef.current + 1;
+    sessionRef.current = token;
+    let left = 3;
+    setCountdown(left);
+    countdownTimerRef.current = window.setInterval(() => {
+      if (sessionRef.current !== token) return;
+      left -= 1;
+      if (left <= 0) {
+        if (countdownTimerRef.current !== null) {
+          window.clearInterval(countdownTimerRef.current);
+          countdownTimerRef.current = null;
+        }
+        setCountdown(0);
+        void beginRecording(token);
+      } else {
+        setCountdown(left);
+      }
+    }, 1000);
+  };
+
+  const handleCancelCountdown = () => {
+    sessionRef.current += 1;
+    if (countdownTimerRef.current !== null) {
+      window.clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setCountdown(null);
+  };
+
+  const finishTake = () => {
+    intentionalStopRef.current = true;
+    isRecordingRef.current = false;
+    isPausedRef.current = false;
+    setAwaitingBlob(true);
     stopRecording();
-    if (playerRef.current && typeof playerRef.current.pauseVideo === "function") {
-      playerRef.current.pauseVideo();
-    }
+    playerRef.current?.pauseVideo?.();
   };
 
-  // Preview Controls
-  const handlePlayPreview = () => {
-    if (!audioUrl) return;
-    if (playerRef.current && typeof playerRef.current.seekTo === "function") {
-      playerRef.current.seekTo(0);
-      playerRef.current.playVideo();
-      // event onStateChange (PLAYING) sẽ tự trigger play audio
+  const handlePauseToggle = () => {
+    if (isPausedRef.current) {
+      isPausedRef.current = false;
+      resumeRecording();
+      playerRef.current?.playVideo?.();
+      return;
     }
+    isPausedRef.current = true;
+    pauseRecording();
+    playerRef.current?.pauseVideo?.();
   };
 
-  // Upload Logic
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!audioBlob) return toast.error("Chưa có bản thu nào");
-    if (!videoId) return toast.error("Lỗi: Không tìm thấy Video ID");
+  const handleTogglePreview = () => {
+    const player = playerRef.current;
+    const audio = previewAudioRef.current;
+    if (!player || !audio) return;
 
-    // Check permission local
-    if (!permissionData?.data?.hasPermission) {
-      return toast.error("Bạn chưa được cấp quyền upload hoặc đã hết số lượt. Vui lòng liên hệ Admin.");
+    if (isPlayingPreview) {
+      player.pauseVideo();
+      audio.pause();
+      setIsPlayingPreview(false);
+      return;
     }
 
+    audio.volume = voiceVolume / 100;
+    applyBackingVolume(player, backingVolume);
+    previewingRef.current = true;
+    intentionalStopRef.current = false;
+    player.seekTo(startAtSec, true);
+    setIsPlayingPreview(true);
+    player.playVideo();
+  };
+
+  const handleUseCurrentTime = () => {
+    const current = playerRef.current?.getCurrentTime?.();
+    if (typeof current !== "number" || Number.isNaN(current)) return;
+    setStartAtSec(Math.max(0, Math.round(current * 10) / 10));
+  };
+
+  const handleSaveDraft = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!audioBlob || !videoId) {
+      toast.error("Chưa có bản thu nào");
+      return;
+    }
     if (!title.trim()) {
-      return toast.error("Vui lòng nhập tiêu đề");
+      toast.error("Vui lòng nhập tiêu đề");
+      return;
     }
+    if (recordingTime < 1) {
+      toast.error("Bản thu quá ngắn");
+      return;
+    }
+    if (!savedId && !permission?.hasPermission) {
+      toast.error("Bạn chưa được cấp quyền upload hoặc đã hết số lượt. Vui lòng liên hệ Admin.");
+      return;
+    }
+    if (permission?.maxFileSize && audioBlob.size > permission.maxFileSize) {
+      const maxMb = Math.floor(permission.maxFileSize / 1024 / 1024);
+      toast.error(`Kích thước file vượt quá giới hạn cho phép (${maxMb}MB).`);
+      return;
+    }
+
+    const mix = {
+      backingVolume: Math.round(backingVolume),
+      voiceVolume: Math.round(voiceVolume),
+      syncOffsetMs,
+      startAtSec,
+    };
 
     try {
-      await uploadAudio({
-        audio: audioBlob,
-        title: title,
-        youtubeVideoId: videoId,
-        youtubeTitle: videoTitle || "Karaoke Video",
-        description,
-        audioDuration: recordingTime,
+      if (!savedId) {
+        const result = await uploadAudio.mutateAsync({
+          audio: audioBlob,
+          title: title.trim(),
+          youtubeVideoId: videoId,
+          youtubeTitle: videoTitle || "Karaoke Video",
+          description: description.trim() || undefined,
+          audioDuration: recordingTime,
+          ...mix,
+        });
+        setSavedId(result.data._id);
+        toast.success("Đã lưu bản nháp");
+        return;
+      }
+
+      await updateDraft.mutateAsync({
+        id: savedId,
+        payload: {
+          title: title.trim(),
+          description,
+          ...mix,
+        },
       });
-      toast.success("Tải lên thành công! Đang chờ Admin duyệt.");
-      clearRecording();
-      setTitle("");
-      setDescription("");
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.response?.data?.message || "Lỗi khi upload");
+      toast.success("Đã cập nhật bản nháp");
+    } catch (err: unknown) {
+      toast.error(readApiError(err, "Lỗi khi lưu bản nháp"));
     }
   };
 
+  const handleSubmitReview = async () => {
+    if (!savedId || submitted) return;
+    try {
+      await submitReview.mutateAsync(savedId);
+      setSubmitted(true);
+      toast.success("Đã gửi duyệt");
+    } catch (err: unknown) {
+      toast.error(readApiError(err, "Không gửi duyệt được"));
+    }
+  };
+
+  const saving = uploadAudio.isPending || updateDraft.isPending;
+
   return (
-    <div className="flex w-full flex-col lg:flex-row gap-6 p-4 md:p-6 bg-transparent">
-      {/* LEFT: Player & Controls */}
-      <div className="flex-1 flex flex-col space-y-6">
-        <PageHeader title="Phòng Thu Karaoke" />
-
-        {/* Youtube Search Component */}
-        <div className="z-20">
-          <KaraokeYoutubeSearch onSelectVideo={handleSelectVideo} />
-        </div>
-
-        {/* Player Container */}
-        <div className="w-full aspect-video bg-black/90 rounded-2xl overflow-hidden shadow-2xl border border-white/10 relative flex items-center justify-center">
-          {!videoId ? (
-            <div className="flex flex-col items-center justify-center text-muted-foreground p-8 text-center">
-              <Youtube className="w-16 h-16 mb-4 opacity-50" />
-              <p>Hãy tìm kiếm bài hát trên Youtube bằng thanh tìm kiếm ở trên để bắt đầu hát nhé.</p>
-            </div>
-          ) : (
-            <div id="youtube-player" className="absolute inset-0 w-full h-full" />
-          )}
-        </div>
-
-        {/* Audio Preview (Hidden, controlled by JS) */}
-        {audioUrl && (
-          <audio ref={previewAudioRef} src={audioUrl} className="hidden" />
-        )}
-
-        {/* Controls Bar */}
-        {videoId && (
-          <div className="flex flex-col md:flex-row items-center justify-between glass-frosted p-4 rounded-2xl border shadow-floating gap-4">
-            <div className="flex flex-wrap items-center gap-2 md:gap-4 justify-center w-full md:w-auto">
-              {!isRecording && !audioBlob ? (
-                <Button onClick={handleStartRecord} className="gap-2 bg-red-600 hover:bg-red-700 text-white">
-                  <Mic className="w-4 h-4" /> Bắt đầu Thu Âm
-                </Button>
-              ) : isRecording ? (
-                <div className="flex items-center gap-4">
-                  <Button onClick={handleStopRecord} variant="outline" className="gap-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white">
-                    <Square className="w-4 h-4" /> Dừng thu
-                  </Button>
-                  <span className="flex items-center gap-2 text-red-500 font-mono font-medium animate-pulse">
-                    <div className="w-2 h-2 rounded-full bg-red-500" />
-                    {formatTime(recordingTime)}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button onClick={handlePlayPreview} variant="secondary" className="gap-2">
-                    {isPlayingPreview ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                    Nghe Lại
-                  </Button>
-                  <Button onClick={handleStartRecord} variant="outline" className="gap-2">
-                    <RefreshCcw className="w-4 h-4" /> Thu Lại
-                  </Button>
-                </div>
+    <div className="flex w-full flex-col gap-6 p-4 md:p-6">
+      <ol className="flex flex-wrap gap-2">
+        {STEPS.map((step, index) => {
+          const current = STEPS.findIndex((item) => item.id === activeStep);
+          const done = index < current;
+          const active = step.id === activeStep;
+          return (
+            <li
+              key={step.id}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-semibold",
+                active && "bg-primary text-primary-foreground",
+                done && !active && "bg-primary/15 text-primary",
+                !done && !active && "bg-muted text-muted-foreground",
               )}
-            </div>
+            >
+              {index + 1}. {step.label}
+            </li>
+          );
+        })}
+      </ol>
 
-            {audioBlob && (
-              <div className="text-sm text-muted-foreground font-mono">
-                Độ dài: {formatTime(recordingTime)} | Size: {(audioBlob.size / 1024 / 1024).toFixed(2)} MB
-              </div>
-            )}
+      {phase !== "recording" && phase !== "countdown" && (
+        <KaraokeYoutubeSearch onSelectVideo={handleSelectVideo} initialQuery={initialQuery} />
+      )}
+
+      <div className="relative w-full aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black/90 shadow-2xl">
+        {!videoId ? (
+          <div className="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground">
+            <Youtube className="mb-4 h-16 w-16 opacity-50" />
+            <p>Tìm bài karaoke trên YouTube để bắt đầu.</p>
+          </div>
+        ) : (
+          <div className={cn("absolute inset-0", phase !== "ready" && phase !== "pick" && "pointer-events-none")}>
+            <div key={videoId} id="youtube-player" className="h-full w-full" />
+          </div>
+        )}
+        {countdown !== null && countdown > 0 && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55">
+            <span className="text-7xl font-black text-white">{countdown}</span>
           </div>
         )}
       </div>
 
-      {/* RIGHT: Upload Form */}
-      <div className="w-full lg:w-[400px] flex flex-col space-y-6">
-        {/* Permission Status */}
-        <div className="p-5 rounded-2xl border shadow-floating glass-frosted">
-          <h3 className="font-semibold flex items-center gap-2 mb-2">
-            <Upload className="w-4 h-4 text-primary" /> Quyền Tải Lên
-          </h3>
-          {permissionLoading ? (
-            <p className="text-sm text-muted-foreground animate-pulse">Đang kiểm tra quyền...</p>
-          ) : permissionData?.data?.hasPermission ? (
-            <div className="text-sm space-y-1 text-muted-foreground">
-              <p className="text-green-500 font-medium">✅ Bạn có thể tải lên</p>
-              <p>Số lượt còn lại: <strong className="text-foreground">{permissionData.data.uploadsRemaining === -1 ? 'Vô hạn' : permissionData.data.uploadsRemaining}</strong></p>
-              <p>Max duration: <strong className="text-foreground">{permissionData.data.maxDuration / 60} phút</strong></p>
-            </div>
-          ) : (
-            <div className="text-sm text-red-500 font-medium">
-              ❌ Bạn chưa có quyền tải lên hoặc đã hết lượt.
-              <br />Vui lòng liên hệ Admin để được cấp quyền.
+      {videoId && (
+        <div className="flex flex-col gap-4 rounded-2xl border p-4 glass-frosted">
+          <div className="min-w-0">
+            <p className="truncate font-semibold">{videoTitle || "Beat đã chọn"}</p>
+            <p className="text-xs text-muted-foreground">
+              {playerReady ? "Video đã sẵn sàng" : "Đang tải video..."}
+            </p>
+          </div>
+
+          {(phase === "ready" || phase === "countdown" || phase === "recording") && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              <Headphones className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <p>Hãy đeo tai nghe. Mic chỉ ghi giọng của bạn, không ghi nhạc từ loa.</p>
             </div>
           )}
+
+          {phase === "ready" && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <KaraokeVolumeSlider label="Nhạc nền" value={backingVolume} onChange={setBackingVolume} />
+              <KaraokeVolumeSlider label="Giọng nghe tai" value={monitorVolume} onChange={setMonitorVolume} />
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="start-at">Bắt đầu từ (giây)</Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="start-at"
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={startAtSec}
+                    onChange={(event) => setStartAtSec(Math.max(0, Number(event.target.value) || 0))}
+                  />
+                  <Button type="button" variant="outline" onClick={handleUseCurrentTime} disabled={!playerReady}>
+                    Dùng thời điểm này
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Mức mic</span>
+                  <span className="text-muted-foreground">{micReady ? "Đã bật" : "Chưa bật"}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-red-500 transition-[width] duration-100"
+                    style={{ width: `${Math.round(micLevel * 100)}%` }}
+                  />
+                </div>
+                {micError && <p className="text-sm text-red-500">{micError}</p>}
+              </div>
+            </div>
+          )}
+
+          {phase === "recording" && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <KaraokeVolumeSlider label="Nhạc nền" value={backingVolume} onChange={setBackingVolume} />
+              <KaraokeVolumeSlider label="Giọng nghe tai" value={monitorVolume} onChange={setMonitorVolume} />
+            </div>
+          )}
+
+          {phase === "review" && (
+            <div className="grid gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <KaraokeVolumeSlider label="Nhạc nền" value={backingVolume} onChange={setBackingVolume} />
+                <KaraokeVolumeSlider label="Giọng bản thu" value={voiceVolume} onChange={setVoiceVolume} />
+              </div>
+              <KaraokeOffsetSlider value={syncOffsetMs} onChange={setSyncOffsetMs} />
+              <p className="text-xs text-muted-foreground">
+                Nghe lại từ {formatClock(startAtSec)}. Kéo lệch nhịp nếu giọng chưa khớp beat. Ngưỡng tự kéo lại là 250 ms.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {phase === "ready" && (
+              <Button onClick={() => void handleStart()} className="gap-2 bg-red-600 text-white hover:bg-red-700" disabled={!playerReady}>
+                <Mic className="h-4 w-4" /> Bắt đầu thu
+              </Button>
+            )}
+            {phase === "countdown" && (
+              <Button variant="outline" onClick={handleCancelCountdown}>Hủy</Button>
+            )}
+            {phase === "recording" && (
+              <>
+                <Button variant="outline" className="gap-2 border-red-500 text-red-500" onClick={finishTake} disabled={awaitingBlob}>
+                  <Square className="h-4 w-4" /> Dừng thu
+                </Button>
+                <Button variant="outline" onClick={handlePauseToggle} disabled={awaitingBlob}>
+                  {isPaused ? "Tiếp tục" : "Tạm dừng"}
+                </Button>
+                <span className="flex items-center gap-2 font-mono text-red-500">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                  {formatClock(recordingTime)}
+                  {maxDuration > 0 ? ` / ${formatClock(maxDuration)}` : ""}
+                </span>
+                {awaitingBlob && <Loader2 className="h-4 w-4 animate-spin" />}
+              </>
+            )}
+            {phase === "review" && (
+              <>
+                <Button variant="secondary" className="gap-2" onClick={handleTogglePreview}>
+                  {isPlayingPreview ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  Nghe lại
+                </Button>
+                <Button variant="outline" className="gap-2" onClick={() => resetTake(Boolean(savedId))}>
+                  <RotateCcw className="h-4 w-4" /> Thu lại
+                </Button>
+                {audioBlob && (
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {formatClock(recordingTime)} · {(audioBlob.size / 1024 / 1024).toFixed(2)} MB
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+
+          {phase === "ready" && (
+            <p className="text-sm text-muted-foreground">
+              {permissionLoading
+                ? "Đang kiểm tra quyền tải lên..."
+                : permission?.hasPermission
+                  ? `Còn ${permission.uploadsRemaining === -1 ? "không giới hạn" : permission.uploadsRemaining} lượt tải lên${maxDuration > 0 ? ` · tối đa ${Math.floor(maxDuration / 60)} phút` : ""}.`
+                  : "Bạn chưa có quyền tải lên hoặc đã hết lượt. Vẫn có thể thu để nghe thử."}
+            </p>
+          )}
         </div>
+      )}
 
-        {/* Upload Form */}
-        <form onSubmit={handleUpload} className="flex flex-col space-y-5 p-5 rounded-2xl border shadow-floating glass-frosted flex-1">
-          <h3 className="font-bold text-xl border-b border-border/50 pb-3 font-display">Đăng bản thu</h3>
+      {audioUrl && <audio ref={previewAudioRef} src={audioUrl} preload="auto" className="hidden" />}
 
+      {phase === "review" && (
+        <form onSubmit={(event) => void handleSaveDraft(event)} className="flex flex-col gap-4 rounded-2xl border p-5 glass-frosted">
+          <div>
+            <h3 className="font-display text-xl font-bold">Lưu bản thu</h3>
+            <p className="text-sm text-muted-foreground">Lưu nháp trước. Gửi duyệt là bước riêng, sau khi bạn đã nghe lại mix.</p>
+          </div>
           <div className="space-y-2">
-            <Label htmlFor="title">Tên bản thu <span className="text-red-500">*</span></Label>
+            <Label htmlFor="take-title">Tên bản thu</Label>
             <Input
-              id="title"
-              placeholder="VD: Chắc ai đó sẽ về (Cover by Me)"
+              id="take-title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={!audioBlob || isUploading}
+              onChange={(event) => setTitle(event.target.value)}
+              disabled={saving || submitted}
               required
             />
           </div>
-
           <div className="space-y-2">
-            <Label htmlFor="desc">Mô tả (Không bắt buộc)</Label>
+            <Label htmlFor="take-desc">Mô tả</Label>
             <Textarea
-              id="desc"
-              placeholder="Cảm nghĩ của bạn về bản thu này..."
+              id="take-desc"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={!audioBlob || isUploading}
-              rows={4}
+              onChange={(event) => setDescription(event.target.value)}
+              disabled={saving || submitted}
+              rows={3}
             />
           </div>
-
-          <div className="mt-auto pt-4">
-            <Button
-              type="submit"
-              className="w-full gap-2"
-              disabled={!audioBlob || isUploading || !permissionData?.data?.hasPermission}
-            >
-              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {isUploading ? "Đang tải lên..." : "Tải lên & Gửi duyệt"}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button type="submit" className="gap-2" disabled={saving || submitted || (!savedId && !permission?.hasPermission)}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {savedId ? "Cập nhật bản nháp" : "Lưu bản nháp"}
             </Button>
-            {!audioBlob && (
-              <p className="text-xs text-center text-muted-foreground mt-2">
-                Bạn cần thu âm trước khi có thể tải lên
-              </p>
-            )}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!savedId || submitted || submitReview.isPending}
+              onClick={() => void handleSubmitReview()}
+            >
+              {submitReview.isPending ? "Đang gửi..." : submitted ? "Đã gửi duyệt" : "Gửi duyệt"}
+            </Button>
           </div>
         </form>
-      </div>
+      )}
     </div>
   );
 };

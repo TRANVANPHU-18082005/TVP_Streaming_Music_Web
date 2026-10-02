@@ -165,7 +165,7 @@ export const uploadRecording = catchAsync(async (req: Request, res: Response) =>
 
   res.status(httpStatus.CREATED).json({
     success: true,
-    message: "Upload recording thành công",
+    message: "Đã lưu bản nháp",
     data: recording,
   });
 });

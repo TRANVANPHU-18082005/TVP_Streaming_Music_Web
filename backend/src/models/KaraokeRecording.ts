@@ -27,6 +27,12 @@ export interface IKaraokeRecording extends Document {
   audioDuration: number;   // Thời lượng (giây)
   audioSize: number;       // Kích thước file (bytes)
 
+  // Mix lúc phát: file chỉ chứa giọng, beat vẫn là video YouTube
+  backingVolume: number;   // 0–100, YouTube setVolume
+  voiceVolume: number;     // 0–100, gain file giọng
+  syncOffsetMs: number;    // dương = giọng ra sau beat
+  startAtSec: number;      // mốc YouTube lúc bắt đầu thu
+
   // Metadata
   coverImage?: string;
   description?: string;
@@ -70,6 +76,10 @@ const KaraokeRecordingSchema = new Schema<IKaraokeRecording>(
     audioUrl: { type: String, required: true },
     audioDuration: { type: Number, required: true, min: 0 },
     audioSize: { type: Number, required: true, min: 0 },
+    backingVolume: { type: Number, default: 100, min: 0, max: 100 },
+    voiceVolume: { type: Number, default: 100, min: 0, max: 100 },
+    syncOffsetMs: { type: Number, default: 0, min: -2000, max: 2000 },
+    startAtSec: { type: Number, default: 0, min: 0 },
 
     // Metadata
     coverImage: { type: String, default: "" },

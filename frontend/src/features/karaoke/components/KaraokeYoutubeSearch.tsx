@@ -9,16 +9,18 @@ interface KaraokeYoutubeSearchProps {
   onSelectVideo: (videoId: string, title: string) => void;
   placeholder?: string;
   className?: string;
+  initialQuery?: string;
 }
 
 export const KaraokeYoutubeSearch = ({
   onSelectVideo,
   placeholder = "Tìm kiếm bài hát karaoke trên Youtube...",
   className,
+  initialQuery,
 }: KaraokeYoutubeSearchProps) => {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialQuery ?? "");
   const debouncedSearch = useDebounce(searchTerm, 600);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(Boolean(initialQuery));
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, isFetching } = useYoutubeSearch(debouncedSearch);
@@ -83,7 +85,7 @@ export const KaraokeYoutubeSearch = ({
           ) : (
             <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto custom-scrollbar">
               <div className="p-1.5 md:p-2 flex flex-col gap-1">
-                {results.map((video: any) => (
+                {results.map((video: { videoId: string; title: string; thumbnail?: string; duration?: string; channelName?: string }) => (
                   <button
                     key={video.videoId}
                     onClick={() => handleSelect(video.videoId, video.title)}

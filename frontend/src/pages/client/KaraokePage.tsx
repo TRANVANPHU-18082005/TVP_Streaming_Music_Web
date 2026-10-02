@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { KaraokePlayer } from "@/features/karaoke/components/KaraokePlayer";
 import { KaraokeCommunityFeed } from "@/features/karaoke/components/KaraokeCommunityFeed";
 import { KaraokeMyRecordings } from "@/features/karaoke/components/KaraokeMyRecordings";
@@ -16,6 +17,8 @@ type TabId = typeof TABS[number]["id"];
 
 const KaraokePage = () => {
   const [activeTab, setActiveTab] = useState<TabId>("studio");
+  const [searchParams] = useSearchParams();
+  const initialQuery = searchParams.get("q") || undefined;
 
   return (
     <div className="flex flex-col min-h-screen bg-background relative overflow-hidden pb-32">
@@ -111,7 +114,7 @@ const KaraokePage = () => {
             >
               {activeTab === "studio" && (
                 <div className="glass-frosted rounded-3xl border shadow-xl overflow-hidden">
-                  <KaraokePlayer />
+                  <KaraokePlayer initialQuery={initialQuery} />
                 </div>
               )}
               {activeTab === "my-recordings" && (

@@ -54,6 +54,10 @@ export const uploadRecordingSchema = z.object({
       description: z.string().max(1000, "Mô tả không được vượt quá 1000 ký tự").optional(),
       tags: tagsSchema.optional(),
       audioDuration: z.coerce.number().min(1, "Thời lượng phải lớn hơn 0"),
+      backingVolume: z.coerce.number().min(0).max(100).default(100),
+      voiceVolume: z.coerce.number().min(0).max(100).default(100),
+      syncOffsetMs: z.coerce.number().int().min(-2000).max(2000).default(0),
+      startAtSec: z.coerce.number().min(0).max(14400).default(0),
     })
     .strict(),
 });
@@ -69,6 +73,10 @@ export const updateRecordingSchema = z.object({
       title: z.string().trim().min(1).max(200).optional(),
       description: z.string().max(1000).optional(),
       tags: tagsSchema.optional(),
+      backingVolume: z.coerce.number().min(0).max(100).optional(),
+      voiceVolume: z.coerce.number().min(0).max(100).optional(),
+      syncOffsetMs: z.coerce.number().int().min(-2000).max(2000).optional(),
+      startAtSec: z.coerce.number().min(0).max(14400).optional(),
     })
     .strict()
     .refine(

@@ -1,28 +1,44 @@
 import React, { useState } from "react";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
-import { ListMusic, Play, Clock, CheckCircle2, XCircle, Trash2, Loader2, Music2 } from "lucide-react";
+import { ListMusic, Play, Clock, CheckCircle2, XCircle, Trash2, Loader2, Music2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import Pagination from "@/utils/pagination";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMyRecordings } from "../hooks/useKaraokeQueries";
+import { useSubmitForReview } from "../hooks/useKaraokeMutations";
 import karaokeApi from "../api/karaokeApi";
 import { karaokeKeys } from "../utils/karaokeKeys";
-import { IKaraokeRecording } from "../types";
+import { readApiError } from "../utils/mixSync";
+import type { IKaraokeRecording } from "../types";
 import { KaraokePlaybackModal } from "./KaraokePlaybackModal";
 
 export const KaraokeMyRecordings = () => {
   const [page, setPage] = useState(1);
   const [playingRec, setPlayingRec] = useState<IKaraokeRecording | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const submitReview = useSubmitForReview();
 
   const { data, isLoading } = useMyRecordings({
     page,
     limit: 10,
     sort: "newest",
   });
+
+  const handleSubmit = async (id: string) => {
+    setSubmittingId(id);
+    try {
+      await submitReview.mutateAsync(id);
+      toast.success("Đã gửi duyệt");
+    } catch (err: unknown) {
+      toast.error(readApiError(err, "Không gửi duyệt được"));
+    } finally {
+      setSubmittingId(null);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa bản thu này?")) return;
@@ -31,8 +47,8 @@ export const KaraokeMyRecordings = () => {
       toast.success("Đã xóa bản thu");
       queryClient.invalidateQueries({ queryKey: karaokeKeys.myRecordings({ page, limit: 10, sort: "newest" }) });
       queryClient.invalidateQueries({ queryKey: karaokeKeys.myPermission() }); // Update quota
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Lỗi khi xóa");
+    } catch (err: unknown) {
+      toast.error(readApiError(err, "Lỗi khi xóa"));
     }
   };
 
@@ -110,6 +126,19 @@ export const KaraokeMyRecordings = () => {
                   </div>
 
                   <StatusBadge status={rec.status} />
+                  {rec.status === "uploaded" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 gap-1 px-2 text-xs"
+                      disabled={submittingId === rec._id}
+                      onClick={() => void handleSubmit(rec._id)}
+                    >
+                      {submittingId === rec._id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      Gửi duyệt
+                    </Button>
+                  )}
 
                   {rec.status === 'rejected' && rec.rejectionReason && (
                     <div className="text-xs text-red-500 bg-red-500/10 px-2 py-1 rounded w-full line-clamp-2" title={rec.rejectionReason}>
@@ -148,11 +177,16 @@ export const KaraokeMyRecordings = () => {
 
 const StatusBadge = ({ status }: { status: string }) => {
   switch (status) {
-    case 'uploaded':
-    case 'pending_review':
+    case "uploaded":
       return (
-        <span className="flex items-center gap-1 text-yellow-600 bg-yellow-500/10 px-2 py-1 rounded-full text-xs font-medium">
-          <Clock className="w-3 h-3" /> Chờ duyệt
+        <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+          <Clock className="h-3 w-3" /> Bản nháp
+        </span>
+      );
+    case "pending_review":
+      return (
+        <span className="flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-1 text-xs font-medium text-yellow-600">
+          <Clock className="h-3 w-3" /> Chờ duyệt
         </span>
       );
     case 'approved':

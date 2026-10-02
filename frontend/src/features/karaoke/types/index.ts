@@ -24,6 +24,10 @@ export interface IKaraokeRecording {
   audioUrl: string;
   audioDuration: number;
   audioSize: number;
+  backingVolume?: number;
+  voiceVolume?: number;
+  syncOffsetMs?: number;
+  startAtSec?: number;
 
   // Metadata
   coverImage: string;
@@ -89,12 +93,20 @@ export interface UploadRecordingDto {
   description?: string;
   tags?: string[];
   audioDuration: number;
+  backingVolume: number;
+  voiceVolume: number;
+  syncOffsetMs: number;
+  startAtSec: number;
 }
 
 export interface UpdateRecordingDto {
   title?: string;
   description?: string;
   tags?: string[];
+  backingVolume?: number;
+  voiceVolume?: number;
+  syncOffsetMs?: number;
+  startAtSec?: number;
 }
 
 export interface AdminReviewDto {

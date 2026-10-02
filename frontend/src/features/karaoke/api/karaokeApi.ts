@@ -60,6 +60,10 @@ const karaokeApi = {
     formData.append("youtubeVideoId", payload.youtubeVideoId);
     formData.append("youtubeTitle", payload.youtubeTitle);
     formData.append("audioDuration", String(payload.audioDuration));
+    formData.append("backingVolume", String(payload.backingVolume));
+    formData.append("voiceVolume", String(payload.voiceVolume));
+    formData.append("syncOffsetMs", String(payload.syncOffsetMs));
+    formData.append("startAtSec", String(payload.startAtSec));
 
     if (payload.youtubeThumbnail) {
       formData.append("youtubeThumbnail", payload.youtubeThumbnail);
