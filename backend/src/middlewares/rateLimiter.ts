@@ -13,14 +13,22 @@ function redisStore(prefix: string) {
 
 /**
  * 1. API LIMITER CHUNG
+ * Production shares one counter per IP across Fly machines.
+ * Other environments keep the counter in this process. A shared Upstash key
+ * survives nodemon restarts, and the liveness test fills `rl:api:127.0.0.1`,
+ * so every local API call stays 429 until that 15-minute key expires.
  */
+const apiLimitStore =
+  process.env.NODE_ENV === "production"
+    ? { store: redisStore("rl:api:"), passOnStoreError: true as const }
+    : {};
+
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
-  store: redisStore("rl:api:"),
-  passOnStoreError: true,
+  ...apiLimitStore,
   message: {
     code: 429,
     message: "Quá nhiều request từ IP này, vui lòng thử lại sau 15 phút.",
