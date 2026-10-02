@@ -15,10 +15,8 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import {
-  useRealtimeChart,
-  RankedTrack,
-} from "@/features/track/hooks/useRealtimeChart";
+import type { RankedTrack } from "@/features/track/hooks/useRealtimeChart";
+import { useHomeChart } from "./useHomeChart";
 import { ChartItem } from "@/features/track/components/ChartItem";
 import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
@@ -383,7 +381,7 @@ ChartRow.displayName = "ChartRow";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TopFeaturedTracks = () => {
-  const { tracks, isLoading, isUpdating, error, refetch } = useRealtimeChart();
+  const { tracks, isLoading, isUpdating, error, refetch } = useHomeChart();
   // FIX A: optional chaining — tránh crash khi tracks undefined trong re-sync
   const top10 = useMemo(() => tracks?.slice(0, TOP_N) ?? [], [tracks]);
   useSyncInteractionsPaged(top10, "like", "track", !isLoading);
@@ -404,7 +402,7 @@ export const TopFeaturedTracks = () => {
           aria-busy="true"
         >
           <div className="section-container">
-            <ChartHeader viewAllHref="/charts" />
+            <ChartHeader viewAllHref="/chart-top" />
             <SkeletonGrid count={TOP_N} />
           </div>
         </section>
@@ -426,7 +424,7 @@ export const TopFeaturedTracks = () => {
           aria-labelledby="top-featured-tracks-heading"
         >
           <div className="section-container">
-            <ChartHeader viewAllHref="/charts" />
+            <ChartHeader viewAllHref="/chart-top" />
             <AnimatePresence mode="wait">
               <motion.div key="error" {...slideUpVariants}>
                 <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
@@ -449,7 +447,7 @@ export const TopFeaturedTracks = () => {
           aria-labelledby="top-featured-tracks-heading"
         >
           <div className="section-container">
-            <ChartHeader viewAllHref="/charts" />
+            <ChartHeader viewAllHref="/chart-top" />
             <AnimatePresence mode="wait">
               <motion.div key="error" {...slideUpVariants}>
                 <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">

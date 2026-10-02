@@ -16,6 +16,7 @@ const ContinueShelf = lazy(() =>
   })),
 );
 const TopSevenSection = lazy(() => import("./TopSevenSection"));
+const HomeSignatureStrip = lazy(() => import("./HomeSignatureStrip"));
 const MashupHomeSection = lazy(() =>
   import("@/features/mashup/components/MashupHomeSection").then((mod) => ({
     default: mod.MashupHomeSection,
@@ -36,22 +37,27 @@ function SectionSkeleton({ height = 48 }: { height?: number }) {
 export function HomePage() {
   const { user } = useAppSelector((state) => state.auth); // Ensure we have user data before showing library
 
-  return (
+  const personal = user ? (
     <>
-      <HeroSelector />
-      {user && (
-        <Suspense fallback={<SectionSkeleton height={220} />}>
-          <RecentlyListenedTrack />
-        </Suspense>
-      )}
-      {user && (
-        <Suspense fallback={<SectionSkeleton height={220} />}>
-          <LibrarySection />
-        </Suspense>
-      )}
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <RecentlyListenedTrack />
+      </Suspense>
       <Suspense fallback={<SectionSkeleton height={280} />}>
         <ContinueShelf />
       </Suspense>
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <LibrarySection />
+      </Suspense>
+    </>
+  ) : null;
+
+  return (
+    <>
+      {user ? personal : <HeroSelector />}
+      <Suspense fallback={<SectionSkeleton height={220} />}>
+        <HomeSignatureStrip />
+      </Suspense>
+      {user ? <HeroSelector /> : null}
       <Suspense fallback={<SectionSkeleton height={220} />}>
         <TrackSection />
       </Suspense>

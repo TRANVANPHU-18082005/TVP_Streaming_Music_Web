@@ -34,7 +34,7 @@ const TABS: TabConfig[] = [
     shortLabel: "",
     icon: <Sparkles className="size-3.5" aria-hidden="true" />,
     wave: "--wave-1",
-    viewAllHref: "/discover?tab=recommended",
+    viewAllHref: "/for-me",
     viewAllLabel: "Xem tất cả bài hát gợi ý",
   },
   {
@@ -43,7 +43,7 @@ const TABS: TabConfig[] = [
     shortLabel: "",
     icon: <Flame className="size-3.5" aria-hidden="true" />,
     wave: "--wave-4",
-    viewAllHref: "/charts?tab=hot",
+    viewAllHref: "/chart-top",
     viewAllLabel: "Xem tất cả bài hát thịnh hành",
   },
   {
@@ -52,7 +52,7 @@ const TABS: TabConfig[] = [
     shortLabel: "",
     icon: <Heart className="size-3.5" aria-hidden="true" />,
     wave: "--wave-3",
-    viewAllHref: "/charts?tab=favourite",
+    viewAllHref: "/chart-top",
     viewAllLabel: "Xem tất cả bài hát yêu thích nhất",
   },
 ];

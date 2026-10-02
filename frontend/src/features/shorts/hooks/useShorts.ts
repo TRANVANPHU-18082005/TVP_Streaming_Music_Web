@@ -44,10 +44,10 @@ export const useDeleteShort = () => {
   });
 };
 
-export const usePublishedShorts = (search: string) => {
+export const usePublishedShorts = (search: string, limit = 30) => {
   return useQuery({
-    queryKey: ["published-shorts", search],
-    queryFn: () => shortsApi.getPublished({ search, limit: 30 }),
+    queryKey: ["published-shorts", search, limit],
+    queryFn: () => shortsApi.getPublished({ search, limit }),
   });
 };
 
