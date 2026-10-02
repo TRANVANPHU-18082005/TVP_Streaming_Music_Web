@@ -4,8 +4,10 @@
  * Thiết kế tinh tế, sử dụng primary color, tương thích design system.
  */
 
-import React, { useState, memo } from "react";
+import React, { useEffect, useState, memo } from "react";
 import { X, Lock, Globe, Check } from "lucide-react";
+import { searchApi } from "@/features/search";
+import { useDebounce } from "@/hooks/useDebounce";
 import { motion } from "framer-motion";
 import type { RoomTheme } from "../types/room.types";
 import { ROOM_THEMES } from "../types/room.types";
@@ -24,6 +26,31 @@ const CreateRoomModal = memo(({ onClose, onSubmit, isLoading }: Props) => {
   const [theme, setTheme] = useState<RoomTheme>("bar");
   const [isPublic, setIsPublic] = useState(true);
   const [password, setPassword] = useState("");
+  const [queueMode, setQueueMode] = useState<"open" | "approval">("open");
+  const [starterQuery, setStarterQuery] = useState("");
+  const debouncedStarter = useDebounce(starterQuery, 400);
+  const [starterHits, setStarterHits] = useState<{ id: string; title: string; kind: "track" | "playlist" }[]>([]);
+  const [starter, setStarter] = useState<{ id: string; title: string; kind: "track" | "playlist" } | null>(null);
+
+  useEffect(() => {
+    if (!debouncedStarter.trim()) {
+      setStarterHits([]);
+      return;
+    }
+    searchApi.search({ q: debouncedStarter, limit: 5 }).then((data) => {
+      const tracks = (data.tracks ?? []).slice(0, 4).map((item) => ({
+        id: item._id,
+        title: item.title,
+        kind: "track" as const,
+      }));
+      const playlists = (data.playlists ?? []).slice(0, 3).map((item) => ({
+        id: item._id,
+        title: item.title,
+        kind: "playlist" as const,
+      }));
+      setStarterHits([...tracks, ...playlists]);
+    }).catch(() => setStarterHits([]));
+  }, [debouncedStarter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +60,10 @@ const CreateRoomModal = memo(({ onClose, onSubmit, isLoading }: Props) => {
       description: description.trim() || undefined,
       theme,
       isPublic,
+      queueMode,
       password: !isPublic && password ? password : undefined,
+      trackId: starter?.kind === "track" ? starter.id : undefined,
+      playlistId: starter?.kind === "playlist" ? starter.id : undefined,
     });
   };
 
@@ -106,7 +136,7 @@ const CreateRoomModal = memo(({ onClose, onSubmit, isLoading }: Props) => {
                   >
                     <div className={`h-6 rounded-lg bg-gradient-to-br ${config.gradient}`} />
                     <p className="mt-1 truncate text-[9px] font-medium leading-tight text-muted-foreground">
-                      {config.label.split(" ").slice(1).join(" ")}
+                      {config.label}
                     </p>
                     {theme === key && (
                       <div
@@ -128,7 +158,7 @@ const CreateRoomModal = memo(({ onClose, onSubmit, isLoading }: Props) => {
               <button
                 type="button"
                 id="room-public-btn"
-                onClick={() => setIsPublic(true)}
+                onClick={() => { setIsPublic(true); setQueueMode("open"); }}
                 className={cn(
                   "flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium transition-all",
                   isPublic
@@ -142,7 +172,7 @@ const CreateRoomModal = memo(({ onClose, onSubmit, isLoading }: Props) => {
               <button
                 type="button"
                 id="room-private-btn"
-                onClick={() => setIsPublic(false)}
+                onClick={() => { setIsPublic(false); setQueueMode("approval"); }}
                 className={cn(
                   "flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium transition-all",
                   !isPublic
@@ -176,6 +206,48 @@ const CreateRoomModal = memo(({ onClose, onSubmit, isLoading }: Props) => {
               />
             </motion.div>
           )}
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Hàng chờ</label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setQueueMode("open")} className={cn("flex-1 rounded-xl border py-2 text-sm", queueMode === "open" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}>
+                Mở
+              </button>
+              <button type="button" onClick={() => setQueueMode("approval")} className={cn("flex-1 rounded-xl border py-2 text-sm", queueMode === "approval" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}>
+                Cần duyệt
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-muted-foreground">Bài hoặc playlist mở đầu</label>
+            <input
+              value={starter ? starter.title : starterQuery}
+              onChange={(event) => {
+                setStarter(null);
+                setStarterQuery(event.target.value);
+              }}
+              placeholder="Tìm bài hát hoặc playlist..."
+              className="w-full rounded-xl border border-border bg-input px-4 py-2.5 text-sm outline-none"
+            />
+            {!starter && starterHits.length > 0 && (
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-border">
+                {starterHits.map((hit) => (
+                  <button
+                    key={`${hit.kind}-${hit.id}`}
+                    type="button"
+                    className="block w-full truncate px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => {
+                      setStarter(hit);
+                      setStarterHits([]);
+                    }}
+                  >
+                    {hit.kind === "playlist" ? "Playlist" : "Bài"} · {hit.title}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Submit */}
           <button

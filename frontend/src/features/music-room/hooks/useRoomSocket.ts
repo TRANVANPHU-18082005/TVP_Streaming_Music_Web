@@ -4,7 +4,7 @@
  * Tự động đăng ký/huỷ listeners khi mount/unmount.
  */
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -22,6 +22,8 @@ import {
   setNewHost,
   setTrackRequests,
   setRoomTheme,
+  setCoHosts,
+  setQueueMode,
   moodVideoUpdated,
   setKaraokeMode,
   appendKaraokeQueue,
@@ -29,7 +31,9 @@ import {
   setKaraokeEnded,
   selectCurrentRoom,
   selectIsHost,
+  selectIsCoHost,
 } from "../store/roomSlice";
+import { setIsPlaying } from "@/features/player/slice/playerSlice";
 import type { PlaybackState, FloatingReaction } from "../types/room.types";
 import { useAppSelector } from "@/store/hooks";
 import { RoomErrorCode } from "@/config/constants";
@@ -42,8 +46,11 @@ export const useRoomSocket = (roomCode: string | undefined) => {
   const navigate = useNavigate();
   const currentRoom = useSelector(selectCurrentRoom);
   const isHost = useSelector(selectIsHost);
+  const isCoHost = useSelector(selectIsCoHost);
+  const canControl = isHost || isCoHost;
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = currentUser?._id;
+  const sessionEnded = useRef(false);
   // ── JOIN ──────────────────────────────────────────────────────────────────
 
   const joinRoom = useCallback(
@@ -57,6 +64,7 @@ export const useRoomSocket = (roomCode: string | undefined) => {
   // ── LEAVE ─────────────────────────────────────────────────────────────────
 
   const leaveRoomSocket = useCallback(() => {
+    if (sessionEnded.current) return;
     if (!socket || !roomCode) return;
     socket.emit("room:leave", { roomCode });
     dispatch(leaveRoom());
@@ -85,16 +93,16 @@ export const useRoomSocket = (roomCode: string | undefined) => {
   // ── PLAYBACK (Host only) ──────────────────────────────────────────────────
 
   const playNext = useCallback(() => {
-    if (!socket || !roomCode || !isHost) return;
+    if (!socket || !roomCode || !canControl) return;
     socket.emit("room:play_next", { roomCode });
-  }, [socket, roomCode, isHost]);
+  }, [socket, roomCode, canControl]);
 
   const togglePause = useCallback(
-    (currentPosition: number) => {
-      if (!socket || !roomCode || !isHost) return;
-      socket.emit("room:toggle_pause", { roomCode, currentPosition });
+    (_currentPosition?: number) => {
+      if (!socket || !roomCode || !canControl) return;
+      socket.emit("room:toggle_pause", { roomCode });
     },
-    [socket, roomCode, isHost],
+    [socket, roomCode, canControl],
   );
 
   // ── VOTE ──────────────────────────────────────────────────────────────────
@@ -113,6 +121,8 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     if (!socket) return;
 
     const onRoomState = (data: any) => {
+      if (sessionEnded.current) return;
+      dispatch(setIsPlaying(false));
       dispatch(setRoomState(data));
     };
 
@@ -157,16 +167,18 @@ export const useRoomSocket = (roomCode: string | undefined) => {
       dispatch(setTrackRequests(requests));
     };
 
-    const onRoomClosed = ({ reason }: { roomCode: string; reason?: string }) => {
+    const endSession = (message: string, errorCode: RoomErrorCode) => {
+      sessionEnded.current = true;
       dispatch(leaveRoom());
-      toast.error(reason ?? "Phòng đã bị đóng");
-      navigate("/rooms");
+      dispatch(setRoomError({ message, errorCode }));
+    };
+
+    const onRoomClosed = ({ reason }: { roomCode: string; reason?: string }) => {
+      endSession(reason ?? "Phòng đã đóng", RoomErrorCode.ROOM_CLOSED);
     };
 
     const onKicked = ({ reason }: { roomCode: string; reason?: string }) => {
-      dispatch(leaveRoom());
-      toast.error(reason ?? "Bạn đã bị kick khỏi phòng");
-      navigate("/rooms");
+      endSession(reason ?? "Bạn đã bị đưa khỏi phòng", RoomErrorCode.KICKED);
     };
 
     const onError = ({ message, errorCode }: { message: string, errorCode: string }) => {
@@ -176,8 +188,20 @@ export const useRoomSocket = (roomCode: string | undefined) => {
         navigate(`/login?next=/rooms/${roomCode ?? ""}`);
         return;
       }
-      dispatch(setRoomError(message));
+      if (errorCode === RoomErrorCode.WRONG_PASSWORD || errorCode === RoomErrorCode.ROOM_FULL) {
+        dispatch(setRoomError({ message, errorCode }));
+        return;
+      }
+      dispatch(setRoomError({ message, errorCode }));
       toast.error(message);
+    };
+
+    const onCoHosts = ({ coHosts }: { coHosts: string[] }) => {
+      dispatch(setCoHosts({ coHosts, currentUserId }));
+    };
+
+    const onSettings = ({ queueMode }: { queueMode: "open" | "approval" }) => {
+      dispatch(setQueueMode(queueMode));
     };
 
     const onThemeChanged = ({ theme }: { theme: string }) => {
@@ -225,6 +249,8 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     socket.on("room:closed", onRoomClosed);
     socket.on("room:kicked", onKicked);
     socket.on("room:error", onError);
+    socket.on("room:cohosts_updated", onCoHosts);
+    socket.on("room:settings_updated", onSettings);
     
     socket.on("room:karaoke_mode_toggled", ({ karaokeMode }) => dispatch(setKaraokeMode(karaokeMode)));
     socket.on("room:karaoke_add_queue", (queueItem) => dispatch(appendKaraokeQueue(queueItem)));
@@ -253,6 +279,8 @@ export const useRoomSocket = (roomCode: string | undefined) => {
       socket.off("room:closed", onRoomClosed);
       socket.off("room:kicked", onKicked);
       socket.off("room:error", onError);
+      socket.off("room:cohosts_updated", onCoHosts);
+      socket.off("room:settings_updated", onSettings);
       
       socket.off("room:karaoke_mode_toggled");
       socket.off("room:karaoke_add_queue");
@@ -337,5 +365,7 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     shareKaraokeRecording,
     currentRoom,
     isHost,
+    isCoHost,
+    canControl,
   };
 };

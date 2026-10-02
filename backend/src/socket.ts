@@ -348,9 +348,10 @@ export const initSocket = (httpServer: HttpServer): Server => {
           return;
         }
 
-        // Giới hạn số người
-        const currentCount = io.sockets.adapter.rooms.get(roomSocketKey)?.size ?? 0;
-        if (currentCount >= room.maxMembers) {
+        // Một user nhiều tab vẫn là một chỗ. Đếm theo Redis, không theo số socket của máy này.
+        const alreadyJoined = await cacheRedis.hexists(`room:sessions:${roomCode}`, connectionUserId());
+        const uniqueMembers = await cacheRedis.hlen(`room:sessions:${roomCode}`);
+        if (!alreadyJoined && uniqueMembers >= room.maxMembers) {
           socket.emit("room:error", { message: "Phòng đã đầy", errorCode: RoomErrorCode.ROOM_FULL });
           return;
         }
@@ -368,7 +369,12 @@ export const initSocket = (httpServer: HttpServer): Server => {
           startedAt: room.startedAt?.getTime() ?? null,
           isPaused: room.isPaused,
           pausedAt: room.pausedAt ?? 0,
+          endsAt: room.endsAt?.getTime() ?? null,
+          serverNow: Date.now(),
         };
+
+        const coHostIds = (room.coHosts ?? []).map((id) => id.toString());
+        const isHost = callerIsHost(room.host.toString());
 
         // Gửi full state cho user vừa join để sync
         socket.emit("room:state", {
@@ -380,11 +386,18 @@ export const initSocket = (httpServer: HttpServer): Server => {
             isPublic: room.isPublic,
             memberCount: newCount,
             queue: room.queue,
+            queueMode: room.queueMode ?? "open",
+            coHosts: coHostIds,
             currentTrack: room.currentTrack ?? null,
             currentMoodVideo: room.currentMoodVideo ?? null,
+            karaokeMode: room.karaokeMode,
+            karaokeQueue: room.karaokeQueue,
+            currentKaraokeVideoId: room.currentKaraokeVideoId,
+            currentSinger: room.currentSinger,
           },
           playbackState,
-          isHost: callerIsHost(room.host.toString()),
+          isHost,
+          isCoHost: !isHost && coHostIds.includes(connectionUserId()),
         });
 
         if (callerIsHost(room.host.toString())) {
@@ -400,10 +413,11 @@ export const initSocket = (httpServer: HttpServer): Server => {
           });
 
           // System message
+          const displayName = socket.data.fullName || "Một thành viên";
           const sysMsg = await RoomMessage.create({
             room: room._id,
             senderName: "System",
-            content: `Một thành viên mới đã vào phòng`,
+            content: `${displayName} đã vào phòng`,
             type: "system",
           });
           io.to(roomSocketKey).emit("room:new_message", sysMsg);
@@ -564,24 +578,23 @@ export const initSocket = (httpServer: HttpServer): Server => {
       if (!joinedMusicRoom(roomCode)) return;
 
       try {
-        const room = await MusicRoom.findOne({ roomCode, isActive: true }).lean();
-        if (!room || !callerIsHost(room.host.toString())) {
+        const room = await MusicRoom.findOne({ roomCode, isActive: true }).select("host coHosts queue").lean();
+        const coHostIds = (room?.coHosts ?? []).map((id) => id.toString());
+        const allowed = !!room && (callerIsHost(room.host.toString()) || coHostIds.includes(connectionUserId()));
+        if (!room || !allowed) {
           socket.emit("room:error", { message: "Chỉ Host mới có thể điều khiển phát nhạc" });
           return;
         }
 
         if (room.queue.length === 0) {
           io.to(`music_room:${roomCode}`).emit("room:queue_empty", {
-            message: "Hết nhạc rồi! Host hãy thêm bài mới hoặc Listener có thể yêu cầu bài nhé.",
+            message: "Hết nhạc rồi. Hãy thêm bài mới để nghe tiếp.",
           });
           return;
         }
 
-        // Lấy user object tối giản
         const fakeUser = { _id: connectionUserId(), role: "user" } as any;
-        const playbackState = await musicRoomService.playNext(roomCode, fakeUser);
-
-        io.to(`music_room:${roomCode}`).emit("room:playback_update", playbackState);
+        await musicRoomService.playNext(roomCode, fakeUser);
       } catch (err: any) {
         socket.emit("room:error", { message: err.message ?? "Lỗi khi chuyển bài" });
       }
@@ -590,21 +603,21 @@ export const initSocket = (httpServer: HttpServer): Server => {
     /**
      * Host: Pause/Resume phát nhạc.
      */
-    socket.on("room:toggle_pause", async ({ roomCode, currentPosition }: { roomCode: string; currentPosition: number }) => {
+    socket.on("room:toggle_pause", async ({ roomCode }: { roomCode: string }) => {
       if (!roomCode || isGuest) return;
       if (!joinedMusicRoom(roomCode)) return;
 
       try {
-        const room = await MusicRoom.findOne({ roomCode, isActive: true }).lean();
-        if (!room || !callerIsHost(room.host.toString())) {
+        const room = await MusicRoom.findOne({ roomCode, isActive: true }).select("host coHosts").lean();
+        const coHostIds = (room?.coHosts ?? []).map((id) => id.toString());
+        const allowed = !!room && (callerIsHost(room.host.toString()) || coHostIds.includes(connectionUserId()));
+        if (!allowed) {
           socket.emit("room:error", { message: "Chỉ Host mới có thể điều khiển phát nhạc" });
           return;
         }
 
         const fakeUser = { _id: connectionUserId(), role: "user" } as any;
-        const playbackState = await musicRoomService.togglePause(roomCode, fakeUser, currentPosition ?? 0);
-
-        io.to(`music_room:${roomCode}`).emit("room:playback_update", playbackState);
+        await musicRoomService.togglePause(roomCode, fakeUser);
       } catch (err: any) {
         socket.emit("room:error", { message: err.message ?? "Lỗi khi pause/resume" });
       }

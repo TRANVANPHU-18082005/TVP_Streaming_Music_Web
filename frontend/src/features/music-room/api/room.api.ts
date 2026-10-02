@@ -16,6 +16,9 @@ export interface CreateRoomPayload {
   isPublic?: boolean;
   maxMembers?: number;
   password?: string;
+  queueMode?: "open" | "approval";
+  trackId?: string;
+  playlistId?: string;
 }
 
 export interface RoomMember {
@@ -24,6 +27,8 @@ export interface RoomMember {
   username: string;
   avatar?: string;
   isMuted?: boolean;
+  isCoHost?: boolean;
+  isHost?: boolean;
 }
 
 export interface PublicRoomsResponse {
@@ -36,6 +41,11 @@ export interface PublicRoomsResponse {
 /** Tạo phòng mới */
 export const createRoom = async (payload: CreateRoomPayload): Promise<MusicRoom> => {
   const { data } = await api.post<{ success: boolean; data: MusicRoom }>(BASE, payload);
+  return data.data;
+};
+
+export const getMyRoom = async (): Promise<MusicRoom | null> => {
+  const { data } = await api.get<{ success: boolean; data: MusicRoom | null }>(`${BASE}/mine`);
   return data.data;
 };
 
@@ -75,6 +85,44 @@ export const addToQueue = async (
   const { data } = await api.post<{ success: boolean; data: { queue: QueueItem[] } }>(
     `${BASE}/${roomCode}/queue`,
     { trackId },
+  );
+  return data.data;
+};
+
+export const addCollectionToQueue = async (
+  roomCode: string,
+  payload: { playlistId?: string; albumId?: string; trackIds?: string[] },
+): Promise<{ queue: QueueItem[]; added: number }> => {
+  const { data } = await api.post<{ success: boolean; data: { queue: QueueItem[]; added: number } }>(
+    `${BASE}/${roomCode}/queue/collection`,
+    payload,
+  );
+  return data.data;
+};
+
+export const updateRoomSettings = async (
+  roomCode: string,
+  queueMode: "open" | "approval",
+): Promise<{ queueMode: "open" | "approval" }> => {
+  const { data } = await api.patch<{ success: boolean; data: { queueMode: "open" | "approval" } }>(
+    `${BASE}/${roomCode}/settings`,
+    { queueMode },
+  );
+  return data.data;
+};
+
+export const assignHost = async (roomCode: string, userId: string): Promise<void> => {
+  await api.post(`${BASE}/${roomCode}/host`, { userId });
+};
+
+export const setCoHost = async (
+  roomCode: string,
+  userId: string,
+  enabled: boolean,
+): Promise<{ coHosts: string[] }> => {
+  const { data } = await api.post<{ success: boolean; data: { coHosts: string[] } }>(
+    `${BASE}/${roomCode}/cohosts`,
+    { userId, enabled },
   );
   return data.data;
 };

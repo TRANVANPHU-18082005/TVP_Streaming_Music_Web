@@ -158,8 +158,8 @@ const RoomQueue = memo(({ onVote, onRemove, votedTracks = new Set(), isListener 
               <ListMusic className="size-8 text-muted-foreground/40" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground">Queue trống</p>
-              <p className="text-sm font-medium text-muted-foreground mt-1">Thêm bài để cùng nghe</p>
+              <p className="text-base font-bold text-foreground">Hàng chờ đang trống</p>
+              <p className="text-sm font-medium text-muted-foreground mt-1">Thêm một bài, playlist hoặc album để mọi người nghe tiếp.</p>
             </div>
           </div>
         ) : (

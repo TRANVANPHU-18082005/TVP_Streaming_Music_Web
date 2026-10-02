@@ -27,6 +27,14 @@ export const createRoom = catchAsync(async (req: Request, res: Response) => {
  * GET /api/rooms
  * Danh sách phòng public đang hoạt động.
  */
+export const getMyRoom = catchAsync(async (req: Request, res: Response) => {
+  const room = await musicRoomService.getMyActiveRoom(req.user as IUser);
+  res.status(httpStatus.OK).json({
+    success: true,
+    data: room,
+  });
+});
+
 export const getPublicRooms = catchAsync(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
@@ -102,6 +110,63 @@ export const addToQueue = catchAsync(async (req: Request, res: Response) => {
  * DELETE /api/rooms/:roomCode/queue/:trackId
  * Xóa bài khỏi queue — Host only.
  */
+export const addCollection = catchAsync(async (req: Request, res: Response) => {
+  const roomCode = req.params.roomCode as string;
+  const result = await musicRoomService.addCollectionToQueue(
+    roomCode,
+    req.user as IUser,
+    req.body,
+  );
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: `Đã thêm ${result.added} bài vào hàng chờ`,
+    data: result,
+  });
+});
+
+export const updateSettings = catchAsync(async (req: Request, res: Response) => {
+  const roomCode = req.params.roomCode as string;
+  const result = await musicRoomService.updateRoomSettings(
+    roomCode,
+    req.user as IUser,
+    req.body,
+  );
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: "Đã cập nhật phòng",
+    data: result,
+  });
+});
+
+export const assignHost = catchAsync(async (req: Request, res: Response) => {
+  const roomCode = req.params.roomCode as string;
+  const result = await musicRoomService.assignHost(
+    roomCode,
+    req.user as IUser,
+    req.body.userId,
+  );
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: "Đã chuyển quyền host",
+    data: result,
+  });
+});
+
+export const setCoHost = catchAsync(async (req: Request, res: Response) => {
+  const roomCode = req.params.roomCode as string;
+  const result = await musicRoomService.setCoHost(
+    roomCode,
+    req.user as IUser,
+    req.body.userId,
+    req.body.enabled,
+  );
+  res.status(httpStatus.OK).json({
+    success: true,
+    message: req.body.enabled ? "Đã thêm co-host" : "Đã gỡ co-host",
+    data: result,
+  });
+});
+
 export const removeFromQueue = catchAsync(async (req: Request, res: Response) => {
   const roomCode = req.params.roomCode as string;
   const trackId = req.params.trackId as string;

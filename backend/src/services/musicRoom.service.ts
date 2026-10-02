@@ -2,10 +2,20 @@
 
 import mongoose from "mongoose";
 import httpStatus from "http-status";
-import MusicRoom, { IMusicRoom, IQueueItem } from "../models/MusicRoom";
+import MusicRoom, { IMusicRoom, IQueueItem, QueueMode } from "../models/MusicRoom";
 import RoomMessage from "../models/RoomMessage";
 import Track from "../models/Track";
+import Playlist from "../models/Playlist";
 import User, { IUser } from "../models/User";
+import {
+  acquireRoomPlayLock,
+  endsAtFrom,
+  pausePosition,
+  pickNextQueueItem,
+  releaseRoomPlayLock,
+  resumeStartedAt,
+  stampServerNow,
+} from "./musicRoom.playback";
 import { RoomErrorCode } from "../config/constants";
 import ApiError from "../utils/ApiError";
 import { cacheRedis } from "../config/redis";
@@ -44,6 +54,7 @@ export const savePlaybackStateToRedis = async (
     startedAt: number | null;
     isPaused: boolean;
     pausedAt: number;
+    endsAt?: number | null;
   },
 ) => {
   const key = redisKeys.state(roomCode);
@@ -52,6 +63,7 @@ export const savePlaybackStateToRedis = async (
     startedAt: String(state.startedAt ?? 0),
     isPaused: state.isPaused ? "1" : "0",
     pausedAt: String(state.pausedAt),
+    endsAt: String(state.endsAt ?? 0),
   });
   await cacheRedis.expire(key, 86400); // 24h
 };
@@ -63,12 +75,13 @@ export const getPlaybackStateFromRedis = async (roomCode: string) => {
   const key = redisKeys.state(roomCode);
   const raw = await cacheRedis.hgetall(key);
   if (!raw || !raw.startedAt) return null;
-  return {
+  return stampServerNow({
     currentTrackId: raw.currentTrackId || null,
     startedAt: parseInt(raw.startedAt, 10) || null,
     isPaused: raw.isPaused === "1",
     pausedAt: parseFloat(raw.pausedAt) || 0,
-  };
+    endsAt: parseInt(raw.endsAt, 10) || null,
+  });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,7 +95,23 @@ interface CreateRoomDto {
   isPublic?: boolean;
   maxMembers?: number;
   password?: string;
+  queueMode?: QueueMode;
+  trackId?: string;
+  playlistId?: string;
 }
+
+const userIdOf = (user: { _id?: unknown }) => String(user._id ?? "");
+
+const isRoomHostUser = (room: { host: { toString(): string } }, userId: string) =>
+  room.host.toString() === userId;
+
+const isRoomCoHost = (room: { coHosts?: { toString(): string }[] }, userId: string) =>
+  (room.coHosts ?? []).some((id) => id.toString() === userId);
+
+export const canControlPlayback = (
+  room: { host: { toString(): string }; coHosts?: { toString(): string }[] },
+  userId: string,
+) => isRoomHostUser(room, userId) || isRoomCoHost(room, userId);
 
 /**
  * Tạo phòng mới.
@@ -104,6 +133,7 @@ export const createRoom = async (user: IUser, dto: CreateRoomDto) => {
 
   const isPublic = dto.isPublic !== false;
   const maxMembers = isPublic ? 50 : Math.min(dto.maxMembers ?? 20, 50);
+  const queueMode: QueueMode = dto.queueMode ?? (isPublic ? "open" : "approval");
 
   const roomData: Partial<IMusicRoom> = {
     name: dto.name.trim(),
@@ -112,6 +142,7 @@ export const createRoom = async (user: IUser, dto: CreateRoomDto) => {
     host: user._id as mongoose.Types.ObjectId,
     isPublic,
     maxMembers,
+    queueMode,
     isActive: true,
     memberCount: 0,
     queue: [],
@@ -124,10 +155,29 @@ export const createRoom = async (user: IUser, dto: CreateRoomDto) => {
   }
 
   const room = await MusicRoom.create(roomData);
+  if (dto.playlistId) {
+    await addCollectionToQueue(room.roomCode, user, { playlistId: dto.playlistId });
+  } else if (dto.trackId) {
+    await addToQueue(room.roomCode, dto.trackId, user);
+  }
+  if (dto.playlistId || dto.trackId) {
+    const queued = await MusicRoom.findOne({ roomCode: room.roomCode, isActive: true }).select("queue");
+    if (queued && queued.queue.length > 0) {
+      await playNext(room.roomCode, user);
+    }
+  }
   const safeRoom = room.toObject();
   delete safeRoom.password;
   if (isPublic) invalidateCachePrefixes(["room:public:*"]);
   return safeRoom;
+};
+
+export const getMyActiveRoom = async (user: IUser) => {
+  return MusicRoom.findOne({ host: user._id, isActive: true })
+    .populate("host", "fullName username avatar")
+    .populate("currentTrack", "title coverImage duration artist")
+    .select("-password")
+    .lean();
 };
 
 /**
@@ -381,6 +431,7 @@ export const addToQueue = async (
 
   if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
   if (!track) throw new ApiError(httpStatus.NOT_FOUND, "Bài hát không tồn tại hoặc chưa sẵn sàng");
+  assertCanAddToQueue(room, user);
   if (room.queue.length >= 30) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Queue đã đầy (tối đa 30 bài)");
   }
@@ -516,113 +567,210 @@ export const voteTrack = async (
 // PLAYBACK CONTROL (Host only)
 // ─────────────────────────────────────────────────────────────────────────────
 
+const assertCanAddToQueue = (
+  room: { host: { toString(): string }; coHosts?: { toString(): string }[]; queueMode?: string },
+  user: IUser,
+) => {
+  if (room.queueMode !== "approval") return;
+  const userId = userIdOf(user);
+  if (canControlPlayback(room, userId)) return;
+  throw new ApiError(
+    httpStatus.BAD_REQUEST,
+    "Phòng này cần host duyệt bài. Hãy gửi yêu cầu.",
+    "QUEUE_APPROVAL",
+  );
+};
+
+const emitRoom = (roomCode: string, event: string, payload: unknown) => {
+  try {
+    getIO().to(`music_room:${roomCode}`).emit(event, payload);
+  } catch (err) {
+    console.error(`[Socket] ${event} error:`, err);
+  }
+};
+
 /**
  * Chuyển sang bài tiếp theo trong queue.
+ * user = null khi cron gọi (server quyết định hết bài).
  */
-export const playNext = async (roomCode: string, user: IUser) => {
-  const room = await MusicRoom.findOne({ roomCode, isActive: true });
-  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
-  if (room.host.toString() !== user._id?.toString()) {
-    throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Host mới có thể điều khiển phát nhạc");
+export const playNext = async (roomCode: string, user: IUser | null) => {
+  const locked = await acquireRoomPlayLock(cacheRedis, roomCode);
+  if (!locked) {
+    throw new ApiError(httpStatus.CONFLICT, "Đang chuyển bài", "PLAY_LOCK");
   }
-  if (room.queue.length === 0) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "Queue trống, không có bài để phát");
-  }
-
-  // Lấy bài có vote cao nhất (đã sort)
-  const sorted = [...room.queue].sort((a, b) => b.votes - a.votes);
-  const nextTrack = sorted[0];
-
-  // Cập nhật state
-  const now = new Date();
-  room.currentTrack = nextTrack.track;
-  room.startedAt = now;
-  room.isPaused = false;
-  room.pausedAt = 0;
-  // Xóa bài đang phát khỏi queue
-  room.queue = room.queue.filter(
-    (item) => item.track.toString() !== nextTrack.track.toString(),
-  ) as mongoose.Types.DocumentArray<IQueueItem>;
-  room.lastActivityAt = now;
-  await room.save();
-
-  await room.populate([
-    {
-      path: "queue.track",
-      select: "title coverImage duration artist",
-      populate: { path: "artist", select: "name" },
-    },
-    {
-      path: "currentTrack",
-      select: "title coverImage duration artist hlsUrl trackUrl moodVideo",
-      populate: [
-        { path: "artist", select: "name" },
-        { path: "moodVideo" }
-      ],
-    }
-  ]);
 
   try {
-    getIO().to(`music_room:${roomCode}`).emit("room:queue_update", { 
+    const room = await MusicRoom.findOne({ roomCode, isActive: true });
+    if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+    if (user && !canControlPlayback(room, userIdOf(user))) {
+      throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Host mới có thể điều khiển phát nhạc");
+    }
+    if (room.queue.length === 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Queue trống, không có bài để phát", "QUEUE_EMPTY");
+    }
+
+    const picked = pickNextQueueItem(
+      room.queue.map((item) => ({
+        trackId: item.track.toString(),
+        addedBy: item.addedBy.toString(),
+        votes: item.votes ?? 0,
+      })),
+      room.lastPlayedBy ? room.lastPlayedBy.toString() : null,
+    );
+    if (!picked) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Queue trống, không có bài để phát", "QUEUE_EMPTY");
+    }
+
+    const now = new Date();
+    room.currentTrack = new mongoose.Types.ObjectId(picked.trackId);
+    room.lastPlayedBy = new mongoose.Types.ObjectId(picked.addedBy);
+    room.startedAt = now;
+    room.isPaused = false;
+    room.pausedAt = 0;
+    room.queue = room.queue.filter(
+      (item) => item.track.toString() !== picked.trackId,
+    ) as mongoose.Types.DocumentArray<IQueueItem>;
+    room.lastActivityAt = now;
+    await room.save();
+
+    await room.populate([
+      {
+        path: "queue.track",
+        select: "title coverImage duration artist",
+        populate: { path: "artist", select: "name" },
+      },
+      {
+        path: "currentTrack",
+        select: "title coverImage duration artist hlsUrl trackUrl moodVideo",
+        populate: [
+          { path: "artist", select: "name" },
+          { path: "moodVideo" },
+        ],
+      },
+    ]);
+
+    const duration = Number((room.currentTrack as { duration?: number } | null)?.duration ?? 0);
+    const endsAt = endsAtFrom(now.getTime(), duration);
+    room.endsAt = endsAt ? new Date(endsAt) : null;
+    await room.save();
+
+    emitRoom(roomCode, "room:queue_update", {
       queue: room.queue,
       currentTrack: room.currentTrack,
     });
-  } catch (err) {
-    console.error("[Socket] room:queue_update error:", err);
+
+    const playbackState = stampServerNow({
+      currentTrackId: room.currentTrack?._id?.toString() ?? picked.trackId,
+      startedAt: now.getTime(),
+      isPaused: false,
+      pausedAt: 0,
+      endsAt,
+      track: room.currentTrack,
+    });
+
+    await savePlaybackStateToRedis(roomCode, playbackState);
+    emitRoom(roomCode, "room:playback_update", playbackState);
+    return playbackState;
+  } finally {
+    await releaseRoomPlayLock(cacheRedis, roomCode);
   }
-
-  const playbackState = {
-    currentTrackId: room.currentTrack?._id?.toString() ?? nextTrack.track.toString(),
-    startedAt: now.getTime(),
-    isPaused: false,
-    pausedAt: 0,
-    track: room.currentTrack,
-  };
-
-  // Cache vào Redis
-  await savePlaybackStateToRedis(roomCode, playbackState);
-
-  return playbackState;
 };
 
 /**
  * Pause/Resume phát nhạc.
  */
-export const togglePause = async (
-  roomCode: string,
-  user: IUser,
-  currentPosition: number,
-) => {
-  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+export const togglePause = async (roomCode: string, user: IUser) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true }).populate(
+    "currentTrack",
+    "duration",
+  );
   if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
-  if (room.host.toString() !== user._id?.toString()) {
+  if (!canControlPlayback(room, userIdOf(user))) {
     throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Host mới có thể điều khiển phát nhạc");
   }
+  if (!room.currentTrack) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Phòng chưa có bài để phát");
+  }
 
-  const now = new Date();
+  const nowMs = Date.now();
   if (room.isPaused) {
-    // Resume: tính startedAt mới dựa trên pausedAt
-    room.startedAt = new Date(now.getTime() - room.pausedAt! * 1000);
+    const startedAt = resumeStartedAt(nowMs, room.pausedAt ?? 0);
+    room.startedAt = new Date(startedAt);
     room.isPaused = false;
     room.pausedAt = 0;
+    const duration = Number((room.currentTrack as { duration?: number }).duration ?? 0);
+    const endsAt = endsAtFrom(startedAt, duration);
+    room.endsAt = endsAt ? new Date(endsAt) : null;
   } else {
-    // Pause
     room.isPaused = true;
-    room.pausedAt = currentPosition;
+    room.pausedAt = pausePosition(nowMs, room.startedAt?.getTime() ?? null);
+    room.endsAt = null;
   }
-  room.lastActivityAt = now;
+  room.lastActivityAt = new Date(nowMs);
   await room.save();
 
-  const playbackState = {
+  const playbackState = stampServerNow({
     currentTrackId: room.currentTrack?._id?.toString() ?? room.currentTrack?.toString() ?? null,
     startedAt: room.startedAt?.getTime() ?? null,
     isPaused: room.isPaused,
     pausedAt: room.pausedAt ?? 0,
-  };
+    endsAt: room.endsAt?.getTime() ?? null,
+  });
 
   await savePlaybackStateToRedis(roomCode, playbackState);
-
+  emitRoom(roomCode, "room:playback_update", playbackState);
   return playbackState;
+};
+
+const settleEndedRoom = async (roomCode: string) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room || room.isPaused || !room.endsAt || room.endsAt.getTime() > Date.now()) return;
+  if (room.queue.length > 0) return;
+
+  const nowMs = Date.now();
+  room.isPaused = true;
+  room.pausedAt = pausePosition(nowMs, room.startedAt?.getTime() ?? null);
+  room.endsAt = null;
+  room.lastActivityAt = new Date(nowMs);
+  await room.save();
+
+  const playbackState = stampServerNow({
+    currentTrackId: room.currentTrack?.toString() ?? null,
+    startedAt: room.startedAt?.getTime() ?? null,
+    isPaused: true,
+    pausedAt: room.pausedAt ?? 0,
+    endsAt: null,
+  });
+  await savePlaybackStateToRedis(roomCode, playbackState);
+  emitRoom(roomCode, "room:playback_update", playbackState);
+  emitRoom(roomCode, "room:queue_empty", {
+    message: "Hết nhạc rồi. Hãy thêm bài mới để nghe tiếp.",
+  });
+};
+
+export const advanceDueRooms = async () => {
+  const due = await MusicRoom.find({
+    isActive: true,
+    isPaused: false,
+    endsAt: { $ne: null, $lte: new Date() },
+  })
+    .select("roomCode")
+    .limit(30)
+    .lean();
+
+  for (const row of due) {
+    try {
+      await playNext(row.roomCode, null);
+    } catch (err) {
+      const code = (err as ApiError).errorCode;
+      if (code === "PLAY_LOCK") continue;
+      if (code === "QUEUE_EMPTY") {
+        await settleEndedRoom(row.roomCode);
+        continue;
+      }
+      console.error(`[RoomPlayback] ${row.roomCode}:`, err);
+    }
+  }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -698,10 +846,30 @@ export const transferHost = async (
   roomCode: string,
   newHostId: string,
 ) => {
+  const nextHostId = new mongoose.Types.ObjectId(newHostId);
   await MusicRoom.updateOne(
     { roomCode },
-    { host: new mongoose.Types.ObjectId(newHostId) },
+    {
+      $set: { host: nextHostId },
+      $pull: { coHosts: nextHostId },
+    },
   );
+};
+
+export const assignHost = async (roomCode: string, user: IUser, newHostId: string) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+  if (!isRoomHostUser(room, userIdOf(user))) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Host mới chuyển được quyền host");
+  }
+  if (newHostId === userIdOf(user)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Bạn đang là host");
+  }
+  const present = await cacheRedis.hexists(`room:sessions:${roomCode}`, newHostId);
+  if (!present) throw new ApiError(httpStatus.BAD_REQUEST, "Người này chưa ở trong phòng");
+  await transferHost(roomCode, newHostId);
+  emitRoom(roomCode, "room:host_changed", { newHostId });
+  return { newHostId };
 };
 
 /**
@@ -714,8 +882,9 @@ export const getMembers = async (roomCode: string) => {
   const validMemberIds = memberIds.filter((id: string) => !id.startsWith("guest_"));
   if (validMemberIds.length === 0) return [];
 
-  const room = await MusicRoom.findOne({ roomCode, isActive: true }).select("mutedUsers").lean();
+  const room = await MusicRoom.findOne({ roomCode, isActive: true }).select("mutedUsers coHosts host").lean();
   const mutedUsersSet = new Set((room?.mutedUsers || []).map((id: any) => id.toString()));
+  const coHostSet = new Set((room?.coHosts || []).map((id: any) => id.toString()));
 
   const users = await User.find({ _id: { $in: validMemberIds } })
     .select("_id fullName username avatar")
@@ -727,7 +896,9 @@ export const getMembers = async (roomCode: string) => {
     fullName: u.fullName,
     username: u.username,
     avatar: u.avatar,
-    isMuted: mutedUsersSet.has(u._id.toString())
+    isMuted: mutedUsersSet.has(u._id.toString()),
+    isCoHost: coHostSet.has(u._id.toString()),
+    isHost: room?.host?.toString() === u._id.toString(),
   }));
 };
 
@@ -747,17 +918,28 @@ export const kickUser = async (
   if (room.host.toString() === targetUserId) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Không thể kick chính mình");
   }
+  room.coHosts = room.coHosts.filter((id) => id.toString() !== targetUserId) as typeof room.coHosts;
+  await room.save();
 
-  // Xóa khỏi Redis members set
   await cacheRedis.srem(redisKeys.members(roomCode), targetUserId);
+  await cacheRedis.hdel(`room:sessions:${roomCode}`, targetUserId);
+  const memberCount = await cacheRedis.hlen(`room:sessions:${roomCode}`);
+  await MusicRoom.updateOne({ roomCode }, { memberCount, lastActivityAt: new Date() });
 
-  // Emit kick event qua socket
   try {
-    getIO().to(targetUserId).emit("room:kicked", {
-      roomCode,
-      reason: "Bạn đã bị Host kick khỏi phòng",
-    });
-  } catch {}
+    const io = getIO();
+    const roomSocketKey = `music_room:${roomCode}`;
+    const reason = "Bạn đã bị Host đưa khỏi phòng";
+    const sockets = await io.in(roomSocketKey).fetchSockets();
+    for (const client of sockets) {
+      if (client.data?.userId !== targetUserId) continue;
+      client.leave(roomSocketKey);
+      client.emit("room:kicked", { roomCode, reason });
+    }
+    io.to(roomSocketKey).emit("room:member_left", { userId: targetUserId, memberCount });
+  } catch (err) {
+    console.error("[Socket] room:kicked error:", err);
+  }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -929,6 +1111,129 @@ export const shareKaraokeRecording = async (roomCode: string, user: IUser, recor
   return true;
 };
 
+export const addCollectionToQueue = async (
+  roomCode: string,
+  user: IUser,
+  source: { trackIds?: string[]; playlistId?: string; albumId?: string },
+) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+  assertCanAddToQueue(room, user);
+
+  let ids: string[] = source.trackIds ?? [];
+  if (source.playlistId) {
+    const playlist = await Playlist.findById(source.playlistId).select("tracks visibility user").lean();
+    if (!playlist) throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");
+    const ownerId = playlist.user?.toString();
+    if (playlist.visibility === "private" && ownerId !== userIdOf(user)) {
+      throw new ApiError(httpStatus.FORBIDDEN, "Playlist này không công khai");
+    }
+    ids = (playlist.tracks ?? []).map((id) => id.toString());
+  } else if (source.albumId) {
+    const tracks = await Track.find({
+      album: source.albumId,
+      isPublic: true,
+      status: "ready",
+      isDeleted: false,
+    })
+      .select("_id")
+      .limit(30)
+      .lean();
+    ids = tracks.map((track) => track._id.toString());
+  }
+
+  if (ids.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Không có bài để thêm");
+  }
+
+  const existing = new Set(room.queue.map((item) => item.track.toString()));
+  if (room.currentTrack) existing.add(room.currentTrack.toString());
+  const roomLeft = 30 - room.queue.length;
+  const candidates = [...new Set(ids)].filter((id) => !existing.has(id)).slice(0, roomLeft);
+  const ready = await Track.find({
+    _id: { $in: candidates },
+    isPublic: true,
+    status: "ready",
+    isDeleted: false,
+  })
+    .select("_id")
+    .lean();
+  const readyIds = new Set(ready.map((track) => track._id.toString()));
+  const userObjectId = user._id as mongoose.Types.ObjectId;
+  let added = 0;
+  for (const id of candidates) {
+    if (!readyIds.has(id)) continue;
+    room.queue.push({
+      track: new mongoose.Types.ObjectId(id),
+      addedBy: userObjectId,
+      addedAt: new Date(),
+      votes: 0,
+      voters: [],
+    } as IQueueItem);
+    added += 1;
+  }
+  if (added === 0) {
+    throw new ApiError(httpStatus.CONFLICT, "Các bài này đã có trong hàng chờ hoặc chưa sẵn sàng");
+  }
+  room.lastActivityAt = new Date();
+  await room.save();
+  await room.populate({
+    path: "queue.track",
+    select: "title coverImage duration artist",
+    populate: { path: "artist", select: "name" },
+  });
+  emitRoom(roomCode, "room:queue_update", { queue: room.queue });
+  return { queue: room.queue, added };
+};
+
+export const updateRoomSettings = async (
+  roomCode: string,
+  user: IUser,
+  patch: { queueMode?: QueueMode },
+) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+  if (!isRoomHostUser(room, userIdOf(user))) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Host mới đổi được cài đặt phòng");
+  }
+  if (patch.queueMode) room.queueMode = patch.queueMode;
+  room.lastActivityAt = new Date();
+  await room.save();
+  emitRoom(roomCode, "room:settings_updated", { queueMode: room.queueMode });
+  return { queueMode: room.queueMode };
+};
+
+export const setCoHost = async (
+  roomCode: string,
+  user: IUser,
+  targetUserId: string,
+  enabled: boolean,
+) => {
+  const room = await MusicRoom.findOne({ roomCode, isActive: true });
+  if (!room) throw new ApiError(httpStatus.NOT_FOUND, "Phòng không tồn tại");
+  if (!isRoomHostUser(room, userIdOf(user))) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Chỉ Host mới chỉ định được co-host");
+  }
+  if (targetUserId === userIdOf(user)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Host không thể tự thêm mình làm co-host");
+  }
+  const present = await cacheRedis.hexists(`room:sessions:${roomCode}`, targetUserId);
+  if (enabled && !present) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Người này chưa ở trong phòng");
+  }
+  room.coHosts = room.coHosts.filter((id) => id.toString() !== targetUserId) as typeof room.coHosts;
+  if (enabled) {
+    if (room.coHosts.length >= 3) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Phòng chỉ có tối đa 3 co-host");
+    }
+    room.coHosts.push(new mongoose.Types.ObjectId(targetUserId));
+  }
+  await room.save();
+  const coHosts = room.coHosts.map((id) => id.toString());
+  emitRoom(roomCode, "room:cohosts_updated", { coHosts });
+  return { coHosts };
+};
+
 const musicRoomService = {
   createRoom,
   getPublicRooms,
@@ -950,6 +1255,13 @@ const musicRoomService = {
   getTrackRequests,
   handleRequest,
   getMembers,
+  getMyActiveRoom,
+  assignHost,
+  addCollectionToQueue,
+  updateRoomSettings,
+  setCoHost,
+  advanceDueRooms,
+  canControlPlayback,
   toggleKaraokeMode,
   addKaraokeQueue,
   nextKaraokeSinger,

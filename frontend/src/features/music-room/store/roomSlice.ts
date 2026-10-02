@@ -20,8 +20,9 @@ interface RoomState {
   // Thông tin phòng hiện tại
   currentRoom: Pick<
     MusicRoom,
-    "roomCode" | "name" | "theme" | "host" | "isPublic" | "memberCount" | "queue"
+    "roomCode" | "name" | "theme" | "host" | "isPublic" | "memberCount" | "queue" | "queueMode"
   > & {
+    coHosts?: string[];
     currentTrack?: any;
     currentMoodVideo?: any;
     karaokeMode?: boolean;
@@ -32,6 +33,8 @@ interface RoomState {
 
   // Quyền trong phòng
   isHost: boolean;
+  isCoHost: boolean;
+  clockOffsetMs: number;
 
   // Playback
   playbackState: PlaybackState | null;
@@ -44,6 +47,7 @@ interface RoomState {
   floatingReactions: FloatingReaction[];
   isJoining: boolean;
   error: string | null;
+  errorCode: string | null;
 
   // Của riêng Host
   trackRequests: TrackRequest[];
@@ -57,12 +61,15 @@ interface RoomState {
 const initialState: RoomState = {
   currentRoom: null,
   isHost: false,
+  isCoHost: false,
+  clockOffsetMs: 0,
   playbackState: null,
   messages: [],
   hasMoreMessages: true,
   floatingReactions: [],
   isJoining: false,
   error: null,
+  errorCode: null,
   trackRequests: [],
   publicRooms: [],
   publicRoomsTotal: 0,
@@ -89,13 +96,19 @@ const roomSlice = createSlice({
         room: RoomState["currentRoom"];
         playbackState: PlaybackState;
         isHost: boolean;
+        isCoHost?: boolean;
       }>,
     ) => {
       state.isJoining = false;
       state.error = null;
+      state.errorCode = null;
       state.currentRoom = action.payload.room;
       state.playbackState = action.payload.playbackState;
       state.isHost = action.payload.isHost;
+      state.isCoHost = Boolean(action.payload.isCoHost);
+      if (typeof action.payload.playbackState?.serverNow === "number") {
+        state.clockOffsetMs = action.payload.playbackState.serverNow - Date.now();
+      }
       state.messages = [];
       state.trackRequests = [];
     },
@@ -104,10 +117,13 @@ const roomSlice = createSlice({
       state.currentRoom = null;
       state.playbackState = null;
       state.isHost = false;
+      state.isCoHost = false;
+      state.clockOffsetMs = 0;
       state.messages = [];
       state.hasMoreMessages = true;
       state.floatingReactions = [];
       state.error = null;
+      state.errorCode = null;
     },
 
     // ── Members ──────────────────────────────────────────────────────────────
@@ -126,6 +142,7 @@ const roomSlice = createSlice({
       // Bug 4 fix: Cập nhật isHost khi host mới được chỉ định
       if (currentUserId !== undefined) {
         state.isHost = newHostId === currentUserId;
+        if (state.isHost) state.isCoHost = false;
       }
     },
 
@@ -133,9 +150,24 @@ const roomSlice = createSlice({
 
     updatePlaybackState(state, action: PayloadAction<PlaybackState & { track?: any }>) {
       state.playbackState = action.payload;
+      if (typeof action.payload.serverNow === "number") {
+        state.clockOffsetMs = action.payload.serverNow - Date.now();
+      }
       if (action.payload.track && state.currentRoom) {
         (state.currentRoom as any).currentTrack = action.payload.track;
       }
+    },
+
+    setCoHosts(state, action: PayloadAction<{ coHosts: string[]; currentUserId?: string }>) {
+      if (state.currentRoom) state.currentRoom.coHosts = action.payload.coHosts;
+      if (action.payload.currentUserId) {
+        state.isCoHost =
+          !state.isHost && action.payload.coHosts.includes(action.payload.currentUserId);
+      }
+    },
+
+    setQueueMode(state, action: PayloadAction<"open" | "approval">) {
+      if (state.currentRoom) state.currentRoom.queueMode = action.payload;
     },
 
     // ── Queue ────────────────────────────────────────────────────────────────
@@ -235,8 +267,20 @@ const roomSlice = createSlice({
 
     // ── Error ────────────────────────────────────────────────────────────────
 
-    setRoomError(state, action: PayloadAction<string | null>) {
-      state.error = action.payload;
+    setRoomError(
+      state,
+      action: PayloadAction<{ message: string; errorCode?: string } | string | null>,
+    ) {
+      if (action.payload == null) {
+        state.error = null;
+        state.errorCode = null;
+      } else if (typeof action.payload === "string") {
+        state.error = action.payload;
+        state.errorCode = null;
+      } else {
+        state.error = action.payload.message;
+        state.errorCode = action.payload.errorCode ?? null;
+      }
       state.isJoining = false;
     },
 
@@ -284,6 +328,8 @@ export const {
   setRoomError,
   setPublicRooms,
   updatePublicRoomMemberCount,
+  setCoHosts,
+  setQueueMode,
   setTrackRequests,
   setRoomTheme,
   moodVideoUpdated,
@@ -300,6 +346,11 @@ export const {
 export const selectCurrentRoom = (state: RootState) => state.room.currentRoom;
 export const selectPlaybackState = (state: RootState) => state.room.playbackState;
 export const selectIsHost = (state: RootState) => state.room.isHost;
+export const selectIsCoHost = (state: RootState) => state.room.isCoHost;
+export const selectCanControlPlayback = (state: RootState) =>
+  state.room.isHost || state.room.isCoHost;
+export const selectClockOffsetMs = (state: RootState) => state.room.clockOffsetMs;
+export const selectRoomErrorCode = (state: RootState) => state.room.errorCode;
 export const selectRoomMessages = (state: RootState) => state.room.messages;
 export const selectFloatingReactions = (state: RootState) => state.room.floatingReactions;
 export const selectPublicRooms = (state: RootState) => state.room.publicRooms;

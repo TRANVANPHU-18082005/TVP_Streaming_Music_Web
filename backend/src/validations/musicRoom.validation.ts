@@ -15,6 +15,9 @@ export const createRoomSchema = z.object({
     isPublic: z.boolean().optional(),
     maxMembers: z.number().int().min(2).max(100).optional(),
     password: z.string().min(1).max(128).optional(),
+    queueMode: z.enum(["open", "approval"]).optional(),
+    trackId: objectIdSchema.optional(),
+    playlistId: objectIdSchema.optional(),
   }),
 });
 
@@ -37,6 +40,49 @@ export const roomTrackParamSchema = z.object({
   params: z.object({
     roomCode: roomCodeSchema,
     trackId: objectIdSchema,
+  }),
+});
+
+export const addCollectionSchema = z.object({
+  params: z.object({
+    roomCode: roomCodeSchema,
+  }),
+  body: z
+    .object({
+      trackIds: z.array(objectIdSchema).max(30).optional(),
+      playlistId: objectIdSchema.optional(),
+      albumId: objectIdSchema.optional(),
+    })
+    .refine((body) => Boolean(body.trackIds?.length || body.playlistId || body.albumId), {
+      message: "Cần danh sách bài, playlist hoặc album",
+    }),
+});
+
+export const updateRoomSettingsSchema = z.object({
+  params: z.object({
+    roomCode: roomCodeSchema,
+  }),
+  body: z.object({
+    queueMode: z.enum(["open", "approval"]),
+  }),
+});
+
+export const setCoHostSchema = z.object({
+  params: z.object({
+    roomCode: roomCodeSchema,
+  }),
+  body: z.object({
+    userId: objectIdSchema,
+    enabled: z.boolean(),
+  }),
+});
+
+export const assignHostSchema = z.object({
+  params: z.object({
+    roomCode: roomCodeSchema,
+  }),
+  body: z.object({
+    userId: objectIdSchema,
   }),
 });
 

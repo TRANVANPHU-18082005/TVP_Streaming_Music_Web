@@ -58,8 +58,11 @@ export interface ServerToClientEvents {
       startedAt: number | null;
       isPaused: boolean;
       pausedAt: number;
+      endsAt?: number | null;
+      serverNow?: number;
     };
     isHost: boolean;
+    isCoHost?: boolean;
   }) => void;
   /** Playback cập nhật (skip/pause/resume) */
   "room:playback_update": (data: {
@@ -67,6 +70,9 @@ export interface ServerToClientEvents {
     startedAt: number | null;
     isPaused: boolean;
     pausedAt: number;
+    endsAt?: number | null;
+    serverNow?: number;
+    track?: any;
   }) => void;
   /** Queue cập nhật (vote/add/remove) */
   "room:queue_update": (data: { queue: any[] }) => void;
@@ -102,6 +108,8 @@ export interface ServerToClientEvents {
   "room:user_unmuted": (data: { targetUserId: string }) => void;
   /** Queue trống */
   "room:queue_empty": (data: { message: string }) => void;
+  "room:cohosts_updated": (data: { coHosts: string[] }) => void;
+  "room:settings_updated": (data: { queueMode: "open" | "approval" }) => void;
   /** Karaoke events */
   "room:karaoke_mode_toggled": (data: { karaokeMode: boolean }) => void;
   "room:karaoke_add_queue": (data: { user: any; videoId: string; videoTitle: string; channelTitle: string; thumbnail: string; }) => void;
@@ -157,7 +165,7 @@ export interface ClientToServerEvents {
   /** Host: Phát bài tiếp theo */
   "room:play_next": (data: { roomCode: string }) => void;
   /** Host: Pause/Resume */
-  "room:toggle_pause": (data: { roomCode: string; currentPosition: number }) => void;
+  "room:toggle_pause": (data: { roomCode: string; currentPosition?: number }) => void;
   /** Vote bài tiếp theo */
   "room:vote": (data: { roomCode: string; trackId: string }) => void;
   /** Yêu cầu bài hát */

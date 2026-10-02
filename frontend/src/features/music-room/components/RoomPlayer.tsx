@@ -8,9 +8,9 @@
 import React, { useRef, useEffect, useState, memo } from "react";
 import { useSelector } from "react-redux";
 import { Play, Pause, SkipForward, Music2 } from "lucide-react";
-import { selectPlaybackState, selectCurrentRoom, selectIsHost } from "../store/roomSlice";
+import { selectPlaybackState, selectCurrentRoom, selectCanControlPlayback } from "../store/roomSlice";
 import { ROOM_THEMES } from "../types/room.types";
-import { useRoomPlayback } from "../hooks/useRoomPlayback";
+import { roomPositionSeconds, useRoomPlayback } from "../hooks/useRoomPlayback";
 import RoomVisualizer from "./RoomVisualizer";
 import { ProgressBar } from "@/features/player/components/ProgressBar";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ const RoomPlayer = memo(({ onPlayNext, onTogglePause }: Props) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playbackState = useSelector(selectPlaybackState);
   const currentRoom = useSelector(selectCurrentRoom);
-  const isHost = useSelector(selectIsHost);
+  const canControl = useSelector(selectCanControlPlayback);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
 
@@ -38,40 +38,66 @@ const RoomPlayer = memo(({ onPlayNext, onTogglePause }: Props) => {
     : null;
 
   const trackUrl = currentTrack?.hlsUrl || currentTrack?.trackUrl;
-  useRoomPlayback({ audioRef, trackUrl });
+  const { needsUnlock, unlock, clockOffsetMs } = useRoomPlayback({ audioRef, trackUrl });
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onTimeUpdate = () => setProgress(audio.currentTime);
-    const onDurationChange = () => setDuration(audio.duration || 0);
-    const onEnded = () => {
-      if (isHost) {
-        onPlayNext();
-      }
+    const onDurationChange = () => {
+      if (!currentTrack?.duration) setDuration(audio.duration || 0);
     };
-    audio.addEventListener("timeupdate", onTimeUpdate);
+    const onEnded = () => {
+      if (canControl) onPlayNext();
+    };
     audio.addEventListener("durationchange", onDurationChange);
     audio.addEventListener("ended", onEnded);
     return () => {
-      audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("durationchange", onDurationChange);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [isHost, onPlayNext]);
+  }, [canControl, currentTrack?.duration, onPlayNext]);
+
+  useEffect(() => {
+    const tick = () => {
+      const fromClock = roomPositionSeconds(playbackState, clockOffsetMs);
+      setProgress(fromClock);
+      const trackDuration = currentTrack?.duration;
+      if (trackDuration) setDuration(trackDuration);
+    };
+    tick();
+    if (playbackState?.isPaused) return;
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+  }, [playbackState, clockOffsetMs, currentTrack?.duration]);
 
   const isPaused = playbackState?.isPaused ?? true;
   const hasTrack = !!currentTrack;
 
   const handleTogglePause = () => {
-    if (!isHost || !audioRef.current) return;
-    onTogglePause(audioRef.current.currentTime);
+    if (!canControl) return;
+    onTogglePause(0);
   };
 
   return (
     <div className="relative flex w-full flex-col items-center gap-5 rounded-3xl glass-frosted p-6 shadow-floating border border-border/50 dark:border-border/20">
       <audio ref={audioRef} preload="metadata" />
 
+      {!hasTrack && (
+        <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+          <div className="flex size-16 items-center justify-center rounded-3xl border border-border/30 bg-muted/40">
+            <Music2 className="size-8 text-muted-foreground/50" />
+          </div>
+          <h3 className="text-lg font-bold">Chưa có bài nào</h3>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            {canControl
+              ? "Phòng đang chờ bài đầu tiên. Thêm bài vào hàng chờ, rồi phát."
+              : "Chưa có bài đang phát. Hãy thêm bài hoặc bình chọn bài tiếp theo."}
+          </p>
+        </div>
+      )}
+
+      {hasTrack && (
+      <>
       {/* ── Album art with glow ── */}
       <div className="relative flex justify-center w-full">
         {/* Glow halo */}
@@ -140,7 +166,7 @@ const RoomPlayer = memo(({ onPlayNext, onTogglePause }: Props) => {
           </p>
         ) : (
           <p className="text-xs sm:text-sm font-medium truncate max-w-full animate-pulse" style={{ color: accentColor }}>
-            {isHost ? "Hãy thêm bài hát vào hàng đợi" : "Hãy gửi yêu cầu bài hát cho Host"}
+            {canControl ? "Hãy thêm bài hát vào hàng đợi" : "Hãy thêm bài hoặc bình chọn bài tiếp theo"}
           </p>
         )}
       </div>
@@ -157,7 +183,16 @@ const RoomPlayer = memo(({ onPlayNext, onTogglePause }: Props) => {
 
       {/* ── Controls ── */}
       <div className="flex w-full items-center justify-center gap-5 mt-1">
-        {isHost ? (
+        {needsUnlock && (
+          <button
+            type="button"
+            onClick={() => void unlock()}
+            className="pressable mb-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          >
+            Bật tiếng
+          </button>
+        )}
+        {canControl ? (
           <>
             <button
               disabled
@@ -233,6 +268,8 @@ const RoomPlayer = memo(({ onPlayNext, onTogglePause }: Props) => {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 });

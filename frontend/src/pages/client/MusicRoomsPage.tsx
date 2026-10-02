@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import RoomCard from "@/features/music-room/components/RoomCard";
 import CreateRoomModal from "@/features/music-room/components/CreateRoomModal";
 import RoomFilter from "@/features/music-room/components/RoomFilter";
-import { usePublicRoomsQuery } from "@/features/music-room/hooks/useRoomsQuery";
+import { useMyRoomQuery, usePublicRoomsQuery } from "@/features/music-room/hooks/useRoomsQuery";
 import { useRoomMutations } from "@/features/music-room/hooks/useRoomMutations";
 import { useRoomParams } from "@/features/music-room/hooks/useRoomParams";
 import type { CreateRoomPayload } from "@/features/music-room/api/room.api";
@@ -40,7 +40,9 @@ const MusicRoomsPage = () => {
   const isFiltering = Boolean(filterParams.q);
 
   const currentUser = useAppSelector((state) => state.auth.user);
+  const { data: myRoom } = useMyRoomQuery(Boolean(currentUser));
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
 
   const { createRoomAsync, isCreating } = useRoomMutations();
 
@@ -56,11 +58,6 @@ const MusicRoomsPage = () => {
       navigate("/login?next=/rooms");
       return;
     }
-    // Kiểm tra xem user đã có phòng active trong danh sách public rooms
-    const currentUserId = currentUser._id || currentUser.id;
-    const myRoom = rooms.find(
-      (r) => r.host && (r.host as any)._id?.toString() === currentUserId?.toString(),
-    );
     if (myRoom) {
       toast("Bạn đang có phòng đang hoạt động!", {
         description: `Phòng "${myRoom.name}" — ${myRoom.memberCount} người đang nghe`,
@@ -73,7 +70,16 @@ const MusicRoomsPage = () => {
       return;
     }
     setShowCreateModal(true);
-  }, [currentUser, rooms, navigate]);
+  }, [currentUser, myRoom, navigate]);
+
+  const joinByCode = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code)) {
+      toast.error("Mã phòng gồm 6 ký tự");
+      return;
+    }
+    navigate(`/rooms/${code}`);
+  };
 
   const handleCreateRoom = async (payload: CreateRoomPayload) => {
     try {
@@ -195,6 +201,42 @@ const MusicRoomsPage = () => {
 
       {/* ── MAIN CONTENT ── */}
       <main className="section-container space-y-6 py-10 pb-24">
+        {myRoom && (
+          <button
+            type="button"
+            onClick={() => navigate(`/rooms/${myRoom.roomCode}`)}
+            className="flex w-full items-center justify-between rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-left"
+          >
+            <span>
+              <span className="block text-sm font-semibold">Phòng của bạn đang mở</span>
+              <span className="text-xs text-muted-foreground">
+                {myRoom.name}
+                {myRoom.currentTrack ? ` · ${myRoom.currentTrack.title}` : ""} · {myRoom.memberCount} người
+              </span>
+            </span>
+            <span className="text-sm font-semibold text-primary">Vào phòng</span>
+          </button>
+        )}
+
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            joinByCode();
+          }}
+        >
+          <input
+            value={joinCode}
+            onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+            placeholder="Nhập mã phòng"
+            maxLength={6}
+            className="w-full rounded-xl border border-border bg-input px-4 py-2.5 text-sm tracking-[0.2em] outline-none"
+          />
+          <button type="submit" className="pressable shrink-0 rounded-xl bg-secondary px-4 text-sm font-semibold text-secondary-foreground">
+            Vào
+          </button>
+        </form>
+
         {/* Room Filter */}
         <div
           className="animate-fade-up animation-fill-both"

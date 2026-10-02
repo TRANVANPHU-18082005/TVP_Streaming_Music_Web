@@ -1,5 +1,5 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { getPublicRooms, getRoomByCode, PublicRoomsResponse } from "../api/room.api";
+import { getMyRoom, getPublicRooms, getRoomByCode, PublicRoomsResponse } from "../api/room.api";
 import { roomKeys } from "../utils/roomKeys";
 
 export const usePublicRoomsQuery = (page = 1, limit = 20, q?: string) => {
@@ -17,6 +17,15 @@ export const usePublicRoomsQuery = (page = 1, limit = 20, q?: string) => {
       },
       isEmpty: data.rooms.length === 0,
     }),
+  });
+};
+
+export const useMyRoomQuery = (enabled: boolean) => {
+  return useQuery({
+    queryKey: roomKeys.mine(),
+    queryFn: getMyRoom,
+    enabled,
+    staleTime: 15_000,
   });
 };
 

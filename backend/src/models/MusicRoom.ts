@@ -8,6 +8,7 @@ import { customAlphabet } from "nanoid";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type RoomTheme = "bar" | "lounge" | "festival" | "chill" | "hype";
+export type QueueMode = "open" | "approval";
 
 export interface IQueueItem {
   track: mongoose.Types.ObjectId;
@@ -33,10 +34,12 @@ export interface IMusicRoom extends Document {
 
   // Host & quyền
   host: mongoose.Types.ObjectId;
+  coHosts: mongoose.Types.ObjectId[];
   isPublic: boolean;
   maxMembers: number;     // 20 (private) | 50 (public)
   password?: string;      // Chỉ có khi isPublic = false
   mutedUsers: mongoose.Types.ObjectId[]; // Danh sách user bị cấm chat
+  queueMode: QueueMode;
 
   // Trạng thái
   isActive: boolean;
@@ -56,8 +59,10 @@ export interface IMusicRoom extends Document {
   currentMoodVideo?: mongoose.Types.ObjectId; // Video nền trình chiếu cho listener
   currentTrackIndex: number;
   startedAt?: Date;       // UTC timestamp khi bắt đầu phát bài hiện tại
+  endsAt?: Date | null;   // UTC timestamp khi bài hiện tại kết thúc (null khi pause)
   isPaused: boolean;
   pausedAt?: number;      // Vị trí dừng tính bằng giây
+  lastPlayedBy?: mongoose.Types.ObjectId;
 
   // Timestamps
   lastActivityAt: Date;
@@ -120,10 +125,12 @@ const MusicRoomSchema = new Schema<IMusicRoom>(
     },
 
     host: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    coHosts: { type: [{ type: Schema.Types.ObjectId, ref: "User" }], default: [] },
     isPublic: { type: Boolean, default: true },
     maxMembers: { type: Number, default: 50, min: 2, max: 100 },
     password: { type: String, select: false },
     mutedUsers: { type: [{ type: Schema.Types.ObjectId, ref: "User" }], default: [] },
+    queueMode: { type: String, enum: ["open", "approval"], default: "open" },
 
     isActive: { type: Boolean, default: true, index: true },
     memberCount: { type: Number, default: 0, min: 0 },
@@ -147,8 +154,10 @@ const MusicRoomSchema = new Schema<IMusicRoom>(
     },
     currentTrackIndex: { type: Number, default: -1 },
     startedAt: { type: Date, default: null },
+    endsAt: { type: Date, default: null },
     isPaused: { type: Boolean, default: false },
     pausedAt: { type: Number, default: 0 },
+    lastPlayedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
 
     lastActivityAt: { type: Date, default: Date.now, index: true },
   },

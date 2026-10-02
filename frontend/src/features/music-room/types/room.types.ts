@@ -1,6 +1,7 @@
 // features/music-room/types/room.types.ts
 
 export type RoomTheme = "bar" | "lounge" | "festival" | "chill" | "hype";
+export type QueueMode = "open" | "approval";
 export type MessageType = "text" | "reaction" | "system";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,6 +80,8 @@ export interface MusicRoom {
   coverImage?: string;
   theme: RoomTheme;
   host: RoomHost;
+  coHosts?: string[];
+  queueMode?: QueueMode;
   isPublic: boolean;
   maxMembers: number;
   isActive: boolean;
@@ -94,6 +97,7 @@ export interface MusicRoom {
   currentMoodVideo?: RoomMoodVideoMini;
   queue: QueueItem[];
   startedAt?: string;
+  endsAt?: string | null;
   isPaused: boolean;
   pausedAt?: number;
   lastActivityAt: string;
@@ -109,6 +113,9 @@ export interface PlaybackState {
   startedAt: number | null;   // Unix timestamp ms
   isPaused: boolean;
   pausedAt: number;           // Giây
+  endsAt?: number | null;
+  serverNow?: number;
+  track?: RoomTrackMini;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,42 +173,36 @@ export const ROOM_THEMES: Record<RoomTheme, {
   gradient: string;
   accent: string;
   glow: string;
-  fallbackVideo: string;
 }> = {
   bar: {
-    label: "🍺 Bar Lounge",
+    label: "Bar Lounge",
     gradient: "from-amber-100 via-orange-100 to-yellow-50 dark:from-amber-950 dark:via-red-950 dark:to-zinc-950",
     accent: "#f59e0b",
     glow: "rgba(245,158,11,0.3)",
-    fallbackVideo: "https://www.w3schools.com/html/mov_bbb.mp4",
   },
   lounge: {
-    label: "🌙 Lounge",
+    label: "Lounge",
     gradient: "from-violet-100 via-purple-100 to-fuchsia-50 dark:from-violet-950 dark:via-purple-950 dark:to-zinc-950",
     accent: "#8b5cf6",
     glow: "rgba(139,92,246,0.3)",
-    fallbackVideo: "https://www.w3schools.com/html/mov_bbb.mp4",
   },
   festival: {
-    label: "🎪 Festival",
+    label: "Festival",
     gradient: "from-pink-100 via-rose-100 to-orange-50 dark:from-pink-950 dark:via-orange-950 dark:to-yellow-950",
     accent: "#ec4899",
     glow: "rgba(236,72,153,0.3)",
-    fallbackVideo: "https://www.w3schools.com/html/mov_bbb.mp4",
   },
   chill: {
-    label: "🌊 Chill Waves",
+    label: "Chill Waves",
     gradient: "from-teal-100 via-cyan-100 to-sky-50 dark:from-teal-950 dark:via-cyan-950 dark:to-slate-950",
     accent: "#14b8a6",
     glow: "rgba(20,184,166,0.3)",
-    fallbackVideo: "https://www.w3schools.com/html/mov_bbb.mp4",
   },
   hype: {
-    label: "⚡ Hype",
+    label: "Hype",
     gradient: "from-yellow-100 via-amber-100 to-orange-50 dark:from-yellow-950 dark:via-orange-950 dark:to-red-950",
     accent: "#eab308",
     glow: "rgba(234,179,8,0.3)",
-    fallbackVideo: "https://www.w3schools.com/html/mov_bbb.mp4",
   },
 };
 

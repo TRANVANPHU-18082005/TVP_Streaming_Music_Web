@@ -1,123 +1,168 @@
 // features/music-room/hooks/useRoomPlayback.ts
 /**
- * Hook sync playback audio với server clock.
- * Tính currentTime = (Date.now() - startedAt) / 1000
- * Không cần server push mỗi giây — client tự tính.
+ * Phát HLS của phòng theo đồng hồ server.
+ * Vị trí = (Date.now() + offset - startedAt) / 1000.
  */
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useSelector } from "react-redux";
-import { selectPlaybackState } from "../store/roomSlice";
+import Hls from "hls.js";
+import { selectClockOffsetMs, selectPlaybackState } from "../store/roomSlice";
+import type { PlaybackState } from "../types/room.types";
 
 interface UseRoomPlaybackOptions {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   trackUrl?: string;
 }
 
+const SEEK_WHILE_PLAYING = 0.8;
+const SEEK_WHILE_PAUSED = 0.3;
+
+export const roomPositionSeconds = (
+  playbackState: PlaybackState | null,
+  clockOffsetMs: number,
+  now = Date.now(),
+) => {
+  if (!playbackState?.currentTrackId) return 0;
+  if (playbackState.isPaused) return playbackState.pausedAt ?? 0;
+  if (!playbackState.startedAt) return 0;
+  return Math.max(0, (now + clockOffsetMs - playbackState.startedAt) / 1000);
+};
+
 export const useRoomPlayback = ({ audioRef, trackUrl }: UseRoomPlaybackOptions) => {
   const playbackState = useSelector(selectPlaybackState);
+  const clockOffsetMs = useSelector(selectClockOffsetMs);
   const lastSyncedTrackId = useRef<string | null>(null);
-  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [needsUnlock, setNeedsUnlock] = useState(false);
 
-  /**
-   * Sync audio element với server playback state.
-   * Gọi khi nhận được room:playback_update hoặc khi track thay đổi.
-   */
   const syncAudio = useCallback(async () => {
     const audio = audioRef.current;
-    if (!audio || !playbackState) return;
-
-    const { startedAt, isPaused, pausedAt, currentTrackId } = playbackState;
-
-    // Nếu không có bài nào đang phát
-    if (!currentTrackId) {
-      audio.pause();
+    if (!audio || !playbackState?.currentTrackId) {
+      audio?.pause();
       return;
     }
 
-    if (isPaused) {
-      // Seek đến vị trí pause và dừng
-      if (Math.abs(audio.currentTime - pausedAt) > 1) {
-        audio.currentTime = pausedAt;
-      }
+    const target = roomPositionSeconds(playbackState, clockOffsetMs);
+    const threshold = playbackState.isPaused ? SEEK_WHILE_PAUSED : SEEK_WHILE_PLAYING;
+    if (Number.isFinite(audio.duration) && audio.duration > 0 && target > audio.duration) {
+      audio.currentTime = Math.max(0, audio.duration - 0.05);
+    } else if (Math.abs(audio.currentTime - target) > threshold) {
+      audio.currentTime = target;
+    }
+
+    if (playbackState.isPaused) {
       audio.pause();
-    } else if (startedAt) {
-      // Tính thời điểm hiện tại dựa trên server clock
-      const elapsedSeconds = (Date.now() - startedAt) / 1000;
-
-      // Chỉ seek nếu lệch quá 2 giây (tránh jitter)
-      if (Math.abs(audio.currentTime - elapsedSeconds) > 2) {
-        audio.currentTime = Math.max(0, elapsedSeconds);
-      }
-
-      // Phát nếu đang pause
-      if (audio.paused) {
-        try {
-          await audio.play();
-        } catch {
-          // Autoplay bị chặn → người dùng cần tương tác
-        }
-      }
-    }
-  }, [audioRef, playbackState]);
-
-  // Sync khi playback state thay đổi
-  useEffect(() => {
-    if (!playbackState) return;
-
-    const { currentTrackId } = playbackState;
-
-    // Nếu bài thay đổi, cần load source mới
-    if (currentTrackId !== lastSyncedTrackId.current && trackUrl) {
-      const audio = audioRef.current;
-      if (audio) {
-        audio.src = trackUrl;
-        audio.load();
-        lastSyncedTrackId.current = currentTrackId;
-      }
+      setNeedsUnlock(false);
+      return;
     }
 
-    // Sync sau khi loadedmetadata hoặc ngay lập tức nếu đã có source
+    if (audio.paused) {
+      try {
+        await audio.play();
+        setNeedsUnlock(false);
+      } catch {
+        setNeedsUnlock(true);
+      }
+    }
+  }, [audioRef, clockOffsetMs, playbackState]);
+
+  const unlock = useCallback(async () => {
     const audio = audioRef.current;
     if (!audio) return;
+    try {
+      await audio.play();
+      setNeedsUnlock(false);
+      await syncAudio();
+    } catch {
+      setNeedsUnlock(true);
+    }
+  }, [audioRef, syncAudio]);
 
-    const doSync = () => syncAudio();
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const src = trackUrl;
+    const trackId = playbackState?.currentTrackId ?? null;
 
-    // Bug 3 fix: track whether listener was added to ensure cleanup
-    let listenerAdded = false;
+    if (!src || !trackId) {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      audio.removeAttribute("src");
+      audio.load();
+      lastSyncedTrackId.current = null;
+      return;
+    }
 
-    if (audio.readyState >= 2) {
-      doSync();
+    if (trackId === lastSyncedTrackId.current && (hlsRef.current || audio.src)) {
+      return;
+    }
+
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    lastSyncedTrackId.current = trackId;
+    const startAt = roomPositionSeconds(playbackState, clockOffsetMs);
+
+    if (Hls.isSupported() && src.endsWith(".m3u8")) {
+      const hls = new Hls({
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+        enableWorker: true,
+        manifestLoadingTimeOut: 20000,
+        manifestLoadingMaxRetry: 4,
+        fragLoadingMaxRetry: 4,
+        startPosition: startAt,
+      });
+      hls.loadSource(src);
+      hls.attachMedia(audio);
+      hlsRef.current = hls;
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        void syncAudio();
+      });
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (!data.fatal) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+        else hls.destroy();
+      });
     } else {
-      audio.addEventListener("loadedmetadata", doSync, { once: true });
-      listenerAdded = true;
+      audio.src = src;
+      audio.load();
     }
 
     return () => {
-      // Luôn xóa listener nếu đã thêm (tránh memory leak)
-      if (listenerAdded) {
-        audio.removeEventListener("loadedmetadata", doSync);
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
     };
-  }, [playbackState, trackUrl, syncAudio]);
+    // Re-attach only when the track source changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackUrl, playbackState?.currentTrackId]);
 
-  // Drift correction: mỗi 10 giây resync một lần nếu đang phát
   useEffect(() => {
-    if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
-
-    if (playbackState && !playbackState.isPaused) {
-      syncIntervalRef.current = setInterval(() => {
-        syncAudio();
-      }, 10_000);
-    }
-
-    return () => {
-      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+    const audio = audioRef.current;
+    if (!audio || !playbackState) return;
+    const run = () => {
+      void syncAudio();
     };
+    if (audio.readyState >= 2) run();
+    else audio.addEventListener("loadedmetadata", run, { once: true });
+    return () => audio.removeEventListener("loadedmetadata", run);
+  }, [audioRef, playbackState, syncAudio]);
+
+  useEffect(() => {
+    if (!playbackState || playbackState.isPaused) return;
+    const timer = setInterval(() => {
+      void syncAudio();
+    }, 5_000);
+    return () => clearInterval(timer);
   }, [playbackState, syncAudio]);
 
-  return {
-    playbackState,
-    syncAudio,
-  };
+  return { playbackState, syncAudio, needsUnlock, unlock, clockOffsetMs };
 };
