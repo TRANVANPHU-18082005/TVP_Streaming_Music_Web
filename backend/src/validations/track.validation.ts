@@ -284,6 +284,17 @@ export const getTopTracksSchema = z.object({
 
 export type TopTrackFilterInput = z.infer<typeof getTopTracksSchema>["query"];
 
+export const recommendationFeedbackSchema = z.object({
+  body: z.object({
+    trackId: objectIdSchema,
+    action: z.enum(["skip", "dismiss"]),
+  }),
+});
+
+export const recommendationRefreshSchema = z.object({
+  body: z.object({}).optional(),
+});
+
 // --- 11. GET TOP SEVEN TRACKS ---
 export const getTopSevenSchema = z.object({
   query: z.object({

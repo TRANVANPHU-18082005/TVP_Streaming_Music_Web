@@ -48,7 +48,7 @@ export const ForYouTrackCard = memo<ForYouTrackCardProps>(function ForYouTrackCa
             trackIds: tracks.map((t) => t._id),
             initialMetadata: tracks,
             startIndex: index,
-            source: { id: CLIENT_PATHS.FOR_ME, type: "suggestions", title: "Dành cho bạn" },
+            source: { id: CLIENT_PATHS.FOR_ME, type: "suggestions", title: "Dành cho tôi" },
           }),
         );
       }

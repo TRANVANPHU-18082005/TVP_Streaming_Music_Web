@@ -3,10 +3,11 @@
 //
 // Hybrid Recommendation Engine – "Bài hát bạn có thể thích"
 //
-// Chiến lược 3 tầng:
-//   Tier 1  → Personalized   (User có đủ lịch sử PlayLog + Like)
-//   Tier 2  → Trending       (User mới / cold-start)
-//   Tier 3  → Discovery Mix  (Luôn trộn 20% bài mới phát hành)
+// Chiến lược nghe:
+//   Quen thuộc  → khoảng 40% bài đã thích / nghe nhiều
+//   Cùng gu     → khoảng 40% bài cùng nghệ sĩ, thể loại, tâm trạng
+//   Mới         → khoảng 20% bài mới phát hành
+//   Khách / mới → trending + bài mới, không ép ObjectId
 //
 // Cache: Redis, TTL 1 giờ (+ jitter) per userId
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,6 +44,31 @@ export const TRENDING_WINDOW_DAYS = 7;
 /** Tỉ lệ bài "mới phát hành" trong danh sách cuối (Tier 3 Discovery Mix) */
 const DISCOVERY_RATIO = 0.2;
 
+/** Tỉ lệ bài đã thích hoặc đã nghe trong danh sách cá nhân hóa */
+const FAMILIAR_RATIO = 0.4;
+
+/** Một lần lấy thêm của phiên Dành cho tôi */
+const FOR_ME_BATCH_MAX = 20;
+const FOR_ME_SESSION_TTL = 6 * 60 * 60;
+const FOR_ME_SKIP_TTL = 7 * 24 * 60 * 60;
+const FOR_ME_SESSION_CAP = 300;
+const RECOMMEND_SELECT = `${TRACK_SELECT} aiMetadata`;
+
+type ForMeMood = "focus" | "sad" | "energy";
+
+interface ForMeTaste {
+  mix?: number;
+  genreIds?: string[];
+  mood?: ForMeMood;
+}
+
+interface ForMeSessionState {
+  served: string[];
+  genreIds?: string[];
+  mix?: number;
+  mood?: ForMeMood;
+}
+
 /** TTL base 1 giờ + jitter tối đa 10 phút */
 const CACHE_TTL_BASE = 3600;
 const CACHE_TTL_JITTER = 600;
@@ -68,6 +94,8 @@ interface RecommendOptions {
   limit?: number;
   /** Nếu cung cấp, sẽ loại bài này khỏi danh sách (vd: bài đang phát) */
   excludeTrackId?: string;
+  /** Bài đã phát trong phiên hoặc đã bỏ qua */
+  excludeIds?: string[];
 }
 
 // TrackDoc phản ánh shape thực tế sau khi .lean() + .select() trả về.
@@ -92,7 +120,22 @@ interface TrackDoc {
   moodVideo?: any;
   aiMetadata?: any;
   score?: number; // computed field, chỉ có sau re-scoring
+  reason?: string;
+  reasonCode?: RecommendReasonCode;
 }
+
+type RecommendReasonCode =
+  | "artist"
+  | "genre"
+  | "mood"
+  | "familiar"
+  | "new_release"
+  | "trending";
+
+type TasteScores = {
+  scoreMap: Map<string, number>;
+  likedIds: Set<string>;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POPULATE CONFIG (tái sử dụng ở nhiều query)
@@ -115,7 +158,61 @@ function castLean(docs: unknown): TrackDoc[] {
 
 /** Xây cache key theo userId (hoặc "guest") */
 function buildRecommendCacheKey(userId: string, limit: number): string {
-  return `recommend:tracks:${userId}:limit${limit}`;
+  return `recommend:tracks:${userId}:v2:limit${limit}`;
+}
+
+function isRecommendationUserId(
+  userId: string | null | undefined,
+): userId is string {
+  return Boolean(userId && userId !== "guest" && Types.ObjectId.isValid(userId));
+}
+
+function tagTracks(
+  tracks: TrackDoc[],
+  reasonCode: RecommendReasonCode,
+  reason: string,
+): TrackDoc[] {
+  return tracks.map((track) => ({
+    ...track,
+    reasonCode: track.reasonCode ?? reasonCode,
+    reason: track.reason ?? reason,
+  }));
+}
+
+function artistKeyOf(track: TrackDoc): string {
+  const artist = track.artist as
+    | { _id?: { toString(): string } | string }
+    | string
+    | undefined;
+  if (artist && typeof artist === "object") {
+    return artist._id?.toString() ?? "unknown";
+  }
+  if (typeof artist === "string" && artist) return artist;
+  return "unknown";
+}
+
+function artistNameOf(track: TrackDoc): string | undefined {
+  const artist = track.artist as { name?: string } | undefined;
+  if (artist && typeof artist === "object" && artist.name) return artist.name;
+  return undefined;
+}
+
+function mixRatios(mix?: number): { familiar: number; discovery: number } {
+  if (mix === undefined || Number.isNaN(mix)) {
+    return { familiar: FAMILIAR_RATIO, discovery: DISCOVERY_RATIO };
+  }
+  const t = Math.min(1, Math.max(0, mix));
+  return {
+    familiar: 0.7 - 0.6 * t,
+    discovery: 0.1 + 0.5 * t,
+  };
+}
+
+function objectIds(ids: string[] | undefined, max = 5): Types.ObjectId[] {
+  return (ids ?? [])
+    .filter((id) => Types.ObjectId.isValid(id))
+    .slice(0, max)
+    .map((id) => new Types.ObjectId(id));
 }
 
 /**
@@ -155,24 +252,18 @@ class RecommendationService {
   // ────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Hàm chính – trả về danh sách bài hát gợi ý cho một user.
-   *
-   * Luồng xử lý:
-   *   1. Kiểm tra Redis cache → trả ngay nếu có.
-   *   2. Đếm PlayLog để quyết định Tier.
-   *   3. Chạy thuật toán tương ứng.
-   *   4. Trộn 20% Discovery Mix (Tier 3).
-   *   5. Lưu cache và trả kết quả.
+   * Danh sách "Dành cho tôi".
+   * User đủ lịch sử: bài quen, bài cùng gu, bài mới.
+   * Khách và user mới: trending và bài mới. Chuỗi "guest" không được coi là userId.
    */
   async getRecommendedTracks(
     userId: string | undefined | null,
     options: RecommendOptions = {},
   ): Promise<TrackDoc[]> {
     const { limit = APP_CONFIG.PAGINATION_LIMIT, excludeTrackId } = options;
-    const resolvedUserId = userId ?? "guest";
+    const realUserId = isRecommendationUserId(userId) ? userId : null;
+    const cacheKey = buildRecommendCacheKey(realUserId ?? "guest", limit);
 
-    // ── 1. Cache check ────────────────────────────────────────────────────────
-    const cacheKey = buildRecommendCacheKey(resolvedUserId, limit);
     try {
       const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
       if (cached) {
@@ -186,54 +277,386 @@ class RecommendationService {
       // Cache miss hoặc lỗi Redis → tiếp tục query DB
     }
 
-    // ── 2. Quyết định Tier ────────────────────────────────────────────────────
-    let recommendations: TrackDoc[] = [];
+    const mixed = realUserId
+      ? await this.mixForListener(realUserId, limit, excludeTrackId)
+      : await this.mixColdStart(null, limit, excludeTrackId);
 
-    if (!userId) {
-      // Guest → thẳng Tier 2
-      recommendations = await this.getTrendingTracks(limit);
-    } else {
-      const playLogCount = await PlayLog.countDocuments({ userId });
-
-      if (playLogCount >= PERSONALIZED_THRESHOLD) {
-        // Tier 1: Cá nhân hóa
-        recommendations = await this.getPersonalizedTracks(
-          userId,
-          limit,
-          excludeTrackId,
-        );
-      } else {
-        // Tier 2: Trending (cold-start)
-        recommendations = await this.getTrendingTracks(limit, userId);
-      }
-    }
-
-    // ── 3. Tier 3: Discovery Mix (trộn 20% bài mới) ───────────────────────────
-    const discoveryCount = Math.ceil(limit * DISCOVERY_RATIO);
-    const existingIds = new Set(recommendations.map((t) => t._id.toString()));
-    if (excludeTrackId) existingIds.add(excludeTrackId);
-
-    const discoveryTracks = await this.getDiscoveryTracks(
-      discoveryCount,
-      existingIds,
-    );
-
-    // Cắt bớt mainList để tổng = limit, rồi xen discoveryTracks vào ngẫu nhiên
-    const mainCount = limit - discoveryTracks.length;
-    const mainList = recommendations.slice(0, mainCount);
-    const mixed = this.injectDiscovery(mainList, discoveryTracks);
-
-    // ── 4. Cache & trả kết quả ────────────────────────────────────────────────
     const ttl = CACHE_TTL_BASE + Math.floor(Math.random() * CACHE_TTL_JITTER);
     withCacheTimeout(() =>
       cacheRedis.set(cacheKey, JSON.stringify(mixed), "EX", ttl),
     ).catch(() => {});
 
-    // Loại excludeTrackId khỏi kết quả cuối cùng (sau khi cache đã lưu toàn bộ)
     if (excludeTrackId) {
       return mixed.filter((t) => t._id.toString() !== excludeTrackId);
     }
     return mixed;
+  }
+
+  /**
+   * Lô tiếp theo của phiên nghe. Redis giữ bài đã đưa và bài bỏ qua.
+   * Khách không có session: chỉ loại excludeIds của request hiện tại.
+   */
+  async getForMeContinuation(
+    userId: string | null | undefined,
+    options: {
+      limit?: number;
+      session?: boolean;
+      excludeIds?: string[];
+      genreIds?: string[];
+      mix?: number;
+      mood?: ForMeMood;
+    } = {},
+  ): Promise<{ tracks: TrackDoc[]; needsTaste: boolean }> {
+    const limit = Math.min(Math.max(options.limit ?? 10, 1), FOR_ME_BATCH_MAX);
+    const requested = (options.excludeIds ?? [])
+      .filter((id) => Types.ObjectId.isValid(id))
+      .slice(0, 80);
+    const realUserId = isRecommendationUserId(userId) ? userId : null;
+    const session = realUserId ? await this.readForMeSession(realUserId) : { served: [] };
+    const taste = this.resolveTaste(options, session);
+    const needsTaste = await this.needsTaste(realUserId, taste);
+
+    if (options.session && realUserId) {
+      const skips = await this.readSkipIds(realUserId);
+      const exclude = new Set<string>([...skips, ...session.served, ...requested]);
+      const batch = await this.collectFreshTracks(realUserId, limit, exclude, taste);
+      session.served = [...session.served, ...batch.map((track) => track._id.toString())].slice(
+        -FOR_ME_SESSION_CAP,
+      );
+      session.genreIds = taste.genreIds;
+      session.mix = taste.mix;
+      session.mood = taste.mood;
+      await this.writeForMeSession(realUserId, session);
+      return { tracks: batch, needsTaste };
+    }
+
+    if (requested.length === 0 && !this.hasTasteConstraint(taste)) {
+      return {
+        tracks: await this.getRecommendedTracks(realUserId, { limit }),
+        needsTaste,
+      };
+    }
+    return {
+      tracks: await this.collectFreshTracks(realUserId, limit, new Set(requested), taste),
+      needsTaste,
+    };
+  }
+
+  async resetForMeSession(userId: string): Promise<void> {
+    if (!isRecommendationUserId(userId)) return;
+    await withCacheTimeout(() => cacheRedis.del(`recommend:session:${userId}`));
+    this.invalidateUserRecommendCache(userId);
+  }
+
+  /** Ghi bài bỏ qua hoặc "Không quan tâm". Không tăng playCount. */
+  async recordForMeFeedback(userId: string, trackId: string): Promise<boolean> {
+    if (!isRecommendationUserId(userId) || !Types.ObjectId.isValid(trackId)) {
+      return false;
+    }
+    const key = `recommend:skip:${userId}`;
+    const saved = await withCacheTimeout(async () => {
+      await cacheRedis.sadd(key, trackId);
+      await cacheRedis.expire(key, FOR_ME_SKIP_TTL);
+      return true;
+    });
+    this.invalidateUserRecommendCache(userId);
+    return saved === true;
+  }
+
+  private async readSkipIds(userId: string): Promise<Set<string>> {
+    const ids = await withCacheTimeout(() => cacheRedis.smembers(`recommend:skip:${userId}`));
+    return new Set(ids ?? []);
+  }
+
+  private async readForMeSession(userId: string): Promise<ForMeSessionState> {
+    const raw = await withCacheTimeout(() => cacheRedis.get(`recommend:session:${userId}`));
+    if (!raw) return { served: [] };
+    try {
+      const parsed = JSON.parse(raw) as {
+        served?: unknown;
+        genreIds?: unknown;
+        mix?: unknown;
+        mood?: unknown;
+      };
+      const served = Array.isArray(parsed.served)
+        ? parsed.served.filter((id): id is string => typeof id === "string")
+        : [];
+      const genreIds = Array.isArray(parsed.genreIds)
+        ? parsed.genreIds.filter((id): id is string => typeof id === "string" && Types.ObjectId.isValid(id)).slice(0, 5)
+        : undefined;
+      const mix = typeof parsed.mix === "number" ? parsed.mix : undefined;
+      const mood = parsed.mood === "focus" || parsed.mood === "sad" || parsed.mood === "energy"
+        ? parsed.mood
+        : undefined;
+      return { served, genreIds, mix, mood };
+    } catch {
+      return { served: [] };
+    }
+  }
+
+  private resolveTaste(
+    options: { genreIds?: string[]; mix?: number; mood?: ForMeMood },
+    session: ForMeSessionState,
+  ): ForMeTaste {
+    const genreIds = options.genreIds?.length ? options.genreIds.slice(0, 5) : session.genreIds;
+    return {
+      genreIds,
+      mix: options.mix ?? session.mix,
+      mood: options.mood ?? session.mood,
+    };
+  }
+
+  private hasTasteConstraint(taste?: ForMeTaste): boolean {
+    return Boolean(taste && (taste.genreIds?.length || taste.mood || taste.mix !== undefined));
+  }
+
+  private async needsTaste(userId: string | null, taste: ForMeTaste): Promise<boolean> {
+    if (taste.genreIds?.length) return false;
+    if (!userId) return true;
+    const playLogCount = await PlayLog.countDocuments({ userId });
+    return playLogCount < PERSONALIZED_THRESHOLD;
+  }
+
+  private async writeForMeSession(
+    userId: string,
+    session: ForMeSessionState,
+  ): Promise<void> {
+    await withCacheTimeout(() =>
+      cacheRedis.set(
+        `recommend:session:${userId}`,
+        JSON.stringify(session),
+        "EX",
+        FOR_ME_SESSION_TTL,
+      ),
+    );
+  }
+
+  private async collectFreshTracks(
+    userId: string | null,
+    limit: number,
+    exclude: Set<string>,
+    taste?: ForMeTaste,
+  ): Promise<TrackDoc[]> {
+    if (this.hasTasteConstraint(taste)) {
+      const picked = await this.findByTaste(Math.max(limit, 20), exclude, taste);
+      const more = userId
+        ? await this.mixForListener(userId, Math.max(limit, 20), undefined, exclude, taste)
+        : await this.mixColdStart(null, Math.max(limit, 20), undefined, exclude, taste);
+      const fresh = [...picked];
+      const seen = new Set(fresh.map((track) => track._id.toString()));
+      for (const track of more) {
+        const id = track._id.toString();
+        if (exclude.has(id) || seen.has(id) || !this.matchesTaste(track, taste)) continue;
+        fresh.push(track);
+        seen.add(id);
+        if (fresh.length >= limit) break;
+      }
+      return fresh.slice(0, limit);
+    }
+
+    const pool = await this.getRecommendedTracks(userId, { limit: 50 });
+    const fresh = pool.filter((track) => !exclude.has(track._id.toString()));
+    if (fresh.length >= limit) return fresh.slice(0, limit);
+
+    const more = userId
+      ? await this.mixForListener(userId, Math.max(limit, 20), undefined, exclude)
+      : await this.mixColdStart(null, Math.max(limit, 20), undefined, exclude);
+    const seen = new Set(fresh.map((track) => track._id.toString()));
+    for (const track of more) {
+      const id = track._id.toString();
+      if (exclude.has(id) || seen.has(id)) continue;
+      fresh.push(track);
+      seen.add(id);
+      if (fresh.length >= limit) break;
+    }
+    return fresh.slice(0, limit);
+  }
+
+  private async mixForListener(
+    userId: string,
+    limit: number,
+    excludeTrackId?: string,
+    blocked?: Set<string>,
+    taste?: ForMeTaste,
+  ): Promise<TrackDoc[]> {
+    const playLogCount = await PlayLog.countDocuments({ userId });
+    if (playLogCount < PERSONALIZED_THRESHOLD) {
+      return this.mixColdStart(userId, limit, excludeTrackId, blocked, taste);
+    }
+
+    const tasteScores = await this.loadTasteScores(userId);
+    if (tasteScores.scoreMap.size === 0) {
+      return this.mixColdStart(userId, limit, excludeTrackId, blocked, taste);
+    }
+
+    const ratios = mixRatios(taste?.mix);
+    const discoveryCount = Math.ceil(limit * ratios.discovery);
+    const familiarCount = Math.floor(limit * ratios.familiar);
+    const similarCount = Math.max(0, limit - familiarCount - discoveryCount);
+
+    const familiar = await this.getFamiliarTracks(
+      userId,
+      familiarCount,
+      excludeTrackId,
+      tasteScores,
+      blocked,
+    );
+    const similarNeed = similarCount + (familiarCount - familiar.length);
+    const similar = await this.getPersonalizedTracks(
+      userId,
+      similarNeed,
+      excludeTrackId,
+      tasteScores,
+      blocked,
+    );
+
+    const familiarIds = new Set(familiar.map((track) => track._id.toString()));
+    const similarFiltered = similar.filter(
+      (track) =>
+        !familiarIds.has(track._id.toString()) &&
+        !blocked?.has(track._id.toString()),
+    );
+    const existingIds = new Set<string>([
+      ...familiarIds,
+      ...similarFiltered.map((track) => track._id.toString()),
+    ]);
+    if (excludeTrackId) existingIds.add(excludeTrackId);
+    blocked?.forEach((id) => existingIds.add(id));
+
+    const discovery = tagTracks(
+      await this.getDiscoveryTracks(discoveryCount, existingIds),
+      "new_release",
+      "Bài mới dành cho bạn",
+    );
+
+    let mixed = this.arrangeForMe(
+      familiar,
+      similarFiltered.slice(0, similarNeed),
+      discovery,
+    ).slice(0, limit);
+
+    if (mixed.length < limit) {
+      const have = new Set(mixed.map((track) => track._id.toString()));
+      if (excludeTrackId) have.add(excludeTrackId);
+      const extra = tagTracks(
+        await this.getTrendingTracks(limit, userId),
+        "trending",
+        "Đang được nghe nhiều",
+      ).filter(
+        (track) =>
+          !have.has(track._id.toString()) && !blocked?.has(track._id.toString()),
+      );
+      mixed = this.capArtistSpread([...mixed, ...extra]).slice(0, limit);
+    }
+
+    return mixed.filter((track) => this.matchesTaste(track, taste)).slice(0, limit);
+  }
+
+  private async mixColdStart(
+    userId: string | null,
+    limit: number,
+    excludeTrackId?: string,
+    blocked?: Set<string>,
+    taste?: ForMeTaste,
+  ): Promise<TrackDoc[]> {
+    const ratios = mixRatios(taste?.mix);
+    const discoveryCount = Math.ceil(limit * ratios.discovery);
+    const trending = tagTracks(
+      await this.getTrendingTracks(limit, userId ?? undefined),
+      "trending",
+      "Đang được nghe nhiều",
+    ).filter(
+      (track) => !blocked?.has(track._id.toString()) && this.matchesTaste(track, taste),
+    );
+    const existingIds = new Set(trending.map((track) => track._id.toString()));
+    if (excludeTrackId) existingIds.add(excludeTrackId);
+    blocked?.forEach((id) => existingIds.add(id));
+    const discovery = tagTracks(
+      await this.getDiscoveryTracks(discoveryCount, existingIds),
+      "new_release",
+      "Bài mới dành cho bạn",
+    );
+    const matchedDiscovery = discovery.filter((track) => this.matchesTaste(track, taste));
+    const mainCount = Math.max(0, limit - matchedDiscovery.length);
+    return this.arrangeForMe(trending.slice(0, mainCount), [], matchedDiscovery)
+      .filter((track) => this.matchesTaste(track, taste))
+      .slice(0, limit);
+  }
+
+  private async findByTaste(
+    limit: number,
+    exclude: Set<string>,
+    taste?: ForMeTaste,
+  ): Promise<TrackDoc[]> {
+    if (!taste || (!taste.genreIds?.length && !taste.mood)) return [];
+    const clauses: Record<string, unknown>[] = [];
+    const genreObjectIds = objectIds(taste.genreIds);
+    if (genreObjectIds.length) clauses.push({ genres: { $in: genreObjectIds } });
+    if (taste.mood === "focus") {
+      clauses.push({
+        $or: [
+          { "aiMetadata.contexts": { $in: ["study", "meditation"] } },
+          { "aiMetadata.moods": { $in: ["chill", "peaceful"] } },
+        ],
+      });
+    } else if (taste.mood === "sad") {
+      clauses.push({ "aiMetadata.moods": { $in: ["sad", "melancholic"] } });
+    } else if (taste.mood === "energy") {
+      clauses.push({
+        $or: [
+          { "aiMetadata.moods": { $in: ["energetic", "uplifting"] } },
+          { "aiMetadata.contexts": "gym" },
+        ],
+      });
+    }
+    const blockedIds = objectIds([...exclude], 80);
+    if (blockedIds.length) clauses.push({ _id: { $nin: blockedIds } });
+
+    const tracks = castLean(
+      await Track.find({
+        isDeleted: false,
+        isPublic: true,
+        status: "ready",
+        ...(clauses.length ? { $and: clauses } : {}),
+      })
+        .select(RECOMMEND_SELECT)
+        .populate(TRACK_POPULATE as any)
+        .sort(lifetimePlayCountWithReleaseSort())
+        .limit(Math.max(limit, 1))
+        .lean(),
+    );
+    const reason = this.tasteReason(taste);
+    return tagTracks(tracks, reason.code, reason.text);
+  }
+
+  private matchesTaste(track: TrackDoc, taste?: ForMeTaste): boolean {
+    if (!taste || (!taste.genreIds?.length && !taste.mood)) return true;
+    if (taste.genreIds?.length) {
+      const wanted = new Set(taste.genreIds);
+      const ids = (track.genres ?? []).map((genre) =>
+        typeof genre === "object" ? (genre._id?.toString() ?? "") : String(genre),
+      );
+      if (!ids.some((id) => wanted.has(id))) return false;
+    }
+    if (!taste.mood) return true;
+    const moods: string[] = track.aiMetadata?.moods ?? [];
+    const contexts: string[] = track.aiMetadata?.contexts ?? [];
+    if (taste.mood === "focus") {
+      return moods.some((mood) => mood === "chill" || mood === "peaceful")
+        || contexts.some((context) => context === "study" || context === "meditation");
+    }
+    if (taste.mood === "sad") {
+      return moods.some((mood) => mood === "sad" || mood === "melancholic");
+    }
+    return moods.some((mood) => mood === "energetic" || mood === "uplifting")
+      || contexts.includes("gym");
+  }
+
+  private tasteReason(taste: ForMeTaste): { code: RecommendReasonCode; text: string } {
+    if (taste.mood === "focus") return { code: "mood", text: "Để tập trung" };
+    if (taste.mood === "sad") return { code: "mood", text: "Khi bạn buồn" };
+    if (taste.mood === "energy") return { code: "mood", text: "Năng lượng cao" };
+    return { code: "genre", text: "Cùng thể loại bạn chọn" };
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -256,73 +679,24 @@ class RecommendationService {
     userId: string,
     limit: number,
     excludeTrackId?: string,
+    taste?: TasteScores,
+    blocked?: Set<string>,
   ): Promise<TrackDoc[]> {
-    const userObjId = new Types.ObjectId(userId);
-
-    // ── Step A: Tính preference score từ PlayLog ─────────────────────────────
-    const playLogScores: Array<{ trackId: Types.ObjectId; score: number }> =
-      await PlayLog.aggregate([
-        { $match: { userId: userObjId } },
-        {
-          $addFields: {
-            daysAgo: {
-              $divide: [
-                { $subtract: [new Date(), "$listenedAt"] },
-                1000 * 60 * 60 * 24,
-              ],
-            },
-          },
-        },
-        {
-          $addFields: {
-            // Decay lambda = 0.1: weight = exp(-0.1 * daysAgo)
-            decayWeight: { $exp: { $multiply: [-0.1, "$daysAgo"] } },
-          },
-        },
-        {
-          $group: {
-            _id: "$trackId",
-            score: { $sum: "$decayWeight" },
-          },
-        },
-        {
-          $project: {
-            trackId: "$_id",
-            score: 1,
-            _id: 0,
-          },
-        },
-      ]);
-
-    // ── Step A2: Cộng thêm Like score ────────────────────────────────────────
-    const likedTracks: Array<{ targetId: Types.ObjectId }> = await Like.find({
-      userId: userObjId,
-      targetType: "track",
-    })
-      .select("targetId")
-      .lean();
-
-    const likedSet = new Set(likedTracks.map((l) => l.targetId.toString()));
-
-    // Merge: nếu track đã like → cộng thêm LIKE_WEIGHT
-    const scoreMap = new Map<string, number>();
-    for (const { trackId, score } of playLogScores) {
-      scoreMap.set(trackId.toString(), score);
-    }
-    for (const { targetId } of likedTracks) {
-      const id = targetId.toString();
-      scoreMap.set(id, (scoreMap.get(id) ?? 0) + LIKE_WEIGHT);
-    }
+    if (limit <= 0) return [];
+    const { scoreMap } = taste ?? (await this.loadTasteScores(userId));
 
     if (scoreMap.size === 0) {
-      // Không đủ dữ liệu → fallback Tier 2
-      return this.getTrendingTracks(limit, userId);
+      return tagTracks(
+        await this.getTrendingTracks(limit, userId),
+        "trending",
+        "Đang được nghe nhiều",
+      ).filter((track) => !blocked?.has(track._id.toString()));
     }
 
     // ── Step B: Lookup genres & artists từ các track đã tương tác ────────────
-    const interactedIds = [...scoreMap.keys()].map(
-      (id) => new Types.ObjectId(id),
-    );
+    const interactedIds = [...scoreMap.keys()]
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
 
     const interactedTracks: Array<{
       _id: Types.ObjectId;
@@ -377,16 +751,24 @@ class RecommendationService {
     //   - Bài đã tương tác (đã nghe / đã like)
     //   - Bài đang bị xóa hoặc chưa ready
     //   - excludeTrackId (nếu có)
-    const excludeIds: Types.ObjectId[] = [
-      ...interactedIds,
-      ...likedTracks.map((l) => new Types.ObjectId(l.targetId)),
-    ];
+    const excludeIds: Types.ObjectId[] = [...interactedIds];
     if (excludeTrackId && Types.ObjectId.isValid(excludeTrackId)) {
       excludeIds.push(new Types.ObjectId(excludeTrackId));
     }
+    blocked?.forEach((id) => {
+      if (Types.ObjectId.isValid(id)) excludeIds.push(new Types.ObjectId(id));
+    });
+
+    if (
+      topGenreIds.length === 0 &&
+      topArtistIds.length === 0 &&
+      topMoods.length === 0
+    ) {
+      return [];
+    }
 
     // Lấy nhiều hơn limit để còn chỗ cho Discovery Mix
-    const fetchLimit = Math.min(limit * 4, 200);
+    const fetchLimit = Math.min(Math.max(limit, 1) * 4, 200);
 
     const candidates = castLean(
       await Track.find({
@@ -400,7 +782,7 @@ class RecommendationService {
           { "aiMetadata.moods": { $in: topMoods } },
         ],
       })
-        .select(TRACK_SELECT)
+        .select(RECOMMEND_SELECT)
         .populate(TRACK_POPULATE as any)
         .sort({ playCount: -1, releaseDate: -1 })
         .limit(fetchLimit)
@@ -469,14 +851,213 @@ class RecommendationService {
 
       // Popularity boost (log scale để tránh bias quá lớn)
       const popularityBonus = Math.log1p(track.playCount ?? 0) * 0.01;
+      const explanation = this.explainCandidate(
+        track,
+        genreWeight,
+        artistWeight,
+        moodWeight,
+      );
 
-      return { ...track, score: relevance + popularityBonus };
+      return {
+        ...track,
+        score: relevance + popularityBonus,
+        reason: explanation.reason,
+        reasonCode: explanation.reasonCode,
+      };
     });
 
     scored.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
     // Dedup & slice
     return deduplicateTracks(scored).slice(0, limit);
+  }
+
+  private async loadTasteScores(userId: string): Promise<TasteScores> {
+    const userObjId = new Types.ObjectId(userId);
+    const playLogScores: Array<{ trackId: Types.ObjectId; score: number }> =
+      await PlayLog.aggregate([
+        { $match: { userId: userObjId } },
+        {
+          $addFields: {
+            daysAgo: {
+              $divide: [
+                { $subtract: [new Date(), "$listenedAt"] },
+                1000 * 60 * 60 * 24,
+              ],
+            },
+          },
+        },
+        {
+          $addFields: {
+            decayWeight: { $exp: { $multiply: [-0.1, "$daysAgo"] } },
+          },
+        },
+        {
+          $group: {
+            _id: "$trackId",
+            score: { $sum: "$decayWeight" },
+          },
+        },
+        {
+          $project: {
+            trackId: "$_id",
+            score: 1,
+            _id: 0,
+          },
+        },
+      ]);
+
+    const likedTracks: Array<{ targetId: Types.ObjectId }> = await Like.find({
+      userId: userObjId,
+      targetType: "track",
+    })
+      .select("targetId")
+      .lean();
+
+    const scoreMap = new Map<string, number>();
+    for (const { trackId, score } of playLogScores) {
+      scoreMap.set(trackId.toString(), score);
+    }
+    const likedIds = new Set<string>();
+    for (const { targetId } of likedTracks) {
+      const id = targetId.toString();
+      likedIds.add(id);
+      scoreMap.set(id, (scoreMap.get(id) ?? 0) + LIKE_WEIGHT);
+    }
+    return { scoreMap, likedIds };
+  }
+
+  private async getFamiliarTracks(
+    userId: string,
+    limit: number,
+    excludeTrackId?: string,
+    taste?: TasteScores,
+    blocked?: Set<string>,
+  ): Promise<TrackDoc[]> {
+    if (limit <= 0) return [];
+    const { scoreMap, likedIds } = taste ?? (await this.loadTasteScores(userId));
+    if (scoreMap.size === 0) return [];
+
+    const rankedIds = [...scoreMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => id)
+      .filter(
+        (id) =>
+          id !== excludeTrackId &&
+          !blocked?.has(id) &&
+          Types.ObjectId.isValid(id),
+      )
+      .slice(0, Math.max(limit * 4, limit));
+
+    if (rankedIds.length === 0) return [];
+
+    const tracks = castLean(
+      await Track.find({
+        _id: { $in: rankedIds.map((id) => new Types.ObjectId(id)) },
+        isDeleted: false,
+        isPublic: true,
+        status: "ready",
+      })
+        .select(RECOMMEND_SELECT)
+        .populate(TRACK_POPULATE as any)
+        .lean(),
+    );
+
+    const order = new Map(rankedIds.map((id, index) => [id, index]));
+    tracks.sort(
+      (a, b) =>
+        (order.get(a._id.toString()) ?? 999) -
+        (order.get(b._id.toString()) ?? 999),
+    );
+
+    return tracks.slice(0, limit).map((track) => {
+      const liked = likedIds.has(track._id.toString());
+      return {
+        ...track,
+        reasonCode: "familiar" as const,
+        reason: liked ? "Vì bạn đã thích" : "Vì bạn nghe gần đây",
+      };
+    });
+  }
+
+  private explainCandidate(
+    track: TrackDoc,
+    genreWeight: Map<string, number>,
+    artistWeight: Map<string, number>,
+    moodWeight: Map<string, number>,
+  ): { reason: string; reasonCode: RecommendReasonCode } {
+    const artistW = artistWeight.get(artistKeyOf(track)) ?? 0;
+    let bestGenre = 0;
+    for (const genre of track.genres ?? []) {
+      const genreId =
+        typeof genre === "object" ? (genre._id?.toString() ?? "") : String(genre);
+      bestGenre = Math.max(bestGenre, genreWeight.get(genreId) ?? 0);
+    }
+    let bestMood = 0;
+    for (const mood of track.aiMetadata?.moods ?? []) {
+      bestMood = Math.max(bestMood, moodWeight.get(mood) ?? 0);
+    }
+
+    if (artistW > 0 && artistW >= bestGenre && artistW >= bestMood) {
+      const name = artistNameOf(track);
+      return {
+        reasonCode: "artist",
+        reason: name ? `Vì bạn nghe ${name}` : "Vì nghệ sĩ bạn hay nghe",
+      };
+    }
+    if (bestMood > 0 && bestMood >= bestGenre) {
+      return { reasonCode: "mood", reason: "Cùng tâm trạng bạn hay nghe" };
+    }
+    return { reasonCode: "genre", reason: "Cùng thể loại bạn hay nghe" };
+  }
+
+  private arrangeForMe(
+    familiar: TrackDoc[],
+    similar: TrackDoc[],
+    discovery: TrackDoc[],
+  ): TrackDoc[] {
+    const interleaved: TrackDoc[] = [];
+    const span = Math.max(familiar.length, similar.length);
+    for (let i = 0; i < span; i += 1) {
+      if (i < familiar.length) interleaved.push(familiar[i]);
+      if (i < similar.length) interleaved.push(similar[i]);
+    }
+    return this.capArtistSpread(
+      deduplicateTracks(this.injectDiscovery(interleaved, discovery)),
+    );
+  }
+
+  /** Tối đa 2 bài liên tiếp cùng nghệ sĩ, và một nghệ sĩ không quá 20% danh sách. */
+  private capArtistSpread(tracks: TrackDoc[]): TrackDoc[] {
+    const maxConsecutive = 2;
+    const maxShare = Math.max(maxConsecutive, Math.ceil(tracks.length * 0.2));
+    const result: TrackDoc[] = [];
+    const pending = [...tracks];
+    const counts = new Map<string, number>();
+
+    const canPlace = (track: TrackDoc) => {
+      const key = artistKeyOf(track);
+      if ((counts.get(key) ?? 0) >= maxShare) return false;
+      let run = 0;
+      for (let i = result.length - 1; i >= 0 && run < maxConsecutive; i -= 1) {
+        if (artistKeyOf(result[i]) !== key) break;
+        run += 1;
+      }
+      return run < maxConsecutive;
+    };
+
+    let guard = pending.length * pending.length + 1;
+    while (pending.length > 0 && guard > 0) {
+      guard -= 1;
+      const index = pending.findIndex((track) => canPlace(track));
+      if (index === -1) break;
+      const [track] = pending.splice(index, 1);
+      result.push(track);
+      const key = artistKeyOf(track);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    return result;
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -523,7 +1104,7 @@ class RecommendationService {
           isPublic: true,
           status: "ready",
         })
-          .select(TRACK_SELECT)
+          .select(RECOMMEND_SELECT)
           .populate(TRACK_POPULATE as any)
           .lean(),
       );
@@ -549,7 +1130,7 @@ class RecommendationService {
         status: "ready",
         _id: { $nin: excludeIds },
       })
-        .select(TRACK_SELECT)
+        .select(RECOMMEND_SELECT)
         .populate(TRACK_POPULATE as any)
         .sort(lifetimePlayCountWithReleaseSort())
         .limit(limit)
@@ -580,7 +1161,7 @@ class RecommendationService {
         isPublic: true,
         status: "ready",
       })
-        .select(TRACK_SELECT)
+        .select(RECOMMEND_SELECT)
         .populate(TRACK_POPULATE as any)
         .sort({ releaseDate: -1 })
         .limit(count * 3)
@@ -678,7 +1259,7 @@ class RecommendationService {
         _id: { $ne: excludeId },
         $or: orConditions,
       })
-        .select(TRACK_SELECT)
+        .select(RECOMMEND_SELECT)
         .populate(TRACK_POPULATE as any)
         .sort({ playCount: -1, releaseDate: -1 })
         .limit(fetchLimit)
@@ -816,7 +1397,7 @@ class RecommendationService {
 
     const data = await Track.find({ _id: { $in: pageIds } })
       .populate(TRACK_POPULATE as any)
-      .select(TRACK_SELECT)
+      .select(RECOMMEND_SELECT)
       .lean();
 
     // Sắp xếp theo thứ tự ranking (không phải thứ tự DB trả về)
@@ -1106,7 +1687,8 @@ class RecommendationService {
   // 3. GET RECOMMENDED ALBUMS
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async getRecommendedAlbums(userId: string, limit: number): Promise<any[]> {
+  async getRecommendedAlbums(userId: string | null, limit: number): Promise<any[]> {
+    if (!isRecommendationUserId(userId)) return this.getTrendingAlbums(limit);
     const cacheKey = `recommend:albums:${userId}:limit${limit}`;
     try {
       const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
@@ -1204,7 +1786,8 @@ class RecommendationService {
   // 4. GET RECOMMENDED PLAYLISTS
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async getRecommendedPlaylists(userId: string, limit: number): Promise<any[]> {
+  async getRecommendedPlaylists(userId: string | null, limit: number): Promise<any[]> {
+    if (!isRecommendationUserId(userId)) return this.getTrendingPlaylists(limit);
     const cacheKey = `recommend:playlists:${userId}:limit${limit}`;
     try {
       const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
@@ -1293,8 +1876,8 @@ class RecommendationService {
     userId: string | undefined | null,
     limit: number = 20,
   ): Promise<any[]> {
-    const resolvedUserId = userId ?? "guest";
-    const cacheKey = `recommend:foryou:${resolvedUserId}:limit${limit}`;
+    const realUserId = isRecommendationUserId(userId) ? userId : null;
+    const cacheKey = `recommend:foryou:${realUserId ?? "guest"}:v2:limit${limit}`;
     try {
       const cached = await withCacheTimeout(() => cacheRedis.get(cacheKey));
       if (cached) return JSON.parse(cached as string);
@@ -1305,12 +1888,12 @@ class RecommendationService {
     const numPlaylists = limit - numTracks - numAlbums;
 
     const [tracks, albums, playlists] = await Promise.all([
-      this.getRecommendedTracks(resolvedUserId, { limit: numTracks }),
-      userId
-        ? this.getRecommendedAlbums(userId, numAlbums)
+      this.getRecommendedTracks(realUserId, { limit: numTracks }),
+      realUserId
+        ? this.getRecommendedAlbums(realUserId, numAlbums)
         : this.getTrendingAlbums(numAlbums),
-      userId
-        ? this.getRecommendedPlaylists(userId, numPlaylists)
+      realUserId
+        ? this.getRecommendedPlaylists(realUserId, numPlaylists)
         : this.getTrendingPlaylists(numPlaylists),
     ]);
 
@@ -1320,7 +1903,7 @@ class RecommendationService {
       feed.push({
         type: "track",
         data: t,
-        reason: "Dựa trên bài hát bạn đã nghe",
+        reason: t.reason || "Đang được nghe nhiều",
       }),
     );
     albums.forEach((a) =>

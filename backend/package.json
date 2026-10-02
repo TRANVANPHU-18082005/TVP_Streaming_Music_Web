@@ -12,6 +12,7 @@
     "migrate:identities": "cross-env NODE_ENV=development ts-node src/scripts/migrateIdentities.ts",
     "migrate:room-passwords": "cross-env NODE_ENV=development ts-node src/scripts/migrateRoomPasswords.ts",
     "migrate:playlog-ttl": "cross-env NODE_ENV=development ts-node src/scripts/migratePlayLogTtl.ts",
+    "backfill:ai-metadata": "cross-env NODE_ENV=development ts-node src/scripts/backfillAiMetadata.ts",
     "dev:worker": "cross-env NODE_ENV=development ts-node src/workers/processTrack.worker.ts",
     "start:worker": "cross-env NODE_ENV=production node dist/workers/processTrack.worker.js",
     "type-check": "tsc --noEmit"

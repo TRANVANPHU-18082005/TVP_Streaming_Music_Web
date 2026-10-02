@@ -13,6 +13,7 @@ interface ILogListenJob {
   userId: string;
   ip?: string;
   timestamp: string | Date;
+  source?: string;
 }
 
 /** Audit row for one listen. This does not update Track.playCount. */
@@ -21,13 +22,14 @@ export function buildListenPlayLog(input: {
   userId?: string | null;
   ip?: string;
   timestamp: string | Date;
+  source?: string;
 }) {
   return {
     trackId: new mongoose.Types.ObjectId(input.trackId),
     userId: input.userId ? new mongoose.Types.ObjectId(input.userId) : null,
     ip: input.ip || "unknown",
     listenedAt: new Date(input.timestamp),
-    source: "web" as const,
+    source: input.source === "for-me" ? "for-me" : "web",
   };
 }
 
@@ -36,7 +38,7 @@ export const startViewWorker = () => {
     "view-updates",
     async (job: Job<ILogListenJob>) => {
       if (job.name === "log-listen-history") {
-        const { trackId, userId, ip, timestamp } = job.data;
+        const { trackId, userId, ip, timestamp, source } = job.data;
         // 1. XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7)
         // Dùng toLocaleDateString với timezone cố định để lấy chính xác YYYY-MM-DD tại VN
         const listenDate = new Date(timestamp);
@@ -53,7 +55,7 @@ export const startViewWorker = () => {
 
           // Task A: Ghi Log thô (Audit Trail)
           const logPromise = PlayLog.create(
-            buildListenPlayLog({ trackId, userId, ip, timestamp: listenDate }),
+            buildListenPlayLog({ trackId, userId, ip, timestamp: listenDate, source }),
           );
           recommendationService.invalidateUserRecommendCache(userId);
 

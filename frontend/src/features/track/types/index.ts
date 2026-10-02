@@ -83,6 +83,8 @@ export interface ITrack {
     analyzedAt?: string;
     analysisVersion?: number;
   };
+  reason?: string;
+  reasonCode?: "artist" | "genre" | "mood" | "familiar" | "new_release" | "trending";
 }
 
 // 3. Chart Interfaces (Giữ nguyên cấu trúc nhưng đồng bộ technical fields)

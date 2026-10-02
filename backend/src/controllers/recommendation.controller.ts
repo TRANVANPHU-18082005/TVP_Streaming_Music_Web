@@ -7,6 +7,27 @@ import httpStatus from "http-status";
 import recommendationService from "../services/recommendation.service";
 import catchAsync from "../utils/catchAsync";
 
+function parseExcludeIds(value: unknown): string[] {
+  if (typeof value !== "string" || !value) return [];
+  return value
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => /^[0-9a-fA-F]{24}$/.test(id))
+    .slice(0, 80);
+}
+
+function parseMix(value: unknown): number | undefined {
+  if (typeof value !== "string" || value === "") return undefined;
+  const mix = Number(value);
+  if (!Number.isFinite(mix)) return undefined;
+  return Math.min(1, Math.max(0, mix));
+}
+
+function parseForMeMood(value: unknown): "focus" | "sad" | "energy" | undefined {
+  if (value === "focus" || value === "sad" || value === "energy") return value;
+  return undefined;
+}
+
 /**
  * GET /tracks/recommendations
  *
@@ -23,11 +44,29 @@ export const getRecommendedTracks = catchAsync(
 
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     const excludeTrackId = req.query.excludeTrackId as string | undefined;
+    const session = req.query.session === "1";
+    const excludeIds = parseExcludeIds(req.query.excludeIds);
+    const genreIds = parseExcludeIds(req.query.genreIds).slice(0, 5);
+    const mood = parseForMeMood(req.query.mood);
+    const mix = parseMix(req.query.mix);
+    const useContinuation = session || excludeIds.length > 0 || genreIds.length > 0 || Boolean(mood) || mix !== undefined;
 
-    const tracks = await recommendationService.getRecommendedTracks(userId, {
-      limit,
-      excludeTrackId,
-    });
+    const continuation = useContinuation
+      ? await recommendationService.getForMeContinuation(userId, {
+          limit,
+          session,
+          excludeIds,
+          genreIds,
+          mix,
+          mood,
+        })
+      : null;
+    const tracks = continuation
+      ? continuation.tracks
+      : await recommendationService.getRecommendedTracks(userId, {
+          limit,
+          excludeTrackId,
+        });
 
     res.status(httpStatus.OK).json({
       success: true,
@@ -36,6 +75,7 @@ export const getRecommendedTracks = catchAsync(
         meta: {
           total: tracks.length,
           userId: userId ?? "guest",
+          needsTaste: continuation?.needsTaste ?? false,
         },
       },
     });
@@ -87,9 +127,9 @@ export const getTopFavouriteTracks = catchAsync(
 export const getRecommendedAlbums = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = (req as any).user;
-    if (!currentUser) return res.status(httpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized" });
+    const userId = currentUser?._id?.toString() ?? null;
     const limit = Math.min(Number(req.query.limit) || 10, 30);
-    const result = await recommendationService.getRecommendedAlbums(currentUser._id.toString(), limit);
+    const result = await recommendationService.getRecommendedAlbums(userId, limit);
     res.status(httpStatus.OK).json({ success: true, data: result });
   },
 );
@@ -97,9 +137,9 @@ export const getRecommendedAlbums = catchAsync(
 export const getRecommendedPlaylists = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = (req as any).user;
-    if (!currentUser) return res.status(httpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized" });
+    const userId = currentUser?._id?.toString() ?? null;
     const limit = Math.min(Number(req.query.limit) || 10, 30);
-    const result = await recommendationService.getRecommendedPlaylists(currentUser._id.toString(), limit);
+    const result = await recommendationService.getRecommendedPlaylists(userId, limit);
     res.status(httpStatus.OK).json({ success: true, data: result });
   },
 );
@@ -117,6 +157,29 @@ export const getTrendingPlaylists = catchAsync(
     const limit = Math.min(Number(req.query.limit) || 10, 30);
     const result = await recommendationService.getTrendingPlaylists(limit);
     res.status(httpStatus.OK).json({ success: true, data: result });
+  },
+);
+
+export const refreshForMe = catchAsync(async (req: Request, res: Response) => {
+  const currentUser = (req as any).user;
+  const userId = currentUser?._id?.toString();
+  if (userId) await recommendationService.resetForMeSession(userId);
+  res.status(httpStatus.OK).json({ success: true, data: { reset: Boolean(userId) } });
+});
+
+export const recordForMeFeedback = catchAsync(
+  async (req: Request, res: Response) => {
+    const currentUser = (req as any).user;
+    const userId = currentUser?._id?.toString();
+    if (!userId) {
+      res.status(httpStatus.OK).json({ success: true, data: { saved: false } });
+      return;
+    }
+    const saved = await recommendationService.recordForMeFeedback(
+      userId,
+      req.body.trackId,
+    );
+    res.status(httpStatus.OK).json({ success: true, data: { saved } });
   },
 );
 

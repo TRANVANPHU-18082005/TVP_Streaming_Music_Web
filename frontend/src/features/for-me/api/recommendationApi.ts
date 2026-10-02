@@ -16,6 +16,7 @@ export interface RecommendationResponse {
     meta: {
       total: number;
       userId: string;
+      needsTaste?: boolean;
     };
   };
 }
@@ -32,9 +33,36 @@ export interface UnifiedFeedResponse {
 }
 
 export const recommendationApi = {
-  getForMeFeed: async (limit: number = 20): Promise<RecommendationResponse> => {
+  getForMeFeed: async (
+    limit: number = 10,
+    options?: {
+      session?: boolean;
+      excludeIds?: string[];
+      genreIds?: string[];
+      mix?: number;
+      mood?: "focus" | "sad" | "energy";
+    },
+  ): Promise<RecommendationResponse> => {
     const response = await api.get(`/tracks/recommendations`, {
-      params: { limit },
+      params: {
+        limit,
+        session: options?.session ? 1 : undefined,
+        excludeIds: options?.excludeIds?.length ? options.excludeIds.join(",") : undefined,
+        genreIds: options?.genreIds?.length ? options.genreIds.join(",") : undefined,
+        mix: options?.mix,
+        mood: options?.mood,
+      },
+    });
+    return response.data;
+  },
+  refreshSession: async () => {
+    const response = await api.post(`/tracks/recommendations/refresh`, {});
+    return response.data;
+  },
+  sendFeedback: async (trackId: string, action: "skip" | "dismiss") => {
+    const response = await api.post(`/tracks/recommendations/feedback`, {
+      trackId,
+      action,
     });
     return response.data;
   },

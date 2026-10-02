@@ -20,6 +20,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useSocket } from "@/hooks/useSocket";
 import { RootState } from "@/store/store";
 import { env } from "@/config/env";
+import { CLIENT_PATHS } from "@/config/paths";
 import { ITrack } from "@/features/track";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +69,7 @@ export const useAudioPlayer = () => {
     hasPlayableUrl(s.player.trackMetadataCache[nextTrackId ?? ""]),
   );
   const user = useAppSelector((state: RootState) => state.auth.user);
+  const sourceId = useAppSelector((state: RootState) => state.player.currentSource?.id);
   const activeQueueIds = useAppSelector(
     (s: RootState) => s.player.activeQueueIds,
   );
@@ -134,12 +136,13 @@ export const useAudioPlayer = () => {
         targetId: trackId,
         targetType: "track",
         userId: userId,
+        metadata: sourceId === CLIENT_PATHS.FOR_ME ? { source: "for-me" } : undefined,
       });
       if (env.NODE_ENV === "development") {
         console.log("[Analytics] track_play emitted:", { trackId, userId });
       }
     },
-    [socket, isConnected, user],
+    [socket, isConnected, sourceId, user],
   );
 
   // ==========================================================================

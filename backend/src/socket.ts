@@ -238,6 +238,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
               userId: resolvePlayUserId(socket.data.user),
               ip: userIp,
               timestamp: new Date(),
+              source: data.metadata?.source === "for-me" ? "for-me" : "web",
             },
             { removeOnComplete: true, removeOnFail: { count: 100 } },
           );

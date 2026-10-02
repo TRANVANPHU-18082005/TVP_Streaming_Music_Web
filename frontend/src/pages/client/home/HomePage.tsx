@@ -10,6 +10,11 @@ const TopFeaturedTracks = lazy(() => import("./TopFeaturedTracks"));
 const RecentlyListenedTrack = lazy(() => import("./RecentlyListenedTrack"));
 const LibrarySection = lazy(() => import("./LibrarySection"));
 const TrackSection = lazy(() => import("./TrackSection"));
+const ContinueShelf = lazy(() =>
+  import("@/features/for-me/components/ContinueShelf").then((mod) => ({
+    default: mod.ContinueShelf,
+  })),
+);
 const TopSevenSection = lazy(() => import("./TopSevenSection"));
 const MashupHomeSection = lazy(() =>
   import("@/features/mashup/components/MashupHomeSection").then((mod) => ({
@@ -44,6 +49,9 @@ export function HomePage() {
           <LibrarySection />
         </Suspense>
       )}
+      <Suspense fallback={<SectionSkeleton height={280} />}>
+        <ContinueShelf />
+      </Suspense>
       <Suspense fallback={<SectionSkeleton height={220} />}>
         <TrackSection />
       </Suspense>

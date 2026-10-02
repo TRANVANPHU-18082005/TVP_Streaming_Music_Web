@@ -1,32 +1,30 @@
-import { ITrack } from "@/features/track/types";
-import { useDispatch, useSelector } from "react-redux";
-import {
-  selectPlayer,
-  setIsPlaying,
-  jumpToIndex,
-  nextTrack,
-  prevTrack,
-} from "@/features/player/slice/playerSlice";
-import { Heart, Share2, Play, ChevronUp, ChevronDown, MoreHorizontal, CheckCheck } from "lucide-react";
-import { cn } from "@/lib/utils";
+import type { MouseEvent, ReactNode } from "react";
+import { useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Ban, Captions, CheckCheck, ChevronDown, ChevronUp, Heart, MoreHorizontal, Play, Share2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 import { ForMeProgressBar } from "./ForMeProgressBar";
-import { useCallback } from "react";
+import { ForMeLyrics } from "./ForMeLyrics";
 import { useImageColor } from "@/hooks/useImageColor";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useContextSheet } from "@/app/provider/SheetProvider";
-import { ForMeLyrics } from "./ForMeLyrics";
-import { useState } from "react";
 import { MarqueeText } from "@/features/player/components/MarqueeText";
 import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
-import { useNavigate } from "react-router-dom";
 import { useInteraction } from "@/features/interaction/hooks/useInteraction";
 import { selectIsInteracted } from "@/features/interaction/slice/interactionSlice";
+import { useAppSelector } from "@/store/hooks";
+import type { ITrack } from "@/features/track/types";
 
 interface FeedItemProps {
   track: ITrack;
-  index: number;
-  isActive: boolean;
+  isPlaying: boolean;
+  lyricsOpen: boolean;
+  onTogglePlay: () => void;
+  onToggleLyrics: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onDismiss: () => void;
 }
 
 function formatCount(n: number): string {
@@ -36,63 +34,70 @@ function formatCount(n: number): string {
 }
 
 interface ActionBtnProps {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label?: string;
-  active?: boolean;
-  activeColor?: string;
-  onClick?: (e: React.MouseEvent) => void;
+  pressed?: boolean;
+  onClick?: (event: MouseEvent) => void;
+  labelText: string;
 }
 
-const ActionBtn = ({ icon, label, active, activeColor, onClick }: ActionBtnProps) => (
+const ActionBtn = ({ icon, label, pressed, onClick, labelText }: ActionBtnProps) => (
   <motion.button
     type="button"
+    aria-label={labelText}
+    aria-pressed={pressed}
     whileTap={{ scale: 0.85 }}
-    onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
-    className="flex flex-col items-center gap-[5px] cursor-pointer outline-none select-none"
+    onClick={(event) => {
+      event.stopPropagation();
+      onClick?.(event);
+    }}
+    className="flex cursor-pointer select-none flex-col items-center gap-[5px] outline-none"
   >
     <div
       className={cn(
-        "w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center",
-        "transition-all duration-200",
-        active
-          ? cn("scale-105", activeColor ?? "bg-white/25")
-          : "bg-black/30 hover:bg-white/20 hover:scale-105 border border-white/10",
+        "flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 md:h-12 md:w-12",
+        pressed
+          ? "scale-105 bg-white/25"
+          : "border border-white/10 bg-black/30 hover:scale-105 hover:bg-white/20",
       )}
     >
       {icon}
     </div>
     {label && (
-      <span className="text-[10px] md:text-xs font-semibold text-white drop-shadow-lg leading-none tracking-wide">
+      <span className="text-[10px] font-semibold leading-none tracking-wide text-white drop-shadow-lg md:text-xs">
         {label}
       </span>
     )}
   </motion.button>
 );
 
-export const FeedItem = ({ track, index, isActive }: FeedItemProps) => {
-  const dispatch = useDispatch();
-  const { duration, isPlaying, currentTrackId } = useSelector(selectPlayer);
+export const FeedItem = ({
+  track,
+  isPlaying,
+  lyricsOpen,
+  onTogglePlay,
+  onToggleLyrics,
+  onPrev,
+  onNext,
+  onDismiss,
+}: FeedItemProps) => {
   const { openTrackSheet } = useContextSheet();
   const navigate = useNavigate();
-  const isCurrentTrack = currentTrackId === track._id;
   const { color: accentColor } = useImageColor(track.coverImage);
-
-  // --- LIKE LOGIC ---
   const { handleToggle } = useInteraction();
-  const isLiked = useSelector((state: any) => selectIsInteracted(state, track._id, "track"));
-  const isPending = useSelector((state: any) => state.interaction.loadingIds[`track:${track._id}`]);
+  const isLiked = useAppSelector((state) => selectIsInteracted(state, track._id, "track"));
+  const isPending = useAppSelector((state) => Boolean(state.interaction.loadingIds[`track:${track._id}`]));
+  const [shared, setShared] = useState(false);
 
-  const handleLikeClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleLikeClick = useCallback((event: MouseEvent) => {
+    event.stopPropagation();
     if (isPending) return;
     handleToggle(track._id, "track");
   }, [handleToggle, track._id, isPending]);
 
-  // --- SHARE LOGIC ---
-  const [shared, setShared] = useState(false);
-  const handleShare = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const url = `${window.location.origin}/tracks/${track._id || track.slug}`;
+  const handleShare = useCallback(async (event: MouseEvent) => {
+    event.stopPropagation();
+    const url = `${window.location.origin}/tracks/${track.slug || track._id}`;
     const title = track.title;
     const text = `Nghe "${title}" trên TVP Music`;
     try {
@@ -101,54 +106,18 @@ export const FeedItem = ({ track, index, isActive }: FeedItemProps) => {
       } else {
         await navigator.clipboard.writeText(url);
         setShared(true);
-        setTimeout(() => setShared(false), 2000);
+        window.setTimeout(() => setShared(false), 2000);
       }
     } catch {
-      // ignore
+      // Người dùng đóng hộp chia sẻ.
     }
   }, [track]);
 
-  const togglePlay = useCallback(() => {
-    if (!isCurrentTrack) {
-      dispatch(jumpToIndex(index));
-    } else {
-      dispatch(setIsPlaying(!isPlaying));
-    }
-  }, [isCurrentTrack, dispatch, index, isPlaying]);
-
-  const handlePrev = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const el = (e.currentTarget as HTMLElement).closest(".snap-start");
-      if (el?.previousElementSibling) {
-        el.previousElementSibling.scrollIntoView({ behavior: "smooth" });
-      }
-    },
-    [],
-  );
-
-  const handleNext = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const el = (e.currentTarget as HTMLElement).closest(".snap-start");
-      if (el?.nextElementSibling) {
-        el.nextElementSibling.scrollIntoView({ behavior: "smooth" });
-      }
-    },
-    [],
-  );
-
-
+  const artistSlug = typeof track.artist === "object" ? track.artist?.slug : undefined;
   const artistAvatar = typeof track.artist === "object" ? track.artist?.avatar : undefined;
 
   return (
-    <div
-      className="
-        relative w-full h-screen
-        bg-black snap-start snap-always overflow-hidden
-      "
-    >
-      {/* ── Background Blurred Image ── */}
+    <div className="relative h-full w-full overflow-hidden bg-black">
       <div
         className="absolute inset-0 z-0 scale-110"
         style={{
@@ -158,128 +127,140 @@ export const FeedItem = ({ track, index, isActive }: FeedItemProps) => {
           filter: "blur(40px) brightness(0.35) saturate(1.2)",
         }}
       />
+      <div className="relative z-10 flex h-full items-center justify-center px-4 pb-16 pt-16 md:px-10">
+        <div className="flex w-full max-w-xl flex-col items-center">
+          {track.reason && (
+            <p className="mb-4 max-w-full truncate rounded-full border border-white/15 bg-black/40 px-3 py-1 text-xs font-medium text-white/90">
+              {track.reason}
+            </p>
+          )}
+          <div className="mb-6 max-w-[420px] text-center">
+            <MarqueeText
+              text={track.title}
+              className="text-2xl font-bold leading-tight tracking-tight text-white md:text-3xl"
+              speed={38}
+              pauseMs={1600}
+            />
+            <ArtistDisplay
+              mainArtist={track.artist}
+              featuringArtists={track.featuringArtists}
+              className="mt-1 flex items-center justify-center gap-1 text-base text-white/80 md:text-lg"
+            />
+          </div>
 
-
-
-      {/* ── Layout Container (Pointer events auto to allow scrolling/clicking on inner elements) ── */}
-      <div className="relative z-30 w-full h-full pointer-events-none flex items-center justify-center">
-
-        <div className="w-full max-w-7xl px-2 md:px-8 py-4 md:py-12 flex flex-col md:flex-row items-center md:items-stretch justify-center gap-6 md:gap-16 h-full">
-
-          {/* LEFT COLUMN / TOP MOBILE: Metadata, Cover, Actions */}
-          <div className="flex flex-col items-center justify-center md:justify-center shrink-0 mt-10 md:mt-0">
-
-            {/* Title & Artist */}
-            <div className="text-center mb-6 md:mb-8 max-w-[300px] md:max-w-[300px] lg:max-w-[400px] xl:max-w-[500px]  sm:w-full lg:w-full justify-center align-center pointer-events-auto cursor-pointer" >
-              <MarqueeText
-                text={track.title}
-                className="text-2xl md:text-3xl font-bold text-white truncate leading-tight tracking-tight"
-                speed={38}
-                pauseMs={1600}
-              />
-              <ArtistDisplay
-                mainArtist={track.artist}
-                featuringArtists={track.featuringArtists}
-                className="text-md justify-center align-center md:text-lg flex gap-1 items-center text-white/80 mt-1"
-              />
-            </div>
-
-            {/* Cover Image & Action Bar Wrapper */}
-            <div className="flex justify-center items-center gap-10 md:gap-4 relative">
-
-              {/* Cover Image (Square, glowing) */}
-              <motion.div
-                animate={isPlaying ? { scale: 1 } : { scale: 0.96 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                className="relative pointer-events-auto cursor-pointer"
-                onClick={(e) => { e.stopPropagation(); togglePlay(); }} // Allow play/pause on cover tap too
-              >
-                {/* Glow effect */}
-                <div className="absolute inset-0 scale-105 rounded-xl md:rounded-2xl bg-white/10 blur-xl md:blur-2xl opacity-60" />
-
-                <div className="flex justify-center items-center relative w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] md:w-[300px] md:h-[300px] lg:w-[350px] lg:h-[350px] rounded-xl md:rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/20">
-                  <ImageWithFallback src={track.coverImage} className="w-full h-full object-cover" />
-
-                  {/* Play/Pause tap feedback overlay INSIDE cover */}
-                  <AnimatePresence>
-                    {!isPlaying && isCurrentTrack && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.7 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.7 }}
-                        transition={{ duration: 0.16, type: "spring", stiffness: 500, damping: 28 }}
-                        className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-black/30"
-                      >
-                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 shadow-xl">
-                          <Play fill="white" className="w-8 h-8 md:w-10 md:h-10 text-white ml-1.5" />
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </motion.div>
-
-              {/* Vertical Action Bar */}
-              <div className="flex flex-col gap-2 md:gap-4 pb-2 pointer-events-auto">
-                <ActionBtn
-                  icon={<Heart className={cn("w-4 h-4 md:w-6 md:h-6 transition-colors", isLiked ? "fill-[hsl(var(--error))] text-[hsl(var(--error))]" : "text-white")} strokeWidth={2.5} />}
-                  label={formatCount((track.likeCount || 0) + (isLiked ? 1 : 0))}
-                  onClick={handleLikeClick}
-                />
-                <ActionBtn
-                  icon={shared ? <CheckCheck className="w-4 h-4 md:w-6 md:h-6 text-emerald-500" strokeWidth={2.5} /> : <Share2 className="w-4 h-4 md:w-6 md:h-6 text-white" strokeWidth={2.5} />}
-                  label={formatCount(0)}
-                  onClick={handleShare}
-                />
-                <ActionBtn
-                  icon={<MoreHorizontal className="w-4 h-4 md:w-6 md:h-6 text-white" strokeWidth={2.5} />}
-                  onClick={(e) => {
-                    e?.stopPropagation();
-                    openTrackSheet(track);
-                  }}
-                />
-                <motion.button
-                  whileTap={{ scale: 0.85 }}
-                  className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-white/80 shadow-lg mt-1"
-                  onClick={(e) => { e.stopPropagation(); navigate(`/artists/${track.artist.slug}`); }}
-                >
-                  <ImageWithFallback src={artistAvatar || track.coverImage} className="w-full h-full object-cover bg-black" />
-                </motion.button>
+          <div className="flex items-center gap-6 md:gap-8">
+            <motion.button
+              type="button"
+              aria-label={isPlaying ? "Tạm dừng" : "Phát"}
+              animate={isPlaying ? { scale: 1 } : { scale: 0.96 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="relative cursor-pointer"
+              onClick={onTogglePlay}
+            >
+              <div className="absolute inset-0 scale-105 rounded-2xl bg-white/10 opacity-60 blur-2xl" />
+              <div className="relative h-[220px] w-[220px] overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/20 sm:h-[280px] sm:w-[280px] md:h-[320px] md:w-[320px]">
+                <ImageWithFallback src={track.coverImage} className="h-full w-full object-cover" />
+                <AnimatePresence>
+                  {!isPlaying && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.7 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.7 }}
+                      className="absolute inset-0 flex items-center justify-center bg-black/30"
+                    >
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-black/50">
+                        <Play fill="white" className="ml-1 h-8 w-8 text-white" />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
+            </motion.button>
 
+            <div className="flex flex-col gap-3">
+              <ActionBtn
+                labelText={isLiked ? "Bỏ thích" : "Thích"}
+                pressed={isLiked}
+                icon={<Heart className={cn("h-5 w-5 md:h-6 md:w-6", isLiked ? "fill-[hsl(var(--error))] text-[hsl(var(--error))]" : "text-white")} strokeWidth={2.5} />}
+                label={formatCount((track.likeCount || 0) + (isLiked ? 1 : 0))}
+                onClick={handleLikeClick}
+              />
+              <ActionBtn
+                labelText={shared ? "Đã chép liên kết" : "Chia sẻ"}
+                icon={shared
+                  ? <CheckCheck className="h-5 w-5 text-emerald-400 md:h-6 md:w-6" strokeWidth={2.5} />
+                  : <Share2 className="h-5 w-5 text-white md:h-6 md:w-6" strokeWidth={2.5} />}
+                label={shared ? "Đã chép" : "Chia sẻ"}
+                onClick={(event) => { void handleShare(event); }}
+              />
+              <ActionBtn
+                labelText={lyricsOpen ? "Ẩn lời" : "Hiện lời"}
+                pressed={lyricsOpen}
+                icon={<Captions className="h-5 w-5 text-white md:h-6 md:w-6" strokeWidth={2.5} />}
+                label="Lời"
+                onClick={onToggleLyrics}
+              />
+              <ActionBtn
+                labelText="Không quan tâm"
+                icon={<Ban className="h-5 w-5 text-white md:h-6 md:w-6" strokeWidth={2.5} />}
+                label="Ẩn"
+                onClick={onDismiss}
+              />
+              <ActionBtn
+                labelText="Thêm"
+                icon={<MoreHorizontal className="h-5 w-5 text-white md:h-6 md:w-6" strokeWidth={2.5} />}
+                onClick={() => openTrackSheet(track)}
+              />
+              {artistSlug && (
+                <motion.button
+                  type="button"
+                  aria-label="Xem nghệ sĩ"
+                  whileTap={{ scale: 0.85 }}
+                  className="mt-1 h-10 w-10 overflow-hidden rounded-full border-2 border-white/80 shadow-lg md:h-12 md:w-12"
+                  onClick={() => navigate(`/artists/${artistSlug}`)}
+                >
+                  <ImageWithFallback src={artistAvatar || track.coverImage} className="h-full w-full bg-black object-cover" />
+                </motion.button>
+              )}
             </div>
-
           </div>
-
-          {/* RIGHT COLUMN / BOTTOM MOBILE: Lyrics View */}
-          <div className="flex-1 w-full md:max-w-lg lg:max-w-xl flex flex-col justify-center h-[35vh] md:h-full relative overflow-hidden pb-10 md:pb-0 pointer-events-none mt-2 md:mt-0">
-            <div className="relative z-10 w-full h-full">
-              <ForMeLyrics track={track} isActive={isActive} isPlaying={isPlaying} accentColor={accentColor} />
-            </div>
-          </div>
-
         </div>
-
       </div>
 
-      {/* ── Desktop Right Edge Navigation ── */}
-      <div className="absolute right-6 top-1/2 -translate-y-1/2 flex-col gap-4 hidden md:flex z-30 pointer-events-auto">
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={handlePrev}
-          className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white/80 hover:text-white shadow-xl"
+      <AnimatePresence>
+        {lyricsOpen && (
+          <motion.div
+            data-lyrics
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="absolute inset-x-0 bottom-16 top-20 z-20 bg-black/55 backdrop-blur-md"
+          >
+            <ForMeLyrics track={track} isActive isPlaying={isPlaying} accentColor={accentColor} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="absolute bottom-4 left-1/2 z-30 flex w-[min(100%-2rem,36rem)] -translate-x-1/2 items-center gap-3">
+        <button
+          type="button"
+          aria-label="Bài trước"
+          onClick={onPrev}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white"
         >
-          <ChevronUp className="w-6 h-6" />
-        </motion.button>
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={handleNext}
-          className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white/80 hover:text-white shadow-xl"
+          <ChevronUp className="h-5 w-5" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <ForMeProgressBar duration={track.duration || 0} />
+        </div>
+        <button
+          type="button"
+          aria-label="Bài sau"
+          onClick={onNext}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white"
         >
-          <ChevronDown className="w-6 h-6" />
-        </motion.button>
+          <ChevronDown className="h-5 w-5" />
+        </button>
       </div>
     </div>
   );

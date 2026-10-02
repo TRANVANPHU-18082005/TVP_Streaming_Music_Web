@@ -9,7 +9,8 @@ const ClientLayout = () => {
   // Hook tính toán khoảng cách an toàn cho Player bar
   const playerPaddingClass = usePlayerPadding(120);
   const location = useLocation();
-  const isHiddenHeaderPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}` || location.pathname === `/${CLIENT_PATHS.MASHUPS_FEED}`;
+  const isForMePage = location.pathname === `/${CLIENT_PATHS.FOR_ME}`;
+  const isHiddenHeaderPage = isForMePage || location.pathname === `/${CLIENT_PATHS.SHORTS}` || location.pathname === `/${CLIENT_PATHS.MASHUPS_FEED}`;
 
   return (
     <div
@@ -28,7 +29,7 @@ const ClientLayout = () => {
         <Outlet />
       </main>
 
-      <Footer />
+      {!isForMePage && <Footer />}
 
       {/* Player thường được render ở root hoặc portal, nhưng layout cần chừa chỗ */}
     </div>

@@ -28,6 +28,8 @@ import {
   processTrackBulkSchema,
   processTrackCustomBulkSchema,
   getTopSevenSchema,
+  recommendationFeedbackSchema,
+  recommendationRefreshSchema,
 } from "../validations/track.validation";
 
 const router = express.Router();
@@ -62,6 +64,20 @@ router.get(
   "/recommendations",
   optionalAuth,
   recommendationController.getRecommendedTracks,
+);
+
+router.post(
+  "/recommendations/feedback",
+  optionalAuth,
+  validate(recommendationFeedbackSchema),
+  recommendationController.recordForMeFeedback,
+);
+
+router.post(
+  "/recommendations/refresh",
+  optionalAuth,
+  validate(recommendationRefreshSchema),
+  recommendationController.refreshForMe,
 );
 
 router.get(
