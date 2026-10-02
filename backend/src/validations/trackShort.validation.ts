@@ -3,7 +3,7 @@ import { objectIdSchema } from "./common.validate";
 
 const shortFields = {
   track: objectIdSchema,
-  moodVideo: objectIdSchema,
+  moodVideo: objectIdSchema.optional(),
   startTime: z.number().min(0),
   endTime: z.number().min(0),
   title: z.string().trim().max(200).optional(),
@@ -30,6 +30,15 @@ export const createShortSchema = z.object({
   body: z.object(shortFields).refine(durationIsValid, {
     message: "Short duration must be between 10 and 60 seconds",
     path: ["endTime"],
+  }),
+});
+
+export const rejectShortSchema = z.object({
+  params: z.object({
+    id: objectIdSchema,
+  }),
+  body: z.object({
+    reason: z.string().trim().max(500).optional(),
   }),
 });
 

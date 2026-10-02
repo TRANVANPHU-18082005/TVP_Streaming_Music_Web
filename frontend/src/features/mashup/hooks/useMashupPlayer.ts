@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { IMashup, TransitionType } from "../types";
+import {
+  attachHighlightSource,
+  isAutoplayBlocked,
+  type HighlightAttachment,
+} from "@/features/player/utils/highlightAudio";
 
 export type TransitionState = 'idle' | 'transitioning';
 
@@ -10,6 +15,7 @@ export interface MashupPlayerState {
   transitionState: TransitionState;
   activeTransitionType: TransitionType | null;
   analyserNode: AnalyserNode | null;
+  autoplayBlocked: boolean;
 }
 
 /**
@@ -39,8 +45,10 @@ export const useMashupPlayer = (
   const crossfadingRef  = useRef(false);
   const rafRef          = useRef<number>(0);
   const stutterTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const attachmentsRef  = useRef<HighlightAttachment[]>([]);
 
   const [isPlaying,    setIsPlaying]    = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [progress,     setProgress]     = useState(0);
   const [transitionState, setTransitionState] = useState<TransitionState>('idle');
@@ -69,6 +77,8 @@ export const useMashupPlayer = (
     return () => {
       cancelAnimationFrame(rafRef.current);
       clearStutterTimer();
+      attachmentsRef.current.forEach((item) => item.destroy());
+      attachmentsRef.current = [];
       audiosRef.current.forEach(a => { a.pause(); a.src = ""; });
       if (ctx.state !== "closed") ctx.close();
     };
@@ -90,6 +100,8 @@ export const useMashupPlayer = (
 
     cancelAnimationFrame(rafRef.current);
     clearStutterTimer();
+    attachmentsRef.current.forEach((item) => item.destroy());
+    attachmentsRef.current = [];
     audiosRef.current.forEach(a => { a.pause(); a.src = ""; });
     audiosRef.current    = [];
     gainNodesRef.current = [];
@@ -101,8 +113,19 @@ export const useMashupPlayer = (
     mashup.shorts.forEach(item => {
       const audio = new Audio();
       audio.crossOrigin = "anonymous";
-      audio.preload     = "metadata"; // Optimized: prevent mass loading of all 8 tracks
-      audio.src = item.short.track?.hlsUrl || item.short.track?.trackUrl || "";
+      audio.preload     = "auto";
+      const src = item.short.track?.hlsUrl || item.short.track?.trackUrl || "";
+      if (src) {
+        attachmentsRef.current.push(attachHighlightSource(audio, src));
+      } else {
+        attachmentsRef.current.push({
+          whenReady: Promise.resolve(),
+          prime: async () => undefined,
+          destroy: () => {
+            audio.pause();
+          },
+        });
+      }
 
       const gain = ctx.createGain();
       gain.gain.value = 0;
@@ -150,22 +173,33 @@ export const useMashupPlayer = (
         return;
       }
 
-      const ctx      = audioCtxRef.current;
-      const now      = ctx.currentTime;
-      const fadeSec  = Math.max(0.1, durationMs / 1000);
-
       const fromGain   = gainNodesRef.current[fromIdx];
       const toGain     = gainNodesRef.current[toIdx];
       const fromFilter = filterNodesRef.current[fromIdx];
       const toFilter   = filterNodesRef.current[toIdx];
       const toAudio    = audiosRef.current[toIdx];
       const toItem     = mashup.shorts[toIdx];
-
-      toAudio.currentTime = toItem.trimStart ?? toItem.short.startTime ?? 0;
+      const targetGain = toItem.volume ?? 1;
 
       setTransitionState('transitioning');
       setActiveTransitionType(type);
       onTransitionStart?.(fromIdx, toIdx, type);
+
+      void (async () => {
+      try {
+        await attachmentsRef.current[toIdx]?.prime(
+          toItem.trimStart ?? toItem.short.startTime ?? 0,
+        );
+      } catch {
+        /* A failed prime still attempts playback so the chain does not stall. */
+      }
+      if (!audioCtxRef.current) {
+        crossfadingRef.current = false;
+        return;
+      }
+      const ctx = audioCtxRef.current;
+      const now = ctx.currentTime;
+      const fadeSec = Math.max(0.1, durationMs / 1000);
 
       const doFinish = () => {
         audiosRef.current[fromIdx]?.pause();
@@ -186,7 +220,7 @@ export const useMashupPlayer = (
           fromGain.gain.setValueAtTime(fromGain.gain.value, now);
           fromGain.gain.linearRampToValueAtTime(0, now + fadeSec);
           toGain.gain.setValueAtTime(0, now);
-          toGain.gain.linearRampToValueAtTime(1, now + fadeSec);
+          toGain.gain.linearRampToValueAtTime(targetGain, now + fadeSec);
           playPromisesRef.current[toIdx] = toAudio.play().catch(() => {});
           setTimeout(doFinish, durationMs);
           break;
@@ -196,7 +230,7 @@ export const useMashupPlayer = (
         case 'cut': {
           audiosRef.current[fromIdx]?.pause();
           fromGain.gain.setValueAtTime(0, now);
-          toGain.gain.setValueAtTime(1, now);
+          toGain.gain.setValueAtTime(targetGain, now);
           playPromisesRef.current[toIdx] = toAudio.play().catch(() => {});
           setTimeout(doFinish, 50);
           break;
@@ -207,7 +241,7 @@ export const useMashupPlayer = (
           fromGain.gain.setValueAtTime(fromGain.gain.value, now);
           fromGain.gain.linearRampToValueAtTime(0, now + fadeSec);
           toGain.gain.setValueAtTime(0, now);
-          toGain.gain.linearRampToValueAtTime(1, now + fadeSec);
+          toGain.gain.linearRampToValueAtTime(targetGain, now + fadeSec);
           playPromisesRef.current[toIdx] = toAudio.play().catch(() => {});
           setTimeout(doFinish, durationMs);
           break;
@@ -229,7 +263,7 @@ export const useMashupPlayer = (
           fromGain.gain.setValueAtTime(fromGain.gain.value, now);
           fromGain.gain.linearRampToValueAtTime(0, now + fadeSec);
           toGain.gain.setValueAtTime(0, now + fadeSec * 0.5);
-          toGain.gain.linearRampToValueAtTime(1, now + fadeSec);
+          toGain.gain.linearRampToValueAtTime(targetGain, now + fadeSec);
           playPromisesRef.current[toIdx] = toAudio.play().catch(() => {});
           setTimeout(doFinish, durationMs);
           break;
@@ -249,7 +283,7 @@ export const useMashupPlayer = (
             toFilter.frequency.linearRampToValueAtTime(22050, now + fadeSec);
           }
           toGain.gain.setValueAtTime(0, now + fadeSec * 0.5);
-          toGain.gain.linearRampToValueAtTime(1, now + fadeSec);
+          toGain.gain.linearRampToValueAtTime(targetGain, now + fadeSec);
           playPromisesRef.current[toIdx] = toAudio.play().catch(() => {});
           setTimeout(doFinish, durationMs);
           break;
@@ -267,7 +301,7 @@ export const useMashupPlayer = (
             if (stutterCount >= totalStutters) {
               clearStutterTimer();
               fromGain.gain.setValueAtTime(0, ctx.currentTime);
-              toGain.gain.setValueAtTime(1, ctx.currentTime);
+              toGain.gain.setValueAtTime(targetGain, ctx.currentTime);
               playPromisesRef.current[toIdx] = toAudio.play().catch(() => {});
               doFinish();
             }
@@ -286,7 +320,7 @@ export const useMashupPlayer = (
           fromGain.gain.linearRampToValueAtTime(0, now + fadeSec * 0.85);
           // Short silence before drop
           toGain.gain.setValueAtTime(0, now + fadeSec * 0.85);
-          toGain.gain.linearRampToValueAtTime(1.0, now + fadeSec);
+          toGain.gain.linearRampToValueAtTime(targetGain, now + fadeSec);
           playPromisesRef.current[toIdx] = toAudio.play().catch(() => {});
           setTimeout(doFinish, durationMs);
           break;
@@ -304,7 +338,7 @@ export const useMashupPlayer = (
             if (scratchCount >= scratchSteps) {
               clearInterval(scratchId);
               fromGain.gain.setValueAtTime(0, ctx.currentTime);
-              toGain.gain.setValueAtTime(1, ctx.currentTime);
+              toGain.gain.setValueAtTime(targetGain, ctx.currentTime);
               playPromisesRef.current[toIdx] = toAudio.play().catch(() => {});
               doFinish();
             }
@@ -312,6 +346,7 @@ export const useMashupPlayer = (
           break;
         }
       }
+      })();
     },
     [mashup, onTransitionStart],
   );
@@ -402,17 +437,44 @@ export const useMashupPlayer = (
     const ctx = audioCtxRef.current;
 
     if (shouldPlay) {
-      if (ctx.state === "suspended") ctx.resume();
+      if (ctx.state === "suspended") void ctx.resume();
       const audio = audiosRef.current[currentIndex];
       const item  = mashup.shorts[currentIndex];
-      if (!audio || !item) return;
-      audio.currentTime = item.trimStart ?? item.short.startTime ?? 0;
-      gainNodesRef.current[currentIndex].gain.value = item.volume ?? 1;
-      const p = audio.play().catch(err => {
-        if (err?.name !== "AbortError") console.warn("[MashupPlayer] play error:", err);
-      });
-      playPromisesRef.current[currentIndex] = p;
-      setIsPlaying(true);
+      const attachment = attachmentsRef.current[currentIndex];
+      if (!audio || !item || !attachment) return;
+      let cancelled = false;
+      void (async () => {
+        try {
+          await attachment.prime(item.trimStart ?? item.short.startTime ?? 0);
+          if (cancelled || !activeRef.current) return;
+          gainNodesRef.current[currentIndex].gain.value = item.volume ?? 1;
+          const pending = audio.play();
+          playPromisesRef.current[currentIndex] = pending;
+          await pending;
+          if (cancelled || !activeRef.current) {
+            audio.pause();
+            return;
+          }
+          setAutoplayBlocked(false);
+          setIsPlaying(true);
+          const next = currentIndex + 1;
+          const nextItem = mashup.shorts[next];
+          if (nextItem && attachmentsRef.current[next]) {
+            void attachmentsRef.current[next].prime(
+              nextItem.trimStart ?? nextItem.short.startTime ?? 0,
+            );
+          }
+        } catch (err) {
+          setIsPlaying(false);
+          if (isAutoplayBlocked(err)) setAutoplayBlocked(true);
+          else if (!(err instanceof DOMException && err.name === "AbortError")) {
+            console.warn("[MashupPlayer] play error:", err);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
     } else {
       const stopAll = () => {
         clearStutterTimer();
@@ -450,13 +512,26 @@ export const useMashupPlayer = (
       audiosRef.current.forEach(a => a.pause());
       setIsPlaying(false);
     } else {
-      if (ctx.state === "suspended") ctx.resume();
+      setAutoplayBlocked(false);
+      if (ctx.state === "suspended") void ctx.resume();
       const audio = audiosRef.current[currentIndex];
       const item  = mashup.shorts[currentIndex];
-      gainNodesRef.current[currentIndex].gain.value = item?.volume ?? 1;
-      const p = audio?.play().catch(console.warn) ?? Promise.resolve();
-      playPromisesRef.current[currentIndex] = p;
-      setIsPlaying(true);
+      const attachment = attachmentsRef.current[currentIndex];
+      if (!audio || !item || !attachment) return;
+      void (async () => {
+        try {
+          await attachment.prime(item.trimStart ?? item.short.startTime ?? 0);
+          gainNodesRef.current[currentIndex].gain.value = item.volume ?? 1;
+          const pending = audio.play();
+          playPromisesRef.current[currentIndex] = pending;
+          await pending;
+          setAutoplayBlocked(false);
+          setIsPlaying(true);
+        } catch (err) {
+          setIsPlaying(false);
+          if (isAutoplayBlocked(err)) setAutoplayBlocked(true);
+        }
+      })();
     }
   }, [isPlaying, currentIndex, mashup]);
 
@@ -476,15 +551,23 @@ export const useMashupPlayer = (
 
       const audio = audiosRef.current[idx];
       const item  = mashup.shorts[idx];
-      if (!audio || !item) return;
+      const attachment = attachmentsRef.current[idx];
+      if (!audio || !item || !attachment) return;
 
-      audio.currentTime = item.trimStart ?? item.short.startTime ?? 0;
-      gainNodesRef.current[idx].gain.value = item.volume ?? 1;
-
-      if (isPlaying) {
-        const p = audio.play().catch(console.warn);
-        playPromisesRef.current[idx] = p;
-      }
+      void (async () => {
+        try {
+          await attachment.prime(item.trimStart ?? item.short.startTime ?? 0);
+        } catch {
+          /* seek best-effort */
+        }
+        gainNodesRef.current[idx].gain.value = item.volume ?? 1;
+        if (isPlaying) {
+          const pending = audio.play().catch((err) => {
+            if (isAutoplayBlocked(err)) setAutoplayBlocked(true);
+          });
+          playPromisesRef.current[idx] = pending;
+        }
+      })();
       setCurrentIndex(idx);
     },
     [mashup, isPlaying],
@@ -497,6 +580,7 @@ export const useMashupPlayer = (
     transitionState,
     activeTransitionType,
     analyserNode,
+    autoplayBlocked,
     togglePlay,
     skipTo,
   };

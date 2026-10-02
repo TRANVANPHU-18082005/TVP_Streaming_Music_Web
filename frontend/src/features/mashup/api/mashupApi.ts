@@ -76,18 +76,18 @@ export const mashupApi = {
 
   // ── Admin ─────────────────────────────────────────────────────────────────
   adminGetAll: async (params: MashupListParams = {}): Promise<MashupListResponse> => {
-    // Falls back to feed endpoint with admin params if no dedicated admin route
-    const response = await api.get("/mashups/feed", { params: { ...params, limit: params.limit || 100 } });
-    // Normalize response to MashupListResponse shape
+    const response = await api.get("/mashups/admin", { params });
     const raw = response.data;
+    const total = raw.data?.total || 0;
+    const limit = params.limit || 20;
     return {
       success: raw.success,
       data: {
-        mashups: raw.data?.feed || raw.data?.mashups || [],
-        total: raw.data?.total || 0,
-        page: params.page || 1,
-        limit: params.limit || 100,
-        totalPages: raw.data?.totalPages || 1,
+        mashups: raw.data?.data || [],
+        total,
+        page: raw.data?.page || params.page || 1,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
       },
     };
   },
@@ -103,9 +103,7 @@ export const mashupApi = {
   },
 
   adminTogglePublish: async (id: string, isPublished?: boolean): Promise<MashupResponse> => {
-    // Use publish/draft endpoints depending on desired state
-    const endpoint = isPublished === false ? `/mashups/${id}/draft` : `/mashups/${id}/publish`;
-    const response = await api.post(endpoint);
+    const response = await api.post(`/mashups/admin/${id}/publish`, { isPublished: Boolean(isPublished) });
     return response.data;
   },
 };

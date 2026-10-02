@@ -34,6 +34,7 @@ export const MashupFeedPage = () => {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    refetch,
   } = useMashupFeed(BATCH_SIZE);
 
   // Flatten tất cả pages thành 1 mảng duy nhất
@@ -57,14 +58,14 @@ export const MashupFeedPage = () => {
 
     const supportsScrollEnd = "onscrollend" in window;
     let debounceTimer: ReturnType<typeof setTimeout>;
+    const onScroll = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(commitIndex, 150);
+    };
 
     if (supportsScrollEnd) {
       container.addEventListener("scrollend", commitIndex, { passive: true });
     } else {
-      const onScroll = () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(commitIndex, 150);
-      };
       container.addEventListener("scroll", onScroll, { passive: true });
     }
 
@@ -72,7 +73,7 @@ export const MashupFeedPage = () => {
       if (supportsScrollEnd) {
         container.removeEventListener("scrollend", commitIndex);
       } else {
-        container.removeEventListener("scroll", commitIndex);
+        container.removeEventListener("scroll", onScroll);
         clearTimeout(debounceTimer);
       }
     };
@@ -127,7 +128,22 @@ export const MashupFeedPage = () => {
   }
 
   // ── Error / Empty State ───────────────────────────────────────────────────
-  if (isError || allMashups.length === 0) {
+  if (isError) {
+    return (
+      <div className="w-full h-screen bg-black flex flex-col items-center justify-center gap-4">
+        <ForMeHeader />
+        <p className="text-white/70 font-semibold">Không tải được Mashup</p>
+        <button
+          onClick={() => void refetch()}
+          className="px-4 py-2 bg-white/10 rounded-full text-sm hover:bg-white/20 transition-colors"
+        >
+          Thử lại
+        </button>
+      </div>
+    );
+  }
+
+  if (allMashups.length === 0) {
     return (
       <div className="w-full h-screen bg-black flex flex-col items-center justify-center gap-4">
         <ForMeHeader />

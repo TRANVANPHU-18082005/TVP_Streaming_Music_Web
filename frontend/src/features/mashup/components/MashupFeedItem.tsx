@@ -10,10 +10,11 @@ import { useNavigate } from "react-router-dom";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useLongPress } from "@/hooks/useLongPress";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
-import { Share2, FileText, Wand2, Repeat, ChevronDown } from "lucide-react";
+import { Share2, FileText, Wand2, Repeat, ChevronDown, Heart } from "lucide-react";
 import { MashupTransitionEffect } from "./MashupTransitionEffect";
 import { MashupWaveformBar } from "./MashupWaveformBar";
 import { CLIENT_PATHS } from "@/config/paths";
+import { mashupApi } from "../api/mashupApi";
 
 interface MashupFeedItemProps {
   mashup: IMashup;
@@ -68,6 +69,7 @@ export const MashupFeedItem = ({ mashup, isActive, onEnd, isAutoNext, onToggleAu
     transitionState,
     activeTransitionType,
     analyserNode,
+    autoplayBlocked,
     togglePlay,
     skipTo,
   } = useMashupPlayer(mashup, isActive, onTransitionStart, onEnd);
@@ -108,6 +110,20 @@ export const MashupFeedItem = ({ mashup, isActive, onEnd, isAutoNext, onToggleAu
         togglePlay();
       }}
     >
+      {isActive && autoplayBlocked && (
+        <button
+          type="button"
+          className="absolute inset-0 z-40 flex items-center justify-center bg-black/35"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePlay();
+          }}
+        >
+          <span className="px-5 py-2.5 rounded-full bg-white text-black text-sm font-semibold">
+            Chạm để bật tiếng
+          </span>
+        </button>
+      )}
       {/* ── Background Mood Video ─────────────────────────────────────── */}
       <div className="absolute inset-0 z-0">
         <VideoMoodEngine
@@ -430,6 +446,18 @@ export const MashupFeedItem = ({ mashup, isActive, onEnd, isAutoNext, onToggleAu
             )}
 
             <button
+              type="button"
+              onClick={() => {
+                void mashupApi.likeMashup(mashup._id).catch(() => undefined);
+                setIsDrawerOpen(false);
+              }}
+              className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 text-left"
+            >
+              <Heart className="w-5 h-5" />
+              <span className="text-sm font-bold">Thả tim</span>
+            </button>
+
+            <button
               onClick={() => {
                 navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`);
                 setIsDrawerOpen(false);
@@ -446,10 +474,19 @@ export const MashupFeedItem = ({ mashup, isActive, onEnd, isAutoNext, onToggleAu
             </button>
             <button
               onClick={() => {
-                if (navigator.share) {
-                  navigator.share({ title: mashup.title, url: window.location.href });
-                }
-                setIsDrawerOpen(false);
+                void (async () => {
+                  const url = `${window.location.origin}/mashups/${mashup._id}`;
+                  try {
+                    if (navigator.share) await navigator.share({ title: mashup.title, url });
+                    else {
+                      await navigator.clipboard.writeText(url);
+                    }
+                    await mashupApi.shareMashup(mashup._id);
+                  } catch {
+                    /* dismissed */
+                  }
+                  setIsDrawerOpen(false);
+                })();
               }}
               className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
             >

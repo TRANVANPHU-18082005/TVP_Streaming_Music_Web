@@ -13,6 +13,31 @@ export const shortsApi = {
     return response.data;
   },
 
+  getPublished: async (params?: { page?: number; limit?: number; search?: string }): Promise<ShortsListResponse> => {
+    const response = await api.get("/shorts/catalog", { params });
+    return response.data;
+  },
+
+  getMyShorts: async (params?: { page?: number; limit?: number }): Promise<ShortsListResponse> => {
+    const response = await api.get("/shorts/my", { params });
+    return response.data;
+  },
+
+  likeShort: async (id: string): Promise<{ success: boolean; data: { likeCount: number; liked: boolean } }> => {
+    const response = await api.post(`/shorts/${id}/like`);
+    return response.data;
+  },
+
+  shareShort: async (id: string): Promise<{ success: boolean }> => {
+    const response = await api.post(`/shorts/${id}/share`);
+    return response.data;
+  },
+
+  rejectShort: async (id: string, reason?: string): Promise<ShortsResponse> => {
+    const response = await api.patch(`/shorts/${id}/reject`, { reason });
+    return response.data;
+  },
+
   getShortById: async (id: string): Promise<ShortsResponse> => {
     const response = await api.get(`/shorts/${id}`);
     return response.data;

@@ -17,7 +17,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { useShorts, useCreateShort, useUpdateShort, useDeleteShort, useTogglePublish } from "../hooks/useShorts";
+import { useShorts, useCreateShort, useUpdateShort, useDeleteShort, useTogglePublish, useRejectShort } from "../hooks/useShorts";
 import { ShortEditor } from "../components/ShortEditor";
 import { ShortCard } from "../components/ShortCard";
 import { ShortDeleteDialog } from "../components/ShortDeleteDialog";
@@ -30,7 +30,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 type ViewMode = "grid" | "table";
 type SortKey = "createdAt" | "viewCount" | "likeCount" | "priority";
-type FilterStatus = "all" | "published" | "draft";
+type FilterStatus = "all" | "published" | "draft" | "pending";
 
 export const ShortsManagementPage = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -42,21 +42,30 @@ export const ShortsManagementPage = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title?: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { data, isLoading } = useShorts({ limit: 100, search });
+  const page = 1;
+  const listParams = {
+    limit: 20,
+    page,
+    search: search || undefined,
+    ...(filterStatus === "published" ? { isPublished: true } : {}),
+    ...(filterStatus === "draft" ? { isPublished: false } : {}),
+    ...(filterStatus === "pending" ? { moderationStatus: "pending" } : {}),
+  };
+  const { data, isLoading } = useShorts(listParams);
+  const { data: pendingData } = useShorts({ limit: 1, page: 1, moderationStatus: "pending" });
   const createShort = useCreateShort();
   const updateShort = useUpdateShort();
   const deleteShort = useDeleteShort();
   const togglePublish = useTogglePublish();
+  const rejectShort = useRejectShort();
 
-  const rawList: ITrackShort[] = data?.data?.data || [];
+  const rawList: ITrackShort[] = useMemo(() => data?.data?.data || [], [data]);
+  const total = data?.data?.total ?? rawList.length;
+  const pendingTotal = pendingData?.data?.total ?? 0;
 
   // ── Filter + Sort ─────────────────────────────────────────────────────────
   const shortsList = useMemo(() => {
-    let list = [...rawList];
-
-    // Filter by status
-    if (filterStatus === "published") list = list.filter((s) => s.isPublished);
-    if (filterStatus === "draft") list = list.filter((s) => !s.isPublished);
+    const list = [...rawList];
 
     // Sort
     list.sort((a, b) => {
@@ -68,7 +77,7 @@ export const ShortsManagementPage = () => {
     });
 
     return list;
-  }, [rawList, filterStatus, sortBy]);
+  }, [rawList, sortBy]);
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleAddNew = () => {
     setEditingShort(null);
@@ -96,13 +105,22 @@ export const ShortsManagementPage = () => {
     });
   };
 
-  const handleTogglePublish = (id: string, isPublished: boolean) => {
-    togglePublish.mutate({ id, isPublished }, {
-      onSuccess: () => toast.success(isPublished ? "Đã xuất bản Short" : "Đã ẩn Short"),
+  const handleReject = (id: string) => {
+    const reason = window.prompt("Lý do từ chối (có thể để trống)") ?? "";
+    rejectShort.mutate({ id, reason }, {
+      onSuccess: () => toast.success("Đã từ chối Short"),
+      onError: () => toast.error("Từ chối thất bại"),
     });
   };
 
-  const handleSubmit = (formData: any) => {
+  const handleTogglePublish = (id: string, isPublished: boolean) => {
+    togglePublish.mutate({ id, isPublished }, {
+      onSuccess: () => toast.success(isPublished ? "Đã xuất bản Short" : "Đã ẩn Short"),
+      onError: () => toast.error("Cập nhật trạng thái thất bại"),
+    });
+  };
+
+  const handleSubmit = (formData: Record<string, unknown>) => {
     if (editingShort) {
       updateShort.mutate({ id: editingShort._id, data: formData }, {
         onSuccess: () => {
@@ -166,7 +184,7 @@ export const ShortsManagementPage = () => {
       </div>
 
       {/* ── STATS BAR ─────────────────────────────────────────────────────── */}
-      <ShortStatsBar shorts={rawList} isLoading={isLoading} />
+      <ShortStatsBar shorts={rawList} isLoading={isLoading} pendingCount={pendingTotal} />
 
       {/* ── FILTERS & VIEW TOGGLE ─────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-3 items-center">
@@ -197,6 +215,7 @@ export const ShortsManagementPage = () => {
           <SelectContent>
             <SelectItem value="all">Tất cả</SelectItem>
             <SelectItem value="published">Đang hiển thị</SelectItem>
+            <SelectItem value="pending">Chờ duyệt</SelectItem>
             <SelectItem value="draft">Đang ẩn</SelectItem>
           </SelectContent>
         </Select>
@@ -403,6 +422,11 @@ export const ShortsManagementPage = () => {
                           <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/20 hover:text-destructive" onClick={() => handleDeleteConfirm(short._id, short.title || short.track?.title)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
+                          {short.moderationStatus !== "rejected" && (
+                            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => handleReject(short._id)}>
+                              Từ chối
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -413,7 +437,8 @@ export const ShortsManagementPage = () => {
 
             {shortsList.length > 0 && (
               <div className="border-t border-border/50 p-3 text-xs text-muted-foreground text-center bg-muted/20">
-                Hiển thị {shortsList.length} / {rawList.length} shorts
+                Hiển thị {shortsList.length} / {total} shorts
+                {pendingTotal > 0 ? ` · ${pendingTotal} chờ duyệt` : ""}
               </div>
             )}
           </div>

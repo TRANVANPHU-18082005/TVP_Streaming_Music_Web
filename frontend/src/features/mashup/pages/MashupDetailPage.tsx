@@ -130,11 +130,14 @@ export const MashupDetailPage = () => {
   } = useMashupPlayer(mashup || null, shouldPlay, onTransitionStart);
 
   const [shareCount, setShareCount] = useState(0);
+  const [likeCount, setLikeCount] = useState(0);
+  const [liked, setLiked] = useState(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   useEffect(() => {
     if (mashup) {
       setShareCount(mashup.shareCount || 0);
+      setLikeCount(mashup.likeCount || 0);
     }
   }, [mashup]);
 
@@ -151,15 +154,26 @@ export const MashupDetailPage = () => {
 
 
 
+  const handleLike = useCallback(async () => {
+    if (!mashup) return;
+    try {
+      const result = await mashupApi.likeMashup(mashup._id);
+      setLiked(Boolean(result.data?.liked));
+      setLikeCount(result.data?.likeCount ?? likeCount);
+    } catch {
+      toast.error("Đăng nhập để thả tim");
+    }
+  }, [likeCount, mashup]);
+
   const handleShare = useCallback(async () => {
     if (!mashup) return;
     setShareCount(prev => prev + 1);
     try {
       await mashupApi.shareMashup(mashup._id);
       if (navigator.share) {
-        navigator.share({ title: mashup.title, url: window.location.href });
+        navigator.share({ title: mashup.title, url: `${window.location.origin}/mashups/${mashup._id}` });
       } else {
-        navigator.clipboard.writeText(window.location.href);
+        navigator.clipboard.writeText(`${window.location.origin}/mashups/${mashup._id}`);
         toast.success("Đã copy link!");
       }
     } catch { }
@@ -287,7 +301,7 @@ export const MashupDetailPage = () => {
               <span className="text-sm text-muted-foreground font-medium">
                 {mashup.shorts.length} tracks • {totalDurationStr}
               </span>
-              {mashup.status === "draft" && (
+              {!mashup.isPublished && (
                 <span className="px-2.5 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-md text-xs font-bold uppercase">
                   Bản nháp
                 </span>
@@ -344,6 +358,14 @@ export const MashupDetailPage = () => {
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] hover:translate-x-[100%] transition-transform duration-700 ease-in-out" />
                 {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
                 {isPlaying ? "Tạm Dừng" : "Phát Toàn Bộ"}
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => void handleLike()}
+                className="shrink-0 w-11 h-11 rounded-full border border-border bg-background dark:bg-card hover:bg-muted flex items-center justify-center shadow-sm"
+                title={`${likeCount} tim`}
+              >
+                <Heart className={`w-4 h-4 ${liked ? "fill-rose-500 text-rose-500" : "text-muted-foreground"}`} />
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.9 }}

@@ -28,6 +28,7 @@ import {
   Headphones,
   Users,
   Layers,
+  TvMinimalPlay,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -88,6 +89,7 @@ const LinkedAccountsTab = lazy(
   () => import("@/features/auth/components/LinkedAccountsTab").then((mod) => ({ default: mod.LinkedAccountsTab || mod.default })),
 );
 const UserMashupsTab = lazy(() => import("./profile/UserMashupsTab"));
+const UserShortsTab = lazy(() => import("./profile/UserShortsTab"));
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,7 +334,7 @@ const ProfilePage = () => {
 
   // Tab direction handling for animated slide transitions
   const tabOrder = useMemo(
-    () => ["overview", "playlists", "mashups", "followed-artists", "library"],
+    () => ["overview", "playlists", "shorts", "mashups", "followed-artists", "library"],
     [],
   );
   const prevTabRef = useRef<string>(activeTab);
@@ -545,6 +547,7 @@ const ProfilePage = () => {
                 [
                   { value: "overview", label: "Tổng quan", icon: BarChart3 },
                   { value: "playlists", label: "Playlist", icon: ListMusic },
+                  { value: "shorts", label: "Shorts", icon: TvMinimalPlay },
                   { value: "mashups", label: "Mashups", icon: Layers },
                   {
                     value: "followed-artists",
@@ -879,6 +882,14 @@ const ProfilePage = () => {
                       </Suspense>
                     )}
                   </div>
+                </motion.div>
+              )}
+
+              {activeTab === "shorts" && (
+                <motion.div key="shorts" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                  <Suspense fallback={null}>
+                    <UserShortsTab />
+                  </Suspense>
                 </motion.div>
               )}
 

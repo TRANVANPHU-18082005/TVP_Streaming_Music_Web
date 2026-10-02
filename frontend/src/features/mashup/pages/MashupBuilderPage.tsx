@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useMashupBuilder } from "../hooks/useMashupBuilder";
-import { useCreateMashup, useSuggestShorts } from "../hooks/useMashups";
-import { useShorts } from "@/features/shorts/hooks/useShorts";
+import { useCreateMashup, useSuggestShorts, useUpdateMashup, useMashupDetail } from "../hooks/useMashups";
+import { usePublishedShorts } from "@/features/shorts/hooks/useShorts";
 import { useMashupPreview } from "../hooks/useMashupPreview";
 import {
   Plus, GripVertical, Play, Pause, X, Music, Sparkles, Search,
@@ -568,8 +568,8 @@ const InspectorPanel = ({
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold truncate">{short.track?.title}</p>
                       <div className="flex items-center gap-1 mt-0.5">
-                        <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${(short as any).compatibilityScore || 80}%`, maxWidth: "70px" }} />
-                        <span className="text-[9px] text-emerald-500 font-bold">{(short as any).compatibilityScore || 80}%</span>
+                        <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${Math.round((short as { compatibilityScore?: number }).compatibilityScore ?? 0)}%`, maxWidth: "70px" }} />
+                        <span className="text-[9px] text-emerald-500 font-bold">{Math.round((short as { compatibilityScore?: number }).compatibilityScore ?? 0)}%</span>
                       </div>
                     </div>
                     <button
@@ -640,6 +640,7 @@ export const MashupBuilderPage = () => {
   } = useMashupBuilder();
 
   const createMashup = useCreateMashup();
+  const updateMashup = useUpdateMashup();
   const suggestShorts = useSuggestShorts();
   const [suggestions, setSuggestions] = useState<ITrackShort[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -657,6 +658,8 @@ export const MashupBuilderPage = () => {
   // Preview
   const { isPlaying: isPreviewing, currentIndex: previewIndex, togglePlay: togglePreview, stop: stopPreview } = useMashupPreview(shorts);
   const [hasInitAi, setHasInitAi] = useState(false);
+  const editId = (location.state as { editMashupId?: string } | null)?.editMashupId;
+  const { data: existingMashup } = useMashupDetail(editId || "");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -665,17 +668,41 @@ export const MashupBuilderPage = () => {
   );
 
   useEffect(() => {
-    if (!hasInitAi && location.state?.aiGeneratedShorts) {
-      const aiShorts = location.state.aiGeneratedShorts.map((short: ITrackShort, i: number) => ({
-        short, order: i, transitionType: "crossfade" as const, transitionDuration: 2000,
-      }));
-      setShorts(aiShorts);
+    if (hasInitAi) return;
+    const state = location.state as { aiGeneratedShorts?: ITrackShort[]; seedShort?: ITrackShort } | null;
+    if (state?.aiGeneratedShorts) {
+      setShorts(state.aiGeneratedShorts.map((short, i) => ({
+        short, order: i, transitionType: "crossfade" as const, transitionDuration: 2000, volume: 1,
+      })));
       setHasInitAi(true);
       toast.success("AI đã tạo xong mashup! Nhấn Preview để nghe thử.");
+      return;
     }
-  }, [location.state, hasInitAi, setShorts]);
+    if (state?.seedShort) {
+      setShorts([{
+        short: state.seedShort,
+        order: 0,
+        transitionType: "crossfade",
+        transitionDuration: 2000,
+        volume: 1,
+      }]);
+      setHasInitAi(true);
+      return;
+    }
+    const mashup = existingMashup?.data;
+    if (editId && mashup) {
+      setTitle(mashup.title);
+      setDescription(mashup.description || "");
+      setShorts(mashup.shorts.map((item, index) => ({
+        ...item,
+        order: item.order ?? index,
+        volume: item.volume ?? 1,
+      })));
+      setHasInitAi(true);
+    }
+  }, [location.state, hasInitAi, setShorts, setTitle, setDescription, existingMashup, editId]);
 
-  const { data: shortsData, isLoading: isLoadingShorts } = useShorts({ limit: 50, search: searchQuery });
+  const { data: shortsData, isLoading: isLoadingShorts } = usePublishedShorts(searchQuery);
   const availableShorts: ITrackShort[] = shortsData?.data?.data || [];
   const addedIds = new Set(shorts.map(s => s.short._id));
 
@@ -731,15 +758,25 @@ export const MashupBuilderPage = () => {
     if (totalDuration < MASHUP_MIN_DURATION) return toast.error("Mashup cần ít nhất 1 phút");
     if (totalDuration > MASHUP_MAX_DURATION) return toast.error("Mashup vượt quá 7 phút");
     try {
-      await createMashup.mutateAsync({
+      const payload = {
         title, description, isPublished,
         shorts: shorts.map(s => ({
-          short: s.short._id, order: s.order,
-          transitionType: s.transitionType, transitionDuration: s.transitionDuration,
+          short: s.short._id,
+          order: s.order,
+          transitionType: s.transitionType,
+          transitionDuration: s.transitionDuration,
+          trimStart: s.trimStart,
+          trimEnd: s.trimEnd,
+          volume: s.volume,
         })),
-      });
-      toast.success(isPublished ? "✅ Đã đăng Mashup!" : "💾 Đã lưu bản nháp!");
-      navigate("/mashups/feed");
+      };
+      if (editId) {
+        await updateMashup.mutateAsync({ id: editId, data: payload });
+      } else {
+        await createMashup.mutateAsync(payload);
+      }
+      toast.success(isPublished ? "Đã đăng Mashup!" : "Đã lưu bản nháp!");
+      navigate(isPublished ? "/mashups/feed" : "/profile?tab=mashups");
     } catch { toast.error("Lỗi khi lưu Mashup"); }
   };
 
@@ -791,7 +828,7 @@ export const MashupBuilderPage = () => {
         {!isMobile && (
           <button
             onClick={() => handleSave(false)}
-            disabled={createMashup.isPending || totalDuration < MASHUP_MIN_DURATION}
+            disabled={createMashup.isPending || updateMashup.isPending || totalDuration < MASHUP_MIN_DURATION}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/50 hover:bg-surface-2/60 transition-all disabled:opacity-40 text-xs sm:text-sm"
           >
             <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -800,7 +837,7 @@ export const MashupBuilderPage = () => {
         )}
         <button
           onClick={() => handleSave(true)}
-          disabled={createMashup.isPending || totalDuration < MASHUP_MIN_DURATION || totalDuration > MASHUP_MAX_DURATION}
+          disabled={createMashup.isPending || updateMashup.isPending || totalDuration < MASHUP_MIN_DURATION || totalDuration > MASHUP_MAX_DURATION}
           className="flex items-center gap-1.5 px-3 sm:px-5 py-1.5 rounded-lg sm:rounded-xl bg-primary text-primary-foreground font-bold hover:brightness-110 transition-all disabled:opacity-40 text-xs sm:text-sm shadow-lg shadow-primary/20"
         >
           {createMashup.isPending

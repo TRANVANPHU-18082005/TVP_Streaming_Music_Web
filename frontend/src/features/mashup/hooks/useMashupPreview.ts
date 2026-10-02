@@ -1,123 +1,97 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { IMashupShort } from '../types';
+import { useState, useRef, useEffect, useCallback } from "react";
+import { IMashupShort } from "../types";
+import {
+  attachHighlightSource,
+  type HighlightAttachment,
+} from "@/features/player/utils/highlightAudio";
+
+const clipWindow = (item: IMashupShort) => {
+  const start = item.trimStart ?? item.short.startTime ?? 0;
+  const end = item.trimEnd ?? item.short.endTime ?? start;
+  return { start, end: Math.max(end, start) };
+};
 
 export const useMashupPreview = (shorts: IMashupShort[]) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(-1);
-  const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
-  const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const attachmentsRef = useRef<HighlightAttachment[]>([]);
+  const cancelRef = useRef(false);
+  const playingRef = useRef(false);
 
-  // Cleanup function
   const cleanup = useCallback(() => {
-    timeoutsRef.current.forEach(clearTimeout);
-    timeoutsRef.current = [];
-    audioRefs.current.forEach(audio => {
-      if (audio) {
-        audio.pause();
-        audio.src = '';
-      }
-    });
-    audioRefs.current = [];
+    cancelRef.current = true;
+    playingRef.current = false;
+    attachmentsRef.current.forEach((item) => item.destroy());
+    attachmentsRef.current = [];
     setIsPlaying(false);
     setCurrentIndex(-1);
   }, []);
 
-  useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+  useEffect(() => cleanup, [cleanup]);
 
-  // Handle sequence playing
   const playSequence = useCallback(async () => {
     if (shorts.length === 0) return;
     cleanup();
+    cancelRef.current = false;
+    playingRef.current = true;
     setIsPlaying(true);
-    setCurrentIndex(0);
 
-    // Initialize all audio elements
-    shorts.forEach((short, idx) => {
+    for (let index = 0; index < shorts.length; index++) {
+      if (cancelRef.current) return;
+      const item = shorts[index];
+      const src = item.short.track?.hlsUrl || item.short.track?.trackUrl || "";
+      if (!src) continue;
+
       const audio = new Audio();
-      audio.src = short.short.track?.trackUrl || '';
-      audioRefs.current[idx] = audio;
-    });
+      audio.crossOrigin = "anonymous";
+      audio.preload = "auto";
+      const attachment = attachHighlightSource(audio, src);
+      attachmentsRef.current.push(attachment);
 
-    let cumulativeDelay = 0;
+      const { start, end } = clipWindow(item);
+      const volume = item.volume ?? 1;
+      const transitionMs = Math.max(100, item.transitionDuration ?? 2000);
+      setCurrentIndex(index);
 
-    shorts.forEach((item, index) => {
-      const audio = audioRefs.current[index];
-      if (!audio) return;
-
-      const rawStart = item.trimStart ?? item.short.startTime;
-      const rawEnd = item.trimEnd ?? item.short.endTime;
-      const startSec = (rawStart > 10000) ? rawStart / 1000 : rawStart;
-      const endSec = (rawEnd > 10000) ? rawEnd / 1000 : rawEnd;
-      const durationSec = endSec - startSec;
-      const transSec = item.transitionDuration / 1000;
-
-      const timeoutId = setTimeout(() => {
-        // Double check playing state
-        // (React state closures might capture old state, we use refs in robust code, but for now this is ok if cleanup clears timeouts)
-        
-        setCurrentIndex(index);
-        audio.currentTime = startSec || 0;
+      try {
+        await attachment.prime(start);
+        if (cancelRef.current) return;
         audio.volume = 0;
-        
-        // Play and Fade In
-        audio.play().then(() => {
-          // Fade in over 1 second or transitionDuration
-          let vol = 0;
-          const fadeInterval = setInterval(() => {
-            if (vol < 0.95) {
-              vol += 0.05;
-              audio.volume = vol;
-            } else {
-              audio.volume = 1;
-              clearInterval(fadeInterval);
-            }
-          }, 50);
-          timeoutsRef.current.push(fadeInterval as any);
-        }).catch(err => {
-          console.error("Preview play error:", err);
-        });
+        await audio.play();
+        const fadeSteps = 12;
+        const fadeStepMs = Math.min(80, transitionMs / fadeSteps);
+        for (let step = 1; step <= fadeSteps; step++) {
+          if (cancelRef.current) return;
+          audio.volume = Math.min(volume, (volume * step) / fadeSteps);
+          await new Promise((resolve) => setTimeout(resolve, fadeStepMs));
+        }
+        const holdMs = Math.max(200, (end - start) * 1000 - transitionMs);
+        await new Promise((resolve) => setTimeout(resolve, holdMs));
+        if (cancelRef.current) return;
+        for (let step = fadeSteps; step >= 0; step--) {
+          if (cancelRef.current) return;
+          audio.volume = Math.max(0, (volume * step) / fadeSteps);
+          await new Promise((resolve) => setTimeout(resolve, fadeStepMs));
+        }
+        audio.pause();
+      } catch (err) {
+        console.warn("[MashupPreview] play error:", err);
+        audio.pause();
+      }
+    }
 
-        // Schedule Fade Out
-        const fadeOutDelay = (durationSec - transSec) * 1000;
-        const fadeOutTimeout = setTimeout(() => {
-          let vol = 1;
-          const fadeOutInterval = setInterval(() => {
-            if (vol > 0.05) {
-              vol -= 0.05;
-              audio.volume = vol;
-            } else {
-              audio.pause();
-              audio.volume = 0;
-              clearInterval(fadeOutInterval);
-              if (index === shorts.length - 1) {
-                // End of sequence
-                setIsPlaying(false);
-                setCurrentIndex(-1);
-              }
-            }
-          }, (transSec * 1000) / 20); // smoothly fade out over transSec
-          timeoutsRef.current.push(fadeOutInterval as any);
-        }, fadeOutDelay);
-        
-        timeoutsRef.current.push(fadeOutTimeout);
-
-      }, cumulativeDelay * 1000);
-
-      timeoutsRef.current.push(timeoutId);
-
-      // Accumulate delay for the next track
-      cumulativeDelay += (durationSec - transSec);
-    });
-
+    if (!cancelRef.current) {
+      playingRef.current = false;
+      setIsPlaying(false);
+      setCurrentIndex(-1);
+    }
   }, [shorts, cleanup]);
 
   const togglePlay = () => {
-    if (isPlaying) {
-      cleanup(); // Stop all
+    if (playingRef.current) {
+      cleanup();
     } else {
-      playSequence();
+      void playSequence();
     }
   };
 
@@ -125,6 +99,6 @@ export const useMashupPreview = (shorts: IMashupShort[]) => {
     isPlaying,
     currentIndex,
     togglePlay,
-    stop: cleanup
+    stop: cleanup,
   };
 };

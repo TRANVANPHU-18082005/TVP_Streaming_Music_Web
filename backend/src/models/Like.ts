@@ -6,7 +6,7 @@ const LikeSchema = new Schema(
     targetId: { type: Schema.Types.ObjectId, required: true }, // ID của Track hoặc Album hoặc Playlist
     targetType: {
       type: String,
-      enum: ["track", "album", "playlist", "mashup"],
+      enum: ["track", "album", "playlist", "mashup", "short"],
       required: true,
       default: "track",
     },

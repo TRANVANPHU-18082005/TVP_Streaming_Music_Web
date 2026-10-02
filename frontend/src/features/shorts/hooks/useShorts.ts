@@ -14,6 +14,8 @@ export const useCreateShort = () => {
     mutationFn: shortsApi.createShort,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
+      queryClient.invalidateQueries({ queryKey: ["shorts-feed"] });
+      queryClient.invalidateQueries({ queryKey: ["my-shorts"] });
     },
   });
 };
@@ -24,6 +26,8 @@ export const useUpdateShort = () => {
     mutationFn: ({ id, data }: { id: string; data: any }) => shortsApi.updateShort(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
+      queryClient.invalidateQueries({ queryKey: ["shorts-feed"] });
+      queryClient.invalidateQueries({ queryKey: ["my-shorts"] });
     },
   });
 };
@@ -34,6 +38,34 @@ export const useDeleteShort = () => {
     mutationFn: shortsApi.deleteShort,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
+      queryClient.invalidateQueries({ queryKey: ["shorts-feed"] });
+      queryClient.invalidateQueries({ queryKey: ["my-shorts"] });
+    },
+  });
+};
+
+export const usePublishedShorts = (search: string) => {
+  return useQuery({
+    queryKey: ["published-shorts", search],
+    queryFn: () => shortsApi.getPublished({ search, limit: 30 }),
+  });
+};
+
+export const useMyShorts = () => {
+  return useQuery({
+    queryKey: ["my-shorts"],
+    queryFn: () => shortsApi.getMyShorts({ limit: 50 }),
+  });
+};
+
+export const useRejectShort = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) => shortsApi.rejectShort(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
+      queryClient.invalidateQueries({ queryKey: ["shorts-feed"] });
+      queryClient.invalidateQueries({ queryKey: ["my-shorts"] });
     },
   });
 };
@@ -45,6 +77,8 @@ export const useTogglePublish = () => {
       isPublished ? shortsApi.publishShort(id) : shortsApi.unpublishShort(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
+      queryClient.invalidateQueries({ queryKey: ["shorts-feed"] });
+      queryClient.invalidateQueries({ queryKey: ["my-shorts"] });
     },
   });
 };

@@ -6,6 +6,9 @@ export interface IMashupShort {
   order: number;
   transitionType: 'crossfade' | 'cut' | 'beatmatch' | 'echo-out' | 'filter-sweep' | 'stutter' | 'build-drop' | 'vinyl-scratch';
   transitionDuration: number;
+  trimStart?: number;
+  trimEnd?: number;
+  volume?: number;
 }
 
 export interface IMashup extends Document {
@@ -46,7 +49,10 @@ const MashupShortSchema = new Schema<IMashupShort>({
   short: { type: Schema.Types.ObjectId, ref: 'TrackShort', required: true },
   order: { type: Number, required: true },
   transitionType: { type: String, enum: ['crossfade', 'cut', 'beatmatch', 'echo-out', 'filter-sweep', 'stutter', 'build-drop', 'vinyl-scratch'], default: 'crossfade' },
-  transitionDuration: { type: Number, default: 2000 }
+  transitionDuration: { type: Number, default: 2000 },
+  trimStart: { type: Number, min: 0 },
+  trimEnd: { type: Number, min: 0 },
+  volume: { type: Number, min: 0, max: 1, default: 1 },
 }, { _id: false });
 
 const MashupSchema = new Schema<IMashup>(

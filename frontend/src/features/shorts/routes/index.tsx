@@ -7,4 +7,8 @@ export const shortsRoutes: RouteObject[] = [
     path: CLIENT_PATHS.SHORTS,
     element: <ShortsPage />,
   },
+  {
+    path: `${CLIENT_PATHS.SHORTS}/:id`,
+    element: <ShortsPage />,
+  },
 ];

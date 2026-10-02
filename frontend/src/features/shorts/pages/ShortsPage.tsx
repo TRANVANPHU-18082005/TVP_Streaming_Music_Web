@@ -1,8 +1,9 @@
-import { useEffect, useRef, useCallback, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useParams } from "react-router-dom";
 import { shortsApi } from "../api/shortsApi";
 import { ShortFeedItem } from "../components/ShortFeedItem";
-import { Loader2, Music2, ChevronUp, ChevronDown, TvMinimalPlay, Repeat } from "lucide-react";
+import { Loader2, Music2, ChevronUp, ChevronDown, TvMinimalPlay } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ForMeHeader } from "@/features/for-me/components/ForMeHeader";
 import { useDispatch, useSelector } from "react-redux";
@@ -22,6 +23,7 @@ const ShortShimmer = () => (
 );
 
 export const ShortsPage = () => {
+  const { id: pinnedId } = useParams();
   const [activeIndex, setActiveIndex] = useState(0);
   const [showSwipeHint, setShowSwipeHint] = useState(true);
   const [isAutoNext, setIsAutoNext] = useState(true);
@@ -52,6 +54,7 @@ export const ShortsPage = () => {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    refetch,
   } = useInfiniteQuery({
     queryKey: ["shorts-feed"],
     queryFn: ({ pageParam }) =>
@@ -62,8 +65,19 @@ export const ShortsPage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Flatten tất cả pages thành 1 mảng duy nhất
-  const allShorts = data?.pages.flatMap((p) => p.data?.feed ?? []) ?? [];
+  const pinnedQuery = useQuery({
+    queryKey: ["short", pinnedId],
+    queryFn: () => shortsApi.getShortById(pinnedId as string),
+    enabled: Boolean(pinnedId),
+    retry: false,
+  });
+
+  const allShorts = useMemo(() => {
+    const feed = data?.pages.flatMap((p) => p.data?.feed ?? []) ?? [];
+    const pinned = pinnedQuery.data?.data;
+    if (!pinned) return feed;
+    return [pinned, ...feed.filter((item) => item._id !== pinned._id)];
+  }, [data, pinnedQuery.data]);
 
   // ── Snap Scroll → activeIndex detection ─────────────────────────────────
   useEffect(() => {
@@ -83,14 +97,14 @@ export const ShortsPage = () => {
 
     const supportsScrollEnd = "onscrollend" in window;
     let debounceTimer: ReturnType<typeof setTimeout>;
+    const onScroll = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(commitIndex, 150);
+    };
 
     if (supportsScrollEnd) {
       container.addEventListener("scrollend", commitIndex, { passive: true });
     } else {
-      const onScroll = () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(commitIndex, 150);
-      };
       container.addEventListener("scroll", onScroll, { passive: true });
     }
 
@@ -98,11 +112,10 @@ export const ShortsPage = () => {
       if (supportsScrollEnd) {
         container.removeEventListener("scrollend", commitIndex);
       } else {
-        container.removeEventListener("scroll", commitIndex);
+        container.removeEventListener("scroll", onScroll);
         clearTimeout(debounceTimer);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allShorts.length]);
 
   // ── Prefetch trigger ──────────────────────────────────────────────────────
@@ -159,7 +172,24 @@ export const ShortsPage = () => {
   }
 
   // ── Error / Empty State ───────────────────────────────────────────────────
-  if (isError || allShorts.length === 0) {
+  if (isError) {
+    return (
+      <div className="w-full h-screen bg-black flex flex-col items-center justify-center gap-6">
+        <ForMeHeader />
+        <div className="flex flex-col items-center gap-4">
+          <p className="text-white/70 font-semibold">Không tải được Shorts</p>
+          <button
+            onClick={() => void refetch()}
+            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-full text-sm text-white/80 font-medium border border-white/10"
+          >
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (allShorts.length === 0) {
     return (
       <div className="w-full h-screen bg-black flex flex-col items-center justify-center gap-6">
         <ForMeHeader />

@@ -36,6 +36,7 @@ export const CLIENT_PATHS = {
   PROFILE: "/profile",
   FOR_ME: "for-me",
   SHORTS: "shorts",
+  SHORTS_CREATE: "shorts/create",
   MASHUPS_FEED: "mashups/feed",
   MASHUPS_CREATE: "mashups/create",
   MASHUPS_DETAIL: (id: string) => `mashups/${id}`,

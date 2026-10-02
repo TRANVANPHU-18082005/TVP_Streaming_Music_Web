@@ -222,23 +222,40 @@ class MashupService {
     limit: number = 10,
     cursor?: string,
   ): Promise<{ feed: IMashup[]; nextCursor: string | null }> {
-    const query: any = { isPublished: true, status: 'ready' };
+    const base = { isPublished: true, status: "ready" as const };
+    let query: Record<string, unknown> = base;
 
-    if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-      query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+    if (cursor) {
+      const [scoreRaw, id] = cursor.split("|");
+      if (id && mongoose.Types.ObjectId.isValid(id)) {
+        const score = Number(scoreRaw) || 0;
+        const objectId = new mongoose.Types.ObjectId(id);
+        query = {
+          $and: [
+            base,
+            {
+              $or: [
+                { compatibilityScore: { $lt: score } },
+                { compatibilityScore: score, _id: { $lt: objectId } },
+              ],
+            },
+          ],
+        };
+      }
     }
 
     const mashups = await Mashup.find(query)
       .sort({ compatibilityScore: -1, _id: -1 })
       .limit(Number(limit))
       .populate([
-        { path: 'createdBy', select: 'name avatar' },
-        { path: 'shorts.short', populate: [{ path: 'track', populate: { path: 'artist', select: 'name slug' } }, { path: 'moodVideo', select: 'videoUrl thumbnailUrl' }] },
+        { path: "createdBy", select: "name avatar" },
+        { path: "shorts.short", populate: [{ path: "track", populate: { path: "artist", select: "name slug" } }, { path: "moodVideo", select: "videoUrl thumbnailUrl" }] },
       ])
       .lean();
 
-    const nextCursor = mashups.length === Number(limit)
-      ? String(mashups[mashups.length - 1]._id)
+    const last = mashups[mashups.length - 1];
+    const nextCursor = mashups.length === Number(limit) && last
+      ? `${last.compatibilityScore ?? 0}|${String(last._id)}`
       : null;
 
     return { feed: mashups as unknown as IMashup[], nextCursor };
@@ -249,11 +266,8 @@ class MashupService {
     if (currentShortIds.length === 0) return [];
     
     const lastShortId = currentShortIds[currentShortIds.length - 1];
-    const lastShort = await TrackShort.findById(lastShortId).populate('track').lean();
+    const lastShort = await TrackShort.findById(lastShortId).populate("track").lean();
     if (!lastShort || !lastShort.track) return [];
-
-    const meta = (lastShort.track as any).aiMetadata;
-    if (!meta) return [];
 
     const candidates = await TrackShort.find({ _id: { $nin: currentShortIds }, isPublished: true })
       .populate('track')
@@ -291,8 +305,10 @@ class MashupService {
     return { data: data as unknown as IMashup[], total };
   }
 
-  async updateMashup(id: string, userId: string, data: Partial<IMashup>): Promise<IMashup> {
-    const mashup = await Mashup.findOne({ _id: id, createdBy: userId });
+  async updateMashup(id: string, userId: string, data: Partial<IMashup>, role?: string): Promise<IMashup> {
+    const mashup = role === "admin"
+      ? await Mashup.findById(id)
+      : await Mashup.findOne({ _id: id, createdBy: userId });
     if (!mashup) throw new ApiError(httpStatus.NOT_FOUND, 'Mashup not found or no permission');
 
     // If shorts changed, recalculate metadata
@@ -319,8 +335,10 @@ class MashupService {
     return mashup.save();
   }
 
-  async deleteMashup(id: string, userId: string): Promise<void> {
-    const result = await Mashup.findOneAndDelete({ _id: id, createdBy: userId });
+  async deleteMashup(id: string, userId: string, role?: string): Promise<void> {
+  const result = role === "admin"
+    ? await Mashup.findByIdAndDelete(id)
+    : await Mashup.findOneAndDelete({ _id: id, createdBy: userId });
     if (!result) throw new ApiError(httpStatus.NOT_FOUND, 'Mashup not found or no permission');
     invalidateCachePrefixes(["mashup:feed:*"]);
   }
@@ -363,15 +381,43 @@ class MashupService {
     await Mashup.findByIdAndUpdate(id, { $inc: { shareCount: 1 } });
   }
 
-  async togglePublish(id: string, userId: string, isPublished: boolean): Promise<IMashup> {
-    const mashup = await Mashup.findOneAndUpdate(
-      { _id: id, createdBy: userId },
-      { isPublished },
-      { new: true }
-    );
-    if (!mashup) throw new ApiError(httpStatus.NOT_FOUND, 'Mashup not found or no permission');
+  async setPublished(id: string, userId: string, isPublished: boolean, isAdmin = false): Promise<IMashup> {
+    const filter = isAdmin ? { _id: id } : { _id: id, createdBy: userId };
+    const mashup = await Mashup.findOneAndUpdate(filter, { isPublished }, { new: true });
+    if (!mashup) throw new ApiError(httpStatus.NOT_FOUND, "Mashup not found or no permission");
     invalidateCachePrefixes(["mashup:feed:*"]);
     return mashup;
+  }
+
+  async getAdminMashups(filters: Record<string, unknown> = {}) {
+    const page = Math.max(1, Number(filters.page) || 1);
+    const limit = Math.min(50, Math.max(1, Number(filters.limit) || 20));
+    const query: Record<string, unknown> = {};
+    if (filters.status === "published") query.isPublished = true;
+    if (filters.status === "draft") query.isPublished = false;
+    if (filters.type && filters.type !== "all") query.creationType = filters.type;
+    if (typeof filters.search === "string" && filters.search.trim()) {
+      query.title = { $regex: filters.search.trim(), $options: "i" };
+    }
+
+    const [data, total] = await Promise.all([
+      Mashup.find(query)
+        .sort({ updatedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate([
+          { path: "createdBy", select: "name avatar" },
+          { path: "shorts.short", populate: { path: "track", select: "title coverImage" } },
+        ])
+        .lean(),
+      Mashup.countDocuments(query),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  async togglePublish(id: string, userId: string, isPublished: boolean): Promise<IMashup> {
+    return this.setPublished(id, userId, isPublished, false);
   }
 }
 

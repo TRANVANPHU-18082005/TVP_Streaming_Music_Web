@@ -17,6 +17,9 @@ const mashupShortSchema = z.object({
   order: z.number().int().min(0),
   transitionType: transitionTypeSchema.optional(),
   transitionDuration: z.number().min(0).max(30000).optional(),
+  trimStart: z.number().min(0).optional(),
+  trimEnd: z.number().min(0).optional(),
+  volume: z.number().min(0).max(1).optional(),
 });
 
 const mashupBodySchema = z.object({

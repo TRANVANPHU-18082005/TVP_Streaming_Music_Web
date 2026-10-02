@@ -1,7 +1,7 @@
 export interface ITrackShort {
   _id: string;
   track: any; // Mongoose populate
-  moodVideo: any; // Mongoose populate
+  moodVideo?: any;
   
   startTime: number;
   endTime: number;
@@ -14,6 +14,8 @@ export interface ITrackShort {
   aiConfidence?: number;
   
   isPublished: boolean;
+  moderationStatus?: "pending" | "approved" | "rejected";
+  rejectionReason?: string;
   priority: number;
   
   viewCount: number;

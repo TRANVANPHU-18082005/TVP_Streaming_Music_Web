@@ -1,17 +1,12 @@
-import { TvMinimalPlay, CheckCircle2, EyeOff, Eye, TrendingUp } from "lucide-react";
+import { TvMinimalPlay, CheckCircle2, EyeOff } from "lucide-react";
 import { ITrackShort } from "../types";
 import { motion } from "framer-motion";
 
 interface ShortStatsBarProps {
   shorts: ITrackShort[];
   isLoading?: boolean;
+  pendingCount?: number;
 }
-
-const fmtCount = (n: number): string => {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(".0", "") + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(".0", "") + "K";
-  return String(n || 0);
-};
 
 interface StatItemProps {
   icon: React.ReactNode;
@@ -36,7 +31,7 @@ const StatItem = ({ icon, label, value, color, delay }: StatItemProps) => (
   </motion.div>
 );
 
-export const ShortStatsBar = ({ shorts, isLoading }: ShortStatsBarProps) => {
+export const ShortStatsBar = ({ shorts, isLoading, pendingCount = 0 }: ShortStatsBarProps) => {
   if (isLoading) {
     return (
       <div className="flex gap-3 flex-wrap">
@@ -52,7 +47,6 @@ export const ShortStatsBar = ({ shorts, isLoading }: ShortStatsBarProps) => {
 
   const totalShorts = shorts.length;
   const publishedCount = shorts.filter((s) => s.isPublished).length;
-  const draftCount = totalShorts - publishedCount;
 
   return (
     <div className="flex gap-3 flex-wrap">
@@ -72,8 +66,8 @@ export const ShortStatsBar = ({ shorts, isLoading }: ShortStatsBarProps) => {
       />
       <StatItem
         icon={<EyeOff className="w-5 h-5 text-muted-foreground" />}
-        label="Đang ẩn"
-        value={String(draftCount)}
+        label="Chờ duyệt"
+        value={String(pendingCount)}
         color="border-border/50"
         delay={0.1}
       />

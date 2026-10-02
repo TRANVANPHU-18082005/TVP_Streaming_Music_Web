@@ -6,6 +6,7 @@ import { forMeRoutes } from "@/features/for-me/routes";
 import { shortsAdminRoutes } from "@/features/shorts/routes/adminRoutes";
 import { mashupAdminRoutes } from "@/features/mashup/routes/adminRoutes";
 import { shortsRoutes } from "@/features/shorts/routes";
+import { CreateShortPage } from "@/features/shorts/pages/CreateShortPage";
 import { mashupRoutes } from "@/features/mashup/routes";
 
 import { AdminLayout, ClientLayout, RootLayout } from "@/layouts";
@@ -93,6 +94,7 @@ export const router = createBrowserRouter([
             element: <ProtectedRoute />,
             children: [
               { path: CLIENT_PATHS.PROFILE, element: <ProfilePage /> },
+              { path: CLIENT_PATHS.SHORTS_CREATE, element: <CreateShortPage /> },
               { path: CLIENT_PATHS.KARAOKE_STUDIO, element: <KaraokePage /> },
               // {
               //   path: CLIENT_PATHS.CLAIM_PROFILE,

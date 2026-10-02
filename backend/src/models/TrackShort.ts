@@ -1,31 +1,31 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export type ShortModerationStatus = "pending" | "approved" | "rejected";
+
 export interface ITrackShort extends Document {
-  track: mongoose.Types.ObjectId;           // ref → Track
-  moodVideo: mongoose.Types.ObjectId;       // ref → TrackMoodVideo
-  
-  // ── Highlight Segment ──
+  track: mongoose.Types.ObjectId;
+  moodVideo?: mongoose.Types.ObjectId;
+  createdBy?: mongoose.Types.ObjectId;
+
   startTime: number;
   endTime: number;
-  duration: number; // Virtual field
-  
-  // ── Metadata ──
+  duration: number;
+
   title?: string;
   caption?: string;
-  
-  // ── AI Suggestion ──
+
   suggestedByAi: boolean;
   aiConfidence?: number;
-  
-  // ── Admin Controls ──
+
   isPublished: boolean;
+  moderationStatus: ShortModerationStatus;
+  rejectionReason?: string;
   priority: number;
-  
-  // ── Stats ──
+
   viewCount: number;
   likeCount: number;
   shareCount: number;
-  
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,7 +33,8 @@ export interface ITrackShort extends Document {
 const TrackShortSchema = new Schema<ITrackShort>(
   {
     track: { type: Schema.Types.ObjectId, ref: "Track", required: true },
-    moodVideo: { type: Schema.Types.ObjectId, ref: "TrackMoodVideo", required: true },
+    moodVideo: { type: Schema.Types.ObjectId, ref: "TrackMoodVideo" },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
     
     startTime: { type: Number, required: true, min: 0 },
     endTime: { type: Number, required: true, min: 0 },
@@ -45,6 +46,12 @@ const TrackShortSchema = new Schema<ITrackShort>(
     aiConfidence: { type: Number, min: 0, max: 1 },
     
     isPublished: { type: Boolean, default: false },
+    moderationStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+    rejectionReason: { type: String, trim: true, maxlength: 500 },
     priority: { type: Number, default: 0 },
     
     viewCount: { type: Number, default: 0 },
@@ -78,8 +85,9 @@ TrackShortSchema.pre("validate", function () {
 });
 
 // Indexes
-TrackShortSchema.index({ isPublished: 1, priority: -1, createdAt: -1 });
+TrackShortSchema.index({ isPublished: 1, moderationStatus: 1, priority: -1, createdAt: -1 });
 TrackShortSchema.index({ track: 1 });
+TrackShortSchema.index({ createdBy: 1, createdAt: -1 });
 
 const TrackShort = mongoose.model<ITrackShort>("TrackShort", TrackShortSchema);
 export default TrackShort;

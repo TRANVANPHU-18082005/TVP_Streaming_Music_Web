@@ -254,7 +254,7 @@ export const MashupManagementPage = () => {
   const handleTogglePublish = async (mashup: IMashup) => {
     setTogglingId(mashup._id);
     try {
-      await togglePublish.mutateAsync({ id: mashup._id, isPublished: mashup.isPublished });
+      await togglePublish.mutateAsync({ id: mashup._id, isPublished: !mashup.isPublished });
       toast.success(mashup.isPublished ? "Đã ẩn Mashup" : "Đã đăng Mashup");
     } catch {
       toast.error("Không thể cập nhật trạng thái");

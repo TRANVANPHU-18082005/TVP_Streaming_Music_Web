@@ -11,6 +11,11 @@ const RecentlyListenedTrack = lazy(() => import("./RecentlyListenedTrack"));
 const LibrarySection = lazy(() => import("./LibrarySection"));
 const TrackSection = lazy(() => import("./TrackSection"));
 const TopSevenSection = lazy(() => import("./TopSevenSection"));
+const MashupHomeSection = lazy(() =>
+  import("@/features/mashup/components/MashupHomeSection").then((mod) => ({
+    default: mod.MashupHomeSection,
+  })),
+);
 
 function SectionSkeleton({ height = 48 }: { height?: number }) {
   return (
@@ -53,6 +58,10 @@ export function HomePage() {
 
       <Suspense fallback={<SectionSkeleton height={220} />}>
         <FeaturedPlaylists />
+      </Suspense>
+
+      <Suspense fallback={<SectionSkeleton height={260} />}>
+        <MashupHomeSection />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton height={220} />}>

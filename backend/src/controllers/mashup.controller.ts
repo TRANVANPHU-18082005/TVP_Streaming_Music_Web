@@ -15,8 +15,27 @@ export const createMashup = catchAsync(async (req: Request, res: Response) => {
   res.status(httpStatus.CREATED).json({ success: true, data: mashup });
 });
 
+export const getAdminMashups = catchAsync(async (req: Request, res: Response) => {
+  const result = await mashupService.getAdminMashups(req.query as Record<string, unknown>);
+  res.status(httpStatus.OK).json({ success: true, data: result });
+});
+
+export const adminSetPublish = catchAsync(async (req: Request, res: Response) => {
+  const userId = String(req.user?._id ?? "");
+  const isPublished = Boolean(req.body?.isPublished);
+  const mashup = await mashupService.setPublished(req.params.id as string, userId, isPublished, true);
+  res.status(httpStatus.OK).json({ success: true, data: mashup });
+});
+
 export const getMashup = catchAsync(async (req: Request, res: Response) => {
   const mashup = await mashupService.getMashupById(req.params.id as string);
+  const ownerId = String((mashup.createdBy as { _id?: unknown } | null)?._id ?? mashup.createdBy ?? "");
+  const userId = req.user?._id ? String(req.user._id) : "";
+  const isOwner = Boolean(userId) && ownerId === userId;
+  const isAdmin = req.user?.role === "admin";
+  if (!mashup.isPublished && !isOwner && !isAdmin) {
+    return res.status(httpStatus.NOT_FOUND).json({ success: false, message: "Mashup not found" });
+  }
   res.status(httpStatus.OK).json({ success: true, data: mashup });
 });
 
@@ -37,14 +56,14 @@ export const getMyMashups = catchAsync(async (req: Request, res: Response) => {
 export const updateMashup = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user?._id?.toString();
   if (!userId) return res.status(httpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized" });
-  const mashup = await mashupService.updateMashup(req.params.id as string, userId, req.body);
+  const mashup = await mashupService.updateMashup(req.params.id as string, userId, req.body, req.user?.role);
   res.status(httpStatus.OK).json({ success: true, data: mashup });
 });
 
 export const deleteMashup = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user?._id?.toString();
   if (!userId) return res.status(httpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized" });
-  await mashupService.deleteMashup(req.params.id as string, userId);
+  await mashupService.deleteMashup(req.params.id as string, userId, req.user?.role);
   res.status(httpStatus.OK).json({ success: true, message: "Mashup deleted" });
 });
 

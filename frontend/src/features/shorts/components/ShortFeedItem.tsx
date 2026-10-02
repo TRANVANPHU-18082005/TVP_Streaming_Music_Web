@@ -2,15 +2,18 @@ import { ITrackShort } from "../types";
 import { useShortAudio } from "../hooks/useShortAudio";
 import { VideoMoodEngine } from "@/features/player/components/VideoMoodEngine";
 import { Play, Loader2 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { MarqueeText } from "@/features/player/components/MarqueeText";
 import { Link, useNavigate } from "react-router-dom";
 import { useLongPress } from "@/hooks/useLongPress";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
-import { Share2, FileText, Zap, Wand2, Repeat, ChevronDown } from "lucide-react";
+import { Share2, FileText, Wand2, Repeat, ChevronDown, Heart } from "lucide-react";
 import { CLIENT_PATHS } from "@/config/paths";
+import { shortsApi } from "../api/shortsApi";
+import { useAppSelector } from "@/store/hooks";
+import { toast } from "sonner";
 
 interface ShortFeedItemProps {
   short: ITrackShort;
@@ -23,20 +26,23 @@ interface ShortFeedItemProps {
 export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAutoNext }: ShortFeedItemProps) => {
   const { track, moodVideo } = short;
   const navigate = useNavigate();
+  const user = useAppSelector((state) => state.auth.user);
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(short.likeCount || 0);
 
   // ── Audio hook (đã fix race condition + reset + seek) ────────────────────
-  const { isPlaying, progress, isLoading, togglePlay, seek } = useShortAudio(
-    track.hlsUrl || track.trackUrl,
+  const src = track?.hlsUrl || track?.trackUrl || "";
+  const { isPlaying, progress, isLoading, autoplayBlocked, togglePlay, seek } = useShortAudio(
+    src,
     short.startTime,
     short.endTime,
-    isActive,
+    isActive && Boolean(track),
     onEnd
   );
 
   // ── Seekbar drag state ────────────────────────────────────────────────────
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekPreview, setSeekPreview] = useState(0);
-  const [showSeekbar, setShowSeekbar] = useState(false);
   const seekbarRef = useRef<HTMLDivElement>(null);
 
   // ── Drawer state ──────────────────────────────────────────────────────────
@@ -94,15 +100,41 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
     [isSeeking],
   );
 
-  const handleNavigateTrack = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      navigate(`/tracks/${track._id}`);
-    },
-    [navigate, track._id],
-  );
+  useEffect(() => {
+    if (!isActive) return;
+    void shortsApi.recordView(short._id).catch(() => undefined);
+  }, [isActive, short._id]);
 
-  // Hiển thị progress dùng cho UI (khi đang kéo thì dùng seekPreview)
+  const shareShort = useCallback(async () => {
+    const url = `${window.location.origin}/shorts/${short._id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: short.title || track?.title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success("Đã sao chép liên kết");
+      }
+      if (user) await shortsApi.shareShort(short._id);
+    } catch {
+      /* user dismissed the share sheet */
+    }
+  }, [short._id, short.title, track?.title, user]);
+
+  const likeShort = useCallback(async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    try {
+      const result = await shortsApi.likeShort(short._id);
+      setLiked(result.data.liked);
+      setLikeCount(result.data.likeCount);
+    } catch {
+      toast.error("Không thả tim được");
+    }
+  }, [navigate, short._id, user]);
+
   const displayProgress = isSeeking ? seekPreview : progress;
 
   // Tính thời gian hiển thị
@@ -112,12 +144,16 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
   const fmtTime = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
+  if (!track) {
+    return <div className="relative w-full h-full bg-black snap-start snap-always" />;
+  }
+
   return (
     <div
       className="relative w-full bg-black snap-start snap-always overflow-hidden select-none"
       style={{ height: "100%" }}
       {...longPress}
-      onClick={(e) => {
+      onClick={() => {
         if (longPressTriggeredRef.current) {
           longPressTriggeredRef.current = false;
           return;
@@ -125,16 +161,36 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
         if (isSeeking) return;
         togglePlay();
       }}
-      onMouseEnter={() => setShowSeekbar(true)}
-      onMouseLeave={() => !isSeeking && setShowSeekbar(false)}
     >
+      {isActive && autoplayBlocked && (
+        <button
+          type="button"
+          className="absolute inset-0 z-40 flex items-center justify-center bg-black/35"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePlay();
+          }}
+        >
+          <span className="px-5 py-2.5 rounded-full bg-white text-black text-sm font-semibold">
+            Chạm để bật tiếng
+          </span>
+        </button>
+      )}
+
       {/* ── Background Mood Video ────────────────────────────────────────── */}
       <div className="absolute inset-0 z-0">
-        <VideoMoodEngine
-          src={moodVideo?.videoUrl || null}
-          isPlaying={isPlaying}
-          blur={0}
-        />
+        {moodVideo?.videoUrl ? (
+          <VideoMoodEngine
+            src={moodVideo.videoUrl}
+            isPlaying={isPlaying}
+            blur={0}
+          />
+        ) : (
+          <ImageWithFallback
+            src={track.coverImage}
+            className="w-full h-full object-cover scale-110 blur-md"
+          />
+        )}
       </div>
 
       {/* ── Gradient scrims ──────────────────────────────────────────────── */}
@@ -173,7 +229,7 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
         </div>
 
         {/* ── Bottom Info Section ───────────────────────────────────────── */}
-        <div className="px-4 pb-2 md:px-6 pointer-events-auto">
+        <div className="px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6 pointer-events-auto">
           <div className="flex items-end justify-between gap-2 w-full">
 
             {/* Track cover + info */}
@@ -191,6 +247,9 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
                   <Link to={`/tracks/${track._id}`} className="text-white/90 text-[13px] font-bold truncate hover:underline leading-tight block">
                     {track.title}
                   </Link>
+                  {track.isExplicit && (
+                    <span className="text-[10px] font-bold text-white/80 border border-white/30 rounded px-1">E</span>
+                  )}
                   {track.artist && (
                     <>
                       <span className="text-white/40 text-[10px] shrink-0 font-black">•</span>
@@ -242,27 +301,14 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
           {/* ── Seekbar + Time display ─────────────────────────────────── */}
           <div className="mt-3 mb-1 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
 
-            {/* Time labels — hiển thị khi hover hoặc đang seek */}
-            <AnimatePresence>
-              {(showSeekbar || isSeeking) && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  transition={{ duration: 0.15 }}
-                  className="flex justify-between text-[10px] text-white/50 font-mono mb-1.5 px-0.5"
-                >
-                  <span>{fmtTime(currentSec)}</span>
-                  <span>{fmtTime(totalSec)}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div className="flex justify-between text-[10px] text-white/50 font-mono mb-1.5 px-0.5">
+              <span>{fmtTime(currentSec)}</span>
+              <span>{fmtTime(totalSec)}</span>
+            </div>
 
-            {/* Seekbar track */}
             <div
               ref={seekbarRef}
-              className={`relative w-full cursor-pointer group transition-all duration-200 ${showSeekbar || isSeeking ? "h-5" : "h-3"
-                } flex items-center`}
+              className="relative w-full h-5 cursor-pointer group flex items-center"
               onPointerDown={handleSeekbarPointerDown}
               onPointerMove={handleSeekbarPointerMove}
               onPointerUp={handleSeekbarPointerUp}
@@ -270,33 +316,36 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
             >
-              {/* Track background */}
-              <div className={`w-full rounded-full bg-white/20 overflow-hidden transition-all duration-200 ${showSeekbar || isSeeking ? "h-1.5" : "h-[3px]"
-                }`}>
-                {/* Filled portion */}
+              <div className="w-full h-1.5 rounded-full bg-white/20 overflow-hidden">
                 <div
                   className="h-full bg-white rounded-full transition-none"
                   style={{ width: `${displayProgress}%` }}
                 />
               </div>
-
-              {/* Thumb — chỉ visible khi hover hoặc đang seek */}
-              <AnimatePresence>
-                {(showSeekbar || isSeeking) && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg shadow-black/40 pointer-events-none transition-none ${isSeeking ? "scale-125" : ""
-                      }`}
-                    style={{ left: `calc(${displayProgress}% - 8px)` }}
-                  />
-                )}
-              </AnimatePresence>
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg shadow-black/40 pointer-events-none"
+                style={{ left: `calc(${displayProgress}% - 8px)` }}
+              />
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="absolute right-3 bottom-28 z-30 flex flex-col items-center gap-3">
+        <button type="button" onClick={likeShort} className="flex flex-col items-center text-white">
+          <Heart className={`w-7 h-7 ${liked ? "fill-rose-500 text-rose-500" : ""}`} />
+          <span className="text-[11px]">{likeCount}</span>
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            void shareShort();
+          }}
+          className="text-white"
+        >
+          <Share2 className="w-6 h-6" />
+        </button>
       </div>
 
       {/* ── Action Menu (Long press) ────────────────────────────────────────── */}
@@ -324,7 +373,7 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
                 <FileText className="w-5 h-5" />
               </div>
               <div className="flex flex-col">
-                <span className="text-sm font-bold">Chi tiết Track</span>
+                <span className="text-sm font-bold">Nghe cả bài</span>
                 <span className="text-xs text-muted-foreground">Xem bài hát gốc</span>
               </div>
             </button>
@@ -354,7 +403,7 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
 
             <button
               onClick={() => {
-                navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`);
+                navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`, { state: { seedShort: short } });
                 setIsDrawerOpen(false);
               }}
               className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
@@ -363,15 +412,13 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
                 <Wand2 className="w-5 h-5" />
               </div>
               <div className="flex flex-col">
-                <span className="text-sm font-bold">Tạo Mashup</span>
+                <span className="text-sm font-bold">Thêm vào mashup</span>
                 <span className="text-xs text-muted-foreground">Mix track này với các bài khác</span>
               </div>
             </button>
             <button
               onClick={() => {
-                if (navigator.share) {
-                  navigator.share({ title: short.title || track.title, url: window.location.href });
-                }
+                void shareShort();
                 setIsDrawerOpen(false);
               }}
               className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
