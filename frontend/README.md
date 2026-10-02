@@ -1,93 +1,104 @@
-# 🎨 TVP Music - Frontend & User Experience
+# TVP Music frontend
 
-Đây là giao diện người dùng của nền tảng TVP Music, được xây dựng với mục tiêu mang lại trải nghiệm nghe nhạc mượt mà, tốc độ phản hồi cực nhanh và giao diện chuẩn Premium với hiệu ứng Glassmorphism.
+React 18 app for TVP Music. It talks to the Express API in `../backend`. The API is one process. Audio transcoding is a second Node process in that package (`npm run dev:worker`). This folder does not run the API or the worker.
 
-[Image of a modern music player interface with a sleek dark theme, glassmorphism sidebar, and dynamic album art colors]
+## Stack
 
----
+- React 18, TypeScript, Vite (`rolldown-vite` 7)
+- React Router 7
+- Redux Toolkit and redux-persist for auth, playback, followed artists, and the music room
+- TanStack Query for server data
+- react-hook-form and Zod
+- Tailwind CSS 4 and Radix UI
+- hls.js for playback of the single AAC HLS playlist the worker produces
+- socket.io-client
 
-## ⚡ Tech Stack & Core Libraries
+`vite.config.ts` does not set `server.port` or `preview.port`. `npm run dev` uses Vite’s default port **5173**. `npm run preview` uses Vite’s default port **4173**.
 
-- **Framework:** React 18 + Vite (TypeScript)
-- **State Management:** - **Redux Toolkit:** Quản lý hàng chờ phát nhạc (Queue), trạng thái Player và xác thực.
-  - **TanStack Query (React Query):** Quản lý server-state, caching dữ liệu API và xử lý Infinite Scrolling.
-- **Styling:** - **Tailwind CSS:** Thiết kế giao diện responsive linh hoạt.
-  - **Shadcn/UI:** Hệ thống component chuẩn mực (Table, Modal, Dropdown, Tabs).
-- **Animations:** **Framer Motion** cho các hiệu ứng chuyển trang, staggered list và micro-interactions.
-- **Streaming Logic:** **Hls.js** tích hợp để giải mã các phân đoạn âm thanh (.ts) từ máy chủ.
+## Setup
 
----
+```bash
+cd frontend
+npm install
+```
 
-## ✨ Tính năng nổi bật trên giao diện
+Vite loads `.env`, `.env.local`, `.env.[mode]`, and `.env.[mode].local`. For `npm run dev`, mode is `development`, so `.env.development` is the file to use locally.
 
-### 🎵 Smart Music Player
+`frontend/.gitignore` ignores `.env.development`, `.env.production`, and `*.local`. It does not ignore a plain `.env`. Do not commit secrets in either file.
 
-- **HLS Streaming:** Phát nhạc thông qua luồng Adaptive Bitrate, tự động điều chỉnh chất lượng theo tốc độ mạng.
-- **Queue Management:** Hỗ trợ kéo thả, thêm bài hát vào hàng chờ, chế độ phát ngẫu nhiên (Shuffle) và lặp lại (Repeat).
-- **Visualizer:** Hiệu ứng sóng nhạc động (Music Bars) phản hồi theo trạng thái bài hát đang phát.
+```env
+VITE_API_URL=http://localhost:8000/api
+VITE_SOCKET_URL=http://localhost:8000
+VITE_APP_NAME=TVP Music
+VITE_CDN_URL=
+```
 
-### 📊 Realtime Charts & Discovery
+The backend must be listening on port **8000** (its default). Start it from `../backend` with `npm run dev`.
 
-- **Live Leaderboard:** Hiển thị Top 100 bài hát thịnh hành với dữ liệu cập nhật liên tục từ Redis.
-- **Interactive Graphs:** Sử dụng biểu đồ đường (Line Chart) để minh họa biến động thứ hạng bài hát theo từng giờ.
+## Environment variables
 
-### 🛡️ Professional Admin Dashboard
+`src/config/env.ts` reads these four variables:
 
-- **Hierarchy Tree:** Quản lý thể loại nhạc theo cấu trúc cha-con trực quan.
-- **Batch Actions:** Chọn nhiều bài hát/người dùng để xử lý hàng loạt (Delete, Block, Change Status).
-- **Monitoring:** Giao diện theo dõi tiến độ xử lý nhạc (Transcoding) của hệ thống Worker.
+| Variable | Used for | If unset |
+|---|---|---|
+| `VITE_API_URL` | Axios `baseURL`. Feature modules call paths such as `/tracks`, so this value already ends with `/api` | `https://tvp-backend.fly.dev/api` |
+| `VITE_SOCKET_URL` | Socket.IO client. No `/api` suffix | `https://tvp-backend.fly.dev` |
+| `VITE_APP_NAME` | Display name | `Music App` |
+| `VITE_CDN_URL` | CDN origin. The module stores it on the field `CDN_DOMAIN` | `https://cdn.tvpmusic.site` |
 
-### 👤 Premium User Profile
+`src/utils/track-helper.ts` builds playback URLs from `VITE_CDN_URL`. The name `VITE_CDN_DOMAIN` is not read. `frontend/.env.example` lists `VITE_CDN_URL` and also `VITE_NODE_ENV`; application code does not read `VITE_NODE_ENV`.
 
-- **Personalization:** Trang cá nhân với ảnh bìa rộng, hiển thị lịch sử hoạt động (Activity Feed) và playlist đã tạo.
-- **Optimistic UI:** Phản hồi tức thì khi người dùng nhấn Like bài hát hoặc Follow nghệ sĩ trước khi server phản hồi.
+The backend’s own CDN setting is `CDN_DOMAIN` in `backend/src/config/env.ts`. Karaoke URL building in `karaoke.controller.ts` reads `CLOUDFLARE_DOMAIN`. Those are backend variables.
 
----
+## Commands
 
-## 🏗️ Cấu trúc thư mục (Architecture)
+```bash
+npm run dev          # Vite dev server, port 5173
+npm run type-check   # tsc --noEmit
+npm run lint         # eslint .
+npm run test         # vitest run
+npm run test:watch   # vitest
+npm run test:coverage
+npm run build        # tsc --noEmit && vite build
+npm run preview      # serve dist
+```
 
-Dự án tuân thủ cấu trúc **Feature-based**, giúp dễ dàng mở rộng và bảo trì:
+Tests use `vitest.config.ts`: jsdom, `src/test/setup.ts`, and `src/**/*.{test,spec}.{ts,tsx}`.
+
+## Architecture
+
+`src/main.tsx` injects the Redux store into Axios, then renders providers. `RootLayout` runs auth bootstrap (`POST /api/auth/refresh-token` with the httpOnly cookie) and waits before rendering the tree. The access token stays in Redux memory. `MusicPlayer` is mounted once at the root.
+
+Routes are composed in `src/app/routes/route.tsx`. Features export their own route arrays.
 
 ```text
 src/
-├── features/           # Các tính năng lớn (track, artist, genre, player, user)
-│   ├── hooks/          # Query & Mutation hooks riêng cho từng feature
-│   ├── components/     # UI components đặc thù cho feature
-│   └── types/          # Định nghĩa TypeScript cho feature đó
-├── store/              # Cấu hình Redux Toolkit & Slices
-├── components/         # Shared UI components (Button, Table, Input...)
-├── lib/                # Cấu hình Axios, Utils (cn, formatters)
-└── layouts/            # Main Layout, Admin Layout, Auth Layout
+  app/             router, providers, sheets
+  features/        one folder per feature (api, hooks, components, schemas)
+  pages/           admin, client, and auth screens
+  layouts/         RootLayout, ClientLayout, AdminLayout
+  components/ui/   shared UI primitives
+  store/           Redux store
+  lib/             Axios and the query client
+  config/          env.ts, paths
 ```
 
-Cài đặt & Khởi chạy
-Yêu cầu
-Node.js 18+
+Feature folders in use include `auth`, `player`, `track`, `album`, `artist`, `playlist`, `genre`, `search`, `interaction`, `library`, `profile`, `user`, `dashboard`, `analytics`, `verification`, `mood-video`, `shorts`, `mashup`, `music-room`, `karaoke`, `ai`, `for-me`, and `track-topic`. The notifications folder is spelled `notifcation`.
 
-Backend API (đang chạy)
+Server data goes through TanStack Query. Playback, auth, and room state stay in Redux. `player` and `interaction.followedArtists` are persisted. `auth` and `room` are not.
 
-Các bước thiết lập
-Clone dự án & Cài đặt:
+The theme provider is `components/providers/theme-provider.tsx` (`storageKey="vite-ui-theme"`). The toaster mounted by the app provider imports `sonner` directly.
 
-Bash
-git clone [https://github.com/username/tvp-music-frontend.git](https://github.com/username/tvp-music-frontend.git)
-cd tvp-music-frontend
-npm install
-Cấu hình môi trường (.env):
-Tạo file .env.local:
+## Playback and realtime
 
-Đoạn mã
-VITE_API_URL=http://localhost:5000/api/v1
-VITE_CDN_URL=[https://music-cdn.yourdomain.com](https://music-cdn.yourdomain.com)
-Khởi chạy:
+The audio worker writes one AAC HLS playlist (10-second segments), not a multi-rendition ladder. This app plays that playlist with hls.js and rewrites storage URLs through `VITE_CDN_URL`.
 
-Bash
-npm run dev
-📱 Khả năng thích ứng (Responsiveness)
-Giao diện được tối ưu hóa cho 3 cấp độ màn hình:
+The socket client sends `auth.token` and `query.userId`. Identity on the server is the access token. Chart pages join `live_chart_room` and listen for `chart_update`. The server emits that event every 10 seconds while the room has members. The chart payload itself is cached for 30 seconds on the API. This UI does not recompute the chart.
 
-Mobile: Ẩn các cột phụ trong bảng nhạc, chuyển menu sang Bottom Navigation.
+## API
 
-Tablet: Thu gọn Sidebar, hiển thị Grid 2-3 cột cho Album/Artist.
+With the local API:
 
-Desktop: Trải nghiệm đầy đủ với Sidebar mở rộng, bảng nhạc chi tiết và Player thanh mảnh phía dưới.
+- HTTP: `http://localhost:8000/api`
+- Socket.IO: `http://localhost:8000`
+- Liveness: `GET http://localhost:8000/api/health` returns `{ "status": "ok" }`

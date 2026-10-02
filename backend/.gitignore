@@ -9,3 +9,4 @@ logs
 .combined.log
 .error.log
 .tmp
+src/scripts/data/
