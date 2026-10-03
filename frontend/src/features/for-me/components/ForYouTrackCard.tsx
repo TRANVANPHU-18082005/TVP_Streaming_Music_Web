@@ -2,7 +2,7 @@
 
 import { memo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Play, Pause } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -31,10 +31,13 @@ export const ForYouTrackCard = memo<ForYouTrackCardProps>(function ForYouTrackCa
 }) {
   const dispatch = useDispatch();
   const player = useSelector(selectPlayer);
+  const navigate = useNavigate();
 
   const isThisTrackActive = player.currentTrackId === track._id;
   const isThisTrackPlaying = isThisTrackActive && player.isPlaying;
-
+  const handleNavigate = useCallback(() => {
+    navigate(`/tracks/${track._id}`);
+  }, [navigate, track._id]);
   const handlePlayClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -58,6 +61,8 @@ export const ForYouTrackCard = memo<ForYouTrackCardProps>(function ForYouTrackCa
 
   return (
     <article
+      onClick={handleNavigate}
+
       className={cn(
         "group cursor-pointer flex flex-col gap-3 relative",
         "album-card !overflow-visible p-2 rounded-2xl transition-all duration-300",
@@ -66,12 +71,6 @@ export const ForYouTrackCard = memo<ForYouTrackCardProps>(function ForYouTrackCa
         className,
       )}
     >
-      {reason && (
-        <div className="absolute -top-3 left-2 z-30 bg-primary/90 backdrop-blur text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded-full shadow-lg pointer-events-none truncate max-w-[90%]">
-          {reason}
-        </div>
-      )}
-
       <div
         className={cn(
           "album-card aspect-square relative isolate overflow-hidden rounded-xl transition-all duration-500",
@@ -80,6 +79,11 @@ export const ForYouTrackCard = memo<ForYouTrackCardProps>(function ForYouTrackCa
             : "ring-1 ring-border/50",
         )}
       >
+        {reason && (
+          <div className="absolute top-2 left-2 z-30 bg-primary/90 backdrop-blur text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded-md shadow-lg pointer-events-none truncate max-w-[90%]">
+            {reason}
+          </div>
+        )}
         <ImageWithFallback
           src={track.coverImage}
           alt={track.title}

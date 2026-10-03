@@ -5,7 +5,6 @@ import { Sparkles } from "lucide-react";
 import { FeedItem } from "../components/FeedItem";
 import { ForMeGenrePicker } from "../components/ForMeGenrePicker";
 import { ForMeEndShelf } from "../components/ForMeEndShelf";
-import { ForMeSessionActions } from "../components/ForMeSessionActions";
 import { ForMeHeader } from "../components/ForMeHeader";
 import { ForMeSessionBar, type ForMeMood } from "../components/ForMeSessionBar";
 import { useForMeFeed } from "../hooks/useForMeFeed";
@@ -26,6 +25,7 @@ import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
 import { useAppSelector } from "@/store/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ITrack } from "@/features/track/types";
+import { AnimatePresence, motion } from "framer-motion";
 
 const SESSION_LIMIT = 10;
 
@@ -70,6 +70,8 @@ export const ForMePage = () => {
   const loadingMore = useRef(false);
   const exhausted = useRef(false);
   const [sessionEnded, setSessionEnded] = useState(false);
+  const [relaxMode, setRelaxMode] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   const [lyricsOpen, setLyricsOpen] = useState(false);
   const lyricsOpenRef = useRef(false);
@@ -174,6 +176,7 @@ export const ForMePage = () => {
 
   useEffect(() => {
     setLyricsOpen(false);
+    setControlsVisible(true);
   }, [current?._id]);
 
   const refreshTaste = useCallback(() => {
@@ -243,18 +246,27 @@ export const ForMePage = () => {
   }, [dispatch, go, player.isPlaying]);
 
   const onWheel = (event: WheelEvent) => {
-    if (lyricsOpenRef.current && (event.target as HTMLElement).closest("[data-lyrics]")) return;
+    const target = event.target as HTMLElement;
+    if (lyricsOpenRef.current && target.closest("[data-lyrics]")) return;
+    if (target.closest("[role='dialog']")) return;
     if (Math.abs(event.deltaY) < 40) return;
     go(event.deltaY > 0 ? 1 : -1);
   };
 
   const onTouchStart = (event: TouchEvent) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("[role='dialog']")) return;
     touchStartY.current = event.touches[0]?.clientY ?? null;
   };
 
   const onTouchEnd = (event: TouchEvent) => {
     if (touchStartY.current == null) return;
-    if (lyricsOpenRef.current && (event.target as HTMLElement).closest("[data-lyrics]")) return;
+    const target = event.target as HTMLElement;
+    if (lyricsOpenRef.current && target.closest("[data-lyrics]")) return;
+    if (target.closest("[role='dialog']")) {
+      touchStartY.current = null;
+      return;
+    }
     const endY = event.changedTouches[0]?.clientY ?? touchStartY.current;
     const delta = touchStartY.current - endY;
     touchStartY.current = null;
@@ -324,18 +336,35 @@ export const ForMePage = () => {
     .map((id) => (id ? trackById.get(id) ?? player.trackMetadataCache[id] : undefined))
     .filter((track): track is ITrack => Boolean(track?.coverImage));
 
+  const hideUI = relaxMode || (lyricsOpen && !controlsVisible);
+
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-black">
-      <ForMeHeader />
-      <ForMeSessionBar
-        mix={mix ?? 0.5}
-        mood={mood}
-        refreshing={refreshing}
-        onMix={setMix}
-        onMood={setMood}
-        onRefresh={refreshTaste}
-      />
-      {!user && sourceIsForMe && index >= 4 && (
+      <div className="absolute inset-x-0 top-0 z-[60] pointer-events-auto">
+        <ForMeHeader />
+      </div>
+      <AnimatePresence>
+        {!hideUI && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="absolute inset-x-0 top-0 z-[55] pointer-events-none"
+          >
+            <ForMeSessionBar
+              mix={mix ?? 0.5}
+              mood={mood}
+              refreshing={refreshing}
+              onMix={setMix}
+              onMood={setMood}
+              onRefresh={refreshTaste}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!user && sourceIsForMe && index >= 4 && !hideUI && (
         <div className="absolute left-1/2 top-28 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-white/15 bg-black/60 px-4 py-2 text-xs text-white backdrop-blur-md">
           <span>Đăng nhập để giữ gu nghe của bạn.</span>
           <Link to={AUTH_PATHS.LOGIN} className="font-semibold underline">
@@ -343,16 +372,8 @@ export const ForMePage = () => {
           </Link>
         </div>
       )}
-      <ForMeSessionActions
-        track={current}
-        trackIds={queueIds}
-        onAppend={(next) => {
-          dispatch(appendQueueIds(next.map((item) => item._id)));
-          dispatch(upsertMetadataCache(next));
-          setSessionTracks((existing) => mergeTracks(existing ?? tracksRef.current, next));
-        }}
-      />
-      <div className="flex h-full">
+      {/* ForMeSessionActions has been moved inside FeedItem as a Drawer */}
+      <div className="flex h-full pt-0">
         <div
           className="relative min-w-0 flex-1"
           onWheel={onWheel}
@@ -366,52 +387,64 @@ export const ForMePage = () => {
             track={current}
             isPlaying={player.isPlaying && player.currentTrackId === current._id}
             lyricsOpen={lyricsOpen}
+            relaxMode={relaxMode}
+            controlsVisible={controlsVisible}
+            onToggleRelaxMode={() => setRelaxMode((prev) => !prev)}
+            onToggleControls={() => setControlsVisible((prev) => !prev)}
             onTogglePlay={() => dispatch(setIsPlaying(!(player.isPlaying && player.currentTrackId === current._id)))}
             onToggleLyrics={() => setLyricsOpen((open) => !open)}
             onPrev={() => go(-1)}
             onNext={() => go(1)}
             onDismiss={dismissCurrent}
+            trackIds={queueIds}
+            onAppend={(next) => {
+              dispatch(appendQueueIds(next.map((item) => item._id)));
+              dispatch(upsertMetadataCache(next));
+              setSessionTracks((existing) => mergeTracks(existing ?? tracksRef.current, next));
+            }}
           />
         </div>
-        <aside className="hidden w-80 shrink-0 flex-col border-l border-white/10 bg-black/50 pt-16 lg:flex">
-          <p className="px-4 pb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
-            Tiếp theo
-          </p>
-          {upcoming.length === 0 ? (
-            <p className="px-4 text-sm text-white/50">
-              {sessionEnded ? "Hết phiên này." : "Hết danh sách phiên này."}
+        {!hideUI && (
+          <aside className="hidden w-80 shrink-0 flex-col border-l border-white/10 bg-black/50 pt-16 lg:flex">
+            <p className="px-4 pb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
+              Tiếp theo
             </p>
-          ) : (
-            <ol className="flex-1 space-y-1 overflow-y-auto px-2 pb-6">
-              {upcoming.map(({ id, queueIndex, track }) => (
-                <li key={id}>
-                  <button
-                    type="button"
-                    onClick={() => dispatch(jumpToIndex(queueIndex))}
-                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-white/10"
-                  >
-                    <img
-                      src={track?.coverImage}
-                      alt=""
-                      className="h-12 w-12 rounded-lg object-cover"
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-white">
-                        {track?.title ?? "Bài hát"}
+            {upcoming.length === 0 ? (
+              <p className="px-4 text-sm text-white/50">
+                {sessionEnded ? "Hết phiên này." : "Hết danh sách phiên này."}
+              </p>
+            ) : (
+              <ol className="flex-1 space-y-1 overflow-y-auto px-2 pb-6">
+                {upcoming.map(({ id, queueIndex, track }) => (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      onClick={() => dispatch(jumpToIndex(queueIndex))}
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-white/10"
+                    >
+                      <img
+                        src={track?.coverImage}
+                        alt=""
+                        className="h-12 w-12 rounded-lg object-cover"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-white">
+                          {track?.title ?? "Bài hát"}
+                        </span>
+                        <span className="block truncate text-xs text-white/60">
+                          {track?.reason ?? "Trong phiên này"}
+                        </span>
                       </span>
-                      <span className="block truncate text-xs text-white/60">
-                        {track?.reason ?? "Trong phiên này"}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )}
-          {sessionEnded ? <ForMeEndShelf /> : null}
-        </aside>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {sessionEnded ? <ForMeEndShelf /> : null}
+          </aside>
+        )}
       </div>
-      {sessionEnded && atEnd ? (
+      {sessionEnded && atEnd && !hideUI ? (
         <div className="absolute inset-x-0 bottom-16 z-30 max-h-[38vh] overflow-y-auto bg-black/85 lg:hidden">
           <ForMeEndShelf />
         </div>
