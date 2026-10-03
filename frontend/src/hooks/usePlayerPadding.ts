@@ -13,18 +13,19 @@ export const usePlayerPadding = (customOffset = 0) => {
   const { currentTrackId } = useSelector(selectPlayer);
   const location = useLocation();
   const isForMePage = location.pathname === `/${CLIENT_PATHS.FOR_ME}`;
+  const isRoomSession = /^\/rooms\/[^/]+$/.test(location.pathname);
 
   // Chiều cao chuẩn của Player (Mobile 80px, Desktop 90px)
   const PLAYER_HEIGHT = 90;
 
   const style = useMemo<CSSProperties>(() => {
-    if (isForMePage) return { paddingBottom: "0px" };
+    if (isForMePage || isRoomSession) return { paddingBottom: "0px" };
     return {
       paddingBottom: currentTrackId
         ? `${PLAYER_HEIGHT + customOffset}px`
         : "0px",
     };
-  }, [currentTrackId, customOffset, isForMePage]);
+  }, [currentTrackId, customOffset, isForMePage, isRoomSession]);
 
   return {
     // Class tạo hiệu ứng mượt

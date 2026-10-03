@@ -1,18 +1,7 @@
 import Hls from "hls.js";
+import { createHls, isHlsSource } from "./hlsProfile";
 
-/** Highlight clips only need a short buffer, not a full-track download. */
-const HIGHLIGHT_HLS: Partial<Hls["config"]> = {
-  maxBufferLength: 30,
-  maxMaxBufferLength: 60,
-  backBufferLength: 15,
-  enableWorker: true,
-  autoStartLoad: false,
-};
-
-export function isHlsSource(src: string): boolean {
-  const path = src.split("?")[0]?.split("#")[0] ?? "";
-  return path.endsWith(".m3u8");
-}
+export { isHlsSource };
 
 export function isAutoplayBlocked(err: unknown): boolean {
   return err instanceof DOMException && err.name === "NotAllowedError";
@@ -22,6 +11,8 @@ export interface HighlightAttachment {
   whenReady: Promise<void>;
   /** Begin loading at `startSeconds` (HLS) or seek a progressive file. */
   prime: (startSeconds: number) => Promise<void>;
+  /** Pause and stop fragment loading without tearing the instance down. */
+  suspend: () => void;
   destroy: () => void;
 }
 
@@ -44,7 +35,7 @@ export function attachHighlightSource(
     }
 
     if (isHlsSource(src) && Hls.isSupported()) {
-      hls = new Hls(HIGHLIGHT_HLS);
+      hls = createHls("highlight");
       hls.loadSource(src);
       hls.attachMedia(audio);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -108,6 +99,10 @@ export function attachHighlightSource(
   return {
     whenReady,
     prime,
+    suspend: () => {
+      audio.pause();
+      hls?.stopLoad();
+    },
     destroy: () => {
       destroyed = true;
       if (hls) {

@@ -209,6 +209,7 @@ interface VideoSlotProps {
   src: string;
   isPlaying: boolean;
   visible: boolean;
+  preload: "none" | "auto";
   kbClass: "vme-video--kb-a" | "vme-video--kb-b";
   videoFilter: string;
   onReady: () => void;
@@ -219,12 +220,14 @@ const VideoSlot = memo(
     src,
     isPlaying,
     visible,
+    preload,
     kbClass,
     videoFilter,
     onReady,
   }: VideoSlotProps) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const prevPlaying = useRef(isPlaying);
+    const prevPreload = useRef(preload);
     const readyFired = useRef(false);
 
     const handleReady = useCallback(() => {
@@ -239,7 +242,7 @@ const VideoSlot = memo(
       if (!v) return;
       // readyState 3 = HAVE_FUTURE_DATA, 4 = HAVE_ENOUGH_DATA
       if (v.readyState >= 3) handleReady();
-      if (isPlaying)
+      if (isPlaying && preload === "auto")
         v.play().catch(() => setTimeout(() => v.play().catch(() => {}), 80));
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -247,9 +250,11 @@ const VideoSlot = memo(
     // Play/pause guard
     useEffect(() => {
       const v = videoRef.current;
-      if (!v || isPlaying === prevPlaying.current) return;
+      if (!v) return;
+      if (isPlaying === prevPlaying.current && preload === prevPreload.current) return;
       prevPlaying.current = isPlaying;
-      if (isPlaying) {
+      prevPreload.current = preload;
+      if (isPlaying && preload === "auto") {
         v.play().catch(() => {
           const t = setTimeout(() => v.play().catch(() => {}), 80);
           return () => clearTimeout(t);
@@ -257,7 +262,7 @@ const VideoSlot = memo(
       } else {
         v.pause();
       }
-    }, [isPlaying]);
+    }, [isPlaying, preload]);
 
     return (
       <div
@@ -270,7 +275,7 @@ const VideoSlot = memo(
           muted
           loop
           playsInline
-          preload="auto"
+          preload={preload}
           onCanPlay={handleReady}
           onCanPlayThrough={handleReady}
           style={{ filter: videoFilter }}
@@ -283,6 +288,7 @@ const VideoSlot = memo(
     prev.src === next.src &&
     prev.isPlaying === next.isPlaying &&
     prev.visible === next.visible &&
+    prev.preload === next.preload &&
     prev.kbClass === next.kbClass &&
     prev.videoFilter === next.videoFilter,
 );
@@ -295,6 +301,8 @@ VideoSlot.displayName = "VideoSlot";
 export interface VideoMoodEngineProps {
   src?: string;
   isPlaying: boolean;
+  /** Hidden slots stay at "none" even when this is "auto". */
+  preload?: "none" | "auto";
   accentColor?: string;
   opacity?: number;
   blur?: number;
@@ -308,6 +316,7 @@ export const VideoMoodEngine = memo(
   ({
     src,
     isPlaying,
+    preload = "auto",
     accentColor = "primary",
     blur = 0,
   }: VideoMoodEngineProps) => {
@@ -358,6 +367,7 @@ export const VideoMoodEngine = memo(
             src={slots.a}
             isPlaying={isPlaying}
             visible={slots.active === "a" && slots.aReady}
+            preload={slots.active === "a" && isPlaying && preload === "auto" ? "auto" : "none"}
             kbClass="vme-video--kb-a"
             videoFilter={videoFilter}
             onReady={onAReady}
@@ -369,6 +379,7 @@ export const VideoMoodEngine = memo(
             src={slots.b}
             isPlaying={isPlaying}
             visible={slots.active === "b" && slots.bReady}
+            preload={slots.active === "b" && isPlaying && preload === "auto" ? "auto" : "none"}
             kbClass="vme-video--kb-b"
             videoFilter={videoFilter}
             onReady={onBReady}

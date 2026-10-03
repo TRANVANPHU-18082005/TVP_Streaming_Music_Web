@@ -31,6 +31,7 @@ export interface LyricsViewProps {
   /** 0–1; dưới 0.7 → degraded mode */
   qualityScore?: number;
   focusRadius?: number;
+  align?: "left" | "center";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -104,6 +105,16 @@ const LYRICS_CSS = `
   padding: 1.5rem 1.75rem;
   user-select: text;
  }
+
+/* Alignment overrides */
+.lv-scroll[data-align="center"] .sv-line,
+.lv-scroll[data-align="center"] .kv-line {
+  text-align: center;
+  transform-origin: center center;
+}
+.lv-scroll[data-align="center"] .lv-plain {
+  text-align: center;
+}
 
 /* ── synced lines ── */
 .sv-line {
@@ -579,8 +590,8 @@ LyricsEmpty.displayName = "LyricsEmpty";
 // PLAIN
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PlainLyricsView = memo(({ text }: { text: string }) => (
-  <div className="lv-scroll h-full">
+const PlainLyricsView = memo(({ text, align = "left" }: { text: string; align?: "left" | "center" }) => (
+  <div className="lv-scroll h-full" data-align={align}>
     <pre
       className="lv-plain"
       style={{ paddingTop: "4rem", paddingBottom: "4rem" }}
@@ -695,12 +706,14 @@ const SyncedLyricsView = memo(
     focusRadius,
     accentColor,
     paddingForMe = 38,
+    align = "left",
   }: {
     lines: NormSync[];
     onSeek: (ms: number) => void;
     focusRadius: number;
     accentColor: string;
     paddingForMe: number;
+    align?: "left" | "center";
   }) => {
     const rafTime = useRafTime();
     const [currentIndex, setCurrentIndex] = useState(() =>
@@ -764,6 +777,7 @@ const SyncedLyricsView = memo(
           style={{ paddingTop: `${paddingForMe}vh`, paddingBottom: `${paddingForMe}vh` }}
           role="list"
           aria-label="Synced lyrics"
+          data-align={align}
         >
           {lines.map((line, i) => (
             <div
@@ -1053,12 +1067,14 @@ const KaraokeView = memo(
     focusRadius,
     accentColor = "primary",
     degraded,
+    align = "left",
   }: {
     lines: IKaraokeLine[];
     onSeek: (ms: number) => void;
     focusRadius: number;
     accentColor: string;
     degraded: boolean;
+    align?: "left" | "center";
   }) => {
     const rafTime = useRafTime();
 
@@ -1139,6 +1155,7 @@ const KaraokeView = memo(
           style={{ paddingTop: "40vh", paddingBottom: "40vh" }}
           role="list"
           aria-label="Karaoke lyrics"
+          data-align={align}
         >
           {displayLines.map((line, i) => {
             const prev = i > 0 ? displayLines[i - 1] : null;
@@ -1196,6 +1213,7 @@ export const LyricsView = memo(
     accentColor = "primary",
     qualityScore = 1,
     focusRadius = 0,
+    align = "left",
   }: LyricsViewProps) => {
     // Single rAF loop for the entire tree — not per-component
     const rafTimeRef = useRafTimeRef(currentTime, isPlaying);
@@ -1216,7 +1234,7 @@ export const LyricsView = memo(
 
       const fallbackToPlain = () => {
         return plainLyrics?.trim() ? (
-          <PlainLyricsView text={plainLyrics} />
+          <PlainLyricsView text={plainLyrics} align={align} />
         ) : (
           <LyricsEmpty loading={false} />
         );
@@ -1235,6 +1253,7 @@ export const LyricsView = memo(
               onSeek={handleSeek}
               focusRadius={focusRadius}
               accentColor={accentColor}
+              align={align}
             />
           );
         }
@@ -1250,6 +1269,7 @@ export const LyricsView = memo(
               focusRadius={focusRadius}
               accentColor={accentColor}
               degraded={degraded}
+              align={align}
             />
           );
         }

@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
 import { playWakeLock, pauseWakeLock, destroyWakeLock } from "@/utils/audioWakeLock";
+import { publishAudioClock } from "@/features/player/utils/audioClock";
+import { createHls, isHlsSource, promotePrefetchToCatalog } from "@/features/player/utils/hlsProfile";
+import {
+  acquirePlayback,
+  bindPlaybackOwner,
+  releasePlayback,
+} from "@/features/player/utils/playbackSession";
 import {
   selectPlayer,
   selectCurrentTrack,
@@ -87,7 +94,11 @@ export const useAudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
-  const preloadHlsRef = useRef<Hls | null>(null);
+  const preloadStateRef = useRef<{ hls: Hls; src: string; manifestParsed: boolean } | null>(null);
+  const parkedPreloadRef = useRef<{ hls: Hls; src: string; manifestParsed: boolean } | null>(null);
+  const loadStoppedRef = useRef(false);
+  const positionStampRef = useRef(0);
+  const suspendSelfRef = useRef<() => void>(() => undefined);
 
   // ── Sync Refs (tránh stale closure trong effects có dep rỗng / dep tối thiểu) ──
   /**
@@ -138,9 +149,6 @@ export const useAudioPlayer = () => {
         userId: userId,
         metadata: sourceId === CLIENT_PATHS.FOR_ME ? { source: "for-me" } : undefined,
       });
-      if (env.NODE_ENV === "development") {
-        console.log("[Analytics] track_play emitted:", { trackId, userId });
-      }
     },
     [socket, isConnected, sourceId, user],
   );
@@ -192,59 +200,33 @@ export const useAudioPlayer = () => {
   // ==========================================================================
 
   useEffect(() => {
-    // If metadata isn't cached yet (we may have returned a placeholder),
-    // don't attempt to start the HLS/Audio loader — the resolver will
-    // populate the cache and re-trigger this effect.
-    if (!currentTrack || !audioRef.current || !isCurrentCached) return;
-
     const audio = audioRef.current;
-    const rawSrc = currentTrack.hlsUrl || currentTrack.trackUrl;
-    const src = rawSrc;
+    const src = currentTrack?.hlsUrl || currentTrack?.trackUrl || "";
+    const parked = parkedPreloadRef.current;
 
-    // Guard: some tracks may not have a playable URL yet. Avoid calling
-    // string methods on undefined which causes runtime crash (endsWith).
-    if (!src) {
-      // Nothing to play — ensure UI isn't stuck in loading/playing state.
-      dispatch(setLoadingState("idle"));
-      dispatch(setIsPlaying(false));
+    if (!currentTrack || !audio || !isCurrentCached || !src) {
+      if (currentTrack && isCurrentCached && !src) {
+        if (parked) {
+          parked.hls.destroy();
+          parkedPreloadRef.current = null;
+        }
+        dispatch(setLoadingState("idle"));
+        dispatch(setIsPlaying(false));
+      }
       return;
     }
 
-    // Dọn HLS instance của bài trước
-    if (hlsRef.current) {
-      hlsRef.current.detachMedia();
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    retryCountRef.current = 0;
-
-    if (Hls.isSupported() && src.endsWith(".m3u8")) {
-      const hls = new Hls({
-        // ── Buffer tối đa để chịu đựng mất mạng lâu / tắt màn hình ──
-        maxBufferLength: 300,        // Tải trước 5 phút nhạc (~1 bài hoàn chỉnh)
-        maxMaxBufferLength: 600,     // Giới hạn trần: 10 phút khi mạng rất khỏe
-        enableWorker: true,          // Worker độc lập, không bị main thread block
-        highBufferWatchdogPeriod: 3,
-        nudgeMaxRetry: 10,           // Tăng lên 10 lần để vượt qua đứt mạng ngắn
-        manifestLoadingTimeOut: 20000, // Chờ 20s khi mạng chập chờn (lên thang máy)
-        manifestLoadingMaxRetry: 6,  // Thử lại manifest 6 lần trước khi bỏ cuộc
-        levelLoadingMaxRetry: 6,     // Thử lại tải segment 6 lần
-        fragLoadingMaxRetry: 6,      // Thử lại tải fragment 6 lần
-        abrEwmaDefaultEstimate: 500000,
-        testBandwidth: false,
-        backBufferLength: 30,        // Giữ lại 30s audio đã phát trong bộ nhớ để tua lại mượt
-      });
-      hls.loadSource(src);
-      hls.attachMedia(audio);
-      hlsRef.current = hls;
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    const wireCatalogHls = (hls: Hls, manifestReady: boolean) => {
+      hls.off(Hls.Events.MANIFEST_PARSED);
+      hls.off(Hls.Events.ERROR);
+      const startPlayback = () => {
         dispatch(setLoadingState("buffering"));
-        // @fix #1 — isPlayingRef thay vì isPlaying (stale closure)
         if (isPlayingRef.current) {
           audio.play().catch(() => dispatch(setIsPlaying(false)));
         }
-      });
+      };
+      if (manifestReady) startPlayback();
+      else hls.on(Hls.Events.MANIFEST_PARSED, startPlayback);
 
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (!data.fatal) return;
@@ -263,20 +245,61 @@ export const useAudioPlayer = () => {
             break;
           default:
             hls.destroy();
+            if (hlsRef.current === hls) hlsRef.current = null;
             dispatch(setLoadingState("idle"));
         }
       });
+    };
+
+    retryCountRef.current = 0;
+
+    if (parked?.src === src && isHlsSource(src) && Hls.isSupported()) {
+      parkedPreloadRef.current = null;
+      if (hlsRef.current && hlsRef.current !== parked.hls) {
+        hlsRef.current.detachMedia();
+        hlsRef.current.destroy();
+      }
+      const hls = parked.hls;
+      promotePrefetchToCatalog(hls);
+      hls.detachMedia();
+      hls.once(Hls.Events.MEDIA_ATTACHED, () => {
+        if (parked.manifestParsed) hls.startLoad(0);
+      });
+      hls.attachMedia(audio);
+      hlsRef.current = hls;
+      wireCatalogHls(hls, parked.manifestParsed);
+    } else if (isHlsSource(src) && Hls.isSupported()) {
+      if (parked) {
+        parked.hls.destroy();
+        parkedPreloadRef.current = null;
+      }
+      if (hlsRef.current) {
+        hlsRef.current.detachMedia();
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      const hls = createHls("catalog");
+      hls.loadSource(src);
+      hls.attachMedia(audio);
+      hlsRef.current = hls;
+      wireCatalogHls(hls, false);
     } else {
-      // Fallback MP3/AAC
+      if (parked) {
+        parked.hls.destroy();
+        parkedPreloadRef.current = null;
+      }
+      if (hlsRef.current) {
+        hlsRef.current.detachMedia();
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
       audio.src = src;
       dispatch(setLoadingState("buffering"));
-      // @fix #1 — isPlayingRef thay vì isPlaying (stale closure)
       if (isPlayingRef.current) {
         audio.play().catch(() => dispatch(setIsPlaying(false)));
       }
     }
 
-    // @fix #5 — cleanup HLS khi bài đổi hoặc component unmount
     return () => {
       if (hlsRef.current) {
         hlsRef.current.detachMedia();
@@ -284,76 +307,79 @@ export const useAudioPlayer = () => {
         hlsRef.current = null;
       }
     };
+    // Chỉ re-run khi đổi bài hoặc metadata playable vừa về.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack?._id, isCurrentCached]);
-  // Intentionally exclude isPlaying, dispatch — chỉ re-run khi đổi track
 
   // ==========================================================================
   // D. PRELOAD NEXT TRACK
   //
-  // @fix #6 — return cleanup destroy preload HLS khi unmount
+  // Cleanup parks the instance so the main loader can attach it without a
+  // second manifest request. A later effect destroys anything still parked
+  // on unmount.
   // ==========================================================================
 
   useEffect(() => {
-    // Only attempt to preload next track's audio if its metadata is cached.
-    if (!nextTrackPreload || !isNextCached) {
-      if (preloadHlsRef.current) {
-        preloadHlsRef.current.destroy();
-        preloadHlsRef.current = null;
+    const parked = parkedPreloadRef.current;
+    const rawSrc = nextTrackPreload?.hlsUrl || nextTrackPreload?.trackUrl || "";
+    const src = isNextCached ? rawSrc : "";
+
+    if (!nextTrackPreload || !src) {
+      if (parked) {
+        parked.hls.destroy();
+        parkedPreloadRef.current = null;
       }
-      if (preloadAudioRef.current) {
-        preloadAudioRef.current.src = "";
+      if (preloadStateRef.current) {
+        preloadStateRef.current.hls.destroy();
+        preloadStateRef.current = null;
       }
+      if (preloadAudioRef.current) preloadAudioRef.current.src = "";
       return;
     }
 
-    const rawSrc = nextTrackPreload.hlsUrl || nextTrackPreload.trackUrl;
-    const src = rawSrc;
-
-    // Guard against missing src for preload as well.
-    if (!src) {
-      if (preloadHlsRef.current) {
-        preloadHlsRef.current.destroy();
-        preloadHlsRef.current = null;
+    if (parked?.src === src) {
+      preloadStateRef.current = parked;
+      parkedPreloadRef.current = null;
+    } else {
+      if (parked) {
+        parked.hls.destroy();
+        parkedPreloadRef.current = null;
       }
-      if (preloadAudioRef.current) {
-        preloadAudioRef.current.src = "";
+      if (preloadStateRef.current && preloadStateRef.current.src !== src) {
+        preloadStateRef.current.hls.destroy();
+        preloadStateRef.current = null;
       }
-      return;
     }
 
-    if (!preloadAudioRef.current) {
-      preloadAudioRef.current = new Audio();
-      preloadAudioRef.current.muted = true;
-    }
-    const preloadAudio = preloadAudioRef.current;
-
-    if (preloadHlsRef.current) {
-      preloadHlsRef.current.destroy();
-      preloadHlsRef.current = null;
-    }
-
-    if (Hls.isSupported() && src.endsWith(".m3u8")) {
-      const hls = new Hls({ maxBufferLength: 10, startLevel: 0 });
+    if (!preloadStateRef.current && isHlsSource(src) && Hls.isSupported()) {
+      if (!preloadAudioRef.current) {
+        preloadAudioRef.current = new Audio();
+        preloadAudioRef.current.muted = true;
+      }
+      const preloadAudio = preloadAudioRef.current;
+      const hls = createHls("prefetch");
+      const state = { hls, src, manifestParsed: false };
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        state.manifestParsed = true;
+      });
       hls.loadSource(src);
       hls.attachMedia(preloadAudio);
-      preloadHlsRef.current = hls;
-    } else {
-      preloadAudio.src = src;
-      preloadAudio.load();
+      preloadStateRef.current = state;
+    } else if (!isHlsSource(src)) {
+      if (!preloadAudioRef.current) {
+        preloadAudioRef.current = new Audio();
+        preloadAudioRef.current.muted = true;
+      }
+      preloadAudioRef.current.src = src;
+      preloadAudioRef.current.load();
     }
 
-    // @fix #6 — cleanup preload HLS khi bài tiếp theo đổi hoặc unmount
     return () => {
-      if (preloadHlsRef.current) {
-        preloadHlsRef.current.destroy();
-        preloadHlsRef.current = null;
-      }
-      if (preloadAudioRef.current) {
-        preloadAudioRef.current.src = "";
-      }
+      const state = preloadStateRef.current;
+      preloadStateRef.current = null;
+      if (state) parkedPreloadRef.current = state;
     };
-  }, [nextTrackPreload?._id]);
+  }, [nextTrackPreload?._id, isNextCached, nextTrackPreload?.hlsUrl, nextTrackPreload?.trackUrl]);
 
   // ==========================================================================
   // E. SYNC PLAY/PAUSE
@@ -365,17 +391,32 @@ export const useAudioPlayer = () => {
   // ==========================================================================
 
   useEffect(() => {
+    const suspend = () => {
+      loadStoppedRef.current = true;
+      audioRef.current?.pause();
+      hlsRef.current?.stopLoad();
+      if (isPlayingRef.current) dispatch(setIsPlaying(false));
+    };
+    suspendSelfRef.current = suspend;
+    return bindPlaybackOwner("catalog", suspend);
+  }, [dispatch]);
+
+  useEffect(() => {
     if (!audioRef.current) return;
 
     if (isPlaying) {
-      audioRef.current.play().catch(() => dispatch(setIsPlaying(false)));
-      // 🔒 WakeLock: Khi phát nhạc → giữ OS khỏi kill tab
+      acquirePlayback("catalog", suspendSelfRef.current);
+      const audio = audioRef.current;
+      if (loadStoppedRef.current && hlsRef.current) {
+        loadStoppedRef.current = false;
+        hlsRef.current.startLoad(Number.isFinite(audio.currentTime) ? audio.currentTime : -1);
+      }
+      audio.play().catch(() => dispatch(setIsPlaying(false)));
       playWakeLock();
     } else {
       audioRef.current.pause();
-      // 🔒 WakeLock: Chỉ tắt khi user thực sự Pause (không tắt khi đang load/chuyển bài)
       pauseWakeLock();
-      // @fix #2 — không dispatch seekTo ở đây
+      releasePlayback("catalog", suspendSelfRef.current);
     }
   }, [isPlaying, dispatch]);
 
@@ -446,6 +487,7 @@ export const useAudioPlayer = () => {
       if (details.seekTime != null && audioRef.current) {
         audioRef.current.currentTime = details.seekTime;
         setCurrentTime(details.seekTime);
+        publishAudioClock(details.seekTime);
         dispatch(seekTo(details.seekTime));
       }
     });
@@ -470,11 +512,11 @@ export const useAudioPlayer = () => {
     if (!audioRef.current || !currentTrack) return;
     const { currentTime: curr, duration: dur } = audioRef.current;
 
-    setCurrentTime(curr);
+    publishAudioClock(curr);
 
-    // Ghi nhận view (Giữ nguyên mốc 90% rất tối ưu của Phú)
-    if (curr >= Math.floor(currentTrack.duration * 0.9))
+    if (curr >= Math.floor(currentTrack.duration * 0.9)) {
       handleRecordView(currentTrack._id);
+    }
 
     if (
       dur > 0 &&
@@ -484,21 +526,22 @@ export const useAudioPlayer = () => {
       dispatch(setReduxDuration(dur));
     }
 
-    // 🚀 BỔ SUNG CHIẾN LƯỢC: Cập nhật thanh thời gian chạy ngầm lên Lockscreen Android/iOS
+    const now = performance.now();
     if (
+      now - positionStampRef.current >= 1000 &&
       "mediaSession" in navigator &&
       navigator.mediaSession.setPositionState &&
       dur > 0 &&
       dur !== Infinity
     ) {
+      positionStampRef.current = now;
       try {
         navigator.mediaSession.setPositionState({
           duration: dur,
           playbackRate: 1,
-          position: curr,
+          position: Math.min(curr, dur),
         });
       } catch (e) {
-        // Tránh crash nếu sai lệch mili-giây cấu trúc
         console.error("[MediaSession] Set position failed:", e);
       }
     }
@@ -657,6 +700,14 @@ export const useAudioPlayer = () => {
   // Cleanup WakeLock khi toàn bộ Player component unmount
   useEffect(() => {
     return () => {
+      parkedPreloadRef.current?.hls.destroy();
+      parkedPreloadRef.current = null;
+      preloadStateRef.current?.hls.destroy();
+      preloadStateRef.current = null;
+      if (preloadAudioRef.current) {
+        preloadAudioRef.current.src = "";
+        preloadAudioRef.current = null;
+      }
       destroyWakeLock();
     };
   }, []);
@@ -683,6 +734,7 @@ export const useAudioPlayer = () => {
       const validTime = Number.isFinite(time) ? time : 0;
       audioRef.current.currentTime = validTime;
       setCurrentTime(validTime);
+      publishAudioClock(validTime);
       lastSeekTimeRef.current = Date.now(); // sync trước khi dispatch
       dispatch(seekTo(validTime));
     },

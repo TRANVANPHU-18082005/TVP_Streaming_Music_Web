@@ -30,7 +30,8 @@ export function MusicPlayer() {
   const [isExpanded, setIsExpanded] = useState(false);
   const location = useLocation();
   const isMashupPage = location.pathname.includes("/mashups");
-  const isHiddenPlayerPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}` || isMashupPage
+  const isRoomSession = /^\/rooms\/[^/]+$/.test(location.pathname);
+  const isHiddenPlayerPage = location.pathname === `/${CLIENT_PATHS.FOR_ME}` || location.pathname === `/${CLIENT_PATHS.SHORTS}` || isMashupPage || isRoomSession
 
   // 2. DATA RESOLVER: Đặt lên đầu để đảm bảo metadata luôn được xử lý nếu cache miss
   // Resolver này sẽ kích hoạt fetch nếu currentTrackId có nhưng metadata chưa có.
@@ -41,7 +42,7 @@ export function MusicPlayer() {
     useAudioPlayer();
 
   // 4. UTILITY HOOKS: Điều khiển và đồng bộ
-  useKeyboardControls(seek, currentTime);
+  useKeyboardControls(seek, getCurrentTime);
   useCrossTabSync();
 
   // Tự động đếm lượt nghe khi track thay đổi và đang phát

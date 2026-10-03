@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectPlayer,
@@ -9,10 +9,12 @@ import {
 
 export const useKeyboardControls = (
   seek: (t: number) => void,
-  currentTime: number
+  getCurrentTime: () => number,
 ) => {
   const dispatch = useDispatch();
   const { isPlaying, volume } = useSelector(selectPlayer);
+  const getCurrentTimeRef = useRef(getCurrentTime);
+  getCurrentTimeRef.current = getCurrentTime;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -29,10 +31,10 @@ export const useKeyboardControls = (
           dispatch(setIsPlaying(!isPlaying));
           break;
         case "ArrowRight":
-          seek(currentTime + 5);
+          seek(getCurrentTimeRef.current() + 5);
           break;
         case "ArrowLeft":
-          seek(Math.max(0, currentTime - 5));
+          seek(Math.max(0, getCurrentTimeRef.current() - 5));
           break;
         case "ArrowUp":
           e.preventDefault();
@@ -49,5 +51,5 @@ export const useKeyboardControls = (
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPlaying, currentTime, volume, dispatch, seek]);
+  }, [isPlaying, volume, dispatch, seek]);
 };

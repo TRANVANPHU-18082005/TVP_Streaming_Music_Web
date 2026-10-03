@@ -597,7 +597,15 @@ interface DesktopCenterProps {
 }
 
 const DesktopCenter = memo(
-  ({ currentTime, duration, getCurrentTime, onSeek }: DesktopCenterProps) => (
+  ({ currentTime, duration, getCurrentTime, onSeek }: DesktopCenterProps) => {
+    const [time, setTime] = useState(currentTime);
+
+    useEffect(() => {
+      const id = window.setInterval(() => setTime(getCurrentTime()), 250);
+      return () => window.clearInterval(id);
+    }, [getCurrentTime, duration]);
+
+    return (
     <div
       className="hidden md:flex flex-col items-center justify-center flex-1 gap-1.5"
       onClick={(e) => e.stopPropagation()}
@@ -613,7 +621,7 @@ const DesktopCenter = memo(
         <div className="flex-1">
           <ProgressBar
             hasTimeLabels={false}
-            currentTime={currentTime}
+            currentTime={time}
             duration={duration}
             onSeek={onSeek}
           />
@@ -625,7 +633,8 @@ const DesktopCenter = memo(
         />
       </div>
     </div>
-  ),
+    );
+  },
 );
 DesktopCenter.displayName = "DesktopCenter";
 
