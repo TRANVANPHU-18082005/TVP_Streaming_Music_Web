@@ -192,6 +192,21 @@ export const createMyPlaylist = catchAsync(
     });
   },
 );
+
+export const importPlaylistFromText = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await playlistService.importFromText(
+      req.user as IUser,
+      req.body,
+    );
+
+    res.status(httpStatus.CREATED).json({
+      success: true,
+      message: result.message,
+      data: result.data,
+    });
+  },
+);
 // 9.B User edit playlist nhanh
 export const editMyPlaylist = catchAsync(
   async (req: Request, res: Response) => {
@@ -229,7 +244,6 @@ export const togglePlaylistPrivacy = catchAsync(
 export const getMyPlaylists = catchAsync(
   async (req: Request, res: Response) => {
     const userId = req.user!._id; // Lấy ID từ token đã protect
-    console.log("Fetching playlists for user ID:", userId);
     const playlists = await playlistService.getMyAllPlaylists(
       userId.toString(),
     );
@@ -247,7 +261,6 @@ export const getPlaylistTracks = catchAsync(async (req, res) => {
   const { query } = getPlaylistTracksSchema.parse({ query: req.query });
   const currentUser = req.user as IUser | undefined;
 
-  console.log("Params" + req.params.id);
   const id = req.params.id as string;
   const result = await playlistService.getPlaylistTracks(
     id,

@@ -18,6 +18,7 @@ export const CLIENT_PATHS = {
   ARTISTS: "artists",
   ALBUMS: "albums",
   PLAYLISTS: "playlists",
+  PLAYLIST_IMPORT: "/playlists/import",
   GENRES: "genres",
   GENRE_DETAIL: (slug: string) => `/genres/${slug}`, // Hàm tạo link động
   PLAYLIST_DETAIL: (slug: string) => `/playlists/${slug}`, // Hàm tạo link động

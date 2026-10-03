@@ -1,4 +1,8 @@
-import type { IPlaylist, IPlaylistDetail } from "@/features/playlist/types";
+import type {
+  IPlaylist,
+  IPlaylistDetail,
+  PlaylistImportResult,
+} from "@/features/playlist/types";
 import api from "@/lib/axios";
 import { type ApiResponse, type PagedResponse } from "@/types";
 import {
@@ -56,6 +60,18 @@ const playlistApi = {
   },
 
   // Tạo nhanh Playlist trống (Spotify Style)
+  importFromText: async (data: {
+    text: string;
+    title?: string;
+    visibility?: "public" | "private" | "unlisted";
+  }) => {
+    const response = await api.post<ApiResponse<PlaylistImportResult>>(
+      "/playlists/me/import",
+      data,
+    );
+    return response.data;
+  },
+
   createQuickPlaylist: async (data?: {
     title?: string;
     visibility?: string;

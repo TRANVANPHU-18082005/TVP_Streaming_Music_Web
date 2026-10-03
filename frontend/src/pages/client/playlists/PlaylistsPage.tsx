@@ -1,5 +1,6 @@
 import React, { useMemo, memo } from "react";
-import { ListMusic } from "lucide-react";
+import { Link } from "react-router-dom";
+import { FileUp, ListMusic } from "lucide-react";
 
 import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
 import MusicResult from "@/components/ui/Result";
@@ -22,6 +23,7 @@ import {
 } from "@/features/playlist";
 import { useSyncInteractions } from "@/features/interaction";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { CLIENT_PATHS } from "@/config/paths";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE HERO — eyebrow (ListMusic) + gradient-warm title + divider + stats
@@ -65,6 +67,13 @@ const PageHero = memo(() => (
       className="divider-glow animate-fade-up animation-fill-both"
       style={{ animationDelay: "100ms", maxWidth: "32rem" }}
     />
+    <Link
+      to={CLIENT_PATHS.PLAYLIST_IMPORT}
+      className="btn-outline btn-sm mt-5 inline-flex items-center gap-2"
+    >
+      <FileUp className="size-3.5" aria-hidden="true" />
+      Tạo từ danh sách bài hát
+    </Link>
   </header>
 ));
 PageHero.displayName = "PageHero";

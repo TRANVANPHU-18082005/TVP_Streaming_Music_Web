@@ -9,6 +9,7 @@ export { default as PlaylistModal } from "./components/PlaylistModal";
 export { default as PublicPlaylistCard } from "./components/PublicPlaylistCard";
 export { default as SortablePlaylistTrackRow } from "./components/SortablePlaylistTrackRow";
 
+export * from "./hooks/useImportPlaylist";
 export * from "./hooks/usePlaylistForm";
 export * from "./hooks/usePlaylistMutations";
 export * from "./hooks/usePlaylistParams";

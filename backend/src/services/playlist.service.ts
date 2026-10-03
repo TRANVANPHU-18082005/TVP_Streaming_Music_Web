@@ -25,6 +25,15 @@ import {
 import { cacheRedis } from "../config/redis";
 import themeColorService from "./themeColor.service";
 import { APP_CONFIG, TRACK_POPULATE, TRACK_SELECT } from "../config/constants";
+import {
+  pickImportTrack,
+  parseImportLines,
+  searchPhrases,
+  accentPattern,
+  foldText,
+  type ImportCandidateView,
+  type ParsedImportLine,
+} from "./playlistImport";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -45,6 +54,55 @@ const VIBRANT_COLORS = [
 
 function randomVibrantColor(): string {
   return VIBRANT_COLORS[Math.floor(Math.random() * VIBRANT_COLORS.length)];
+}
+
+function artistNamesOf(value: unknown): string[] {
+  if (!value || typeof value !== "object") return [];
+  const doc = value as { name?: string; aliases?: string[] };
+  return [doc.name, ...(doc.aliases ?? [])].filter(
+    (name): name is string => Boolean(name),
+  );
+}
+
+function toImportCandidate(doc: {
+  _id: { toString(): string };
+  title: string;
+  coverImage?: string;
+  playCount?: number;
+  artist?: unknown;
+  featuringArtists?: unknown[];
+}): ImportCandidateView {
+  const main = artistNamesOf(doc.artist);
+  const featured = (doc.featuringArtists ?? []).flatMap(artistNamesOf);
+  return {
+    id: doc._id.toString(),
+    title: doc.title,
+    artistName: main[0] ?? "",
+    artistNames: [...main, ...featured],
+    coverImage: doc.coverImage ?? "",
+    playCount: doc.playCount ?? 0,
+  };
+}
+
+async function mapWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  const run = async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index]);
+    }
+  };
+
+  const workers = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workers }, () => run()));
+  return results;
 }
 
 /**
@@ -261,6 +319,214 @@ class PlaylistService {
       session.endSession();
     }
   }
+
+  // ── 1C. IMPORT FROM A LINE-PER-SONG LIST ───────────────────────────────────
+  async importFromText(
+    currentUser: IUser,
+    payload: {
+      text: string;
+      title?: string;
+      visibility?: "public" | "private" | "unlisted";
+    },
+  ) {
+    const parsed = parseImportLines(payload.text);
+    if (parsed.overflow) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Chỉ nhập tối đa 200 dòng mỗi lần",
+      );
+    }
+    if (!parsed.lines.length) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Không có tên bài hát hợp lệ",
+      );
+    }
+
+    const matchCache = new Map<string, Promise<ImportCandidateView | null>>();
+    const resolved = await mapWithLimit(parsed.lines, 5, (line) => {
+      const key = [foldText(line.query), ...line.parts.map(foldText)].join("|");
+      let pending = matchCache.get(key);
+      if (!pending) {
+        pending = this.matchImportLine(line).then((item) => item.track);
+        matchCache.set(key, pending);
+      }
+      return pending.then((track) => ({ line, track }));
+    });
+
+    const matched: Array<{
+      line: string;
+      trackId: string;
+      title: string;
+      artistName: string;
+      coverImage: string;
+    }> = [];
+    const missed: Array<{ line: string }> = [];
+    const seen = new Set<string>();
+
+    for (const item of resolved) {
+      if (!item.track) {
+        missed.push({ line: item.line.line });
+        continue;
+      }
+      if (seen.has(item.track.id)) continue;
+      seen.add(item.track.id);
+      matched.push({
+        line: item.line.line,
+        trackId: item.track.id,
+        title: item.track.title,
+        artistName: item.track.artistName,
+        coverImage: item.track.coverImage,
+      });
+    }
+
+    if (!matched.length) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Không tìm thấy bài hát nào khớp với danh sách",
+        undefined,
+        true,
+        undefined,
+        undefined,
+        { missed },
+      );
+    }
+
+    let finalTitle = payload.title?.trim();
+    if (!finalTitle) {
+      const count = await Playlist.countDocuments({
+        user: currentUser._id,
+        isSystem: false,
+      });
+      finalTitle = `Danh sách nhập #${count + 1}`;
+    } else {
+      finalTitle = finalTitle.substring(0, 100);
+    }
+
+    const visibility = payload.visibility ?? "private";
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const [playlist] = await Playlist.create(
+        [
+          {
+            title: finalTitle,
+            slug: generatePlaylistSlug(finalTitle),
+            user: currentUser._id,
+            description: "",
+            coverImage: "",
+            themeColor: randomVibrantColor(),
+            visibility,
+            isSystem: false,
+            tracks: matched.map((item) => new Types.ObjectId(item.trackId)),
+            totalTracks: matched.length,
+            totalDuration: 0,
+            playCount: 0,
+          },
+        ],
+        { session },
+      );
+
+      await mongoose
+        .model("User")
+        .findByIdAndUpdate(
+          currentUser._id,
+          { $inc: { totalPlaylists: 1 } },
+          { session },
+        );
+
+      await session.commitTransaction();
+
+      const playlistId = playlist._id.toString();
+      Promise.allSettled([
+        syncPlaylistStats(playlistId),
+        this.refreshSmartCover(playlistId),
+        invalidatePlaylistCache(playlistId),
+        invalidateUserPlaylistCache(playlistId, currentUser._id.toString()),
+      ]).catch(console.error);
+
+      const message = missed.length
+        ? `Đã tạo playlist với ${matched.length} bài hát. ${missed.length} dòng không tìm thấy.`
+        : `Đã tạo playlist với ${matched.length} bài hát`;
+      return {
+        message,
+        data: {
+          playlist: {
+            _id: playlistId,
+            title: playlist.title,
+            slug: playlist.slug,
+            visibility: playlist.visibility,
+            totalTracks: matched.length,
+          },
+          matched,
+          missed,
+        },
+      };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  private async matchImportLine(line: ParsedImportLine): Promise<{
+    line: ParsedImportLine;
+    track: ImportCandidateView | null;
+  }> {
+    const phrases = searchPhrases(line)
+      .map((phrase) => ({
+        folded: foldText(phrase),
+        pattern: accentPattern(foldText(phrase)),
+      }))
+      .filter((phrase) => phrase.folded.length >= 2);
+
+    if (!phrases.length) return { line, track: null };
+
+    const ready = {
+      status: "ready" as const,
+      isPublic: true,
+      isDeleted: false,
+    };
+
+    const loadTracks = (patterns: { pattern: string }[], anchored: boolean) =>
+      Track.find({
+        ...ready,
+        $or: patterns.map((phrase) => ({
+          title: {
+            $regex: anchored ? `^${phrase.pattern}$` : phrase.pattern,
+            $options: "i",
+          },
+        })),
+      })
+        .select("title coverImage artist featuringArtists playCount")
+        .populate("artist", "name aliases")
+        .populate("featuringArtists", "name aliases")
+        .sort(anchored ? { _id: 1 } : { playCount: -1 })
+        .limit(8)
+        .lean();
+
+    const exactDocs = await loadTracks(phrases, true);
+    const exactPick = pickImportTrack(
+      exactDocs.map((doc) => toImportCandidate(doc)),
+      line,
+    );
+    if (exactPick) return { line, track: exactPick };
+
+    const loose = phrases.filter((phrase) => phrase.folded.length >= 4);
+    if (!loose.length) return { line, track: null };
+
+    const looseDocs = await loadTracks(loose, false);
+    return {
+      line,
+      track: pickImportTrack(
+        looseDocs.map((doc) => toImportCandidate(doc)),
+        line,
+      ),
+    };
+  }
+
   // ── 2. UPDATE PLAYLIST ─────────────────────────────────────────────────────
 
   async updatePlaylistByAdmin(
@@ -269,7 +535,6 @@ class PlaylistService {
     data: UpdatePlaylistInput,
     file?: Express.Multer.File,
   ) {
-    console.log("update playlist admin", data);
     const playlist = await Playlist.findById(id);
     if (!playlist)
       throw new ApiError(httpStatus.NOT_FOUND, "Playlist không tồn tại");

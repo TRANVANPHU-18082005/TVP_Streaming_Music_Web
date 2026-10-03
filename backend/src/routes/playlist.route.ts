@@ -13,6 +13,7 @@ import {
   createPlaylistSchema,
   createQuickPlaylistSchema,
   deletePlaylistSchema,
+  importPlaylistFromTextSchema,
   getMyPlaylistsSchema,
   getPlaylistDetailSchema,
   getPlaylistsByAdminSchema,
@@ -90,6 +91,12 @@ router.post(
   "/me",
   validate(createQuickPlaylistSchema),
   playlistController.createMyPlaylist,
+);
+
+router.post(
+  "/me/import",
+  validate(importPlaylistFromTextSchema),
+  playlistController.importPlaylistFromText,
 );
 
 // 7. Edit Quick Playlist

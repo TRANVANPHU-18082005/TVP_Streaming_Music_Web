@@ -32,3 +32,23 @@ export interface IPlaylist {
 export interface IPlaylistDetail extends IPlaylist {
   trackIds: string[];
 }
+
+export interface PlaylistImportMatch {
+  line: string;
+  trackId: string;
+  title: string;
+  artistName: string;
+  coverImage: string;
+}
+
+export interface PlaylistImportResult {
+  playlist: {
+    _id: string;
+    title: string;
+    slug: string;
+    visibility: PlaylistVisibility;
+    totalTracks: number;
+  };
+  matched: PlaylistImportMatch[];
+  missed: { line: string }[];
+}

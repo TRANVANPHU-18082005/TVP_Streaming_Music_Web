@@ -23,6 +23,7 @@ import {
   KaraokeManagementPage,
   MoodVideoManagementPage,
   NotFoundPage,
+  ImportPlaylistPage,
   PlaylistManagementPage,
   ProfilePage,
   SearchPage,
@@ -94,6 +95,10 @@ export const router = createBrowserRouter([
             element: <ProtectedRoute />,
             children: [
               { path: CLIENT_PATHS.PROFILE, element: <ProfilePage /> },
+              {
+                path: CLIENT_PATHS.PLAYLIST_IMPORT,
+                element: <ImportPlaylistPage />,
+              },
               { path: CLIENT_PATHS.SHORTS_CREATE, element: <CreateShortPage /> },
               { path: CLIENT_PATHS.KARAOKE_STUDIO, element: <KaraokePage /> },
               // {

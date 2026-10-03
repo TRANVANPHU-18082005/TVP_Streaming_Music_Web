@@ -227,6 +227,27 @@ export const getPlaylistDetailSchema = z.object({
   params: z.object({ id: objectIdSchema }),
 });
 
+// --- 13. Import playlist from one song name per line ---
+export const importPlaylistFromTextSchema = z.object({
+  body: z.object({
+    title: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .trim()
+        .min(1, "Tiêu đề không được để trống")
+        .max(100, "Tiêu đề không được vượt quá 100 ký tự")
+        .optional(),
+    ),
+    visibility: visibilitySchema.default("private"),
+    text: z
+      .string()
+      .trim()
+      .min(1, "Danh sách trống")
+      .max(50000, "Nội dung quá dài"),
+  }),
+});
+
 // --- EXPORT TYPES ---
 export type CreatePlaylistInput = z.infer<typeof createPlaylistSchema>["body"];
 export type UpdatePlaylistInput = z.infer<typeof updatePlaylistSchema>["body"];
