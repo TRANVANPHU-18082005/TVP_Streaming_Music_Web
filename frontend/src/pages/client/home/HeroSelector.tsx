@@ -363,7 +363,7 @@ function GenreConnector() {
         }
         headerLabel="THỂ LOẠI NỔI BẬT"
         badgeLabel="Genre"
-        // No actionExtra — genre has no like button
+      // No actionExtra — genre has no like button
       />
     </Suspense>
   );
@@ -483,7 +483,7 @@ function TabBar({
   );
 
   return (
-    <div className="flex justify-center lg:justify-end px-4 sm:px-6 lg:px-10 mb-3 sm:mb-4">
+    <div className="flex justify-center lg:justify-end px-4 sm:px-6 lg:px-10 mb-3 mt-3 sm:mt-4 sm:mb-4">
       <nav
         ref={containerRef}
         role="tablist"

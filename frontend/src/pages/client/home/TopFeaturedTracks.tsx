@@ -71,10 +71,10 @@ const WaveDivider = memo(() => (
     style={{
       background: `linear-gradient(to right,
         transparent,
-        hsl(var(--brand-glow) / 0.3) 30%,
-        hsl(var(--brand-glow) / 0.28) 70%,
+        hsl(var(--wave-5) / 0.3) 30%,
+        hsl(var(--wave-5) / 0.28) 70%,
         transparent)`,
-      boxShadow: "0 0 8px hsl(var(--brand-glow) / 0.1)",
+      boxShadow: "0 0 8px hsl(var(--wave-5) / 0.1)",
     }}
   />
 ));
@@ -91,15 +91,15 @@ const ChartHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
         <div
           className="flex items-center justify-center size-6 rounded-md"
           style={{
-            background: "hsl(var(--brand-glow) / 0.12)",
-            color: "hsl(var(--brand-glow))",
+            background: "hsl(var(--wave-5) / 0.12)",
+            color: "hsl(var(--wave-5))",
           }}
         >
           <BarChart3 className="size-3.5" aria-hidden="true" />
         </div>
         <span
           className="text-overline"
-          style={{ color: "hsl(var(--brand-glow))" }}
+          style={{ color: "hsl(var(--wave-5))" }}
         >
           Xếp hạng
         </span>

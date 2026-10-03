@@ -29,6 +29,7 @@ import {
   Users,
   Layers,
   TvMinimalPlay,
+  FileUp,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -49,7 +50,7 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import { APP_CONFIG } from "@/config/constants";
 import { TrackList } from "@/features/track";
 import { AmbientBackground } from "@/components/AmbientBackground";
-import { AUTH_PATHS } from "@/config/paths";
+import { AUTH_PATHS, CLIENT_PATHS } from "@/config/paths";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTION PRESETS
@@ -832,14 +833,23 @@ const ProfilePage = () => {
                         Playlist của tôi
                       </h2>
                     </div>
-                    <button
-                      type="button"
-                      onClick={openCreatePlaylist}
-                      className="btn-primary gap-2 shrink-0"
-                    >
-                      <Plus className="size-4" aria-hidden="true" />
-                      Tạo playlist
-                    </button>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Link
+                        to={CLIENT_PATHS.PLAYLIST_IMPORT}
+                        className="btn-outline gap-2"
+                      >
+                        <FileUp className="size-4" aria-hidden="true" />
+                        Nhập danh sách
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={openCreatePlaylist}
+                        className="btn-primary gap-2 shrink-0"
+                      >
+                        <Plus className="size-4" aria-hidden="true" />
+                        Tạo playlist
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">

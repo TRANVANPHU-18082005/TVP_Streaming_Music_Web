@@ -68,6 +68,7 @@ export function Footer() {
                 { name: "Nghệ sĩ", path: "/artists" },
                 { name: "Thể loại", path: "/genres" },
                 { name: "Bảng xếp hạng", path: "/chart-top" },
+                { name: "Karaoke", path: "/karaoke" },
               ].map((item) => (
                 <li key={item.name}>
                   <Link

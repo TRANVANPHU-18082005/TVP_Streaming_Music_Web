@@ -10,7 +10,10 @@ const ClientLayout = () => {
   const playerPaddingClass = usePlayerPadding(120);
   const location = useLocation();
   const isForMePage = location.pathname === `/${CLIENT_PATHS.FOR_ME}`;
-  const isHiddenHeaderPage = isForMePage || location.pathname === `/${CLIENT_PATHS.SHORTS}` || location.pathname === `/${CLIENT_PATHS.MASHUPS_FEED}`;
+  const isShortsPage = location.pathname.startsWith(`/${CLIENT_PATHS.SHORTS}`);
+  const isMashupsPage = location.pathname.startsWith(`/${CLIENT_PATHS.MASHUPS_FEED}`);
+  const isRoomSession = /^\/rooms\/[^/]+$/.test(location.pathname);
+  const isHiddenHeaderPage = isForMePage || isShortsPage || isMashupsPage || isRoomSession;
 
   return (
     <div
@@ -29,7 +32,7 @@ const ClientLayout = () => {
         <Outlet />
       </main>
 
-      {!isForMePage && <Footer />}
+      {!isHiddenHeaderPage && <Footer />}
 
       {/* Player thường được render ở root hoặc portal, nhưng layout cần chừa chỗ */}
     </div>

@@ -211,11 +211,11 @@ export const RecentlyListenedTrack = () => {
               background: `linear-gradient(
                 to right,
                 transparent,
-                hsl(var(--wave-2) / 0.3) 30%,
-                hsl(var(--wave-2) / 0.3) 70%,
+                hsl(var(--wave-6) / 0.3) 30%,
+                hsl(var(--wave-6) / 0.3) 70%,
                 transparent
               )`,
-              boxShadow: "0 0 8px hsl(var(--wave-2) / 0.1)",
+              boxShadow: "0 0 8px hsl(var(--wave-6) / 0.1)",
             }}
           />
           <ChartHeader viewAllHref="/charts" />
@@ -243,11 +243,11 @@ export const RecentlyListenedTrack = () => {
               background: `linear-gradient(
                 to right,
                 transparent,
-                hsl(var(--wave-2) / 0.3) 30%,
-                hsl(var(--wave-2) / 0.3) 70%,
+                hsl(var(--wave-6) / 0.3) 30%,
+                hsl(var(--wave-6) / 0.3) 70%,
                 transparent
               )`,
-              boxShadow: "0 0 8px hsl(var(--wave-2) / 0.1)",
+              boxShadow: "0 0 8px hsl(var(--wave-6) / 0.1)",
             }}
           />
           <ChartHeader viewAllHref="/charts" />
@@ -277,11 +277,11 @@ export const RecentlyListenedTrack = () => {
               background: `linear-gradient(
                 to right,
                 transparent,
-                hsl(var(--wave-2) / 0.3) 30%,
-                hsl(var(--wave-2) / 0.3) 70%,
+                hsl(var(--wave-6) / 0.3) 30%,
+                hsl(var(--wave-6) / 0.3) 70%,
                 transparent
               )`,
-              boxShadow: "0 0 8px hsl(var(--wave-2) / 0.1)",
+              boxShadow: "0 0 8px hsl(var(--wave-6) / 0.1)",
             }}
           />
           <ChartHeader viewAllHref="/charts" />
@@ -303,11 +303,11 @@ export const RecentlyListenedTrack = () => {
           background: `linear-gradient(
               to right,
               transparent,
-              hsl(var(--wave-2) / 0.3) 30%,
-              hsl(var(--wave-2) / 0.28) 70%,
+              hsl(var(--wave-6) / 0.3) 30%,
+              hsl(var(--wave-6) / 0.28) 70%,
               transparent
             )`,
-          boxShadow: "0 0 8px hsl(var(--wave-2) / 0.1)",
+          boxShadow: "0 0 8px hsl(var(--wave-6) / 0.1)",
         }}
       />
       <section
@@ -315,7 +315,7 @@ export const RecentlyListenedTrack = () => {
         aria-labelledby="top-featured-tracks-heading"
       >
         {/* Ambient orbs — decorative depth layer */}
-        <SectionAmbient style="wave-2" />
+        <SectionAmbient style="wave-6" />
 
         <div className="section-container relative z-[1]">
           {/* Section header — same anatomy as PlaylistsHeader */}
@@ -333,7 +333,7 @@ export const RecentlyListenedTrack = () => {
                 <TrackList
                   {...trackListProps}
                   maxHeight={500}
-                  moodColor={`var(--wave-2)`}
+                  moodColor={`var(--wave-6)`}
                   skeletonCount={APP_CONFIG.PAGINATION_LIMIT}
                   staggerAnimation={true}
                 />
