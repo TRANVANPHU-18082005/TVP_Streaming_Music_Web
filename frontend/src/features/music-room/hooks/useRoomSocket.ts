@@ -49,8 +49,12 @@ export const useRoomSocket = (roomCode: string | undefined) => {
   const isCoHost = useSelector(selectIsCoHost);
   const canControl = isHost || isCoHost;
   const currentUser = useAppSelector((state) => state.auth.user);
-  const currentUserId = currentUser?._id;
+  const currentUserId = currentUser?._id || currentUser?.id;
+  const currentUserIdRef = useRef(currentUserId);
+  currentUserIdRef.current = currentUserId;
   const sessionEnded = useRef(false);
+  const socketRef = useRef(socket);
+  socketRef.current = socket;
   // ── JOIN ──────────────────────────────────────────────────────────────────
 
   const joinRoom = useCallback(
@@ -65,10 +69,26 @@ export const useRoomSocket = (roomCode: string | undefined) => {
 
   const leaveRoomSocket = useCallback(() => {
     if (sessionEnded.current) return;
-    if (!socket || !roomCode) return;
-    socket.emit("room:leave", { roomCode });
+    sessionEnded.current = true;
+    // Socket đang ngắt thì không emit: gói leave sẽ bị xếp hàng và gửi khi nối lại,
+    // server hiểu là host chủ động rời và đóng phòng.
+    if (socket?.connected && roomCode) {
+      socket.emit("room:leave", { roomCode });
+    }
     dispatch(leaveRoom());
   }, [socket, roomCode, dispatch]);
+
+  useEffect(() => {
+    const code = roomCode;
+    return () => {
+      if (!code || sessionEnded.current) return;
+      const active = socketRef.current;
+      if (active?.connected) {
+        active.emit("room:leave", { roomCode: code });
+      }
+      dispatch(leaveRoom());
+    };
+  }, [roomCode, dispatch]);
 
   // ── CHAT ──────────────────────────────────────────────────────────────────
 
@@ -159,7 +179,7 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     };
 
     const onHostChanged = ({ newHostId }: { newHostId: string }) => {
-      dispatch(setNewHost({ newHostId, currentUserId }));
+      dispatch(setNewHost({ newHostId, currentUserId: currentUserIdRef.current }));
       toast.info("Host mới đã được chỉ định");
     };
 
@@ -197,7 +217,7 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     };
 
     const onCoHosts = ({ coHosts }: { coHosts: string[] }) => {
-      dispatch(setCoHosts({ coHosts, currentUserId }));
+      dispatch(setCoHosts({ coHosts, currentUserId: currentUserIdRef.current }));
     };
 
     const onSettings = ({ queueMode }: { queueMode: "open" | "approval" }) => {
@@ -214,13 +234,13 @@ export const useRoomSocket = (roomCode: string | undefined) => {
     };
 
     const onUserMuted = ({ targetUserId }: { targetUserId: string }) => {
-      if (targetUserId === currentUserId) {
+      if (targetUserId === currentUserIdRef.current) {
         toast.error("Bạn đã bị cấm chat bởi Host");
       }
     };
 
     const onUserUnmuted = ({ targetUserId }: { targetUserId: string }) => {
-      if (targetUserId === currentUserId) {
+      if (targetUserId === currentUserIdRef.current) {
         toast.success("Host đã mở cấm chat cho bạn");
       }
     };

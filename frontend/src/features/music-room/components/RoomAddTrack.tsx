@@ -23,7 +23,7 @@ export const RoomAddTrack = ({
   } = useRoomAddTrack(roomCode);
 
   return (
-    <div className="relative mb-4" ref={containerRef}>
+    <div className="relative" ref={containerRef}>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <input
@@ -43,7 +43,7 @@ export const RoomAddTrack = ({
 
       {isOpen && (query || results.length > 0) && (
         <div className="absolute z-50 mt-2 w-full rounded-xl border border-border/50 bg-background/95 backdrop-blur-xl shadow-floating overflow-hidden">
-          <div className="max-h-64 overflow-y-auto p-1 scrollbar-thin">
+          <div className="max-h-64 overflow-y-auto p-1 scrollbar-glass">
             {!isSearching && results.length === 0 && query && (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 Không tìm thấy bài hát nào

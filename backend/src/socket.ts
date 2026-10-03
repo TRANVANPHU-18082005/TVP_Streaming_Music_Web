@@ -55,6 +55,50 @@ export const getIO = (): Server => {
   return io;
 };
 
+const HOST_DISCONNECT_GRACE_MS = 20_000;
+const hostGoneTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function cancelHostGoneTimer(roomCode: string) {
+  const timer = hostGoneTimers.get(roomCode);
+  if (!timer) return;
+  clearTimeout(timer);
+  hostGoneTimers.delete(roomCode);
+}
+
+function scheduleHostGone(roomCode: string, hostId: string) {
+  cancelHostGoneTimer(roomCode);
+  const timer = setTimeout(() => {
+    hostGoneTimers.delete(roomCode);
+    void settleHostDisconnect(roomCode, hostId);
+  }, HOST_DISCONNECT_GRACE_MS);
+  hostGoneTimers.set(roomCode, timer);
+}
+
+async function settleHostDisconnect(roomCode: string, hostId: string) {
+  const sessionCount = Number(await cacheRedis.hget(`room:sessions:${roomCode}`, hostId) || 0);
+  if (sessionCount > 0) return;
+
+  const room = await MusicRoom.findOne({ roomCode, isActive: true }).select("host").lean();
+  if (!room || room.host.toString() !== hostId) return;
+
+  const roomSocketKey = `music_room:${roomCode}`;
+  const remaining = Array.from(io.sockets.adapter.rooms.get(roomSocketKey) ?? []);
+  const nextUserId = selectNextHostId(
+    remaining.map((socketId) => readVerifiedUserId(io.sockets.sockets.get(socketId)?.data)),
+    hostId,
+  );
+
+  if (nextUserId) {
+    await musicRoomService.transferHost(roomCode, nextUserId);
+    io.to(roomSocketKey).emit("room:host_changed", { newHostId: nextUserId });
+    return;
+  }
+
+  await MusicRoom.updateOne({ roomCode }, { isActive: false });
+  io.to(roomSocketKey).emit("room:closed", { reason: "Host ngắt kết nối, phòng không có người" });
+  await cacheRedis.del(`room:sessions:${roomCode}`);
+}
+
 async function findSocketUser(id: string): Promise<SocketUserRecord | null> {
   const user = await User.findById(id)
     .select("role fullName avatar isActive")
@@ -358,6 +402,9 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
         socket.join(roomSocketKey);
         const sessionCount = await cacheRedis.hincrby(`room:sessions:${roomCode}`, connectionUserId(), 1);
+        if (callerIsHost(room.host.toString())) {
+          cancelHostGoneTimer(roomCode);
+        }
 
         // Cập nhật memberCount
         const newCount = await cacheRedis.hlen(`room:sessions:${roomCode}`);
@@ -437,6 +484,7 @@ export const initSocket = (httpServer: HttpServer): Server => {
       const roomSocketKey = `music_room:${roomCode}`;
 
       try {
+        cancelHostGoneTimer(roomCode);
         socket.leave(roomSocketKey);
 
         const count = await cacheRedis.hincrby(`room:sessions:${roomCode}`, connectionUserId(), -1);
@@ -883,26 +931,9 @@ export const initSocket = (httpServer: HttpServer): Server => {
                   memberCount: nextSize,
                 });
 
-                // Gửi thông báo hệ thống nếu user này là Host và cần transfer
-                const roomInfo = await MusicRoom.findOne({ roomCode, isActive: true }).lean();
+                const roomInfo = await MusicRoom.findOne({ roomCode, isActive: true }).select("host").lean();
                 if (roomInfo && callerIsHost(roomInfo.host.toString())) {
-                   const remaining = Array.from(io.sockets.adapter.rooms.get(room) ?? []);
-                   const nextUserId = selectNextHostId(
-                     remaining
-                       .filter((socketId) => socketId !== socket.id)
-                       .map((socketId) =>
-                         readVerifiedUserId(io.sockets.sockets.get(socketId)?.data),
-                       ),
-                     connectionUserId(),
-                   );
-                   if (nextUserId) {
-                     await musicRoomService.transferHost(roomCode, nextUserId);
-                     io.to(room).emit("room:host_changed", { newHostId: nextUserId });
-                   } else {
-                     await MusicRoom.updateOne({ roomCode }, { isActive: false });
-                     io.to(room).emit("room:closed", { reason: "Host ngắt kết nối, phòng không có người" });
-                     await cacheRedis.del(`room:sessions:${roomCode}`);
-                   }
+                  scheduleHostGone(roomCode, connectionUserId());
                 }
              } catch (e) {
                  console.error("[Socket] disconnecting music room error:", e);

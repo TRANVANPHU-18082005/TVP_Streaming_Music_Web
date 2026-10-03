@@ -7,6 +7,12 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useSelector } from "react-redux";
 import Hls from "hls.js";
+import { createHls, isHlsSource } from "@/features/player/utils/hlsProfile";
+import {
+  acquirePlayback,
+  bindPlaybackOwner,
+  releasePlayback,
+} from "@/features/player/utils/playbackSession";
 import { selectClockOffsetMs, selectPlaybackState } from "../store/roomSlice";
 import type { PlaybackState } from "../types/room.types";
 
@@ -34,24 +40,35 @@ export const useRoomPlayback = ({ audioRef, trackUrl }: UseRoomPlaybackOptions) 
   const clockOffsetMs = useSelector(selectClockOffsetMs);
   const lastSyncedTrackId = useRef<string | null>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const waitingRef = useRef(false);
+  const suspendedRef = useRef(false);
+  const playbackRef = useRef(playbackState);
+  const clockRef = useRef(clockOffsetMs);
+  const suspendSelfRef = useRef<() => void>(() => undefined);
+  playbackRef.current = playbackState;
+  clockRef.current = clockOffsetMs;
   const [needsUnlock, setNeedsUnlock] = useState(false);
 
   const syncAudio = useCallback(async () => {
     const audio = audioRef.current;
-    if (!audio || !playbackState?.currentTrackId) {
-      audio?.pause();
+    const state = playbackRef.current;
+    const offset = clockRef.current;
+    if (!audio || !state?.currentTrackId || suspendedRef.current) {
+      if (!state?.currentTrackId) audio?.pause();
       return;
     }
+    if (audio.readyState < 2 || audio.seeking) return;
+    if (waitingRef.current && !state.isPaused) return;
 
-    const target = roomPositionSeconds(playbackState, clockOffsetMs);
-    const threshold = playbackState.isPaused ? SEEK_WHILE_PAUSED : SEEK_WHILE_PLAYING;
+    const target = roomPositionSeconds(state, offset);
+    const threshold = state.isPaused ? SEEK_WHILE_PAUSED : SEEK_WHILE_PLAYING;
     if (Number.isFinite(audio.duration) && audio.duration > 0 && target > audio.duration) {
       audio.currentTime = Math.max(0, audio.duration - 0.05);
     } else if (Math.abs(audio.currentTime - target) > threshold) {
       audio.currentTime = target;
     }
 
-    if (playbackState.isPaused) {
+    if (state.isPaused) {
       audio.pause();
       setNeedsUnlock(false);
       return;
@@ -59,18 +76,24 @@ export const useRoomPlayback = ({ audioRef, trackUrl }: UseRoomPlaybackOptions) 
 
     if (audio.paused) {
       try {
+        acquirePlayback("room", suspendSelfRef.current);
         await audio.play();
         setNeedsUnlock(false);
       } catch {
         setNeedsUnlock(true);
       }
     }
-  }, [audioRef, clockOffsetMs, playbackState]);
+  }, [audioRef]);
 
   const unlock = useCallback(async () => {
     const audio = audioRef.current;
     if (!audio) return;
+    suspendedRef.current = false;
     try {
+      acquirePlayback("room", suspendSelfRef.current);
+      if (hlsRef.current) {
+        hlsRef.current.startLoad(Number.isFinite(audio.currentTime) ? audio.currentTime : -1);
+      }
       await audio.play();
       setNeedsUnlock(false);
       await syncAudio();
@@ -78,6 +101,18 @@ export const useRoomPlayback = ({ audioRef, trackUrl }: UseRoomPlaybackOptions) 
       setNeedsUnlock(true);
     }
   }, [audioRef, syncAudio]);
+
+  useEffect(() => {
+    const suspend = () => {
+      suspendedRef.current = true;
+      waitingRef.current = false;
+      audioRef.current?.pause();
+      hlsRef.current?.stopLoad();
+      setNeedsUnlock(true);
+    };
+    suspendSelfRef.current = suspend;
+    return bindPlaybackOwner("room", suspend);
+  }, [audioRef]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -108,16 +143,8 @@ export const useRoomPlayback = ({ audioRef, trackUrl }: UseRoomPlaybackOptions) 
     lastSyncedTrackId.current = trackId;
     const startAt = roomPositionSeconds(playbackState, clockOffsetMs);
 
-    if (Hls.isSupported() && src.endsWith(".m3u8")) {
-      const hls = new Hls({
-        maxBufferLength: 60,
-        maxMaxBufferLength: 120,
-        enableWorker: true,
-        manifestLoadingTimeOut: 20000,
-        manifestLoadingMaxRetry: 4,
-        fragLoadingMaxRetry: 4,
-        startPosition: startAt,
-      });
+    if (Hls.isSupported() && isHlsSource(src)) {
+      const hls = createHls("room", { startPosition: startAt });
       hls.loadSource(src);
       hls.attachMedia(audio);
       hlsRef.current = hls;
@@ -147,22 +174,49 @@ export const useRoomPlayback = ({ audioRef, trackUrl }: UseRoomPlaybackOptions) 
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !playbackState) return;
-    const run = () => {
+    if (!audio) return;
+    const onWaiting = () => {
+      waitingRef.current = true;
+    };
+    const onReady = () => {
+      waitingRef.current = false;
       void syncAudio();
     };
-    if (audio.readyState >= 2) run();
-    else audio.addEventListener("loadedmetadata", run, { once: true });
-    return () => audio.removeEventListener("loadedmetadata", run);
-  }, [audioRef, playbackState, syncAudio]);
+    audio.addEventListener("waiting", onWaiting);
+    audio.addEventListener("loadeddata", onReady);
+    audio.addEventListener("canplay", onReady);
+    return () => {
+      audio.removeEventListener("waiting", onWaiting);
+      audio.removeEventListener("loadeddata", onReady);
+      audio.removeEventListener("canplay", onReady);
+    };
+  }, [audioRef, trackUrl, syncAudio]);
+
+  const syncKey = [
+    playbackState?.currentTrackId ?? "",
+    playbackState?.isPaused ? "1" : "0",
+    playbackState?.startedAt ?? "",
+    playbackState?.pausedAt ?? "",
+    clockOffsetMs,
+  ].join("|");
 
   useEffect(() => {
-    if (!playbackState || playbackState.isPaused) return;
+    if (!playbackRef.current) return;
+    void syncAudio();
+  }, [syncKey, syncAudio]);
+
+  useEffect(() => {
+    if (!playbackState?.currentTrackId || playbackState.isPaused || suspendedRef.current) {
+      if (!playbackState?.currentTrackId || playbackState?.isPaused) {
+        releasePlayback("room", suspendSelfRef.current);
+      }
+      return;
+    }
     const timer = setInterval(() => {
       void syncAudio();
     }, 5_000);
     return () => clearInterval(timer);
-  }, [playbackState, syncAudio]);
+  }, [playbackState?.currentTrackId, playbackState?.isPaused, syncAudio]);
 
   return { playbackState, syncAudio, needsUnlock, unlock, clockOffsetMs };
 };

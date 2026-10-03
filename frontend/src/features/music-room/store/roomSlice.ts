@@ -58,6 +58,13 @@ interface RoomState {
   publicRoomsPage: number;
 }
 
+const idOf = (value: unknown): string => {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "object" && "_id" in value) return idOf((value as { _id: unknown })._id);
+  return "";
+};
+
 const initialState: RoomState = {
   currentRoom: null,
   isHost: false,
@@ -135,14 +142,27 @@ const roomSlice = createSlice({
     },
 
     setNewHost(state, action: PayloadAction<{ newHostId: string; currentUserId?: string }>) {
-      const { newHostId, currentUserId } = action.payload;
-      if (state.currentRoom) {
-        (state.currentRoom.host as any)._id = newHostId;
+      const newHostId = idOf(action.payload.newHostId);
+      const currentUserId =
+        action.payload.currentUserId == null ? undefined : idOf(action.payload.currentUserId);
+      if (state.currentRoom && newHostId) {
+        // room:state gửi host là chuỗi id. Gán host._id lên chuỗi làm reducer throw
+        // và Immer hủy cả lần cập nhật isHost, nên layout không đổi theo vai trò.
+        const host = state.currentRoom.host as unknown;
+        if (host && typeof host === "object") {
+          (state.currentRoom.host as { _id: string })._id = newHostId;
+        } else {
+          (state.currentRoom as unknown as { host: string }).host = newHostId;
+        }
+        if (state.currentRoom.coHosts?.length) {
+          state.currentRoom.coHosts = state.currentRoom.coHosts.filter((id) => idOf(id) !== newHostId);
+        }
       }
-      // Bug 4 fix: Cập nhật isHost khi host mới được chỉ định
-      if (currentUserId !== undefined) {
-        state.isHost = newHostId === currentUserId;
-        if (state.isHost) state.isCoHost = false;
+      if (currentUserId !== undefined && newHostId) {
+        const nowHost = newHostId === currentUserId;
+        state.isHost = nowHost;
+        if (nowHost) state.isCoHost = false;
+        else state.trackRequests = [];
       }
     },
 

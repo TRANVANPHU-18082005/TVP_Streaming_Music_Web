@@ -62,7 +62,7 @@ const RoomCard = memo(({ room }: Props) => {
             </div>
 
             {/* Live pill */}
-            <span className="badge badge-live shrink-0 text-[10px]">LIVE</span>
+            <span className="badge badge-live shrink-0 text-[10px]">Trực tiếp</span>
           </div>
 
           {/* ── Current track ── */}

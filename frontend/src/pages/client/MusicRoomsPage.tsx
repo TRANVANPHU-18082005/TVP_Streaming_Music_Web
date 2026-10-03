@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Plus, Radio, RefreshCw, Users, Lock, Music2, Sparkles } from "lucide-react";
+import { Plus, Radio, RefreshCw, Music2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import RoomCard from "@/features/music-room/components/RoomCard";
@@ -25,15 +25,15 @@ const SP = { type: "spring", stiffness: 340, damping: 28 } as const;
 
 const MusicRoomsPage = () => {
   const navigate = useNavigate();
-  
+
   const { filterParams, handleSearch, handlePageChange, clearFilters } = useRoomParams();
-  
+
   const { data, isLoading, refetch } = usePublicRoomsQuery(
     filterParams.page,
     filterParams.limit,
     filterParams.q
   );
-  
+
   const rooms = data?.rooms || [];
   const meta = data?.meta || { total: 0, page: 1, totalPages: 1 };
   const hasResults = rooms.length > 0;
@@ -118,73 +118,58 @@ const MusicRoomsPage = () => {
           style={{ background: "hsl(var(--wave-2))" }}
         />
 
-        <div className="section-container relative py-16 md:py-20">
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-
-            {/* Left: Copy */}
+        <div className="section-container relative py-10 md:py-12">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={SP}
             >
-              {/* Eyebrow badge */}
-              <div className="mb-4 inline-flex items-center gap-2">
+              <div className="mb-3 inline-flex items-center gap-2">
                 <span className="badge badge-playing">
                   <Radio className="size-3" />
-                  Music Rooms
+                  Phòng nhạc
                 </span>
               </div>
-
               <h1 className="text-display-xl text-foreground">
                 Cùng nghe nhạc
                 <br />
                 <span className="text-gradient-brand">với mọi người</span>
               </h1>
-
-              <p className="mt-3 max-w-md text-base text-muted-foreground">
-                Tham gia phòng nhạc, bình chọn bài hát và trải nghiệm âm nhạc
-                cùng cộng đồng theo thời gian thực.
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                Vào phòng, bình chọn bài và nghe cùng nhau theo thời gian thực.
               </p>
-
-              {/* Stats row */}
-              <div className="mt-5 flex items-center gap-5">
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Users className="size-3.5 text-primary" />
-                  <span>
-                    <strong className="text-foreground">{rooms.reduce((acc, r) => acc + r.memberCount, 0)}</strong> đang online
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Music2 className="size-3.5 text-primary" />
-                  <span>
-                    <strong className="text-foreground">{rooms.length}</strong> phòng hoạt động
-                  </span>
-                </div>
-              </div>
             </motion.div>
 
-            {/* Right: Actions */}
             <motion.div
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...SP, delay: 0.08 }}
-              className="flex shrink-0 items-center gap-3"
+              className="flex w-full max-w-md flex-col gap-2 sm:flex-row sm:items-center"
             >
-              <button
-                id="refresh-rooms-btn"
-                onClick={() => refetch()}
-                disabled={isLoading}
-                className="control-btn--primary flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-brand transition-all hover:scale-105 active:scale-95 bg-primary"
-
-                title="Làm mới"
+              <form
+                className="flex min-w-0 flex-1 gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  joinByCode();
+                }}
               >
-                <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
-              </button>
-
+                <input
+                  value={joinCode}
+                  onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                  placeholder="Mã phòng"
+                  maxLength={6}
+                  aria-label="Mã phòng"
+                  className="w-full rounded-xl border border-border bg-input px-4 py-2.5 text-sm tracking-[0.2em] outline-none"
+                />
+                <button type="submit" className="pressable shrink-0 rounded-xl bg-secondary px-4 text-sm font-semibold text-secondary-foreground">
+                  Vào
+                </button>
+              </form>
               <button
                 id="create-room-btn"
                 onClick={handleOpenCreateModal}
-                className="control-btn--primary flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-brand transition-all hover:scale-105 active:scale-95 bg-primary"
+                className="pressable flex shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-brand"
               >
                 <Plus className="size-4" />
                 Tạo phòng
@@ -217,25 +202,6 @@ const MusicRoomsPage = () => {
             <span className="text-sm font-semibold text-primary">Vào phòng</span>
           </button>
         )}
-
-        <form
-          className="flex gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            joinByCode();
-          }}
-        >
-          <input
-            value={joinCode}
-            onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-            placeholder="Nhập mã phòng"
-            maxLength={6}
-            className="w-full rounded-xl border border-border bg-input px-4 py-2.5 text-sm tracking-[0.2em] outline-none"
-          />
-          <button type="submit" className="pressable shrink-0 rounded-xl bg-secondary px-4 text-sm font-semibold text-secondary-foreground">
-            Vào
-          </button>
-        </form>
 
         {/* Room Filter */}
         <div
@@ -315,13 +281,20 @@ const MusicRoomsPage = () => {
               <div className="mb-6 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-overline text-muted-foreground">
-                    {rooms.length} phòng đang hoạt động
+                    {meta.total} phòng đang hoạt động
                   </span>
-                  <span className="badge badge-live text-[10px]">LIVE</span>
+                  <span className="badge badge-live text-[10px]">Trực tiếp</span>
                 </div>
-                {isLoading && (
-                  <div className="spinner spinner-xs" />
-                )}
+                <button
+                  id="refresh-rooms-btn"
+                  type="button"
+                  onClick={() => refetch()}
+                  disabled={isLoading}
+                  className="pressable flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+                >
+                  <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                  Làm mới
+                </button>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

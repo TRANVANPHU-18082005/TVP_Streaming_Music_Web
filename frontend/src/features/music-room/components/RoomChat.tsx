@@ -9,6 +9,7 @@ import { Send, ChevronUp, MessageSquare, Smile } from "lucide-react";
 import type { RoomMessage } from "../types/room.types";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface RoomChatProps {
   messages: RoomMessage[];
@@ -160,7 +161,7 @@ const RoomChat = memo(
     };
 
     return (
-      <div className="flex h-full flex-col gap-3">
+      <div className="flex flex-1 min-h-0 flex-col gap-3 w-full">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between shrink-0">
@@ -205,7 +206,7 @@ const RoomChat = memo(
         {/* ── Messages list ── */}
         <div
           ref={chatContainerRef}
-          className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-0.5 py-1 min-h-0"
+          className="scrollbar-glass flex-1 space-y-3 overflow-y-auto px-0.5 py-1 min-h-0"
           role="log"
           aria-label="Tin nhắn phòng"
           aria-live="polite"
@@ -216,56 +217,70 @@ const RoomChat = memo(
               <p className="text-xs font-medium">Hãy là người đầu tiên nhắn gì đó!</p>
             </div>
           )}
-          {messages.map((msg) => (
-            <MessageBubble
-              key={msg._id}
-              msg={msg}
-              isOwn={msg.sender === currentUserId}
-              accentColor={accentColor}
-              hostId={hostId}
-            />
-          ))}
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => (
+              <motion.div
+                key={msg._id}
+                layout
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <MessageBubble
+                  msg={msg}
+                  isOwn={msg.sender === currentUserId}
+                  accentColor={accentColor}
+                  hostId={hostId}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
           <div ref={chatEndRef} />
         </div>
 
         {/* ── Input ── */}
-        <div className="shrink-0 flex flex-col gap-1">
-          <div
-            className="flex items-end gap-2 bg-card/80 dark:glass border border-border dark:border-border/30 p-1.5 rounded-[1.25rem] transition-all focus-within:border-primary/60 dark:focus-within:border-primary/40 shadow-sm"
-            style={{ ["--tw-ring-color" as any]: accentColor }}
-          >
-            <textarea
-              id="room-chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value.slice(0, 300))}
-              onKeyDown={handleKeyDown}
-              placeholder="Nhắn gì đó… (Enter để gửi)"
-              rows={1}
-              aria-label="Nhập tin nhắn"
-              className="flex-1 resize-none bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none scrollbar-none"
-              style={{ maxHeight: "80px" }}
-            />
+        <div className="shrink-0 pt-1">
+          <div className="flex items-end gap-1.5 bg-input/50 backdrop-blur-sm border border-border/50 p-1.5 rounded-[1.25rem] transition-all focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 shadow-sm group">
+            <div className="relative flex-1 flex flex-col min-h-[40px]">
+              <textarea
+                id="room-chat-input"
+                value={input}
+                onChange={(e) => setInput(e.target.value.slice(0, 300))}
+                onKeyDown={handleKeyDown}
+                placeholder="Nhắn gì đó..."
+                rows={1}
+                aria-label="Nhập tin nhắn"
+                className="flex-1 resize-none bg-transparent pl-3 pr-10 py-2.5 text-[13px] font-medium text-foreground placeholder:text-muted-foreground/60 outline-none scrollbar-none"
+                style={{ maxHeight: "80px" }}
+              />
+              <div 
+                className={cn(
+                  "absolute right-2 bottom-2.5 text-[9px] font-bold pointer-events-none transition-opacity",
+                  input.length > 0 ? "opacity-100" : "opacity-0",
+                  input.length >= 280 ? "text-red-500" : "text-muted-foreground/40"
+                )}
+              >
+                {input.length}/300
+              </div>
+            </div>
             <button
               id="room-chat-send-btn"
               onClick={handleSend}
               disabled={!input.trim()}
               className={cn(
-                "size-9 rounded-xl flex items-center justify-center shrink-0 transition-all m-0.5 shadow-sm",
+                "size-10 rounded-xl flex items-center justify-center shrink-0 transition-all shadow-sm",
                 input.trim()
                   ? "text-white hover:scale-105 active:scale-95"
-                  : "bg-muted/80 dark:bg-muted text-muted-foreground/80 cursor-not-allowed"
+                  : "bg-background border border-border/50 text-muted-foreground/50 cursor-not-allowed"
               )}
               aria-label="Gửi tin nhắn"
               style={{
-                background: input.trim() ? `linear-gradient(135deg, ${accentColor}, ${accentColor}bb)` : undefined,
+                background: input.trim() ? `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` : undefined,
               }}
             >
-              <Send className="size-3.5 ml-0.5" />
+              <Send className="size-4 ml-0.5" />
             </button>
           </div>
-          <span className="pr-1 text-right text-[10px] font-medium text-muted-foreground/40">
-            {input.length}/300
-          </span>
         </div>
       </div>
     );

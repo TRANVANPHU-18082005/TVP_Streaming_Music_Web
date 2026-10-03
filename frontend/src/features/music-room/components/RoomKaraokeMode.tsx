@@ -14,6 +14,7 @@ interface RoomKaraokeModeProps {
   karaokeQueue: any[];
   currentSinger?: any;
   isHost: boolean;
+  canAdvance?: boolean;
   onAddQueue: (videoId: string, title: string) => void;
   onNextSinger: () => void;
   onShareRecording: (recordingId: string, url: string, title: string) => void; // Cho sau này
@@ -25,6 +26,7 @@ export const RoomKaraokeMode = ({
   karaokeQueue,
   currentSinger,
   isHost,
+  canAdvance,
   onAddQueue,
   onNextSinger
 }: RoomKaraokeModeProps) => {
@@ -123,7 +125,7 @@ export const RoomKaraokeMode = ({
     toast.success("Đã đăng ký hát thành công!");
   };
 
-  const isMyTurn = currentSinger?._id === currentUser?._id;
+  const isMyTurn = currentSinger?._id === (currentUser?._id || currentUser?.id);
 
   return (
     <div className="flex flex-col md:flex-row gap-4 h-full bg-background/50 backdrop-blur-md rounded-2xl p-4 border shadow-xl">
@@ -189,9 +191,9 @@ export const RoomKaraokeMode = ({
                </div>
              )}
              
-             {isHost && !isMyTurn && (
+             {(canAdvance ?? isHost) && !isMyTurn && (
                <Button variant="secondary" onClick={onNextSinger} className="gap-2 shrink-0">
-                 <FastForward className="w-4 h-4" /> Next Singer
+                 <FastForward className="w-4 h-4" /> Người hát tiếp
                </Button>
              )}
           </div>

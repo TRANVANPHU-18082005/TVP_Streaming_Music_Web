@@ -9,7 +9,6 @@ export { default as RoomCard } from "./components/RoomCard";
 export { default as RoomPlayer } from "./components/RoomPlayer";
 export { default as RoomQueue } from "./components/RoomQueue";
 export { default as RoomChat } from "./components/RoomChat";
-export { default as RoomMemberList } from "./components/RoomMemberList";
 export { default as RoomReactions } from "./components/RoomReactions";
 export { ReactionButtons } from "./components/RoomReactions";
 export { default as RoomThemeBackground } from "./components/RoomThemeBackground";

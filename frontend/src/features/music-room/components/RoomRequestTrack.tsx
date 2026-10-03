@@ -51,18 +51,7 @@ export const RoomRequestTrack = ({ roomCode, onRequestTrack }: Props) => {
   };
 
   return (
-    <div className="w-full flex flex-col h-full bg-transparent">
-      <div className="text-center mb-6">
-        <div className="size-12 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-3 border border-primary/30 shadow-inner">
-          <Music className="size-6 text-primary" />
-        </div>
-        <h2 className="text-lg font-bold text-foreground drop-shadow-sm">
-          Yêu cầu Bài hát
-        </h2>
-        <p className="text-xs font-medium text-muted-foreground mt-1.5 px-4">
-          Gửi yêu cầu bài hát tới Host. Nếu được duyệt, bài hát sẽ lọt vào danh sách phát!
-        </p>
-      </div>
+    <div className="w-full flex flex-1 min-h-0 flex-col bg-transparent">
 
       <div className="relative mb-2">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -82,7 +71,7 @@ export const RoomRequestTrack = ({ roomCode, onRequestTrack }: Props) => {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto mt-2 space-y-2 scrollbar-thin pb-4">
+      <div className="flex-1 overflow-y-auto mt-1 space-y-1.5 scrollbar-glass pb-2 min-h-[100px]">
         {!isLoading && results.length === 0 && searchTerm.trim() !== "" && (
           <div className="text-center text-sm font-medium text-muted-foreground py-12 bg-card/30 rounded-2xl border border-border/20 backdrop-blur-sm">
             Không tìm thấy bài hát nào.
@@ -94,12 +83,12 @@ export const RoomRequestTrack = ({ roomCode, onRequestTrack }: Props) => {
           return (
             <div
               key={track._id}
-              className="flex items-center gap-3 p-2.5 bg-card/40 backdrop-blur-sm hover:bg-card/70 rounded-2xl transition-all border border-border/20 hover:border-primary/30 group shadow-sm"
+              className="flex items-center gap-2.5 p-2 bg-card/40 backdrop-blur-sm hover:bg-card/70 rounded-xl transition-all border border-border/20 hover:border-primary/30 group shadow-sm"
             >
               <img
                 src={track.coverImage || "/placeholder-track.png"}
                 alt={track.title}
-                className="size-12 rounded-xl object-cover shadow-sm group-hover:scale-105 transition-transform"
+                className="size-10 rounded-lg object-cover shadow-sm group-hover:scale-105 transition-transform shrink-0"
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-foreground truncate">{track.title}</p>

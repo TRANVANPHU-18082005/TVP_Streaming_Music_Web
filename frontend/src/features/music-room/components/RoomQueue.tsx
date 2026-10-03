@@ -11,6 +11,7 @@ import { ThumbsUp, Crown, ListMusic, X } from "lucide-react";
 import { selectRoomQueue, selectIsHost, selectCurrentRoom } from "../store/roomSlice";
 import { ROOM_THEMES } from "../types/room.types";
 import type { QueueItem } from "../types/room.types";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -42,26 +43,30 @@ const QueueTrackCard = memo(
     onVote: (id: string) => void;
     onRemove?: (id: string) => void;
   }) => (
-
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+      transition={{ duration: 0.3, ease: "circOut" }}
       className={cn(
-        "flex items-center gap-3 p-3 rounded-2xl transition-all border",
+        "flex items-center gap-2.5 p-2 rounded-xl transition-all border group cursor-default",
         isTopVoted 
           ? "bg-primary/10 border-primary/30 shadow-md ring-1 ring-primary/20 scale-[1.01]" 
-          : "bg-card/40 border-border/20 hover:bg-card/60 hover:border-primary/30",
+          : "glass border-border/40 hover:bg-card/40 hover:border-primary/40",
       )}
     >
       {/* Inner content */}
-      <div className="flex items-center justify-center w-6 shrink-0">
+      <div className="flex items-center justify-center w-5 shrink-0">
         {isTopVoted ? (
-          <Crown className="size-4 text-primary animate-bounce" />
+          <Crown className="size-3.5 text-primary animate-bounce drop-shadow-[0_0_8px_rgba(var(--primary),0.8)]" />
         ) : (
-          <span className="text-xs font-bold text-muted-foreground">#{rank}</span>
+          <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground transition-colors">#{rank}</span>
         )}
       </div>
 
       {/* Cover */}
-      <div className="relative size-12 shrink-0 overflow-hidden rounded-xl shadow-sm">
+      <div className="relative size-10 shrink-0 overflow-hidden rounded-lg shadow-sm">
         <img
           src={item.track.coverImage || "/placeholder-track.png"}
           alt={item.track.title}
@@ -71,23 +76,23 @@ const QueueTrackCard = memo(
 
       {/* Info */}
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold truncate text-foreground">
+        <p className="text-[13px] font-bold truncate text-foreground">
           {item.track.title}
         </p>
-        <p className="text-xs font-medium truncate text-muted-foreground mt-0.5">
+        <p className="text-[11px] font-medium truncate text-muted-foreground mt-0.5">
           {item.track.artist?.name ?? "Unknown Artist"}
         </p>
       </div>
 
       {/* Actions */}
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         {/* Vote */}
         <button
           id={`vote-btn-${item.track._id}`}
           onClick={() => onVote(item.track._id)}
           aria-pressed={hasVoted}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm",
+            "flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all shadow-sm",
             hasVoted 
               ? "bg-primary text-primary-foreground scale-105" 
               : "bg-background border border-border/50 text-foreground hover:bg-muted"
@@ -109,7 +114,7 @@ const QueueTrackCard = memo(
           </button>
         )}
       </div>
-    </div>
+    </motion.div>
   ),
 );
 QueueTrackCard.displayName = "QueueTrackCard";
@@ -133,7 +138,7 @@ const RoomQueue = memo(({ onVote, onRemove, votedTracks = new Set(), isListener 
   const maxVotes = sortedQueue[0]?.votes ?? 0;
   
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-1 min-h-0 flex-col w-full">
 
       {/* ── Header ── */}
       <div className="mb-4 flex items-center justify-between px-2">
@@ -151,9 +156,13 @@ const RoomQueue = memo(({ onVote, onRemove, votedTracks = new Set(), isListener 
       )}
 
       {/* ── List ── */}
-      <div className="scrollbar-thin flex-1 space-y-2 overflow-y-auto px-1 pb-4">
+      <div className="scrollbar-glass flex-1 space-y-2 overflow-y-auto px-1 pb-4 min-h-0">
         {sortedQueue.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            className="flex flex-col items-center justify-center gap-3 py-16 text-center"
+          >
             <div className="size-16 rounded-3xl bg-muted/30 flex items-center justify-center border border-border/20 shadow-inner">
               <ListMusic className="size-8 text-muted-foreground/40" />
             </div>
@@ -161,21 +170,23 @@ const RoomQueue = memo(({ onVote, onRemove, votedTracks = new Set(), isListener 
               <p className="text-base font-bold text-foreground">Hàng chờ đang trống</p>
               <p className="text-sm font-medium text-muted-foreground mt-1">Thêm một bài, playlist hoặc album để mọi người nghe tiếp.</p>
             </div>
-          </div>
+          </motion.div>
         ) : (
-          sortedQueue.map((item, idx) => (
-            <QueueTrackCard
-              key={item._id}
-              item={item}
-              rank={idx + 1}
-              accentColor={accentColor}
-              isHost={isHost}
-              isTopVoted={maxVotes > 0 && item.votes === maxVotes && idx === 0}
-              hasVoted={votedTracks.has(item.track._id)}
-              onVote={onVote}
-              onRemove={onRemove}
-            />
-          ))
+          <AnimatePresence mode="popLayout">
+            {sortedQueue.map((item, idx) => (
+              <QueueTrackCard
+                key={item._id}
+                item={item}
+                rank={idx + 1}
+                accentColor={accentColor}
+                isHost={isHost}
+                isTopVoted={maxVotes > 0 && item.votes === maxVotes && idx === 0}
+                hasVoted={votedTracks.has(item.track._id)}
+                onVote={onVote}
+                onRemove={onRemove}
+              />
+            ))}
+          </AnimatePresence>
         )}
       </div>
     </div>
