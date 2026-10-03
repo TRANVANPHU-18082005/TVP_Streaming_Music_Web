@@ -269,8 +269,6 @@ const UserPlaylistModal = memo<UserPlaylistModalProps>(
 
     const onInternalSubmit = useCallback(
       async (data: FormValues) => {
-        console.log("data", data);
-
         try {
           if (onSubmit) {
             await onSubmit({

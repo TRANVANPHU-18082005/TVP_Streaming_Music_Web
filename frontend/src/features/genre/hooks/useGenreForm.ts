@@ -10,7 +10,6 @@ import {
 import { mapEntityToForm } from "../utils/formMapper";
 import { buildGenrePayload } from "../utils/payloadBuilder";
 import { IGenre } from "../types";
-import { env } from "@/config/env";
 import { toast } from "sonner";
 import { handleError } from "@/utils/handleError";
 
@@ -72,11 +71,6 @@ export const useGenreForm = <TMode extends "create" | "edit">({
   const handleSubmit = form.handleSubmit(async (values) => {
     const { dirtyFields } = form.formState;
 
-    if (env.NODE_ENV === "development") {
-      console.debug("[GenreForm] submit values:", values);
-      console.debug("[GenreForm] dirtyFields:", dirtyFields);
-    }
-
     if (isEditMode) {
       // dirtyFields.image = true khi xóa ảnh (image = null) hoặc đổi file
       const dirtyCount = Object.keys(dirtyFields).length;
@@ -132,14 +126,6 @@ export const useGenreForm = <TMode extends "create" | "edit">({
           }
         }
 
-        if (env.NODE_ENV === "development") {
-          // eslint-disable-next-line no-console
-          console.debug(
-            "[GenreForm] fallback compare -> hasChanges:",
-            hasChanges,
-            { cur: values, orig: defaultValues },
-          );
-        }
       }
 
       if (!hasChanges) {
@@ -155,14 +141,6 @@ export const useGenreForm = <TMode extends "create" | "edit">({
       }
     }
 
-    if (env.NODE_ENV === "development") {
-      console.log("🚀 Submitting Genre Payload:", {
-        mode,
-        values,
-        dirtyFields,
-      });
-    }
-
     const payload = buildGenrePayload(
       values as any,
       dirtyFields as any,
@@ -170,7 +148,6 @@ export const useGenreForm = <TMode extends "create" | "edit">({
     );
 
     try {
-      console.log("🚀 Final Genre Payload (FormData):", payload);
       await onSubmit(payload);
     } catch (err: any) {
       const resp = err?.response?.data || err?.response || null;

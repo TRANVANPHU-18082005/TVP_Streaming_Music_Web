@@ -59,7 +59,6 @@ export const updateGenre = catchAsync(async (req: Request, res: Response) => {
     req.body,
     req.file,
   );
-  console.log(id, req.body, req.file);
   res.status(httpStatus.OK).json({
     success: true,
     message: "Cập nhật thể loại thành công",
@@ -106,7 +105,6 @@ export const getGenreDetail = catchAsync(
   async (req: Request, res: Response) => {
     const currentUser = req.user as IUser | undefined;
     const slug = req.params.slug as string;
-    console.log(req.params, slug);
     const genreDetailResult = await genreService.getGenreDetail(
       slug,
       currentUser,

@@ -396,7 +396,6 @@ const DesktopSearchBar = memo<{
 
   const { data: suggestionsData, isFetching: isSuggesting } = useSearchSuggestions(value);
   const suggestions = suggestionsData ?? [];
-  console.log(suggestions, "suggestions")
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;

@@ -463,7 +463,6 @@ const AiInsightsCard = memo(({ metadata, paletteHex }: { metadata: ITrack["aiMet
   if (!metadata || (!metadata.meaning && !metadata.emotion && !metadata.musicalStyle)) return null;
 
   const color = metadata.colorHex || paletteHex;
-  console.log("metadata", metadata, "color", color);
   return (
     <motion.section variants={STAGGER_ITEM} className="mb-12">
       <div
@@ -966,7 +965,7 @@ const TrackDetailPage = () => {
               {typeof track.artist === "object" && (
                 <TrackDetailArtistCard
                   artist={track.artist}
-                  onClick={() => { }}
+                  onClick={() => { navigate(`/artists/${track.artist.slug || track.artist._id}`); }}
                 />
               )}
 

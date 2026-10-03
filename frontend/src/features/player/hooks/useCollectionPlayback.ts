@@ -17,8 +17,6 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { setIsPlaying, selectPlayer } from "@/features/player";
 import { usePlayCollection } from "./usePlayCollection";
 import { useSocket } from "@/hooks";
-import { env } from "@/config/env";
-
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PLAY_THRESHOLD_MS = 30_000;
@@ -118,23 +116,11 @@ export function useCollectionPlayback(
           targetType: event.targetType,
           userId: event.userId,
         });
-
-        if (env.NODE_ENV === "development") {
-          console.log(
-            `[Analytics] ✅ Play emitted — ${event.targetType}: "${collectionName}"`,
-          );
-        }
       } else {
         pendingQueue.push(event);
-
-        if (env.NODE_ENV === "development") {
-          console.log(
-            `[Analytics] 📦 Queued (offline) — ${event.targetType}: "${collectionName}". Queue: ${pendingQueue.length}`,
-          );
-        }
       }
     },
-    [socket, isConnected, collectionName],
+    [socket, isConnected],
   );
 
   const startThresholdTimer = useCallback(
@@ -200,10 +186,6 @@ export function useCollectionPlayback(
         userId: event.userId,
       });
     });
-
-    if (env.NODE_ENV === "development") {
-      console.log(`[Analytics] 🚀 Flushed ${toFlush.length} queued play(s)`);
-    }
   }, [socket, isConnected]);
 
   // ── Cleanup khi unmount ───────────────────────────────────────────────────

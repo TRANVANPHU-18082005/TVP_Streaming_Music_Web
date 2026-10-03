@@ -88,7 +88,6 @@ export const useAlbumForm = <TMode extends "create" | "edit">({
     }
     // Build payload — chỉ gửi dirtyFields khi Edit, gửi tất cả khi Create
     const payload = buildAlbumPayload(values, dirtyFields, isEditMode);
-    console.log(values, dirtyFields, isEditMode)
     try {
       // await onSubmit(payload);
     } catch (err: any) {

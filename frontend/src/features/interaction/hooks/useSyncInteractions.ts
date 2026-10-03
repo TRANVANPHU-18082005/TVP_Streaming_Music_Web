@@ -6,7 +6,6 @@ import {
   syncInteractions,
   InteractionTargetType,
 } from "../slice/interactionSlice";
-import { env } from "@/config/env";
 
 export const useSyncInteractions = (
   ids: string[],
@@ -39,14 +38,6 @@ export const useSyncInteractions = (
   }, [user?._id, targetType, idsKey]);
 
   useEffect(() => {
-    if (env.NODE_ENV === "development") {
-      console.log("[useSyncInteractions] effect execution:", {
-        idsKey,
-        enabled,
-        hasUser: !!user,
-      });
-    }
-
     // 3. SỬA LỖI CHÍ MẠNG: Chỉ lọc những ID thực sự chưa từng check (bằng undefined)
     const unknownIds = ids.filter((id) => interactionMap[id] === undefined);
 

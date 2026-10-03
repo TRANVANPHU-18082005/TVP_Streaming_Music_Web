@@ -32,7 +32,6 @@ export const getMyFollowedArtists = catchAsync(
     const query = req.query as unknown as ArtistUserFilterInput;
     const currentUser = req.user as IUser | undefined;
     const result = await artistService.getMyFollowedArtists(query, currentUser);
-    console.log(currentUser);
     res.status(httpStatus.OK).json({
       success: true,
       data: result,

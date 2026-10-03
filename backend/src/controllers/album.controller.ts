@@ -30,7 +30,6 @@ export const getAlbumsByUser = catchAsync(
     // Cast Type chuẩn từ Zod (req.query đã được validate & coerce bởi middleware)
     const filter = req.query as unknown as AlbumUserFilterInput;
     const currentUser = req.user as IUser;
-    console.log("Received filter from query:", filter, currentUser); // Debug log
     const result = await albumService.getAlbumsByUser(filter, currentUser);
 
     res.status(httpStatus.OK).json({
@@ -46,7 +45,6 @@ export const getAlbumsByAdmin = catchAsync(
     // Cast Type chuẩn từ Zod (req.query đã được validate & coerce bởi middleware)
     const filter = req.query as unknown as AlbumAdminFilterInput;
     const currentUser = req.user as IUser;
-    console.log("Received filter from query:", filter, currentUser); // Debug log
     const result = await albumService.getAlbumsByAdmin(filter, currentUser);
 
     res.status(httpStatus.OK).json({

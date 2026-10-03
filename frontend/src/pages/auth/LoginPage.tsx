@@ -23,8 +23,6 @@ const LoginPage = () => {
           ? "Facebook"
           : "Mạng xã hội";
 
-    console.log("error", error);
-    console.log("reason", reason);
     if (!error && !reason) return;
 
     // 🚀 2. Dọn dẹp URL ngay lập tức để nhìn chuyên nghiệp

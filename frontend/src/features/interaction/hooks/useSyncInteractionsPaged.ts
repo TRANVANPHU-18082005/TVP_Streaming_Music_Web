@@ -6,7 +6,6 @@ import {
   syncInteractions,
 } from "../slice/interactionSlice";
 import type { InteractionTargetType } from "../slice/interactionSlice";
-import { env } from "@/config/env";
 import type { ITrack } from "@/features/track";
 
 export const useSyncInteractionsPaged = (
@@ -62,12 +61,6 @@ export const useSyncInteractionsPaged = (
 
     timerRef.current = setTimeout(async () => {
       try {
-        if (env.NODE_ENV === "development") {
-          console.log(
-            `[SyncPaged] Requesting API for ${unknownIds.length} new IDs`,
-          );
-        }
-
         const interactedIds = await interactionApi.checkBatch(
           unknownIds,
           type,

@@ -312,8 +312,7 @@ export const TrackTableRow = memo(
         try {
           await retryKaraoke(track._id);
           toast.success("Track queued for reprocessing");
-        } catch (err: any) {
-          console.log(err);
+        } catch {
           toast.error("Retry failed — please try again");
           setIsRetrying(false);
         }

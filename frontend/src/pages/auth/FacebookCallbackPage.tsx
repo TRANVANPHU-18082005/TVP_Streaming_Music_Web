@@ -30,7 +30,6 @@ const FacebookCallbackPage = () => {
     }
 
     const authCode = searchParams.get("code");
-    console.log("authCode", authCode);
     if (authCode) {
       authApi
         .exchangeSocialCode(authCode)

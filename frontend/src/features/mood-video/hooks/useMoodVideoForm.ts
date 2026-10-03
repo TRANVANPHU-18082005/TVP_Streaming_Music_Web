@@ -49,8 +49,6 @@ export const useMoodVideoForm = ({
       dirtyFields as any,
       isEditMode,
     );
-    console.log("Check File before submit:", values.video instanceof File);
-    console.log("FormData Video Check:", payload.get("video"));
     await onSubmit(payload);
   });
 
