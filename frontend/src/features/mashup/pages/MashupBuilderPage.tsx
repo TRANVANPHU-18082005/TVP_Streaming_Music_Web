@@ -153,11 +153,11 @@ const TrackCard = ({
         {/* Card */}
         <div
           onClick={onSelect}
-          className={`relative flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all group ${isPreviewing
-              ? "border-primary/80 ring-1 ring-primary/50 shadow-[0_0_15px_rgba(var(--primary),0.2)] bg-primary/10"
-              : isSelected
-                ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-sm"
-                : "border-border/40 hover:border-border hover:bg-white/5"
+          className={`relative flex items-center gap-3 p-3 rounded-[1.5rem] border cursor-pointer transition-all group backdrop-blur-md ${isPreviewing
+            ? "border-primary/80 ring-1 ring-primary/50 shadow-[0_0_15px_rgba(var(--primary),0.2)] bg-primary/10"
+            : isSelected
+              ? "border-primary/50 bg-primary/10 ring-1 ring-primary/20 shadow-md"
+              : "border-white/40 dark:border-white/5 hover:border-white/60 dark:hover:border-white/10 bg-white/40 dark:bg-black/20 hover:bg-white/60 dark:hover:bg-black/40 shadow-sm"
             } ${isDragging ? "shadow-2xl scale-[1.02]" : ""}`}
         >
           {/* Drag handle */}
@@ -221,14 +221,14 @@ const TrackCard = ({
     <div ref={setNodeRef} style={style} className="flex items-stretch gap-0 shrink-0 ">
       <div
         onClick={onSelect}
-        className={`relative flex flex-col w-40 cursor-pointer rounded-2xl overflow-hidden border transition-all duration-300 group ${isPreviewing
-            ? "border-primary/80 ring-1 ring-primary/50 shadow-[0_0_15px_rgba(var(--primary),0.2)] bg-primary/10"
-            : isSelected
-              ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-sm"
-              : "border-border/40 hover:border-border hover:bg-white/5"
+        className={`relative flex flex-col w-40 cursor-pointer rounded-[1.5rem] overflow-hidden border transition-all duration-300 group backdrop-blur-md ${isPreviewing
+          ? "border-primary/80 ring-1 ring-primary/50 shadow-[0_0_15px_rgba(var(--primary),0.2)] bg-primary/10"
+          : isSelected
+            ? "border-primary/50 bg-primary/10 ring-1 ring-primary/20 shadow-md"
+            : "border-white/40 dark:border-white/5 hover:border-white/60 dark:hover:border-white/10 bg-white/40 dark:bg-black/20 hover:bg-white/60 dark:hover:bg-black/40 shadow-sm"
           } ${isDragging ? "shadow-2xl scale-[1.03]" : ""}`}
       >
-        <div className="relative h-24 bg-black">
+        <div className="relative h-24 bg-black/5 dark:bg-black/40">
           <ImageWithFallback src={item.short.track?.coverImage} className="w-full h-full object-cover opacity-70" />
           <div className="absolute inset-x-0 bottom-0 px-2 pb-1">
             <MiniWaveform seed={index} active={isPreviewing} />
@@ -300,7 +300,7 @@ const LibraryPanel = ({
 }: LibraryPanelProps) => (
   <div className="flex flex-col h-full">
     {/* Search */}
-    <div className="p-3 border-b border-border/40 shrink-0">
+    <div className="p-3 border-b border-border/20 shrink-0">
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
         <input
@@ -308,7 +308,7 @@ const LibraryPanel = ({
           placeholder="Tìm kiếm shorts..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full bg-background/60 border border-border/50 text-xs rounded-full pl-9 pr-3 py-2.5 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground transition-all"
+          className="w-full bg-white/50 dark:bg-black/20 border border-white/50 dark:border-white/5 text-xs rounded-full pl-9 pr-3 py-2.5 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground shadow-inner transition-all backdrop-blur-md"
         />
         {search && <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
           <X className="w-3.5 h-3.5" />
@@ -329,9 +329,9 @@ const LibraryPanel = ({
         return (
           <div
             key={short._id}
-            className={`flex items-center gap-3 p-2 rounded-2xl transition-all group ${added || wouldExceed
-                ? "opacity-40 cursor-not-allowed"
-                : "hover:bg-white/5 cursor-pointer"
+            className={`flex items-center gap-3 p-2 rounded-[1rem] transition-all group border border-transparent ${added || wouldExceed
+              ? "opacity-40 cursor-not-allowed"
+              : "hover:border-white/40 dark:hover:border-white/10 hover:bg-white/40 dark:hover:bg-black/20 hover:shadow-sm cursor-pointer"
               }`}
             onClick={() => !added && !wouldExceed && onAdd(short)}
           >
@@ -389,8 +389,8 @@ const InspectorPanel = ({
 
   if (!item) return (
     <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-surface-2/50 flex items-center justify-center mb-3">
-        <SlidersHorizontal className="w-7 h-7 text-muted-foreground/30" />
+      <div className="w-14 h-14 rounded-2xl bg-white/40 dark:bg-black/20 backdrop-blur-md border border-white/40 dark:border-white/5 flex items-center justify-center mb-3 shadow-inner">
+        <SlidersHorizontal className="w-7 h-7 text-muted-foreground/50" />
       </div>
       <p className="text-sm font-medium text-muted-foreground/60">Chọn một track để chỉnh sửa</p>
       <p className="text-xs text-muted-foreground/40 mt-1">Volume, trim, hiệu ứng chuyển bài</p>
@@ -404,7 +404,7 @@ const InspectorPanel = ({
   return (
     <div className="flex flex-col h-full">
       {/* Tabs */}
-      <div className="flex bg-surface-2/40 p-1 rounded-xl mx-2 mt-2 mb-1 shrink-0 border border-border/20 shadow-inner">
+      <div className="flex bg-white/50 dark:bg-black/20 p-1 rounded-2xl mx-2 mt-2 mb-1 shrink-0 border border-white/50 dark:border-white/5 shadow-inner backdrop-blur-md">
         {(["track", "fx", "ai"] as const).map(t => (
           <button
             key={t}
@@ -422,7 +422,7 @@ const InspectorPanel = ({
         {tab === "track" && (
           <>
             {/* Cover */}
-            <div className="relative rounded-xl overflow-hidden aspect-square bg-black">
+            <div className="relative rounded-2xl overflow-hidden aspect-square bg-black/5 dark:bg-black/50 shadow-sm border border-white/20 dark:border-white/5">
               <ImageWithFallback src={item.short.track?.coverImage} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
               <div className="absolute bottom-2.5 left-3 right-3">
@@ -452,7 +452,7 @@ const InspectorPanel = ({
               <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                 <Scissors className="w-3.5 h-3.5" /> Trim đoạn nhạc
               </label>
-              <div className="space-y-2.5 p-3 bg-surface-2/30 rounded-xl border border-border/30">
+              <div className="space-y-2.5 p-3 bg-white/50 dark:bg-black/20 rounded-2xl border border-white/50 dark:border-white/5 shadow-inner backdrop-blur-md">
                 <div className="flex items-center gap-3">
                   <span className="text-[10px] text-muted-foreground w-12 shrink-0">Bắt đầu</span>
                   <input type="range" min={0} max={Math.max(0, trimEnd - 1)} step={0.5}
@@ -490,8 +490,8 @@ const InspectorPanel = ({
                     key={t.value}
                     onClick={() => onUpdateTransition(index, t.value, item.transitionDuration)}
                     className={`flex flex-col gap-1.5 p-3 rounded-2xl border text-left transition-all hover:scale-[1.02] active:scale-[0.98] ${item.transitionType === t.value
-                        ? "border-primary/60 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.15)] ring-1 ring-primary/30"
-                        : "border-border/40 hover:border-primary/30 bg-surface-2/30"
+                      ? "border-primary/60 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.15)] ring-1 ring-primary/30"
+                      : "border-border/40 hover:border-primary/30 bg-surface-2/30"
                       }`}
                   >
                     <div className="flex items-center justify-between w-full">
@@ -786,7 +786,7 @@ export const MashupBuilderPage = () => {
 
   // ── Header ────────────────────────────────────────────────────────────────
   const Header = (
-    <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3 border-b border-border/50 bg-surface-1/60 backdrop-blur shrink-0">
+    <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3 border border-white/40 dark:border-white/5 bg-white/60 dark:bg-card/30 backdrop-blur-2xl shrink-0 rounded-full shadow-sm mx-auto w-full z-20">
       {/* Back btn (mobile) */}
       {isMobile && (
         <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-surface-2/60 text-muted-foreground">
@@ -814,10 +814,10 @@ export const MashupBuilderPage = () => {
 
       {/* Duration chip */}
       <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold border shrink-0 transition-all ${totalDuration >= MASHUP_MIN_DURATION && totalDuration <= MASHUP_MAX_DURATION
-          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-          : totalDuration > MASHUP_MAX_DURATION
-            ? "bg-red-500/10 border-red-500/30 text-red-400"
-            : "bg-surface-2 border-border/40 text-muted-foreground"
+        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+        : totalDuration > MASHUP_MAX_DURATION
+          ? "bg-red-500/10 border-red-500/30 text-red-400"
+          : "bg-surface-2 border-border/40 text-muted-foreground"
         }`}>
         <Clock className="w-3 h-3" />
         {formatMashupDuration(totalDuration)}
@@ -853,11 +853,14 @@ export const MashupBuilderPage = () => {
   // ── MOBILE LAYOUT ─────────────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div className="relative flex flex-col bg-background text-foreground" style={{ height: "100dvh" }}>
+      <div className="relative flex flex-col bg-background text-foreground h-[100dvh] pt-2 px-2 pb-24 gap-2 overflow-hidden z-0">
+        <div className="absolute top-0 left-0 w-full h-[500px] overflow-hidden -z-10 pointer-events-none">
+          <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[100%] rounded-full bg-primary/20 dark:bg-primary/10 blur-[120px]" />
+        </div>
         {Header}
 
         {/* Panel content */}
-        <div className="flex-1 overflow-hidden min-h-0">
+        <div className="flex-1 overflow-hidden min-h-0 relative z-10 bg-white/40 dark:bg-card/20 backdrop-blur-xl rounded-[2rem] border border-white/40 dark:border-white/5 shadow-md">
           <AnimatePresence mode="wait">
             {mobilePanel === "library" && (
               <motion.div key="library" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="h-full">
@@ -952,7 +955,7 @@ export const MashupBuilderPage = () => {
         </div>
 
         {/* Mobile bottom nav */}
-        <div className="flex border-t border-border/40 bg-surface-1/90 backdrop-blur shrink-0 safe-area-pb">
+        <div className="flex border border-white/20 dark:border-white/5 bg-white/70 dark:bg-card/70 backdrop-blur-2xl shrink-0 safe-area-pb rounded-full shadow-lg mb-2 mx-4 z-20">
           {([
             { id: "library", icon: Library, label: "Kho nhạc" },
             { id: "timeline", icon: ListMusic, label: "Timeline" },
@@ -981,10 +984,13 @@ export const MashupBuilderPage = () => {
   // ── TABLET LAYOUT ─────────────────────────────────────────────────────────
   if (bp === "tablet") {
     return (
-      <div className="relative flex flex-col bg-background text-foreground" style={{ height: "100dvh" }}>
+      <div className="relative flex flex-col bg-background text-foreground h-[100dvh] pt-4 px-4 pb-28 gap-4 overflow-hidden z-0">
+        <div className="absolute top-0 left-0 w-full h-[500px] overflow-hidden -z-10 pointer-events-none">
+          <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[100%] rounded-full bg-primary/20 dark:bg-primary/10 blur-[120px]" />
+        </div>
         {Header}
 
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden gap-4 relative z-10">
           {/* Library sidebar (collapsible) */}
           <AnimatePresence>
             {showLibrarySidebar && (
@@ -993,9 +999,9 @@ export const MashupBuilderPage = () => {
                 animate={{ width: 240, opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
                 transition={{ duration: 0.2, ease: "easeInOut" }}
-                className="flex flex-col border-r border-border/40 bg-surface-1/60 shrink-0 overflow-hidden"
+                className="flex flex-col border border-white/40 dark:border-white/5 bg-white/40 dark:bg-card/20 backdrop-blur-xl rounded-[2rem] shadow-md shrink-0 overflow-hidden"
               >
-                <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/40 bg-surface-2/20">
+                <div className="flex items-center justify-between px-4 py-3.5 border-b border-border/20 bg-white/20 dark:bg-black/10">
                   <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
                     <Music className="w-3.5 h-3.5" /> Kho Shorts
                   </span>
@@ -1017,15 +1023,15 @@ export const MashupBuilderPage = () => {
           {!showLibrarySidebar && (
             <button
               onClick={() => setShowLibrarySidebar(true)}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-30 flex items-center gap-1 bg-primary/20 border border-primary/40 text-primary rounded-r-xl py-3 px-1.5 hover:bg-primary/30 transition-all shadow-md"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-30 flex items-center gap-1 bg-primary border border-primary/40 text-primary-foreground rounded-r-2xl py-4 px-2 hover:bg-primary/90 transition-all shadow-xl"
             >
               <Music className="w-3.5 h-3.5" />
             </button>
           )}
 
           {/* Timeline (vertical) */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/40 shrink-0 bg-surface-2/10">
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden border border-white/40 dark:border-white/5 bg-white/40 dark:bg-card/20 backdrop-blur-xl rounded-[2rem] shadow-md">
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/20 shrink-0 bg-white/20 dark:bg-black/10">
               <span className="text-xs font-semibold text-muted-foreground">Timeline • {shorts.length} tracks</span>
               <div className="ml-auto flex items-center gap-2">
                 <button
@@ -1150,10 +1156,13 @@ export const MashupBuilderPage = () => {
 
   // ── DESKTOP LAYOUT (3-panel DAW) ──────────────────────────────────────────
   return (
-    <div className="relative section-container space-y-6 sm:space-y-8 flex flex-col bg-background text-foreground overflow-hidden" style={{ height: "100dvh" }}>
+    <div className="relative flex flex-col bg-background text-foreground h-[100dvh] pt-4 px-4 pb-28 gap-4 overflow-hidden z-0">
+      <div className="absolute top-0 left-0 w-full h-[500px] overflow-hidden -z-10 pointer-events-none">
+        <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[100%] rounded-full bg-primary/20 dark:bg-primary/10 blur-[120px]" />
+      </div>
       {Header}
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden gap-4 relative z-10 w-full max-w-screen-2xl mx-auto">
         {/* Library Panel */}
         <AnimatePresence>
           {showLibrarySidebar && (
@@ -1161,10 +1170,9 @@ export const MashupBuilderPage = () => {
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 260, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.25, ease: "easeInOut" }}
-              className="flex flex-col border-r border-border/40 bg-surface-1/60 backdrop-blur shrink-0 overflow-hidden"
+              className="flex flex-col border border-white/40 dark:border-white/5 bg-white/40 dark:bg-card/20 backdrop-blur-xl rounded-[2rem] shadow-md shrink-0 overflow-hidden"
             >
-              <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/40 bg-surface-2/20 shrink-0">
+              <div className="flex items-center justify-between px-4 py-3.5 border-b border-border/20 bg-white/20 dark:bg-black/10 shrink-0">
                 <span className="text-sm font-bold flex items-center gap-2">
                   <Music className="w-4 h-4 text-primary" /> Kho Shorts
                 </span>
@@ -1185,17 +1193,17 @@ export const MashupBuilderPage = () => {
         {!showLibrarySidebar && (
           <button
             onClick={() => setShowLibrarySidebar(true)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-1 bg-surface-2/80 border border-border/50 text-muted-foreground rounded-r-xl py-3 px-1.5 hover:bg-primary/15 hover:text-primary hover:border-primary/40 transition-all shadow-md"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-1 bg-primary text-primary-foreground rounded-r-2xl py-4 px-2 hover:bg-primary/90 transition-all shadow-xl"
           >
-            <Music className="w-3.5 h-3.5" />
-            <span className="text-[8px] font-bold uppercase tracking-wide writing-mode-vertical">Kho</span>
+            <Music className="w-4 h-4" />
+            <span className="text-[10px] font-bold uppercase tracking-wide writing-mode-vertical">Kho</span>
           </button>
         )}
 
         {/* Timeline */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden border border-white/40 dark:border-white/5 bg-white/40 dark:bg-card/20 backdrop-blur-xl rounded-[2rem] shadow-md">
           {/* Toolbar */}
-          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/40 bg-surface-2/10 shrink-0">
+          <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/20 bg-white/20 dark:bg-black/10 shrink-0">
             <span className="text-xs font-bold text-muted-foreground">Timeline</span>
             <span className="text-[10px] text-muted-foreground/60 bg-surface-2/40 px-2 py-0.5 rounded-full">{shorts.length} track{shorts.length !== 1 ? "s" : ""}</span>
             <div className="ml-auto flex items-center gap-2">
@@ -1211,7 +1219,7 @@ export const MashupBuilderPage = () => {
           </div>
 
           {/* Horizontal timeline (desktop DAW) */}
-          <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gradient-to-b from-surface-1/30 to-surface-1/10 relative">
+          <div className="flex-1 overflow-x-auto overflow-y-hidden relative bg-transparent">
             {shorts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
@@ -1278,8 +1286,8 @@ export const MashupBuilderPage = () => {
         </div>
 
         {/* Inspector Panel */}
-        <div className="w-60 xl:w-64 shrink-0 border-l border-border/40 bg-surface-1/60 backdrop-blur flex flex-col overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-border/40 bg-surface-2/20 shrink-0">
+        <div className="w-60 xl:w-72 shrink-0 flex flex-col border border-white/40 dark:border-white/5 bg-white/40 dark:bg-card/20 backdrop-blur-xl rounded-[2rem] shadow-md overflow-hidden">
+          <div className="px-4 py-3.5 border-b border-border/20 bg-white/20 dark:bg-black/10 shrink-0">
             <h2 className="text-sm font-bold flex items-center gap-2">
               <Settings2 className="w-4 h-4 text-primary" /> Inspector
             </h2>

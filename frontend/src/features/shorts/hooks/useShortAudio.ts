@@ -4,6 +4,11 @@ import {
   isAutoplayBlocked,
   type HighlightAttachment,
 } from "@/features/player/utils/highlightAudio";
+import {
+  acquirePlayback,
+  bindPlaybackOwner,
+  releasePlayback,
+} from "@/features/player/utils/playbackSession";
 
 /**
  * Plays one highlight window [startTime, endTime].
@@ -15,6 +20,7 @@ export const useShortAudio = (
   endTime: number,
   isActive: boolean,
   onEnd?: () => void,
+  prefetch = false,
 ) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const attachmentRef = useRef<HighlightAttachment | null>(null);
@@ -24,6 +30,8 @@ export const useShortAudio = (
   const startRef = useRef(startTime);
   const endRef = useRef(endTime);
   const readyRef = useRef(false);
+  const attachedSrcRef = useRef("");
+  const suspendSelfRef = useRef<() => void>(() => undefined);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -49,6 +57,23 @@ export const useShortAudio = (
       playPromiseRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const suspend = () => {
+      audioRef.current?.pause();
+      attachmentRef.current?.suspend();
+      setIsPlaying(false);
+      setIsLoading(false);
+    };
+    suspendSelfRef.current = suspend;
+    return bindPlaybackOwner("short", suspend);
+  }, []);
+
+  useEffect(() => {
+    if (!isActive) return;
+    acquirePlayback("short", suspendSelfRef.current);
+    return () => releasePlayback("short", suspendSelfRef.current);
+  }, [isActive]);
 
   const playFromStart = useCallback(async () => {
     const audio = audioRef.current;
@@ -82,9 +107,26 @@ export const useShortAudio = (
     }
   }, []);
 
+  const armed = isActive || prefetch;
+
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !src) return;
+    if (!audio) return;
+
+    if (!src || !armed) {
+      attachmentRef.current?.destroy();
+      attachmentRef.current = null;
+      attachedSrcRef.current = "";
+      readyRef.current = false;
+      setProgress(0);
+      setIsPlaying(false);
+      setIsLoading(false);
+      setAutoplayBlocked(false);
+      playPromiseRef.current = null;
+      return;
+    }
+
+    if (attachedSrcRef.current === src && attachmentRef.current) return;
 
     attachmentRef.current?.destroy();
     readyRef.current = false;
@@ -96,6 +138,7 @@ export const useShortAudio = (
 
     const attachment = attachHighlightSource(audio, src);
     attachmentRef.current = attachment;
+    attachedSrcRef.current = src;
     let cancelled = false;
 
     attachment.whenReady
@@ -118,10 +161,8 @@ export const useShortAudio = (
 
     return () => {
       cancelled = true;
-      attachment.destroy();
-      if (attachmentRef.current === attachment) attachmentRef.current = null;
     };
-  }, [src, playFromStart]);
+  }, [src, armed, playFromStart]);
 
   useEffect(() => {
     const audio = audioRef.current;

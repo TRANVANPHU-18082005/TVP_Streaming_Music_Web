@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import type { IKaraokeRecording } from "../types";
 import { loadYoutubeIframeApi, mixFromRecording, syncVoiceElement, type YoutubePlayerHandle } from "../utils/mixSync";
+import { acquirePlayback, bindPlaybackOwner, releasePlayback } from "@/features/player/utils/playbackSession";
 
 interface KaraokePlaybackModalProps {
   recording: IKaraokeRecording | null;
@@ -26,6 +27,21 @@ export const KaraokePlaybackModal = ({ recording, onClose, onEnded }: KaraokePla
   );
   const mixRef = useRef(mix);
   mixRef.current = mix;
+
+  useEffect(() => {
+    if (!recording) return;
+    const suspend = () => {
+      ytPlayerRef.current?.pauseVideo?.();
+      audioRef.current?.pause();
+      setIsPlaying(false);
+    };
+    const unbind = bindPlaybackOwner("karaoke", suspend);
+    acquirePlayback("karaoke", suspend);
+    return () => {
+      unbind();
+      releasePlayback("karaoke", suspend);
+    };
+  }, [recording]);
 
   useEffect(() => {
     if (!recording || !mix) return;
@@ -202,7 +218,7 @@ export const KaraokePlaybackModal = ({ recording, onClose, onEnded }: KaraokePla
             src={recording.audioUrl}
             className="hidden"
             controlsList="nodownload"
-            preload="auto"
+            preload="metadata"
           />
 
           {recording.description && (

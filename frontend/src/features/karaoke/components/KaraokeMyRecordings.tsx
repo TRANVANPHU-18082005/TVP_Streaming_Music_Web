@@ -77,29 +77,29 @@ export const KaraokeMyRecordings = () => {
       </div>
 
       {!recordings.length ? (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground glass-frosted rounded-2xl shadow-sm border border-dashed border-border/50">
-          <Music2 className="w-12 h-12 mb-4 opacity-50" />
-          <p>Bạn chưa có bản thu nào.</p>
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground bg-white/40 dark:bg-card/20 backdrop-blur-3xl rounded-[2rem] shadow-sm border border-dashed border-border/50">
+          <Music2 className="w-16 h-16 mb-4 opacity-30" />
+          <p className="font-bold text-lg text-foreground/80">Bạn chưa có bản thu nào.</p>
           <p className="text-sm mt-1">Hãy vào phòng thu và tạo bản thu đầu tiên nhé!</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
           {recordings.map((rec: IKaraokeRecording) => (
-            <div key={rec._id} className="flex flex-col sm:flex-row gap-3 md:gap-4 p-3 md:p-4 rounded-2xl border border-border/50 glass-frosted hover:shadow-floating transition-all duration-300">
+            <div key={rec._id} className="flex flex-col sm:flex-row gap-4 p-4 md:p-5 rounded-3xl border border-white/20 dark:border-white/5 bg-white/40 dark:bg-card/20 backdrop-blur-2xl shadow-sm hover:shadow-xl hover:bg-white/60 dark:hover:bg-card/40 transition-all duration-300">
               {/* Thumbnail */}
               <div 
-                className="relative w-full sm:w-32 md:w-40 aspect-video rounded-xl overflow-hidden shrink-0 group cursor-pointer bg-black"
+                className="relative w-full sm:w-36 md:w-44 aspect-video rounded-2xl overflow-hidden shrink-0 group cursor-pointer bg-black/10 ring-1 ring-black/5 dark:ring-white/10"
                 onClick={() => setPlayingRec(rec)}
               >
                 <ImageWithFallback
                   src={rec.youtubeThumbnail || `https://img.youtube.com/vi/${rec.youtubeVideoId}/hqdefault.jpg`}
                   alt={rec.youtubeTitle}
-                  className="w-full h-full object-cover opacity-80 group-hover:scale-110 group-hover:opacity-100 transition-all duration-500"
+                  className="w-full h-full object-cover opacity-90 group-hover:scale-105 group-hover:opacity-100 transition-all duration-700"
                 />
                 <button
-                  className="absolute inset-0 m-auto w-10 h-10 md:w-12 md:h-12 bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 shadow-lg"
+                  className="absolute inset-0 m-auto w-12 h-12 md:w-14 md:h-14 bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 shadow-xl shadow-primary/30 backdrop-blur-sm"
                 >
-                  <Play className="w-4 h-4 md:w-5 md:h-5 ml-1" />
+                  <Play className="w-5 h-5 md:w-6 md:h-6 ml-1" />
                 </button>
               </div>
 
@@ -131,11 +131,11 @@ export const KaraokeMyRecordings = () => {
                       type="button"
                       size="sm"
                       variant="secondary"
-                      className="h-7 gap-1 px-2 text-xs"
+                      className="h-8 gap-1.5 px-3 text-xs rounded-full font-bold shadow-sm"
                       disabled={submittingId === rec._id}
                       onClick={() => void handleSubmit(rec._id)}
                     >
-                      {submittingId === rec._id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      {submittingId === rec._id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                       Gửi duyệt
                     </Button>
                   )}

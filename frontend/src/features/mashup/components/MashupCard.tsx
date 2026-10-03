@@ -8,11 +8,16 @@ import { useLongPress } from "@/hooks/useLongPress";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
 import { Share2, FileText } from "lucide-react";
 import React from "react";
+import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/components/ui/use-mobile";
 
 interface MashupCardProps {
   mashup: IMashup;
   variant?: "default" | "compact" | "featured";
 }
+
+const CARD_BASE =
+  "group relative flex h-72 w-full cursor-pointer flex-col overflow-hidden rounded-[2rem] border border-border/40 bg-background/40 backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:border-border/80 dark:hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)]";
 
 /** Mini energy curve SVG */
 const EnergyCurve = ({ shorts }: { shorts?: any[] }) => {
@@ -24,7 +29,7 @@ const EnergyCurve = ({ shorts }: { shorts?: any[] }) => {
     return `${x},${y}`;
   });
   return (
-    <svg viewBox="0 0 100 24" preserveAspectRatio="none" className="w-full h-4 opacity-70">
+    <svg viewBox="0 0 100 24" preserveAspectRatio="none" className="h-4 w-full opacity-70">
       <path d={`M 0,24 L ${pts.join(" L ")} L 100,24 Z`} fill="#f59e0b18" />
       <path d={`M ${pts.join(" L ")}`} stroke="#f59e0b" strokeWidth="2" fill="none" strokeLinecap="round" />
     </svg>
@@ -33,7 +38,7 @@ const EnergyCurve = ({ shorts }: { shorts?: any[] }) => {
 
 /** Mini waveform bars (static decorative) */
 const WaveformBars = ({ active, count = 16 }: { active: boolean; count?: number }) => (
-  <div className="flex items-end gap-px h-5 w-full">
+  <div className="flex h-5 w-full items-end gap-px">
     {Array.from({ length: count }, (_, i) => {
       const h = Math.max(15, Math.abs(Math.sin(i * 1.3) * 60 + Math.cos(i * 2.7) * 20) + 20);
       return (
@@ -58,6 +63,7 @@ const WaveformBars = ({ active, count = 16 }: { active: boolean; count?: number 
 export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => {
   const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
+  const isMobile = useIsMobile();
 
   const coverUrl = mashup.coverImage || mashup.shorts?.[0]?.short?.track?.coverImage;
   const topTransitions = [...new Set(mashup.shorts?.slice(0, 3).map(s => s.transitionType).filter(Boolean))];
@@ -82,27 +88,27 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
   if (variant === "compact") {
     return (
       <div
-        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-surface-2/60 cursor-pointer transition-all group"
+        className="group flex cursor-pointer items-center gap-3 rounded-xl p-2.5 transition-all hover:bg-surface-2/60"
         onClick={handleClick}
       >
-        <div className="relative w-11 h-11 rounded-lg overflow-hidden shrink-0">
-          <ImageWithFallback src={coverUrl} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Play className="w-4 h-4 text-white fill-white" />
+        <div className="relative size-11 shrink-0 overflow-hidden rounded-lg">
+          <ImageWithFallback src={coverUrl} className="size-full object-cover" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+            <Play className="size-4 fill-white text-white" />
           </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate group-hover:text-primary transition-colors">{mashup.title}</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-              <Layers className="w-2.5 h-2.5" /> {mashup.shorts?.length || 0} tracks
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold transition-colors group-hover:text-primary">{mashup.title}</p>
+          <div className="mt-0.5 flex items-center gap-2">
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+              <Layers className="size-2.5" /> {mashup.shorts?.length || 0} tracks
             </span>
-            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-              <Clock className="w-2.5 h-2.5" /> {formatMashupDuration(mashup.totalDuration || 0)}
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+              <Clock className="size-2.5" /> {formatMashupDuration(mashup.totalDuration || 0)}
             </span>
           </div>
         </div>
-        <Heart className="w-4 h-4 text-muted-foreground group-hover:text-red-400 transition-colors shrink-0" />
+        <Heart className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-red-400" />
       </div>
     );
   }
@@ -110,7 +116,7 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
   if (variant === "featured") {
     return (
       <div
-        className="relative overflow-hidden rounded-2xl cursor-pointer group aspect-[4/3] min-h-[280px]"
+        className={cn(CARD_BASE, "justify-end")}
         onClick={handleClick}
         onMouseEnter={() => setIsHovered(true)}
         {...lpRest}
@@ -119,40 +125,60 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
           if (lpOnMouseLeave) (lpOnMouseLeave as Function)();
         }}
       >
-        <ImageWithFallback src={coverUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/20" />
+        <ImageWithFallback src={coverUrl} className="absolute inset-0 size-full object-cover transition-transform duration-700 group-hover:scale-110" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10 opacity-90 transition-opacity duration-300 group-hover:opacity-100" />
+        <div className="absolute inset-0 bg-primary/10 opacity-0 mix-blend-overlay transition-opacity duration-500 group-hover:opacity-100" />
 
         {/* Waveform strip */}
-        <div className="absolute inset-x-6 bottom-24">
-          <WaveformBars active={isHovered} count={20} />
+        <div className="absolute inset-x-6 bottom-24 opacity-80">
+          <WaveformBars active={isHovered} count={24} />
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 p-6">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="bg-primary/90 text-white text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 uppercase tracking-wider">
-              <Layers className="w-2.5 h-2.5" /> Mashup
+        <div className="relative z-10 p-6">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex items-center gap-1 rounded-md bg-white/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white backdrop-blur-sm">
+              <Layers className="size-3" /> Mashup Hot
             </span>
-            <span className="text-white/60 text-[10px] font-mono">{formatMashupDuration(mashup.totalDuration || 0)}</span>
+            <span className="rounded-md bg-black/40 px-2 py-0.5 font-mono text-[10px] text-white/80 backdrop-blur-sm">{formatMashupDuration(mashup.totalDuration || 0)}</span>
           </div>
-          <h3 className="text-white font-black text-xl leading-tight mb-1">{mashup.title}</h3>
-          <p className="text-white/60 text-sm">{mashup.shorts?.length || 0} tracks • {mashup.createdBy?.name || ""}</p>
+          <h3 className="mb-1.5 text-2xl font-black leading-tight text-white drop-shadow-md">{mashup.title}</h3>
+          <p className="flex items-center gap-1.5 text-sm font-medium text-white/70">
+            <span>{mashup.shorts?.length || 0} tracks</span>
+            <span className="size-1 rounded-full bg-white/30" />
+            <span>{mashup.createdBy?.name || "Unknown"}</span>
+          </p>
         </div>
 
         {/* Vinyl record overlay on hover */}
         <motion.div
-          className="absolute top-4 right-4 pointer-events-none"
-          initial={{ opacity: 0, scale: 0.7, rotate: 0 }}
-          animate={isHovered ? { opacity: 1, scale: 1, rotate: 360 } : { opacity: 0, scale: 0.7 }}
-          transition={{ duration: isHovered ? 0.4 : 0.2, rotate: { duration: 3, repeat: Infinity, ease: "linear" } }}
+          className="pointer-events-none absolute -right-4 top-4"
+          initial={{ opacity: 0, scale: 0.5, x: 20 }}
+          animate={isHovered ? { opacity: 1, scale: 1, x: 0 } : { opacity: 0, scale: 0.5, x: 20 }}
+          transition={{ duration: 0.4 }}
         >
-          <div className="w-16 h-16 rounded-full bg-neutral-900 border-2 border-white/10 relative shadow-2xl">
-            <div className="absolute inset-0 rounded-full" style={{
-              background: "radial-gradient(circle at 50%, transparent 20%, rgba(255,255,255,0.03) 21% 22%, transparent 23%, rgba(255,255,255,0.03) 30% 31%, transparent 32%)",
-            }} />
+          <div className="relative size-24 rounded-full border border-white/10 bg-neutral-900 shadow-2xl">
+            <motion.div 
+              className="absolute inset-0 rounded-full" 
+              animate={isHovered ? { rotate: 360 } : { rotate: 0 }}
+              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+              style={{
+                background: "radial-gradient(circle at 50%, transparent 20%, rgba(255,255,255,0.05) 21% 22%, transparent 23%, rgba(255,255,255,0.05) 30% 31%, transparent 32%, rgba(255,255,255,0.02) 40% 41%, transparent 42%)",
+              }} 
+            />
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-7 h-7 rounded-full overflow-hidden">
-                <ImageWithFallback src={coverUrl} className="w-full h-full object-cover" />
-              </div>
+              <motion.div 
+                className="size-10 overflow-hidden rounded-full shadow-inner"
+                animate={isHovered ? { rotate: 360 } : { rotate: 0 }}
+                transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+              >
+                <ImageWithFallback src={coverUrl} className="size-full object-cover" />
+              </motion.div>
+            </div>
+            {/* Play overlay icon */}
+            <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex size-7 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm">
+                   <Play className="ml-0.5 size-3 fill-white text-white" />
+                </div>
             </div>
           </div>
         </motion.div>
@@ -163,9 +189,7 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
   // ── Default Card ──────────────────────────────────────────────────────────
   return (
     <>
-      <div
-        className="group cursor-pointer rounded-2xl border border-border/40 overflow-hidden transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
-        style={{ background: "hsl(var(--surface-1)/0.6)" }}
+      <article
         onClick={handleClick}
         onMouseEnter={() => setIsHovered(true)}
         {...lpRest}
@@ -173,75 +197,87 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
           setIsHovered(false);
           if (lpOnMouseLeave) (lpOnMouseLeave as Function)();
         }}
+        className={cn(
+          "group cursor-pointer flex flex-col gap-3 relative",
+          "album-card !overflow-visible p-2 rounded-2xl transition-all duration-300",
+          "hover:bg-muted/10",
+        )}
       >
         {/* Cover area */}
-        <div className="relative h-40 overflow-hidden bg-black">
+        <div
+          className={cn(
+            "relative aspect-square overflow-hidden rounded-[18px] transition-all duration-500",
+            "bg-muted border border-border/10 shadow-raised group-hover:shadow-elevated ring-1 ring-border/50",
+          )}
+        >
           <ImageWithFallback
             src={coverUrl}
-            className="w-full h-full object-cover opacity-80 transition-transform duration-500 group-hover:scale-105"
+            className="size-full object-cover transition-transform duration-1000 ease-out group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 transition-opacity group-hover:opacity-80" />
 
-          {/* Waveform overlay */}
-          <div className="absolute inset-x-3 bottom-2">
-            <WaveformBars active={isHovered} count={20} />
+          {/* Waveform overlay mini for Mashup feel */}
+          <div className="absolute inset-x-4 bottom-14 opacity-60">
+            <WaveformBars active={isHovered} count={16} />
           </div>
 
           {/* Duration badge */}
-          <div className="absolute top-2.5 left-2.5 flex items-center gap-1 bg-black/60 backdrop-blur px-2 py-0.5 rounded-md">
-            <Clock className="w-2.5 h-2.5 text-white/70" />
-            <span className="text-[10px] text-white font-mono">{formatMashupDuration(mashup.totalDuration || 0)}</span>
+          <div className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 backdrop-blur-md">
+            <Clock className="size-2.5 text-white/70" />
+            <span className="font-mono text-[10px] font-medium text-white">{formatMashupDuration(mashup.totalDuration || 0)}</span>
           </div>
 
           {/* Tracks badge */}
-          <div className="absolute top-2.5 right-2.5 flex items-center gap-1 bg-primary/80 backdrop-blur px-2 py-0.5 rounded-md">
-            <Layers className="w-2.5 h-2.5 text-white" />
-            <span className="text-[10px] text-white font-bold">{mashup.shorts?.length || 0}</span>
+          <div className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-primary/90 px-1.5 py-0.5 shadow-sm backdrop-blur-md">
+            <Layers className="size-2.5 text-white" />
+            <span className="text-[10px] font-bold text-white">{mashup.shorts?.length || 0}</span>
           </div>
 
-          {/* Hovering play button */}
-          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${isHovered ? "opacity-100" : "opacity-0"}`}>
-            <motion.div
-              whileTap={{ scale: 0.9 }}
-              className="w-12 h-12 rounded-full bg-primary/90 backdrop-blur flex items-center justify-center shadow-xl"
-            >
-              <Play className="w-5 h-5 text-white fill-white ml-0.5" />
-            </motion.div>
-          </div>
-
-          {/* Vinyl disc on hover */}
-          <motion.div
-            className="absolute top-3 right-14 pointer-events-none"
-            animate={isHovered ? { rotate: 360, opacity: 0.9 } : { rotate: 0, opacity: 0 }}
-            transition={{ rotate: { duration: 3, repeat: Infinity, ease: "linear" }, opacity: { duration: 0.3 } }}
+          {/* PLAY BUTTON (Bottom Right morphing) */}
+          <div
+            className={cn(
+              "absolute right-2 bottom-2 z-30 transition-all duration-300 ease-out",
+              cn(
+                "translate-y-3 opacity-0 scale-90",
+                isMobile ? "hidden" : "group-hover:translate-y-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 group-hover:scale-100"
+              )
+            )}
           >
-            <Disc3 className="w-8 h-8 text-white/50" />
-          </motion.div>
+            <button
+              type="button"
+              className="control-btn control-btn--primary size-10 sm:size-12 shadow-glow-sm"
+            >
+              <Play className="size-5 ml-0.5 fill-current" />
+            </button>
+          </div>
         </div>
 
-        {/* Info */}
-        <div className="p-3.5 space-y-2.5">
-          <div>
-            <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">{mashup.title}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">{mashup.createdBy?.name || ""}</p>
+        {/* Info Section */}
+        <div className="flex flex-col gap-0.5 px-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-bold truncate transition-colors duration-200 flex-1 text-foreground group-hover:text-primary">
+              {mashup.title}
+            </h3>
           </div>
 
-          {/* Energy curve */}
-          <EnergyCurve shorts={mashup.shorts} />
-
-          {/* Stats & transitions */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Heart className="w-3 h-3" /> {(mashup.likeCount || 0).toLocaleString()}
-            </span>
-            <div className="flex gap-1 ml-auto">
+          <div className="flex items-center gap-1.5 justify-between">
+            <p className="text-[11.5px] text-muted-foreground flex items-center gap-1.5 min-w-0">
+              <span className="truncate max-w-[120px]">{mashup.createdBy?.name || "Unknown"}</span>
+              <span className="size-0.5 rounded-full bg-border shrink-0" />
+              <span className="flex items-center gap-0.5 text-muted-foreground transition-colors group-hover:text-red-400">
+                <Heart className="size-3 text-current" /> {(mashup.likeCount || 0).toLocaleString()}
+              </span>
+            </p>
+            
+            <div className="flex gap-1">
               {topTransitions.slice(0, 2).map(t => {
                 const m = TRANSITION_META[t as keyof typeof TRANSITION_META];
                 return m ? (
                   <span
                     key={t}
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded border"
+                    className="flex size-4 items-center justify-center rounded-[4px] border text-[8px]"
                     style={{ backgroundColor: `${m.color}15`, borderColor: `${m.color}40`, color: m.color }}
+                    title={m.label}
                   >
                     {m.icon}
                   </span>
@@ -250,31 +286,31 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
             </div>
           </div>
         </div>
-      </div>
+      </article>
 
       {/* ── Action Menu (Long press) ────────────────────────────────────────── */}
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-          <DrawerContent className="bg-background text-foreground border-border z-[100]">
-            <DrawerHeader className="text-left border-b border-border/50 pb-4">
+          <DrawerContent className="z-[100] border-border bg-background text-foreground">
+            <DrawerHeader className="border-b border-border/50 pb-4 text-left">
               <DrawerTitle className="text-lg">Tùy chọn Mashup</DrawerTitle>
-              <DrawerDescription className="flex items-center gap-3 mt-3">
-                <ImageWithFallback src={coverUrl} className="w-10 h-10 rounded-md shadow-sm border border-border/50" />
-                <div className="flex flex-col min-w-0">
-                  <span className="font-semibold text-foreground line-clamp-1 text-sm">{mashup.title}</span>
-                  <span className="text-xs text-muted-foreground truncate">{mashup.createdBy?.name || "Unknown"}</span>
+              <DrawerDescription className="mt-3 flex items-center gap-3">
+                <ImageWithFallback src={coverUrl} className="size-10 rounded-md border border-border/50 shadow-sm" />
+                <div className="flex min-w-0 flex-col">
+                  <span className="line-clamp-1 text-sm font-semibold text-foreground">{mashup.title}</span>
+                  <span className="truncate text-xs text-muted-foreground">{mashup.createdBy?.name || "Unknown"}</span>
                 </div>
               </DrawerDescription>
             </DrawerHeader>
-            <div className="p-4 flex flex-col gap-2">
+            <div className="flex flex-col gap-2 p-4">
               <button
                 onClick={() => {
                   navigate(`/mashups/${mashup._id}`);
                   setIsDrawerOpen(false);
                 }}
-                className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
+                className="flex w-full items-center gap-4 rounded-2xl p-3 text-left transition-colors hover:bg-muted/50 active:bg-muted"
               >
-                <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <Play className="w-5 h-5 ml-1" fill="currentColor" />
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Play className="ml-1 size-5" fill="currentColor" />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-bold">Phát Mashup</span>
@@ -286,10 +322,10 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
                   navigate(`/mashups/${mashup._id}`); // Might be same for now, but could be edit later
                   setIsDrawerOpen(false);
                 }}
-                className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
+                className="flex w-full items-center gap-4 rounded-2xl p-3 text-left transition-colors hover:bg-muted/50 active:bg-muted"
               >
-                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center shrink-0 text-foreground">
-                  <FileText className="w-5 h-5" />
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+                  <FileText className="size-5" />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-bold">Chi tiết Mashup</span>
@@ -303,10 +339,10 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
                   }
                   setIsDrawerOpen(false);
                 }}
-                className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
+                className="flex w-full items-center gap-4 rounded-2xl p-3 text-left transition-colors hover:bg-muted/50 active:bg-muted"
               >
-                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center shrink-0 text-foreground">
-                  <Share2 className="w-5 h-5" />
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+                  <Share2 className="size-5" />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-bold">Chia sẻ</span>
@@ -314,9 +350,9 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
                 </div>
               </button>
             </div>
-            <DrawerFooter className="pt-2 pb-6">
+            <DrawerFooter className="pb-6 pt-2">
               <DrawerClose asChild>
-                <button className="w-full py-3.5 rounded-2xl bg-muted hover:bg-muted/80 text-foreground font-bold transition-colors">
+                <button className="w-full rounded-2xl bg-muted py-3.5 font-bold text-foreground transition-colors hover:bg-muted/80">
                   Hủy
                 </button>
               </DrawerClose>

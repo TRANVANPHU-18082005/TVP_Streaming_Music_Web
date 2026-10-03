@@ -7,9 +7,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { MarqueeText } from "@/features/player/components/MarqueeText";
 import { useNavigate } from "react-router-dom";
-import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useLongPress } from "@/hooks/useLongPress";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
+import {
+  ActionButton,
+  type ActionItem,
+  CancelFooter,
+  HandleBar,
+  SheetBackdrop,
+  SheetWrapper,
+} from "@/app/context/sheetPrimitives";
 import { Share2, FileText, Wand2, Repeat, ChevronDown, Heart } from "lucide-react";
 import { MashupTransitionEffect } from "./MashupTransitionEffect";
 import { MashupWaveformBar } from "./MashupWaveformBar";
@@ -96,6 +104,69 @@ export const MashupFeedItem = ({ mashup, isActive, onEnd, isAutoNext, onToggleAu
     e.stopPropagation();
     navigate(`/mashups/${mashup._id}`);
   }, [navigate, mashup._id]);
+
+  const actions = useMemo<ActionItem[]>(() => {
+    const list: ActionItem[] = [
+      {
+        icon: FileText,
+        label: "Chi tiết Mashup",
+        onClick: () => {
+          navigate(`/mashups/${mashup._id}`);
+          setIsDrawerOpen(false);
+        },
+      },
+    ];
+
+    if (onToggleAutoNext) {
+      list.push({
+        icon: isAutoNext ? ChevronDown : Repeat,
+        label: isAutoNext ? 'Tự động lướt: Đang BẬT' : 'Tự động lướt: Đang TẮT',
+        onClick: () => {
+          onToggleAutoNext();
+          setIsDrawerOpen(false);
+        },
+      });
+    }
+
+    list.push(
+      {
+        icon: Heart,
+        label: "Thả tim",
+        onClick: () => {
+          void mashupApi.likeMashup(mashup._id).catch(() => undefined);
+          setIsDrawerOpen(false);
+        },
+      },
+      {
+        icon: Wand2,
+        label: "Tạo Mashup",
+        onClick: () => {
+          navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`);
+          setIsDrawerOpen(false);
+        },
+      },
+      {
+        icon: Share2,
+        label: "Chia sẻ",
+        onClick: () => {
+          void (async () => {
+            const url = `${window.location.origin}/mashups/${mashup._id}`;
+            try {
+              if (navigator.share) await navigator.share({ title: mashup.title, url });
+              else {
+                await navigator.clipboard.writeText(url);
+              }
+              await mashupApi.shareMashup(mashup._id);
+            } catch {
+              /* dismissed */
+            }
+            setIsDrawerOpen(false);
+          })();
+        },
+      }
+    );
+    return list;
+  }, [mashup._id, mashup.title, isAutoNext, onToggleAutoNext, navigate]);
 
   return (
     <div
@@ -394,120 +465,42 @@ export const MashupFeedItem = ({ mashup, isActive, onEnd, isAutoNext, onToggleAu
       </div>
 
       {/* ── Action Menu (Long press) ────────────────────────────────────────── */}
-      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-        <DrawerContent className="bg-background text-foreground border-border z-[100]">
-          <DrawerHeader className="text-left border-b border-border/50 pb-4">
-            <DrawerTitle className="text-lg">Tùy chọn Mashup</DrawerTitle>
-            <DrawerDescription className="flex items-center gap-3 mt-3">
-              <ImageWithFallback src={mashup.coverImage || mashup.shorts[0]?.short?.track?.coverImage} className="w-10 h-10 rounded-md shadow-sm border border-border/50" />
-              <div className="flex flex-col min-w-0">
-                <span className="font-semibold text-foreground line-clamp-1 text-sm">{mashup.title}</span>
-              </div>
-            </DrawerDescription>
-          </DrawerHeader>
-          <div className="p-4 flex flex-col gap-2">
-            <button
-              onClick={() => {
-                navigate(`/mashups/${mashup._id}`);
-                setIsDrawerOpen(false);
-              }}
-              className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
-            >
-              <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold">Chi tiết Mashup</span>
-                <span className="text-xs text-muted-foreground">Xem tất cả các track được mix</span>
-              </div>
-            </button>
-            
-            {/* Nút Toggle Tự động lướt */}
-            {onToggleAutoNext && (
-              <button
-                onClick={() => {
-                  onToggleAutoNext();
-                  setIsDrawerOpen(false);
-                }}
-                className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
-              >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isAutoNext ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                  {isAutoNext ? <ChevronDown className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
-                </div>
-                <div className="flex flex-col flex-1">
-                  <span className="text-sm font-bold">
-                    {isAutoNext ? 'Tự động lướt: Đang BẬT' : 'Tự động lướt: Đang TẮT'}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {isAutoNext ? 'Tự động sang Mashup tiếp theo' : 'Lặp lại Mashup hiện tại'}
-                  </span>
-                </div>
-              </button>
+      {createPortal(
+        <>
+          <AnimatePresence>
+            {isDrawerOpen && (
+              <SheetBackdrop key="backdrop" onClick={() => setIsDrawerOpen(false)} zIndex={100} />
             )}
+          </AnimatePresence>
 
-            <button
-              type="button"
-              onClick={() => {
-                void mashupApi.likeMashup(mashup._id).catch(() => undefined);
-                setIsDrawerOpen(false);
-              }}
-              className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 text-left"
-            >
-              <Heart className="w-5 h-5" />
-              <span className="text-sm font-bold">Thả tim</span>
-            </button>
-
-            <button
-              onClick={() => {
-                navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`);
-                setIsDrawerOpen(false);
-              }}
-              className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
-            >
-              <div className="w-12 h-12 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
-                <Wand2 className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold">Tạo Mashup</span>
-                <span className="text-xs text-muted-foreground">Tạo bản Mashup mới của riêng bạn</span>
-              </div>
-            </button>
-            <button
-              onClick={() => {
-                void (async () => {
-                  const url = `${window.location.origin}/mashups/${mashup._id}`;
-                  try {
-                    if (navigator.share) await navigator.share({ title: mashup.title, url });
-                    else {
-                      await navigator.clipboard.writeText(url);
-                    }
-                    await mashupApi.shareMashup(mashup._id);
-                  } catch {
-                    /* dismissed */
-                  }
-                  setIsDrawerOpen(false);
-                })();
-              }}
-              className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
-            >
-              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center shrink-0 text-foreground">
-                <Share2 className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold">Chia sẻ</span>
-                <span className="text-xs text-muted-foreground">Chia sẻ Mashup này</span>
-              </div>
-            </button>
-          </div>
-          <DrawerFooter className="pt-2 pb-6">
-            <DrawerClose asChild>
-              <button className="w-full py-3.5 rounded-2xl bg-muted hover:bg-muted/80 text-foreground font-bold transition-colors">
-                Hủy
-              </button>
-            </DrawerClose>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+          <AnimatePresence>
+            {isDrawerOpen && (
+              <SheetWrapper
+                key="wrapper"
+                ariaLabel={`Tùy chọn cho mashup ${mashup.title}`}
+                zIndex={101}
+                onClose={() => setIsDrawerOpen(false)}
+              >
+                <HandleBar />
+                <div className="flex items-center gap-3 px-5 py-3 border-b border-border">
+                  <ImageWithFallback src={mashup.coverImage || mashup.shorts[0]?.short?.track?.coverImage} className="w-14 h-14 rounded-xl object-cover ring-1 ring-border shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{mashup.title}</p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{mashup.shorts.length} tracks</p>
+                  </div>
+                </div>
+                <div className="py-2">
+                  {actions.map((action) => (
+                    <ActionButton key={action.label} {...action} />
+                  ))}
+                </div>
+                <CancelFooter onClose={() => setIsDrawerOpen(false)} />
+              </SheetWrapper>
+            )}
+          </AnimatePresence>
+        </>,
+        document.body
+      )}
     </div>
   );
 };

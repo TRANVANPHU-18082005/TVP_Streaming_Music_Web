@@ -36,10 +36,10 @@ export const ShortCard = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
-      className={`group relative flex flex-col rounded-2xl overflow-hidden border transition-all duration-300 cursor-pointer ${isSelected
-        ? "border-primary shadow-md shadow-primary/20 ring-1 ring-primary"
-        : "border-border/50 hover:border-primary/50 hover:shadow-xl dark:hover:shadow-black/40 hover:-translate-y-1"
-        } bg-card`}
+      className={`group relative flex flex-col rounded-[2rem] overflow-hidden border transition-all duration-500 cursor-pointer ${isSelected
+        ? "border-primary shadow-xl shadow-primary/20 ring-2 ring-primary bg-primary/5"
+        : "border-white/20 dark:border-white/5 hover:border-primary/30 hover:shadow-2xl dark:hover:shadow-black/40 hover:-translate-y-1.5 hover:bg-white/60 dark:hover:bg-card/40"
+        } bg-white/40 dark:bg-card/20 backdrop-blur-2xl`}
     >
       {/* ── Thumbnail (9:16 ratio) ────────────────────────────────────────── */}
       <div

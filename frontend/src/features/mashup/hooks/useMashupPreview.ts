@@ -4,6 +4,11 @@ import {
   attachHighlightSource,
   type HighlightAttachment,
 } from "@/features/player/utils/highlightAudio";
+import {
+  acquirePlayback,
+  bindPlaybackOwner,
+  releasePlayback,
+} from "@/features/player/utils/playbackSession";
 
 const clipWindow = (item: IMashupShort) => {
   const start = item.trimStart ?? item.short.startTime ?? 0;
@@ -17,6 +22,7 @@ export const useMashupPreview = (shorts: IMashupShort[]) => {
   const attachmentsRef = useRef<HighlightAttachment[]>([]);
   const cancelRef = useRef(false);
   const playingRef = useRef(false);
+  const suspendSelfRef = useRef<() => void>(() => undefined);
 
   const cleanup = useCallback(() => {
     cancelRef.current = true;
@@ -25,9 +31,18 @@ export const useMashupPreview = (shorts: IMashupShort[]) => {
     attachmentsRef.current = [];
     setIsPlaying(false);
     setCurrentIndex(-1);
+    releasePlayback("mashup", suspendSelfRef.current);
   }, []);
 
-  useEffect(() => cleanup, [cleanup]);
+  useEffect(() => {
+    const suspend = () => cleanup();
+    suspendSelfRef.current = suspend;
+    const unbind = bindPlaybackOwner("mashup", suspend);
+    return () => {
+      unbind();
+      cleanup();
+    };
+  }, [cleanup]);
 
   const playSequence = useCallback(async () => {
     if (shorts.length === 0) return;
@@ -35,6 +50,7 @@ export const useMashupPreview = (shorts: IMashupShort[]) => {
     cancelRef.current = false;
     playingRef.current = true;
     setIsPlaying(true);
+    acquirePlayback("mashup", suspendSelfRef.current);
 
     for (let index = 0; index < shorts.length; index++) {
       if (cancelRef.current) return;
@@ -45,6 +61,8 @@ export const useMashupPreview = (shorts: IMashupShort[]) => {
       const audio = new Audio();
       audio.crossOrigin = "anonymous";
       audio.preload = "auto";
+      attachmentsRef.current.forEach((item) => item.destroy());
+      attachmentsRef.current = [];
       const attachment = attachHighlightSource(audio, src);
       attachmentsRef.current.push(attachment);
 
@@ -84,6 +102,7 @@ export const useMashupPreview = (shorts: IMashupShort[]) => {
       playingRef.current = false;
       setIsPlaying(false);
       setCurrentIndex(-1);
+      releasePlayback("mashup", suspendSelfRef.current);
     }
   }, [shorts, cleanup]);
 

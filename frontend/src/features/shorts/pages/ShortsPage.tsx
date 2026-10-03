@@ -9,6 +9,7 @@ import { ForMeHeader } from "@/features/for-me/components/ForMeHeader";
 import { useDispatch, useSelector } from "react-redux";
 import { setIsPlaying, selectPlayer } from "@/features/player/slice/playerSlice";
 import { motion, AnimatePresence } from "framer-motion";
+import { CLIENT_PATHS } from "@/config/paths";
 
 const BATCH_SIZE = 10;
 
@@ -117,6 +118,19 @@ export const ShortsPage = () => {
       }
     };
   }, [allShorts.length]);
+
+  // ── URL Syncing (Update ID in URL without reload) ────────────────────────
+  useEffect(() => {
+    if (allShorts.length > 0 && allShorts[activeIndex]) {
+      const activeShortId = allShorts[activeIndex]._id;
+      // Tránh replace liên tục nếu url đã đúng
+      const currentPath = window.location.pathname;
+      const expectedPath = `/${CLIENT_PATHS.SHORTS}/${activeShortId}`;
+      if (currentPath !== expectedPath) {
+        window.history.replaceState(null, "", expectedPath);
+      }
+    }
+  }, [activeIndex, allShorts]);
 
   // ── Prefetch trigger ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -281,16 +295,31 @@ export const ShortsPage = () => {
         >
           <style>{`div::-webkit-scrollbar { display: none; }`}</style>
 
-          {allShorts.map((short, index) => (
-            <ShortFeedItem
-              key={short._id}
-              short={short}
-              isActive={index === activeIndex}
-              onEnd={isAutoNext ? handleNext : undefined}
-              isAutoNext={isAutoNext}
-              onToggleAutoNext={() => setIsAutoNext(!isAutoNext)}
-            />
-          ))}
+          {allShorts.map((short, index) => {
+            const isVisible = Math.abs(index - activeIndex) <= 2;
+            
+            if (!isVisible) {
+              return (
+                <div 
+                  key={short._id} 
+                  className="w-full bg-black snap-start snap-always" 
+                  style={{ height: "100%" }} 
+                />
+              );
+            }
+
+            return (
+              <ShortFeedItem
+                key={short._id}
+                short={short}
+                isActive={index === activeIndex}
+                prefetch={index === activeIndex + 1}
+                onEnd={isAutoNext ? handleNext : undefined}
+                isAutoNext={isAutoNext}
+                onToggleAutoNext={() => setIsAutoNext(!isAutoNext)}
+              />
+            );
+          })}
 
           {/* Loading indicator khi fetch trang tiếp theo */}
           {isFetchingNextPage && (

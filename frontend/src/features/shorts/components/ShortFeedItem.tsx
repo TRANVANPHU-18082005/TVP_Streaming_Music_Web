@@ -2,13 +2,21 @@ import { ITrackShort } from "../types";
 import { useShortAudio } from "../hooks/useShortAudio";
 import { VideoMoodEngine } from "@/features/player/components/VideoMoodEngine";
 import { Play, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { MarqueeText } from "@/features/player/components/MarqueeText";
 import { Link, useNavigate } from "react-router-dom";
 import { useLongPress } from "@/hooks/useLongPress";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
+import {
+  ActionButton,
+  type ActionItem,
+  CancelFooter,
+  HandleBar,
+  SheetBackdrop,
+  SheetWrapper,
+} from "@/app/context/sheetPrimitives";
 import { Share2, FileText, Wand2, Repeat, ChevronDown, Heart } from "lucide-react";
 import { CLIENT_PATHS } from "@/config/paths";
 import { shortsApi } from "../api/shortsApi";
@@ -18,12 +26,13 @@ import { toast } from "sonner";
 interface ShortFeedItemProps {
   short: ITrackShort;
   isActive: boolean;
+  prefetch?: boolean;
   onEnd?: () => void;
   isAutoNext?: boolean;
   onToggleAutoNext?: () => void;
 }
 
-export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAutoNext }: ShortFeedItemProps) => {
+export const ShortFeedItem = ({ short, isActive, prefetch = false, onEnd, isAutoNext, onToggleAutoNext }: ShortFeedItemProps) => {
   const { track, moodVideo } = short;
   const navigate = useNavigate();
   const user = useAppSelector((state) => state.auth.user);
@@ -37,7 +46,8 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
     short.startTime,
     short.endTime,
     isActive && Boolean(track),
-    onEnd
+    onEnd,
+    prefetch && Boolean(track),
   );
 
   // ── Seekbar drag state ────────────────────────────────────────────────────
@@ -144,6 +154,50 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
   const fmtTime = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
+  const actions = useMemo<ActionItem[]>(() => {
+    const list: ActionItem[] = [
+      {
+        icon: FileText,
+        label: "Nghe cả bài",
+        onClick: () => {
+          navigate(`/tracks/${track._id}`);
+          setIsDrawerOpen(false);
+        },
+      },
+    ];
+
+    if (onToggleAutoNext) {
+      list.push({
+        icon: isAutoNext ? ChevronDown : Repeat,
+        label: isAutoNext ? 'Tự động lướt: Đang BẬT' : 'Tự động lướt: Đang TẮT',
+        onClick: () => {
+          onToggleAutoNext();
+          setIsDrawerOpen(false);
+        },
+      });
+    }
+
+    list.push(
+      {
+        icon: Wand2,
+        label: "Thêm vào mashup",
+        onClick: () => {
+          navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`, { state: { seedShort: short } });
+          setIsDrawerOpen(false);
+        },
+      },
+      {
+        icon: Share2,
+        label: "Chia sẻ",
+        onClick: () => {
+          void shareShort();
+          setIsDrawerOpen(false);
+        },
+      }
+    );
+    return list;
+  }, [track?._id, isAutoNext, onToggleAutoNext, short, shareShort, navigate]);
+
   if (!track) {
     return <div className="relative w-full h-full bg-black snap-start snap-always" />;
   }
@@ -179,10 +233,11 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
 
       {/* ── Background Mood Video ────────────────────────────────────────── */}
       <div className="absolute inset-0 z-0">
-        {moodVideo?.videoUrl ? (
+        {(isActive || prefetch) && moodVideo?.videoUrl ? (
           <VideoMoodEngine
             src={moodVideo.videoUrl}
-            isPlaying={isPlaying}
+            isPlaying={isActive && isPlaying}
+            preload={isActive && isPlaying ? "auto" : "none"}
             blur={0}
           />
         ) : (
@@ -331,7 +386,7 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
         </div>
       </div>
 
-      <div className="absolute right-3 bottom-28 z-30 flex flex-col items-center gap-3">
+      <div className="absolute right-3 bottom-[35vh] z-30 flex flex-col items-center gap-3">
         <button type="button" onClick={likeShort} className="flex flex-col items-center text-white">
           <Heart className={`w-7 h-7 ${liked ? "fill-rose-500 text-rose-500" : ""}`} />
           <span className="text-[11px]">{likeCount}</span>
@@ -349,98 +404,42 @@ export const ShortFeedItem = ({ short, isActive, onEnd, isAutoNext, onToggleAuto
       </div>
 
       {/* ── Action Menu (Long press) ────────────────────────────────────────── */}
-      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-        <DrawerContent className="bg-background text-foreground border-border z-[100]">
-          <DrawerHeader className="text-left border-b border-border/50 pb-4">
-            <DrawerTitle className="text-lg">Tùy chọn Short</DrawerTitle>
-            <DrawerDescription className="flex items-center gap-3 mt-3">
-              <ImageWithFallback src={track.coverImage} className="w-10 h-10 rounded-md shadow-sm border border-border/50" />
-              <div className="flex flex-col min-w-0">
-                <span className="font-semibold text-foreground line-clamp-1 text-sm">{short.title || track.title}</span>
-                <span className="text-xs text-muted-foreground truncate">{track.artist?.name || "Unknown"}</span>
-              </div>
-            </DrawerDescription>
-          </DrawerHeader>
-          <div className="p-4 flex flex-col gap-2">
-            <button
-              onClick={() => {
-                navigate(`/tracks/${track._id}`);
-                setIsDrawerOpen(false);
-              }}
-              className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
-            >
-              <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold">Nghe cả bài</span>
-                <span className="text-xs text-muted-foreground">Xem bài hát gốc</span>
-              </div>
-            </button>
-            
-            {/* Nút Toggle Tự động lướt */}
-            {onToggleAutoNext && (
-              <button
-                onClick={() => {
-                  onToggleAutoNext();
-                  setIsDrawerOpen(false);
-                }}
-                className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
-              >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isAutoNext ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                  {isAutoNext ? <ChevronDown className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
-                </div>
-                <div className="flex flex-col flex-1">
-                  <span className="text-sm font-bold">
-                    {isAutoNext ? 'Tự động lướt: Đang BẬT' : 'Tự động lướt: Đang TẮT'}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {isAutoNext ? 'Tự động sang video tiếp theo' : 'Lặp lại video hiện tại'}
-                  </span>
-                </div>
-              </button>
+      {createPortal(
+        <>
+          <AnimatePresence>
+            {isDrawerOpen && (
+              <SheetBackdrop key="backdrop" onClick={() => setIsDrawerOpen(false)} zIndex={100} />
             )}
+          </AnimatePresence>
 
-            <button
-              onClick={() => {
-                navigate(`/${CLIENT_PATHS.MASHUPS_CREATE}`, { state: { seedShort: short } });
-                setIsDrawerOpen(false);
-              }}
-              className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
-            >
-              <div className="w-12 h-12 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
-                <Wand2 className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold">Thêm vào mashup</span>
-                <span className="text-xs text-muted-foreground">Mix track này với các bài khác</span>
-              </div>
-            </button>
-            <button
-              onClick={() => {
-                void shareShort();
-                setIsDrawerOpen(false);
-              }}
-              className="flex items-center gap-4 w-full p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors text-left"
-            >
-              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center shrink-0 text-foreground">
-                <Share2 className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold">Chia sẻ</span>
-                <span className="text-xs text-muted-foreground">Chia sẻ Short này</span>
-              </div>
-            </button>
-          </div>
-          <DrawerFooter className="pt-2 pb-6">
-            <DrawerClose asChild>
-              <button className="w-full py-3.5 rounded-2xl bg-muted hover:bg-muted/80 text-foreground font-bold transition-colors">
-                Đóng
-              </button>
-            </DrawerClose>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+          <AnimatePresence>
+            {isDrawerOpen && (
+              <SheetWrapper
+                key="wrapper"
+                ariaLabel={`Tùy chọn cho short ${short.title || track.title}`}
+                zIndex={101}
+                onClose={() => setIsDrawerOpen(false)}
+              >
+                <HandleBar />
+                <div className="flex items-center gap-3 px-5 py-3 border-b border-border">
+                  <ImageWithFallback src={track.coverImage} className="w-14 h-14 rounded-xl object-cover ring-1 ring-border shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{short.title || track.title}</p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{track.artist?.name || "Unknown"}</p>
+                  </div>
+                </div>
+                <div className="py-2">
+                  {actions.map((action) => (
+                    <ActionButton key={action.label} {...action} />
+                  ))}
+                </div>
+                <CancelFooter onClose={() => setIsDrawerOpen(false)} />
+              </SheetWrapper>
+            )}
+          </AnimatePresence>
+        </>,
+        document.body
+      )}
     </div>
   );
 };

@@ -5,6 +5,11 @@ import {
   isAutoplayBlocked,
   type HighlightAttachment,
 } from "@/features/player/utils/highlightAudio";
+import {
+  acquirePlayback,
+  bindPlaybackOwner,
+  releasePlayback,
+} from "@/features/player/utils/playbackSession";
 
 export type TransitionState = 'idle' | 'transitioning';
 
@@ -54,9 +59,16 @@ export const useMashupPlayer = (
   const [transitionState, setTransitionState] = useState<TransitionState>('idle');
   const [activeTransitionType, setActiveTransitionType] = useState<TransitionType | null>(null);
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+  const mashupStampRef = useRef(mashup);
+  if (mashupStampRef.current !== mashup) {
+    mashupStampRef.current = mashup;
+    if (currentIndex !== 0) setCurrentIndex(0);
+  }
 
   const onEndRef = useRef(onEnd);
   onEndRef.current = onEnd;
+  const suspendSelfRef = useRef<() => void>(() => undefined);
+  const syncWindowRef = useRef<(index: number) => void>(() => undefined);
 
   activeRef.current = shouldPlay;
 
@@ -77,9 +89,12 @@ export const useMashupPlayer = (
     return () => {
       cancelAnimationFrame(rafRef.current);
       clearStutterTimer();
-      attachmentsRef.current.forEach((item) => item.destroy());
+      attachmentsRef.current.forEach((item) => item?.destroy());
       attachmentsRef.current = [];
-      audiosRef.current.forEach(a => { a.pause(); a.src = ""; });
+      audiosRef.current.forEach((a) => {
+        a?.pause();
+        if (a) a.src = "";
+      });
       if (ctx.state !== "closed") ctx.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,73 +107,130 @@ export const useMashupPlayer = (
     }
   };
 
+  const releaseSlot = useCallback((idx: number) => {
+    attachmentsRef.current[idx]?.destroy();
+    const audio = audiosRef.current[idx];
+    if (audio) {
+      audio.pause();
+      audio.src = "";
+    }
+    try { sourceNodesRef.current[idx]?.disconnect(); } catch { /* node already disconnected */ }
+    try { filterNodesRef.current[idx]?.disconnect(); } catch { /* node already disconnected */ }
+    try { gainNodesRef.current[idx]?.disconnect(); } catch { /* node already disconnected */ }
+    attachmentsRef.current[idx] = undefined as unknown as HighlightAttachment;
+    audiosRef.current[idx] = undefined as unknown as HTMLAudioElement;
+    gainNodesRef.current[idx] = undefined as unknown as GainNode;
+    sourceNodesRef.current[idx] = undefined as unknown as MediaElementAudioSourceNode;
+    filterNodesRef.current[idx] = null;
+    playPromisesRef.current[idx] = null;
+  }, []);
+
+  const ensureSlot = useCallback((idx: number) => {
+    if (!mashup || !audioCtxRef.current || !analyserRef.current) return;
+    if (idx < 0 || idx >= mashup.shorts.length) return;
+    if (audiosRef.current[idx] && attachmentsRef.current[idx]) return;
+
+    const ctx = audioCtxRef.current;
+    const item = mashup.shorts[idx];
+    const audio = new Audio();
+    audio.crossOrigin = "anonymous";
+    audio.preload = "auto";
+    const src = item.short.track?.hlsUrl || item.short.track?.trackUrl || "";
+    const attachment: HighlightAttachment = src
+      ? attachHighlightSource(audio, src)
+      : {
+          whenReady: Promise.resolve(),
+          prime: async () => undefined,
+          suspend: () => audio.pause(),
+          destroy: () => audio.pause(),
+        };
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 22050;
+
+    let source: MediaElementAudioSourceNode;
+    try {
+      source = ctx.createMediaElementSource(audio);
+    } catch (err) {
+      attachment.destroy();
+      console.warn("[MashupPlayer] audio source:", err);
+      return;
+    }
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(analyserRef.current);
+
+    audiosRef.current[idx] = audio;
+    gainNodesRef.current[idx] = gain;
+    sourceNodesRef.current[idx] = source;
+    filterNodesRef.current[idx] = filter;
+    attachmentsRef.current[idx] = attachment;
+    playPromisesRef.current[idx] = null;
+  }, [mashup]);
+
+  const syncWindow = useCallback((index: number) => {
+    if (!mashup) return;
+    const keep = new Set([index, index + 1]);
+    const limit = Math.max(mashup.shorts.length, audiosRef.current.length);
+    for (let i = 0; i < limit; i += 1) {
+      if (!keep.has(i) && (audiosRef.current[i] || attachmentsRef.current[i])) releaseSlot(i);
+    }
+    ensureSlot(index);
+    ensureSlot(index + 1);
+  }, [mashup, ensureSlot, releaseSlot]);
+
+  syncWindowRef.current = syncWindow;
+
   // ── 2. Rebuild audio graph when mashup changes ──────────────────────────
   useEffect(() => {
     if (!mashup || !audioCtxRef.current || !analyserRef.current) return;
-    const ctx = audioCtxRef.current;
-    const masterAnalyser = analyserRef.current;
 
     cancelAnimationFrame(rafRef.current);
     clearStutterTimer();
-    attachmentsRef.current.forEach((item) => item.destroy());
+    attachmentsRef.current.forEach((item) => item?.destroy());
+    sourceNodesRef.current.forEach((node) => {
+      try { node?.disconnect(); } catch { /* node already disconnected */ }
+    });
     attachmentsRef.current = [];
-    audiosRef.current.forEach(a => { a.pause(); a.src = ""; });
-    audiosRef.current    = [];
+    audiosRef.current = [];
     gainNodesRef.current = [];
     sourceNodesRef.current = [];
     filterNodesRef.current = [];
     playPromisesRef.current = [];
-    crossfadingRef.current  = false;
-
-    mashup.shorts.forEach(item => {
-      const audio = new Audio();
-      audio.crossOrigin = "anonymous";
-      audio.preload     = "auto";
-      const src = item.short.track?.hlsUrl || item.short.track?.trackUrl || "";
-      if (src) {
-        attachmentsRef.current.push(attachHighlightSource(audio, src));
-      } else {
-        attachmentsRef.current.push({
-          whenReady: Promise.resolve(),
-          prime: async () => undefined,
-          destroy: () => {
-            audio.pause();
-          },
-        });
-      }
-
-      const gain = ctx.createGain();
-      gain.gain.value = 0;
-
-      // Per-track low-pass filter (for filter-sweep effect)
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = 22050; // pass-through by default
-
-      let source: MediaElementAudioSourceNode;
-      try {
-        source = ctx.createMediaElementSource(audio);
-      } catch {
-        source = ctx.createMediaElementSource(new Audio(audio.src));
-      }
-
-      source.connect(filter);
-      filter.connect(gain);
-      gain.connect(masterAnalyser); // route all through master analyser
-
-      audiosRef.current.push(audio);
-      gainNodesRef.current.push(gain);
-      sourceNodesRef.current.push(source);
-      filterNodesRef.current.push(filter);
-      playPromisesRef.current.push(null);
-    });
+    crossfadingRef.current = false;
+    syncWindowRef.current(0);
 
     setCurrentIndex(0);
     setProgress(0);
     setIsPlaying(false);
-    setTransitionState('idle');
+    setTransitionState("idle");
     setActiveTransitionType(null);
   }, [mashup]);
+
+  useEffect(() => {
+    if (!mashup) return;
+    syncWindowRef.current(currentIndex);
+    const next = mashup.shorts[currentIndex + 1];
+    if (!next) return;
+    void attachmentsRef.current[currentIndex + 1]?.prime(
+      next.trimStart ?? next.short.startTime ?? 0,
+    );
+  }, [currentIndex, mashup]);
+
+  useEffect(() => {
+    const suspend = () => {
+      clearStutterTimer();
+      audiosRef.current.forEach((audio) => audio?.pause());
+      attachmentsRef.current.forEach((item) => item?.suspend());
+      setIsPlaying(false);
+    };
+    suspendSelfRef.current = suspend;
+    return bindPlaybackOwner("mashup", suspend);
+  }, []);
 
   // ── 3. DJ Crossfade / Effect transitions ───────────────────────────────
   const scheduleCrossfade = useCallback(
@@ -173,12 +245,17 @@ export const useMashupPlayer = (
         return;
       }
 
+      syncWindowRef.current(fromIdx);
       const fromGain   = gainNodesRef.current[fromIdx];
       const toGain     = gainNodesRef.current[toIdx];
       const fromFilter = filterNodesRef.current[fromIdx];
       const toFilter   = filterNodesRef.current[toIdx];
       const toAudio    = audiosRef.current[toIdx];
       const toItem     = mashup.shorts[toIdx];
+      if (!fromGain || !toGain || !toAudio || !toItem) {
+        crossfadingRef.current = false;
+        return;
+      }
       const targetGain = toItem.volume ?? 1;
 
       setTransitionState('transitioning');
@@ -203,7 +280,7 @@ export const useMashupPlayer = (
 
       const doFinish = () => {
         audiosRef.current[fromIdx]?.pause();
-        gainNodesRef.current[fromIdx].gain.value = 0;
+        if (gainNodesRef.current[fromIdx]) gainNodesRef.current[fromIdx].gain.value = 0;
         if (filterNodesRef.current[fromIdx]) {
           filterNodesRef.current[fromIdx]!.frequency.value = 22050;
         }
@@ -437,6 +514,7 @@ export const useMashupPlayer = (
     const ctx = audioCtxRef.current;
 
     if (shouldPlay) {
+      acquirePlayback("mashup", suspendSelfRef.current);
       if (ctx.state === "suspended") void ctx.resume();
       const audio = audiosRef.current[currentIndex];
       const item  = mashup.shorts[currentIndex];
@@ -479,8 +557,8 @@ export const useMashupPlayer = (
       const stopAll = () => {
         clearStutterTimer();
         audiosRef.current.forEach((a, i) => {
-          a.pause();
-          gainNodesRef.current[i].gain.value = 0;
+          a?.pause();
+          if (gainNodesRef.current[i]) gainNodesRef.current[i].gain.value = 0;
           const item = mashup.shorts[i];
           if (item) a.currentTime = item.trimStart ?? item.short.startTime ?? 0;
           if (filterNodesRef.current[i]) filterNodesRef.current[i]!.frequency.value = 22050;
@@ -493,6 +571,7 @@ export const useMashupPlayer = (
         setTransitionState('idle');
         setActiveTransitionType(null);
         cancelAnimationFrame(rafRef.current);
+        releasePlayback("mashup", suspendSelfRef.current);
       };
       const pending = playPromisesRef.current.filter(Boolean);
       if (pending.length > 0) {
@@ -509,10 +588,12 @@ export const useMashupPlayer = (
     if (!mashup || audiosRef.current.length === 0 || !audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
     if (isPlaying) {
-      audiosRef.current.forEach(a => a.pause());
+      audiosRef.current.forEach(a => a?.pause());
       setIsPlaying(false);
+      releasePlayback("mashup", suspendSelfRef.current);
     } else {
       setAutoplayBlocked(false);
+      acquirePlayback("mashup", suspendSelfRef.current);
       if (ctx.state === "suspended") void ctx.resume();
       const audio = audiosRef.current[currentIndex];
       const item  = mashup.shorts[currentIndex];
@@ -540,9 +621,10 @@ export const useMashupPlayer = (
     (idx: number) => {
       if (!mashup || idx < 0 || idx >= mashup.shorts.length) return;
       clearStutterTimer();
+      syncWindowRef.current(idx);
       audiosRef.current.forEach((a, i) => {
-        a.pause();
-        gainNodesRef.current[i].gain.value = 0;
+        a?.pause();
+        if (gainNodesRef.current[i]) gainNodesRef.current[i].gain.value = 0;
         if (filterNodesRef.current[i]) filterNodesRef.current[i]!.frequency.value = 22050;
       });
       crossfadingRef.current = false;

@@ -55,9 +55,9 @@ export const KaraokeCommunityFeed = () => {
       </div>
 
       {!recordings.length ? (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground glass-frosted rounded-2xl shadow-sm">
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground bg-white/40 dark:bg-card/20 backdrop-blur-3xl rounded-[2rem] shadow-sm border border-dashed border-border/50">
           <Music2 className="w-16 h-16 mb-4 opacity-30" />
-          <p>Chưa có bản thu nào được công khai.</p>
+          <p className="font-bold text-lg text-foreground/80">Chưa có bản thu nào được công khai.</p>
           <p className="text-sm mt-1">Hãy là người đầu tiên đóng góp giọng ca của mình nhé!</p>
         </div>
       ) : (
@@ -122,21 +122,21 @@ const RecordingCard = ({
   };
 
   return (
-    <div className="flex flex-col rounded-2xl glass-frosted shadow-sm overflow-hidden group hover:shadow-floating transition-all duration-300 relative border border-border/50 hover:border-primary/30">
+    <div className="flex flex-col rounded-3xl bg-white/40 dark:bg-card/20 backdrop-blur-2xl shadow-sm overflow-hidden group hover:shadow-xl hover:bg-white/60 dark:hover:bg-card/40 transition-all duration-300 relative border border-white/20 dark:border-white/5">
       {/* Thumbnail */}
       <div 
-        className="relative aspect-video w-full overflow-hidden bg-black cursor-pointer"
+        className="relative aspect-video w-full overflow-hidden bg-black/10 cursor-pointer"
         onClick={onPlay}
       >
         <ImageWithFallback
           src={recording.youtubeThumbnail || `https://img.youtube.com/vi/${recording.youtubeVideoId}/hqdefault.jpg`}
           alt={recording.youtubeTitle}
-          className="w-full h-full object-cover opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all duration-500"
+          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
         
         {/* Play Button Overlay */}
-        <div className="absolute inset-0 m-auto w-12 h-12 md:w-14 md:h-14 bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 scale-50 group-hover:scale-100 transition-all duration-300 z-10">
+        <div className="absolute inset-0 m-auto w-12 h-12 md:w-14 md:h-14 bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center shadow-xl shadow-primary/30 backdrop-blur-sm opacity-0 group-hover:opacity-100 scale-50 group-hover:scale-100 transition-all duration-300 z-10">
           <Play className="w-5 h-5 md:w-6 md:h-6 ml-1" />
         </div>
 
