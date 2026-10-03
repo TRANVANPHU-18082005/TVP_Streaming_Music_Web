@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { motion } from "framer-motion";
 import { Headphones, Loader2, Mic, Pause, Play, RotateCcw, Square, Upload, Youtube } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
