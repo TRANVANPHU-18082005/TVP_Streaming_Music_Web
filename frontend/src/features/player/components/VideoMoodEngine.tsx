@@ -306,6 +306,8 @@ export interface VideoMoodEngineProps {
   accentColor?: string;
   opacity?: number;
   blur?: number;
+  /** True while a newly selected video is loading behind the visible one. */
+  onSwitchChange?: (switching: boolean) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -319,6 +321,7 @@ export const VideoMoodEngine = memo(
     preload = "auto",
     accentColor = "primary",
     blur = 0,
+    onSwitchChange,
   }: VideoMoodEngineProps) => {
     const [slots, dispatch] = useReducer(slotReducer, {
       a: src,
@@ -345,6 +348,27 @@ export const VideoMoodEngine = memo(
       setFirstReady(true);
     }, []);
 
+    // A slot that is not the visible one still has to load while it waits to
+    // become ready; with preload="none" it never fires canplay and the new
+    // video would never replace the old one.
+    const aPending = !!slots.a && slots.active !== "a" && !slots.aReady;
+    const bPending = !!slots.b && slots.active !== "b" && !slots.bReady;
+    const aPreload =
+      preload === "auto" && ((slots.active === "a" && isPlaying) || aPending)
+        ? "auto"
+        : "none";
+    const bPreload =
+      preload === "auto" && ((slots.active === "b" && isPlaying) || bPending)
+        ? "auto"
+        : "none";
+
+    const switching = aPending || bPending;
+    const onSwitchChangeRef = useRef(onSwitchChange);
+    onSwitchChangeRef.current = onSwitchChange;
+    useEffect(() => {
+      onSwitchChangeRef.current?.(switching);
+    }, [switching]);
+
     const videoFilter = useMemo(() => {
       const p = ["brightness(0.58)", "contrast(1.14)", "saturate(0.82)"];
       if (blur) p.push(`blur(${blur}px)`);
@@ -367,7 +391,7 @@ export const VideoMoodEngine = memo(
             src={slots.a}
             isPlaying={isPlaying}
             visible={slots.active === "a" && slots.aReady}
-            preload={slots.active === "a" && isPlaying && preload === "auto" ? "auto" : "none"}
+            preload={aPreload}
             kbClass="vme-video--kb-a"
             videoFilter={videoFilter}
             onReady={onAReady}
@@ -379,7 +403,7 @@ export const VideoMoodEngine = memo(
             src={slots.b}
             isPlaying={isPlaying}
             visible={slots.active === "b" && slots.bReady}
-            preload={slots.active === "b" && isPlaying && preload === "auto" ? "auto" : "none"}
+            preload={bPreload}
             kbClass="vme-video--kb-b"
             videoFilter={videoFilter}
             onReady={onBReady}

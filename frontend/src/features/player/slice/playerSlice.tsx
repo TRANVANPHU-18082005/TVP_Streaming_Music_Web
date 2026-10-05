@@ -194,7 +194,9 @@ const applyTrackChange = (state: PlayerState, newIndex: number): void => {
   state.lastSeekTime = Date.now();
   state.duration = 0; // @fix: reset duration để UI không hiển thị duration bài cũ
   state.isPlaying = true;
-  state.loadingState = state.trackMetadataCache[state.currentTrackId]
+  state.loadingState = hasPlayableUrl(
+    state.trackMetadataCache[state.currentTrackId],
+  )
     ? "buffering"
     : "loading";
   state.nextTrackIdPreloaded = resolveNextPreload(

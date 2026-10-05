@@ -12,10 +12,12 @@
     "migrate:identities": "cross-env NODE_ENV=development ts-node src/scripts/migrateIdentities.ts",
     "migrate:room-passwords": "cross-env NODE_ENV=development ts-node src/scripts/migrateRoomPasswords.ts",
     "migrate:playlog-ttl": "cross-env NODE_ENV=development ts-node src/scripts/migratePlayLogTtl.ts",
+    "audit:hls": "cross-env NODE_ENV=development ts-node src/scripts/auditHlsUrls.ts",
     "backfill:ai-metadata": "cross-env NODE_ENV=development ts-node src/scripts/backfillAiMetadata.ts",
     "dev:worker": "cross-env NODE_ENV=development ts-node src/workers/processTrack.worker.ts",
     "start:worker": "cross-env NODE_ENV=production node dist/workers/processTrack.worker.js",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --require ts-node/register --test src/socket/identity.test.ts src/socket/rooms.test.ts src/health/readiness.test.ts src/health/liveness.test.ts src/health/shutdown.test.ts src/queue/mashup.queue.test.ts src/services/system.service.test.ts src/services/mashup.auth.test.ts src/services/musicRoom.password.test.ts src/services/musicRoom.playback.test.ts src/middlewares/auth.lock.test.ts src/middlewares/auth.admin.test.ts src/middlewares/rateLimiter.redis.test.ts src/middlewares/validate.mutation.test.ts src/config/redisTls.test.ts src/config/redis.connection.test.ts src/config/env.boot.test.ts src/config/env.worker.test.ts src/controllers/auth.google.test.ts src/workers/notify.worker.test.ts src/utils/roomPassword.test.ts src/utils/logRedact.test.ts src/utils/logger.architecture.test.ts src/runtime/nativeDependencies.test.ts src/runtime/nodeRuntime.test.ts src/validations/mutatingRoutes.test.ts src/services/playCount.integrity.test.ts src/models/playLog.ttl.test.ts src/middlewares/auth.lookup.test.ts src/routes/system.unmounted.test.ts src/middlewares/httpCache.test.ts src/services/analytics.service.test.ts src/services/dashboard.contract.test.ts"
   },
   "repository": {
     "type": "git",

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
+import { toast } from "sonner";
 import { playWakeLock, pauseWakeLock, destroyWakeLock } from "@/utils/audioWakeLock";
 import { publishAudioClock } from "@/features/player/utils/audioClock";
 import { createHls, isHlsSource, promotePrefetchToCatalog } from "@/features/player/utils/hlsProfile";
@@ -35,7 +36,7 @@ import { ITrack } from "@/features/track";
 // ---------------------------------------------------------------------------
 
 const toLogVolume = (val: number): number => (val === 0 ? 0 : Math.pow(val, 2));
-const MAX_RETRY_COUNT = 3;
+const MAX_RETRY_COUNT = 2;
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -171,7 +172,11 @@ export const useAudioPlayer = () => {
     const performSeek = () => {
       if (!audioRef.current) return;
       if (Number.isFinite(seekPosition)) {
-        audioRef.current.currentTime = seekPosition;
+        // seek() already moved the element. Assigning currentTime again restarts
+        // the HLS fragment load, so only do it when the position really differs.
+        if (Math.abs(audioRef.current.currentTime - seekPosition) > 0.3) {
+          audioRef.current.currentTime = seekPosition;
+        }
         setCurrentTime(seekPosition);
       }
       lastSeekTimeRef.current = lastSeekTime;
@@ -217,8 +222,9 @@ export const useAudioPlayer = () => {
     }
 
     const wireCatalogHls = (hls: Hls, manifestReady: boolean) => {
-      hls.off(Hls.Events.MANIFEST_PARSED);
-      hls.off(Hls.Events.ERROR);
+      // Do NOT call hls.off(event) without a handler here: hls.js registers its
+      // own internal controllers (stream, level, buffer, ABR) on these events, and
+      // off(event) with no handler removes all of them, so no fragment ever loads.
       const startPlayback = () => {
         dispatch(setLoadingState("buffering"));
         if (isPlayingRef.current) {
@@ -238,6 +244,7 @@ export const useAudioPlayer = () => {
             } else {
               dispatch(setIsPlaying(false));
               dispatch(setLoadingState("idle"));
+              toast.error("Không thể tải bài hát. Vui lòng thử lại sau.");
             }
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
@@ -246,7 +253,9 @@ export const useAudioPlayer = () => {
           default:
             hls.destroy();
             if (hlsRef.current === hls) hlsRef.current = null;
+            dispatch(setIsPlaying(false));
             dispatch(setLoadingState("idle"));
+            toast.error("Không thể phát bài hát này.");
         }
       });
     };

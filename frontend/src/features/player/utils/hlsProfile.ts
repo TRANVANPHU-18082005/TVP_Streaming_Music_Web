@@ -5,10 +5,10 @@ export type HlsProfileName = "catalog" | "prefetch" | "highlight" | "room";
 type HlsOptions = ConstructorParameters<typeof Hls>[0];
 
 const networkRetry = {
-  manifestLoadingTimeOut: 20_000,
-  manifestLoadingMaxRetry: 6,
-  levelLoadingMaxRetry: 6,
-  fragLoadingMaxRetry: 6,
+  manifestLoadingTimeOut: 10_000,
+  manifestLoadingMaxRetry: 3,
+  levelLoadingMaxRetry: 3,
+  fragLoadingMaxRetry: 4,
 } as const;
 
 /**

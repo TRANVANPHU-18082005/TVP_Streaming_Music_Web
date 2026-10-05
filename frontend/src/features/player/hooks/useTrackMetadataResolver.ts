@@ -3,8 +3,10 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   upsertMetadataCache,
   setLoadingState,
+  setIsPlaying,
   hasPlayableUrl,
 } from "@/features/player/slice/playerSlice";
+import { toast } from "sonner";
 import trackApi from "@/features/track/api/trackApi";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -71,6 +73,9 @@ export function useTrackMetadataResolver(): void {
    */
   const inFlightRef = useRef<Map<string, AbortController>>(new Map());
 
+  /** IDs whose metadata loaded but has no playable URL. Not refetched until the next play attempt. */
+  const unplayableRef = useRef<Set<string>>(new Set());
+
   // ── Core fetch with retry ──────────────────────────────────────────────────
 
   /**
@@ -100,7 +105,19 @@ export function useTrackMetadataResolver(): void {
           // After await, re-check abort to avoid a dispatch on a stale request
           if (signal.aborted) return;
 
-          dispatch(upsertMetadataCache([track.data ?? track]));
+          const resolved = track.data ?? track;
+          dispatch(upsertMetadataCache([resolved]));
+
+          // Metadata arrived but the track has no playable URL (pending,
+          // processing, failed). Stop the spinner instead of waiting forever.
+          if (!hasPlayableUrl(resolved)) {
+            unplayableRef.current.add(trackId);
+            if (isCritical && loadingStateRef.current === "loading") {
+              dispatch(setIsPlaying(false));
+              dispatch(setLoadingState("idle"));
+              toast.error("Bài hát này chưa sẵn sàng để phát.");
+            }
+          }
           return; // success — exit retry loop
         } catch (err) {
           if (isAbortError(err)) return; // intentional cancel — stop silently
@@ -136,7 +153,9 @@ export function useTrackMetadataResolver(): void {
         // Only reset loadingState if it's still "loading" — don't clobber a
         // state transition that happened while we were retrying.
         if (loadingStateRef.current === "loading") {
+          dispatch(setIsPlaying(false));
           dispatch(setLoadingState("idle"));
+          toast.error("Không thể tải thông tin bài hát. Vui lòng thử lại.");
         }
       }
     },
@@ -148,6 +167,10 @@ export function useTrackMetadataResolver(): void {
   useEffect(() => {
     if (!currentTrackId) return;
     if (hasPlayableUrl(cacheRef.current[currentTrackId])) return;
+
+    // A new play attempt ("loading") may retry; otherwise skip a known-unplayable track.
+    if (loadingState === "loading") unplayableRef.current.delete(currentTrackId);
+    else if (unplayableRef.current.has(currentTrackId)) return;
 
     // If there's already a live request for this ID, don't duplicate it.
     if (inFlightRef.current.has(currentTrackId)) return;

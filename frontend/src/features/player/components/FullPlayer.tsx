@@ -1394,11 +1394,26 @@ const FullPlayerComponent = ({
 
   const queueSheetRef = useRef<HTMLElement>(null);
   // Lazy fetch: chỉ fetch khi user vào tab Lyrics hoặc Mood
-  const lyricsEnabled = currentView === "lyrics" || currentView === "mood";
+  const lyricsEnabled =
+    currentView === "lyrics" || currentView === "mood" || isCinematic;
   const rawLyricSrc = track.lyricUrl;
   const LyricSrc = rawLyricSrc;
-  const { lyrics, loading } = useLyrics(LyricSrc, lyricsEnabled);
+  // The lyric JSON is small and module-cached: fetch it as soon as the full
+  // player is open so the Lyrics tab and Cinematic mode show lines immediately.
+  const { lyrics, loading } = useLyrics(LyricSrc, true);
   const plainLyrics = usePlainLyrics(track, lyricsEnabled);
+
+  const dispatch = useDispatch();
+  // Tapping a lyric line seeks and starts playback right away, and moves the
+  // highlight now instead of waiting for the next 250ms time poll.
+  const handleLyricSeek = useCallback(
+    (t: number) => {
+      onSeek(t);
+      setCurrentTime(t);
+      if (!isPlaying) dispatch(setIsPlaying(true));
+    },
+    [onSeek, isPlaying, dispatch],
+  );
 
   // Lazy mount: khi chuyển view, thêm vào Set (không bao giờ unmount)
   useEffect(() => {
@@ -1532,7 +1547,7 @@ const FullPlayerComponent = ({
             isPlaying={isPlaying}
             phase={phase}
             swipeHandlers={swipeHandlers}
-            onSeek={onSeek}
+            onSeek={handleLyricSeek}
             focusMode={focusMode}
             plainLyrics={plainLyrics}
           />

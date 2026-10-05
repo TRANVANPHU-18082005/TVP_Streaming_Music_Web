@@ -589,8 +589,11 @@ const CinematicLyricOverlay = memo(({
   const [text, setText] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!lyrics?.length) return;
-    const id = setInterval(() => {
+    if (!lyrics?.length) {
+      setText(null);
+      return;
+    }
+    const tick = () => {
       const ms = getCurrentTime() * 1000;
       const active = lyrics.find((l) => {
         const start = l.startTime ?? l.start ?? 0;
@@ -598,7 +601,9 @@ const CinematicLyricOverlay = memo(({
         return ms >= start && ms <= end;
       });
       setText(active?.text ?? null);
-    }, 200);
+    };
+    tick(); // show the current line immediately instead of waiting for the first interval
+    const id = setInterval(tick, 150);
     return () => clearInterval(id);
   }, [lyrics, getCurrentTime]);
 
@@ -670,6 +675,7 @@ export const CinematicMoodOverlay = memo(({
 
   // Picker
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [videoSwitching, setVideoSwitching] = useState(false);
 
   // Redux state
   const isLoading = useSelector((s: RootState) => {
@@ -753,8 +759,27 @@ export const CinematicMoodOverlay = memo(({
           isPlaying={isPlaying}
           accentColor={accentColor}
           blur={0}
+          onSwitchChange={setVideoSwitching}
         />
       </div>
+
+      <AnimatePresence>
+        {videoSwitching && (
+          <motion.div
+            key="video-switching"
+            className="absolute left-1/2 top-24 z-30 -translate-x-1/2 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium text-white pointer-events-none"
+            style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)" }}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            role="status"
+          >
+            <Loader2 className="size-3.5 animate-spin" />
+            Đang tải video...
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── GRADIENT SCRIMS ── */}
       <div className="cmo-scrim-top" />
