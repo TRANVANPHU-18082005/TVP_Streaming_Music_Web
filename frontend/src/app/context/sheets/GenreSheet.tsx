@@ -14,7 +14,9 @@ import {
   Music2,
 } from "lucide-react";
 
+import { CLIENT_PATHS } from "@/config/paths";
 import { usePlayCollection } from "@/features/player/hooks/usePlayCollection";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 import { genreKeys } from "@/features/genre/utils/genreKeys";
 import genreApi from "@/features/genre/api/genreApi";
 
@@ -112,9 +114,11 @@ export const GenreSheet = memo(
     const player = useAppSelector(selectPlayer);
     const { play } = usePlayCollection();
     const onGenreShare = (genre: IGenreDetail) => {
-      navigator.share?.({
-        title: (genre as IGenre).name,
-        url: `/genres/${(genre as IGenre).slug}`,
+      const item = genre as IGenre;
+      void shareOrCopy({
+        title: item.name,
+        text: `${item.name} trên TVP Music`,
+        url: buildShareUrl(CLIENT_PATHS.GENRE_DETAIL(item.slug)),
       });
     };
     const onGenreAddToQueue = (genre: IGenreDetail) => {

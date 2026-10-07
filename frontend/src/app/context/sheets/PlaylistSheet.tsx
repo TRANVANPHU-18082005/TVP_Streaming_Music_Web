@@ -15,7 +15,9 @@ import {
   Lock,
 } from "lucide-react";
 
+import { CLIENT_PATHS } from "@/config/paths";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 
 import {
   ActionButton,
@@ -115,9 +117,11 @@ export const PlaylistSheet = memo(
     const player = useAppSelector(selectPlayer);
     const { play } = usePlayCollection();
     const onPlaylistShare = (playlist: IPlaylistDetail) => {
-      navigator.share?.({
-        title: (playlist as IPlaylist).title,
-        url: `/playlists/${(playlist as IPlaylist)._id}`,
+      const item = playlist as IPlaylist;
+      void shareOrCopy({
+        title: item.title,
+        text: `Playlist "${item.title}" trên TVP Music`,
+        url: buildShareUrl(CLIENT_PATHS.PLAYLIST_DETAIL(item._id)),
       });
     };
     const onPlaylistAddToQueue = (playlist: IPlaylistDetail) => {

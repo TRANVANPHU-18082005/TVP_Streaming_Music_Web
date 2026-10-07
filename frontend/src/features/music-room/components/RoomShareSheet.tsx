@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Check, Copy, X } from "lucide-react";
+import { CLIENT_PATHS } from "@/config/paths";
+import { buildShareUrl } from "@/utils/share";
 import { qrMatrix } from "../utils/qr";
 
 interface Props {
@@ -10,7 +12,7 @@ interface Props {
 
 export const RoomShareSheet = ({ roomCode, isPublic, onClose }: Props) => {
   const [copied, setCopied] = useState(false);
-  const link = `${window.location.origin}/rooms/${roomCode}`;
+  const link = buildShareUrl(`/${CLIENT_PATHS.ROOMS}/${roomCode}`);
   const matrix = qrMatrix(link);
   const size = matrix.length;
   const cell = 4;

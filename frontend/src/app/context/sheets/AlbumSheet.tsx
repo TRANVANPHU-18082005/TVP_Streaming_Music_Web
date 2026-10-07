@@ -14,7 +14,9 @@ import {
   Pause,
 } from "lucide-react";
 
+import { CLIENT_PATHS } from "@/config/paths";
 import { IAlbum, IAlbumDetail } from "@/features/album/types";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 
 import { useAlbumPlayback } from "@/features/player/hooks/useAlbumPlayback";
 
@@ -110,9 +112,11 @@ export const AlbumSheet = memo(
     const { play } = usePlayCollection();
     const onAlbumGoToArtist = (slug: string) => navigate(`/artists/${slug}`);
     const onAlbumShare = (album: IAlbumDetail) => {
-      navigator.share?.({
-        title: (album as IAlbum).title,
-        url: `/albums/${(album as IAlbum).slug}`,
+      const item = album as IAlbum;
+      void shareOrCopy({
+        title: item.title,
+        text: `Album "${item.title}" trên TVP Music`,
+        url: buildShareUrl(CLIENT_PATHS.ALBUM_DETAIL(item.slug)),
       });
     };
     const onAlbumAddToQueue = (album: IAlbumDetail) => {

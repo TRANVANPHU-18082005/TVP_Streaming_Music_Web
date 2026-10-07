@@ -11,6 +11,7 @@ import { PremiumMusicVisualizer } from "@/components/MusicVisualizer";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { mashupApi } from "../api/mashupApi";
 import { toast } from "sonner";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 import { useDispatch, useSelector } from "react-redux";
 import { setIsPlaying, selectPlayer } from "@/features/player/slice/playerSlice";
 import { motion, AnimatePresence } from "framer-motion";
@@ -170,12 +171,10 @@ export const MashupDetailPage = () => {
     setShareCount(prev => prev + 1);
     try {
       await mashupApi.shareMashup(mashup._id);
-      if (navigator.share) {
-        navigator.share({ title: mashup.title, url: `${window.location.origin}/mashups/${mashup._id}` });
-      } else {
-        navigator.clipboard.writeText(`${window.location.origin}/mashups/${mashup._id}`);
-        toast.success("Đã copy link!");
-      }
+      await shareOrCopy({
+        title: mashup.title,
+        url: buildShareUrl(`/mashups/${mashup._id}`),
+      });
     } catch { }
   }, [mashup]);
 

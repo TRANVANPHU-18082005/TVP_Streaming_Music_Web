@@ -15,6 +15,8 @@ import {
   UserCheck,
 } from "lucide-react";
 
+import { CLIENT_PATHS } from "@/config/paths";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 import {
   ActionButton,
   ActionItem,
@@ -93,9 +95,11 @@ export const ArtistSheet = memo(
     const player = useAppSelector(selectPlayer);
     const { play } = usePlayCollection();
     const onArtistShare = (artist: IArtistDetail) => {
-      navigator.share?.({
-        title: (artist as IArtist).name,
-        url: `/artists/${(artist as IArtist).slug}`,
+      const item = artist as IArtist;
+      void shareOrCopy({
+        title: item.name,
+        text: `${item.name} trên TVP Music`,
+        url: buildShareUrl(CLIENT_PATHS.ARTIST_DETAIL(item.slug)),
       });
     };
     const onArtistAddToQueue = (artist: IArtistDetail) => {

@@ -33,7 +33,9 @@ import ArtistDisplay from "@/features/artist/components/ArtistDisplay";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectPlayer, setIsPlaying, setQueue } from "..";
+import { CLIENT_PATHS } from "@/config/paths";
 import { handleError } from "@/utils/handleError";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 import { APP_CONFIG } from "@/config/constants";
 import { useSyncInteractions } from "@/features/interaction";
 
@@ -526,19 +528,13 @@ const ActionBar = memo(({ track }: { track: ITrack }) => {
   );
 
   const handleShare = useCallback(async () => {
-    const url = `${window.location.origin}/track/${track._id}`;
+    const url = buildShareUrl(CLIENT_PATHS.TRACK_DETAIL(track._id));
     const title = track.title;
     const text = `Nghe "${title}" trên TVP Music`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, text, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        setShared(true);
-        setTimeout(() => setShared(false), 2000);
-      }
-    } catch {
-      // user cancelled or not supported
+    const result = await shareOrCopy({ title, text, url });
+    if (result === "copied") {
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
     }
   }, [track._id, track.title]);
 

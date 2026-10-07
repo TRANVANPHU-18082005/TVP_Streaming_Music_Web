@@ -12,6 +12,7 @@ import { addToQueue, getMyRoom } from "@/features/music-room/api/room.api";
 import { useAppSelector } from "@/store/hooks";
 import { CLIENT_PATHS } from "@/config/paths";
 import { handleError } from "@/utils/handleError";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 import { useInteraction } from "@/features/interaction/hooks/useInteraction";
 import { selectIsInteracted } from "@/features/interaction/slice/interactionSlice";
 import type { ITrack } from "@/features/track/types";
@@ -153,19 +154,11 @@ export const ForMeSheet = memo(({ track, trackIds, isOpen, onClose, onAppend, on
   };
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/tracks/${track.slug || track._id}`;
-    const title = track.title;
-    const text = `Nghe "${title}" trên TVP Music`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, text, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        toast.success("Đã chép liên kết vào khay nhớ tạm");
-      }
-    } catch {
-      // Ignored
-    }
+    await shareOrCopy({
+      title: track.title,
+      text: `Nghe "${track.title}" trên TVP Music`,
+      url: buildShareUrl(CLIENT_PATHS.TRACK_DETAIL(track._id || track.slug)),
+    });
     onClose();
   };
 

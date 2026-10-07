@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 import { Play, Layers, Clock, Heart, Disc3 } from "lucide-react";
 import { motion } from "framer-motion";
 import { IMashup, TRANSITION_META, formatMashupDuration } from "../types";
@@ -334,9 +335,10 @@ export const MashupCard = ({ mashup, variant = "default" }: MashupCardProps) => 
               </button>
               <button
                 onClick={() => {
-                  if (navigator.share) {
-                    navigator.share({ title: mashup.title, url: window.location.href + `mashups/${mashup._id}` });
-                  }
+                  void shareOrCopy({
+                    title: mashup.title,
+                    url: buildShareUrl(`/mashups/${mashup._id}`),
+                  });
                   setIsDrawerOpen(false);
                 }}
                 className="flex w-full items-center gap-4 rounded-2xl p-3 text-left transition-colors hover:bg-muted/50 active:bg-muted"

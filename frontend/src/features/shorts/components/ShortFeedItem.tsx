@@ -22,6 +22,7 @@ import { CLIENT_PATHS } from "@/config/paths";
 import { shortsApi } from "../api/shortsApi";
 import { useAppSelector } from "@/store/hooks";
 import { toast } from "sonner";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 
 interface ShortFeedItemProps {
   short: ITrackShort;
@@ -116,15 +117,13 @@ export const ShortFeedItem = ({ short, isActive, prefetch = false, onEnd, isAuto
   }, [isActive, short._id]);
 
   const shareShort = useCallback(async () => {
-    const url = `${window.location.origin}/shorts/${short._id}`;
+    const result = await shareOrCopy({
+      title: short.title || track?.title || "TVP Music",
+      url: buildShareUrl(`/${CLIENT_PATHS.SHORTS}/${short._id}`),
+    });
+    if (result === "dismissed" || !user) return;
     try {
-      if (navigator.share) {
-        await navigator.share({ title: short.title || track?.title, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        toast.success("Đã sao chép liên kết");
-      }
-      if (user) await shortsApi.shareShort(short._id);
+      await shortsApi.shareShort(short._id);
     } catch {
       /* user dismissed the share sheet */
     }

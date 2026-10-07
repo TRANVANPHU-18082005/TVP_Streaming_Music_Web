@@ -16,6 +16,6 @@
     },
     "types": ["vite/client"]
   },
-  "include": ["src", "vite.config.ts"], // Thêm vite.config.ts vào đây
+  "include": ["src", "vite.config.ts", "middleware.ts", "api"],
   "exclude": ["node_modules"]
 }

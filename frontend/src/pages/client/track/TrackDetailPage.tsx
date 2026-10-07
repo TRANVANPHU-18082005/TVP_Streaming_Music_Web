@@ -47,7 +47,9 @@ import {
   setIsPlaying,
   setQueue,
 } from "@/features/player/slice/playerSlice";
+import { CLIENT_PATHS } from "@/config/paths";
 import { handleError } from "@/utils/handleError";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -588,19 +590,13 @@ const TrackDetailPage = () => {
   const [shared, setShared] = React.useState(false);
   const handleShare = useCallback(async () => {
     if (!track) return;
-    const url = `${window.location.origin}/tracks/${track._id || track.slug}`;
+    const url = buildShareUrl(CLIENT_PATHS.TRACK_DETAIL(track._id || track.slug));
     const title = track.title;
     const text = `Nghe "${title}" trên TVP Music`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, text, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        setShared(true);
-        setTimeout(() => setShared(false), 2000);
-      }
-    } catch {
-      // ignore
+    const result = await shareOrCopy({ title, text, url });
+    if (result === "copied") {
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
     }
   }, [track]);
 

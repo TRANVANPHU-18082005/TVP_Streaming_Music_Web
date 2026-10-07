@@ -22,6 +22,7 @@ import { Share2, FileText, Wand2, Repeat, ChevronDown, Heart } from "lucide-reac
 import { MashupTransitionEffect } from "./MashupTransitionEffect";
 import { MashupWaveformBar } from "./MashupWaveformBar";
 import { CLIENT_PATHS } from "@/config/paths";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 import { mashupApi } from "../api/mashupApi";
 
 interface MashupFeedItemProps {
@@ -150,15 +151,14 @@ export const MashupFeedItem = ({ mashup, isActive, onEnd, isAutoNext, onToggleAu
         label: "Chia sẻ",
         onClick: () => {
           void (async () => {
-            const url = `${window.location.origin}/mashups/${mashup._id}`;
-            try {
-              if (navigator.share) await navigator.share({ title: mashup.title, url });
-              else {
-                await navigator.clipboard.writeText(url);
+            const url = buildShareUrl(`/mashups/${mashup._id}`);
+            const result = await shareOrCopy({ title: mashup.title, url });
+            if (result !== "dismissed") {
+              try {
+                await mashupApi.shareMashup(mashup._id);
+              } catch {
+                /* dismissed */
               }
-              await mashupApi.shareMashup(mashup._id);
-            } catch {
-              /* dismissed */
             }
             setIsDrawerOpen(false);
           })();
