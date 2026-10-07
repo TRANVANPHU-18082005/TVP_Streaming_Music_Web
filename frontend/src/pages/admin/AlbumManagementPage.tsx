@@ -9,6 +9,7 @@ import AlbumFilter from "@/features/album/components/AlbumFilter";
 import ConfirmationModal from "@/components/ui/ConfirmationModal";
 import AlbumCard from "@/features/album/components/AlbumCard";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import Pagination from "@/utils/pagination";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 
@@ -33,7 +34,7 @@ const AlbumManagementPage = () => {
     handlePageChange,
     clearFilters,
   } = useAlbumParams();
-  const { data, isLoading, isError, refetch } =
+  const { data, isLoading, isError, error, refetch } =
     useAlbumsByAdminQuery(filterParams);
   const {
     createAlbumAsync,
@@ -115,7 +116,7 @@ const AlbumManagementPage = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       </>
     );

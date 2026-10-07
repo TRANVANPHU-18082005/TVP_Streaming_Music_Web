@@ -12,6 +12,7 @@ import { ITrack, TrackSkeleton } from "@/features/track";
 
 import SectionAmbient from "../../../components/SectionAmbient";
 import MusicResult from "../../../components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import {
   LibraryHeader,
   LibraryTab,
@@ -220,7 +221,7 @@ export function LibrarySection() {
       if (tracksError && allTracks.length === 0) {
         return (
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-            <MusicResult variant="error" onRetry={refetchTracks} />
+            <QueryErrorResult error={tracksError} onRetry={refetchTracks} />
           </div>
         );
       }
@@ -243,7 +244,7 @@ export function LibrarySection() {
       if (error && albums.length === 0) {
         return (
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-            <MusicResult variant="error" onRetry={refetch} />
+            <QueryErrorResult error={error} onRetry={refetch} />
           </div>
         );
       }
@@ -264,7 +265,7 @@ export function LibrarySection() {
       if (error && playlists.length === 0) {
         return (
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-            <MusicResult variant="error" onRetry={refetch} />
+            <QueryErrorResult error={error} onRetry={refetch} />
           </div>
         );
       }

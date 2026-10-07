@@ -20,6 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 
 import {
   usePublicTrackDetail,
@@ -526,6 +527,7 @@ const TrackDetailPage = () => {
     data: response,
     isLoading,
     isError,
+    error,
     refetch,
   } = usePublicTrackDetail(id ?? "");
   const track = response?.data;
@@ -619,7 +621,7 @@ const TrackDetailPage = () => {
   if (isError || !track) {
     return (
       <div className="section-container space-y-6 pt-4 pb-4">
-        <MusicResult variant="error" onRetry={refetch} onBack={handleBack} />
+        <QueryErrorResult error={error} missing={!track} onRetry={refetch} onBack={handleBack} />
       </div>
     );
   }

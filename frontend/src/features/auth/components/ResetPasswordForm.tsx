@@ -4,13 +4,14 @@ import { cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { parseApiError } from "@/utils/apiError";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 import { useNavigate, useParams } from "react-router-dom";
 import authApi from "@/features/auth/api/authApi";
 import {
   resetPasswordSchema,
   type ResetPasswordInput,
 } from "@/features/auth/schemas/auth.schema";
-import type { ApiErrorResponse } from "@/types";
 import { PASSWORD_REQUIREMENTS } from "@/config/constants";
 
 
@@ -236,32 +237,31 @@ const ResetPasswordForm = () => {
 
       setPageState("success");
     } catch (err: unknown) {
-      const error = err as ApiErrorResponse;
-      const errorCode = error.response?.data?.errorCode as string | undefined;
-      const serverMsg = error.response?.data?.message;
-
-      // Ánh xạ error code sang thông báo cụ thể
+      const parsed = parseApiError(err);
+      const errorCode = parsed.errorCode;
       const displayMsg =
         (errorCode && ERROR_CODE_MESSAGES[errorCode]) ||
-        serverMsg ||
+        parsed.message ||
         "Đặt lại mật khẩu thất bại. Vui lòng thử lại.";
 
-      // Nếu token hết hạn hoặc không hợp lệ -> chuyển sang trạng thái lỗi
       if (errorCode === "RESET_TOKEN_EXPIRED" || errorCode === "RESET_TOKEN_INVALID") {
         setInvalidMessage(displayMsg);
         setPageState("invalid");
         return;
       }
 
-      // Nếu trùng mật khẩu cũ -> hiển thị lỗi inline trên field
       if (errorCode === "SAME_PASSWORD_ERROR") {
         setError("password", { message: displayMsg });
         toast.error(displayMsg);
         return;
       }
 
-      // Các lỗi còn lại -> toast
-      toast.error(displayMsg);
+      const { handledFields, rootMessage } = applyServerErrors(err, setError, {
+        knownFields: ["password", "confirmPassword"],
+      });
+      if (!handledFields || rootMessage) {
+        toast.error(rootMessage ?? displayMsg);
+      }
     }
   };
 

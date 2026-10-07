@@ -30,7 +30,9 @@ export const apiLimiter = rateLimit({
   legacyHeaders: false,
   ...apiLimitStore,
   message: {
+    success: false,
     code: 429,
+    errorCode: "RATE_LIMITED",
     message: "Quá nhiều request từ IP này, vui lòng thử lại sau 15 phút.",
   },
 });
@@ -47,7 +49,9 @@ export const authLimiter = rateLimit({
   skipSuccessfulRequests: true,
   handler: (req, res) => {
     res.status(httpStatus.TOO_MANY_REQUESTS).json({
+      success: false,
       code: httpStatus.TOO_MANY_REQUESTS,
+      errorCode: "RATE_LIMITED",
       message: "Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 15 phút.",
     });
   },
@@ -64,7 +68,9 @@ export const otpLimiter = rateLimit({
   store: redisStore("rl:otp:"),
   handler: (req, res) => {
     res.status(httpStatus.TOO_MANY_REQUESTS).json({
+      success: false,
       code: httpStatus.TOO_MANY_REQUESTS,
+      errorCode: "RATE_LIMITED",
       message: "Bạn đã gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau 1 giờ.",
     });
   },
@@ -88,7 +94,9 @@ export const interactionLimiter = rateLimit({
   },
   handler: (req, res) => {
     res.status(httpStatus.TOO_MANY_REQUESTS).json({
+      success: false,
       code: httpStatus.TOO_MANY_REQUESTS,
+      errorCode: "RATE_LIMITED",
       message:
         "Thao tác quá nhanh! Vui lòng đợi một chút để tiếp tục tương tác.",
     });

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { IArtist } from "@/features/artist";
 import { useSyncInteractions } from "@/features/interaction";
@@ -208,7 +209,7 @@ ArtistScroll.displayName = "ArtistScroll";
 // not wrapped in a conditional — this is the correct pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 export function ArtistSpotlight() {
-  const { data: artists, isLoading, isError, refetch } = useSpotlightArtists();
+  const { data: artists, isLoading, isError, error, refetch } = useSpotlightArtists();
   const artistIds = useMemo(
     () => artists?.map((a: IArtist) => a._id),
     [artists],
@@ -236,7 +237,7 @@ export function ArtistSpotlight() {
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-            <MusicResult variant="error" onRetry={refetch} />
+            <QueryErrorResult error={error} onRetry={refetch} />
           </div>
         </>
       );

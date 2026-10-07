@@ -11,6 +11,8 @@ export const useShorts = (filters: any) => {
 export const useCreateShort = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: shortsApi.createShort,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
@@ -23,6 +25,8 @@ export const useCreateShort = () => {
 export const useUpdateShort = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: ({ id, data }: { id: string; data: any }) => shortsApi.updateShort(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
@@ -35,6 +39,8 @@ export const useUpdateShort = () => {
 export const useDeleteShort = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: shortsApi.deleteShort,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
@@ -61,6 +67,8 @@ export const useMyShorts = () => {
 export const useRejectShort = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: ({ id, reason }: { id: string; reason?: string }) => shortsApi.rejectShort(id, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-shorts"] });
@@ -73,6 +81,8 @@ export const useRejectShort = () => {
 export const useTogglePublish = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: ({ id, isPublished }: { id: string; isPublished: boolean }) =>
       isPublished ? shortsApi.publishShort(id) : shortsApi.unpublishShort(id),
     onSuccess: () => {

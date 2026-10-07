@@ -19,6 +19,7 @@ export interface UseDashboardAnalyticsResult {
   data: DashboardData | undefined;
   isLoading: boolean;
   isError: boolean;
+  error: unknown;
   isStale: boolean; // NEW: backend SWR flag — true = data đang được refresh ngầm
   isRefetching: boolean;
   refetch: () => void;
@@ -41,6 +42,7 @@ export function useDashboardAnalytics(
     data: query.data,
     isLoading: query.isLoading,
     isError: query.isError,
+    error: query.error,
     // Đọc isStale từ _meta được backend inject vào response
     isStale: query.data?._meta?.isStale ?? false,
     isRefetching: query.isRefetching,

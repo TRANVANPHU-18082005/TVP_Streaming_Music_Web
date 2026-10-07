@@ -8,6 +8,7 @@ import SectionAmbient from "../../../components/SectionAmbient";
 import { useRecentlyPlayedInfinite } from "@/features/profile/hooks/useProfileQuery";
 import { CLIENT_PATHS } from "@/config/paths";
 import MusicResult from "../../../components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { APP_CONFIG } from "@/config/constants";
@@ -253,7 +254,7 @@ export const RecentlyListenedTrack = () => {
           <ChartHeader viewAllHref="/charts" />
           <AnimatePresence mode="wait">
             <motion.div key="error" {...slideUpVariants}>
-              <MusicResult variant="error" onRetry={handleRetry} />
+              <QueryErrorResult error={tracksError} onRetry={handleRetry} />
             </motion.div>
           </AnimatePresence>
         </div>

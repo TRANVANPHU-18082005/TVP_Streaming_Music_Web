@@ -113,6 +113,11 @@ export const useAudioPlayer = () => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
+  // Còn bài phía sau trong queue? (đọc từ closure của HLS error handler)
+  const hasNextInQueueRef = useRef(false);
+  hasNextInQueueRef.current =
+    activeQueueLen > 1 && currentIndex < activeQueueLen - 1;
+
   /**
    * @fix #7 — handleTimeUpdate re-create mỗi khi reduxDuration đổi
    * reduxDuration trong dep array → handleTimeUpdate mới mỗi ~1s đầu bài
@@ -234,13 +239,40 @@ export const useAudioPlayer = () => {
       if (manifestReady) startPlayback();
       else hls.on(Hls.Events.MANIFEST_PARSED, startPlayback);
 
+      let waitingForOnline = false;
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (!data.fatal) return;
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
+            // Mất mạng: tạm dừng tải, tự phát tiếp khi có mạng lại (không tính vào số lần retry).
+            if (typeof navigator !== "undefined" && navigator.onLine === false) {
+              dispatch(setLoadingState("buffering"));
+              if (!waitingForOnline) {
+                waitingForOnline = true;
+                toast.warning("Mất kết nối mạng. Bài hát sẽ tự phát tiếp khi có mạng.", {
+                  id: "network-error",
+                });
+                window.addEventListener(
+                  "online",
+                  () => {
+                    waitingForOnline = false;
+                    if (hlsRef.current !== hls) return;
+                    retryCountRef.current = 0;
+                    hls.startLoad();
+                  },
+                  { once: true },
+                );
+              }
+              break;
+            }
             if (retryCountRef.current < MAX_RETRY_COUNT) {
               retryCountRef.current++;
               hls.startLoad();
+            } else if (hasNextInQueueRef.current) {
+              // Online nhưng bài này không tải được: bỏ qua, chuyển bài kế tiếp
+              dispatch(setLoadingState("idle"));
+              toast.error("Không thể phát bài hát này. Đang chuyển sang bài kế tiếp.");
+              dispatch(nextTrack());
             } else {
               dispatch(setIsPlaying(false));
               dispatch(setLoadingState("idle"));

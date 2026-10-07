@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { APP_CONFIG } from "@/config/constants";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { IPlaylist } from "@/features/playlist";
@@ -207,6 +208,7 @@ export function FeaturedPlaylists() {
     data: playlists,
     isLoading,
     isError,
+    error,
     refetch,
   } = useFeaturedPlaylists();
 
@@ -234,7 +236,7 @@ export function FeaturedPlaylists() {
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-            <MusicResult variant="error" onRetry={refetch} />
+            <QueryErrorResult error={error} onRetry={refetch} />
           </div>
         </>
       );

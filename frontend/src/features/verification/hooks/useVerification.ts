@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import verificationApi from "@/features/verification/api/verificationApi";
+import { handleError } from "@/utils/handleError";
 
 // --- HOOKS ---
 export const useVerification = (initialLimit = 10) => {
@@ -13,7 +14,7 @@ export const useVerification = (initialLimit = 10) => {
   });
 
   // 1. Query List (Admin)
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["verification-requests", filterParams],
     queryFn: () => verificationApi.getRequests(filterParams),
     // Chỉ fetch khi user là admin (bạn có thể thêm logic check role ở đây)
@@ -35,8 +36,7 @@ export const useVerification = (initialLimit = 10) => {
       toast.success("Đã gửi yêu cầu! Vui lòng chờ quản trị viên duyệt.");
       // Redirect hoặc update UI user
     },
-    onError: (err: any) =>
-      toast.error(err.response?.data?.message || "Lỗi gửi yêu cầu"),
+    onError: (err: unknown) => handleError(err, "Lỗi gửi yêu cầu"),
   });
 
   // 3. Review Mutation (Admin)
@@ -46,14 +46,16 @@ export const useVerification = (initialLimit = 10) => {
       toast.success("Đã xử lý yêu cầu thành công");
       queryClient.invalidateQueries({ queryKey: ["verification-requests"] });
     },
-    onError: (err: any) =>
-      toast.error(err.response?.data?.message || "Lỗi xử lý"),
+    onError: (err: unknown) => handleError(err, "Lỗi xử lý"),
   });
 
   return {
     requests,
     meta,
     isLoading,
+    isError,
+    error,
+    refetch,
     filterParams,
     setFilterParams,
     handlePageChange,

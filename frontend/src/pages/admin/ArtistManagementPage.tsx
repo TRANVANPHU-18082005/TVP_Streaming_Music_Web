@@ -12,6 +12,7 @@ import CardSkeleton from "@/components/ui/CardSkeleton";
 import Pagination from "@/utils/pagination";
 import ConfirmationModal from "@/components/ui/ConfirmationModal";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 
 // Feature Components
 import { ArtistFilters } from "@/features/artist/components/ArtistFilters";
@@ -41,7 +42,7 @@ const ArtistManagementPage = () => {
   } = useArtistParams();
 
   // --- 2. DATA FETCHING ---
-  const { data, isLoading, isFetching, isError, refetch } =
+  const { data, isLoading, isFetching, isError, error, refetch } =
     useArtistsByAdminQuery(filterParams);
 
   // --- 3. MUTATIONS ---
@@ -132,7 +133,7 @@ const ArtistManagementPage = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       </>
     );

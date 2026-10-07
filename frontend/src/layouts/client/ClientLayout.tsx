@@ -3,6 +3,7 @@ import { usePlayerPadding } from "@/hooks/usePlayerPadding";
 import { Footer } from "@/layouts/client/components/Footer";
 import { Header } from "@/layouts/client/components/Header";
 import { cn } from "@/lib/utils";
+import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 import { Outlet, useLocation } from "react-router-dom";
 
 const ClientLayout = () => {
@@ -33,6 +34,8 @@ const ClientLayout = () => {
       </main>
 
       {!isHiddenHeaderPage && <Footer />}
+
+      <NetworkStatusBanner />
 
       {/* Player thường được render ở root hoặc portal, nhưng layout cần chừa chỗ */}
     </div>

@@ -1,4 +1,5 @@
 // pages/client/MusicRoomsPage.tsx
+import { QueryErrorResult } from "@/components/ui/QueryState";
 /**
  * Trang khám phá phòng nhạc.
  * Tuân theo design system index.css (dark/light mode, glass, tokens).
@@ -28,7 +29,7 @@ const MusicRoomsPage = () => {
 
   const { filterParams, handleSearch, handlePageChange, clearFilters } = useRoomParams();
 
-  const { data, isLoading, refetch } = usePublicRoomsQuery(
+  const { data, isLoading, isError, error, refetch } = usePublicRoomsQuery(
     filterParams.page,
     filterParams.limit,
     filterParams.q
@@ -228,6 +229,18 @@ const MusicRoomsPage = () => {
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="skeleton h-48 rounded-2xl" />
               ))}
+            </motion.div>
+
+          ) : isError && rooms.length === 0 ? (
+            /* Error state */
+            <motion.div
+              key="error"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="py-12"
+            >
+              <QueryErrorResult error={error} onRetry={() => void refetch()} size="lg" />
             </motion.div>
 
           ) : rooms.length === 0 ? (

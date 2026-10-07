@@ -37,6 +37,7 @@ import {
 import PageHeader from "@/components/ui/PageHeader";
 import Pagination from "@/utils/pagination";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import ConfirmationModal from "@/components/ui/ConfirmationModal";
 import TableSkeleton from "@/components/ui/TableSkeleton";
 
@@ -68,7 +69,7 @@ const UsersManagementPage = () => {
   } = useUserParams(APP_CONFIG.PAGINATION_LIMIT);
 
   // --- 2. DATA FETCHING ---
-  const { data, isLoading, isError, refetch } = useUsersQuery(filterParams);
+  const { data, isLoading, isError, error, refetch } = useUsersQuery(filterParams);
   // --- 3. MUTATIONS ---
   const {
     createUserAsync,
@@ -261,7 +262,7 @@ const UsersManagementPage = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       </>
     );

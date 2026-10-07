@@ -77,6 +77,7 @@ import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTheme } from "@/hooks/useTheme";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { formatListeners } from "@/utils/track-helper";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
@@ -458,7 +459,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
   const isScrolled = scrollY > (isEmbedded ? 150 : 340);
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  const { data: artist, isLoading, isError, refetch } = useArtistDetail(slug);
+  const { data: artist, isLoading, isError, error, refetch } = useArtistDetail(slug);
 
   const albums = artist?.albums ?? [];
 
@@ -624,7 +625,7 @@ const ArtistDetailPage: FC<ArtistDetailPageProps> = ({
   if (isError || !artist) {
     return (
       <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-        <MusicResult variant="error" onRetry={refetch} />
+        <QueryErrorResult error={error} missing={!artist} onRetry={refetch} />
       </div>
     );
   }

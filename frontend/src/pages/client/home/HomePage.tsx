@@ -1,4 +1,5 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, type ReactNode } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import HeroSelector from "./HeroSelector";
 import { useAppSelector } from "@/store/hooks";
 
@@ -34,61 +35,69 @@ function SectionSkeleton({ height = 48 }: { height?: number }) {
   );
 }
 
+/** Mỗi section tự bắt lỗi + loading: một section lỗi không làm hỏng cả trang chủ. */
+function HomeSection({ height = 220, children }: { height?: number; children: ReactNode }) {
+  return (
+    <ErrorBoundary size="sm" className="section-container">
+      <Suspense fallback={<SectionSkeleton height={height} />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
+}
 export function HomePage() {
   const { user } = useAppSelector((state) => state.auth); // Ensure we have user data before showing library
 
   const personal = user ? (
     <>
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <RecentlyListenedTrack />
-      </Suspense>
-      <Suspense fallback={<SectionSkeleton height={280} />}>
+      </HomeSection>
+      <HomeSection height={280}>
         <ContinueShelf />
-      </Suspense>
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      </HomeSection>
+      <HomeSection height={220}>
         <LibrarySection />
-      </Suspense>
+      </HomeSection>
     </>
   ) : null;
 
   return (
     <>
       {user ? personal : <HeroSelector />}
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <HomeSignatureStrip />
-      </Suspense>
+      </HomeSection>
       {user ? <HeroSelector /> : null}
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <TrackSection />
-      </Suspense>
+      </HomeSection>
 
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <TopSevenSection />
-      </Suspense>
+      </HomeSection>
 
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <FeaturedAlbums />
-      </Suspense>
+      </HomeSection>
 
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <FeaturedPlaylists />
-      </Suspense>
+      </HomeSection>
 
-      <Suspense fallback={<SectionSkeleton height={260} />}>
+      <HomeSection height={260}>
         <MashupHomeSection />
-      </Suspense>
+      </HomeSection>
 
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <ArtistSpotlight />
-      </Suspense>
+      </HomeSection>
 
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <FeaturedGenres />
-      </Suspense>
+      </HomeSection>
 
-      <Suspense fallback={<SectionSkeleton height={220} />}>
+      <HomeSection height={220}>
         <TopFeaturedTracks />
-      </Suspense>
+      </HomeSection>
     </>
   );
 }

@@ -4,6 +4,7 @@ import { Disc3 } from "lucide-react";
 
 import PublicAlbumCard from "@/features/album/components/PublicAlbumCard";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import AlbumFilter from "@/features/album/components/AlbumFilter";
 import { useAlbumParams } from "@/features/album/hooks/useAlbumParams";
 
@@ -97,7 +98,7 @@ const AlbumPage: React.FC = () => {
     clearFilters,
   } = useAlbumParams();
 
-  const { data, isLoading, isError, refetch } =
+  const { data, isLoading, isError, error, refetch } =
     useAlbumsByUserQuery(filterParams);
   const albums = useMemo(() => data?.albums ?? [], [data?.albums]);
   const meta = useMemo(
@@ -133,7 +134,7 @@ const AlbumPage: React.FC = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       </>
     );

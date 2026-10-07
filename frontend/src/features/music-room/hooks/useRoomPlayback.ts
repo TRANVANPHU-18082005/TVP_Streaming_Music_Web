@@ -7,6 +7,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useSelector } from "react-redux";
 import Hls from "hls.js";
+import { toast } from "sonner";
 import { createHls, isHlsSource } from "@/features/player/utils/hlsProfile";
 import {
   acquirePlayback,
@@ -151,10 +152,40 @@ export const useRoomPlayback = ({ audioRef, trackUrl }: UseRoomPlaybackOptions) 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         void syncAudio();
       });
+      let networkRetries = 0;
+      let waitingForOnline = false;
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (!data.fatal) return;
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          // Mất mạng: chờ có mạng lại rồi tải tiếp, không retry dồn dập.
+          if (typeof navigator !== "undefined" && navigator.onLine === false) {
+            if (!waitingForOnline) {
+              waitingForOnline = true;
+              toast.warning("Mất kết nối mạng. Nhạc phòng sẽ tự phát tiếp khi có mạng.", {
+                id: "network-error",
+              });
+              window.addEventListener(
+                "online",
+                () => {
+                  waitingForOnline = false;
+                  if (hlsRef.current !== hls) return;
+                  networkRetries = 0;
+                  hls.startLoad();
+                },
+                { once: true },
+              );
+            }
+            return;
+          }
+          if (networkRetries < 3) {
+            networkRetries += 1;
+            hls.startLoad();
+          } else {
+            toast.error("Không thể tải nhạc của phòng. Vui lòng thử lại sau.", {
+              id: "room-playback-error",
+            });
+          }
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
         else hls.destroy();
       });
     } else {

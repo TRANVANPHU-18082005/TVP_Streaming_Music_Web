@@ -4,6 +4,7 @@ import { FileUp, ListMusic } from "lucide-react";
 
 import PublicPlaylistCard from "@/features/playlist/components/PublicPlaylistCard";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { PaginationStrip } from "@/utils/pagination";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import PlaylistFilter from "@/features/playlist/components/PlaylistFilter";
@@ -98,7 +99,7 @@ const PlaylistPage: React.FC = () => {
     clearFilters,
   } = usePlaylistParams();
 
-  const { data, isLoading, isError, refetch } =
+  const { data, isLoading, isError, error, refetch } =
     usePlaylistsByUserQuery(filterParams);
 
   const playlists = useMemo(() => data?.playlists ?? [], [data?.playlists]);
@@ -148,7 +149,7 @@ const PlaylistPage: React.FC = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       </>
     );

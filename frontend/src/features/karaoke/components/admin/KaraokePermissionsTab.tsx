@@ -4,6 +4,7 @@ import { Search, Plus, ShieldOff, ShieldAlert, Check } from "lucide-react";
 import { useAdminPermissions } from "../../hooks/useKaraokeQueries";
 import { useAdminGrantPermission, useAdminRevokePermission } from "../../hooks/useKaraokeMutations";
 import { IKaraokePermission } from "../../types";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ const KaraokePermissionsTab = () => {
   const [isUserSelectOpen, setIsUserSelectOpen] = useState(false);
   const [userToRevoke, setUserToRevoke] = useState<string | null>(null);
 
-  const { data, isLoading } = useAdminPermissions({
+  const { data, isLoading, isError, error, refetch } = useAdminPermissions({
     page,
     limit: 10,
     keyword: keyword || undefined,
@@ -112,6 +113,12 @@ const KaraokePermissionsTab = () => {
               <TableRow>
                 <TableCell colSpan={7} className="text-center h-32 text-muted-foreground">
                   Đang tải dữ liệu...
+                </TableCell>
+              </TableRow>
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={7} className="p-6">
+                  <QueryErrorResult error={error} onRetry={() => void refetch()} size="sm" />
                 </TableCell>
               </TableRow>
             ) : !data?.data?.data?.length ? (

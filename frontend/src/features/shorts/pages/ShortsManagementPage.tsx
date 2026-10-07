@@ -26,6 +26,7 @@ import { ITrackShort } from "../types";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { toast } from "sonner";
 import TableSkeleton from "@/components/ui/TableSkeleton";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { motion, AnimatePresence } from "framer-motion";
 
 type ViewMode = "grid" | "table";
@@ -51,7 +52,7 @@ export const ShortsManagementPage = () => {
     ...(filterStatus === "draft" ? { isPublished: false } : {}),
     ...(filterStatus === "pending" ? { moderationStatus: "pending" } : {}),
   };
-  const { data, isLoading } = useShorts(listParams);
+  const { data, isLoading, isError, error, refetch } = useShorts(listParams);
   const { data: pendingData } = useShorts({ limit: 1, page: 1, moderationStatus: "pending" });
   const createShort = useCreateShort();
   const updateShort = useUpdateShort();
@@ -299,6 +300,8 @@ export const ShortsManagementPage = () => {
               <TableSkeleton rows={8} cols={6} />
             </div>
           )
+        ) : isError ? (
+          <QueryErrorResult error={error} onRetry={() => void refetch()} />
         ) : shortsList.length === 0 ? (
           /* Empty state */
           <motion.div

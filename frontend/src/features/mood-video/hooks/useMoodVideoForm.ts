@@ -5,6 +5,7 @@ import {
   moodVideoSchema,
   type MoodVideoFormValues,
 } from "../schemas/moodVideo.schema";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 import { mapMoodVideoToForm } from "../utils/formMapper";
 import { buildMoodVideoPayload } from "../utils/payloadBuilder";
 import { IMoodVideo } from "../types";
@@ -49,7 +50,14 @@ export const useMoodVideoForm = ({
       dirtyFields as any,
       isEditMode,
     );
-    await onSubmit(payload);
+    try {
+      await onSubmit(payload);
+    } catch (error) {
+      // Mutation đã toast lỗi chung; gán lỗi theo field lên form.
+      applyServerErrors(error, form.setError, {
+        knownFields: Object.keys(form.getValues()),
+      });
+    }
   });
 
   return {

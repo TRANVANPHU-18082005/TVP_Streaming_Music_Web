@@ -26,6 +26,7 @@ import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import { AlbumActionBarProps } from "./components/AlbumActionBar";
@@ -226,7 +227,7 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
-  const { data: album, isLoading, isError, refetch } = useAlbumDetail(slug);
+  const { data: album, isLoading, isError, error, refetch } = useAlbumDetail(slug);
 
   const {
     data: tracksData,
@@ -380,7 +381,7 @@ const AlbumDetailPage: FC<AlbumDetailPageProps> = ({
   if (isError || !album) {
     return (
       <div className="section-container space-y-6 pt-4 pb-4">
-        <MusicResult variant="error" onRetry={refetch} onBack={handleBack} />
+        <QueryErrorResult error={error} missing={!album} onRetry={refetch} onBack={handleBack} />
       </div>
     );
   }

@@ -47,6 +47,7 @@ import {
 } from "../../../components/MusicVisualizer";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { HeroSkeleton } from "./HeroSkeleton";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ export interface HeroCoreProps {
   items: HeroItem[];
   isLoading: boolean;
   isError: boolean;
+  error?: unknown;
   refetch: () => void;
 
   /** Slider index — owned by the connector so the playback hook sees it */
@@ -907,6 +909,7 @@ export function HeroCore({
   items,
   isLoading,
   isError,
+  error,
   refetch,
   currentIndex,
   onNext,
@@ -1005,7 +1008,7 @@ export function HeroCore({
   if (isError || !hasResults || !currentItem) {
     return (
       <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-        <MusicResult variant="error" onRetry={refetch} />
+        <QueryErrorResult error={error} onRetry={refetch} />
       </div>
     );
   }

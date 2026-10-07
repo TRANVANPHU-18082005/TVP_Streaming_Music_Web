@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 
 import {
   adminUserSchema,
@@ -95,8 +96,10 @@ export const useUserForm = ({
       // Gọi API thông qua function được truyền từ Component cha
       await onSubmit(payload);
     } catch (error) {
-      console.error("User form submission error:", error);
-      // Xử lý lỗi form chung ở đây nếu cần, lỗi API đã được mutation lo
+      // Mutation đã toast lỗi chung; gán lỗi theo field (vd: email trùng) lên form.
+      applyServerErrors(error, form.setError, {
+        knownFields: Object.keys(form.getValues()),
+      });
     }
   });
 

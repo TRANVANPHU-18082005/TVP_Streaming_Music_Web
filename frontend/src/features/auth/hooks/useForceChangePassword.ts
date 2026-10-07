@@ -1,10 +1,11 @@
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { handleError } from "@/utils/handleError";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 import { useMutation } from "@tanstack/react-query";
 import authApi from "@/features/auth/api/authApi";
 import type { ChangePasswordRequest } from "@/features/auth/types"; // Đảm bảo import đúng type
-import type { ApiErrorResponse } from "@/types";
 
 export const useForceChangePassword = () => {
   const navigate = useNavigate();
@@ -27,11 +28,12 @@ export const useForceChangePassword = () => {
       navigate("/"); // Chuyển hướng về trang chủ
     },
     onError: (err: unknown) => {
-      const error = err as ApiErrorResponse;
-      const message = error.response?.data?.message || "Đổi mật khẩu thất bại";
-      toast.error(message);
-      // Có thể set error vào form field cụ thể nếu backend trả về field lỗi
-      // setError("currentPassword", { message });
+      const { handledFields, rootMessage } = applyServerErrors(err, setError, {
+        knownFields: ["currentPassword", "newPassword", "confirmPassword"],
+      });
+      if (!handledFields || rootMessage) {
+        handleError(err, "Đổi mật khẩu thất bại");
+      }
     },
   });
 

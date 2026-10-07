@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSyncInteractionsPaged } from "@/features/interaction/hooks/useSyncInteractionsPaged";
 
@@ -428,7 +429,7 @@ export const TopFeaturedTracks = () => {
             <AnimatePresence mode="wait">
               <motion.div key="error" {...slideUpVariants}>
                 <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-                  <MusicResult variant="error" onRetry={handleRetry} />
+                  <QueryErrorResult error={error} onRetry={handleRetry} />
                 </div>
               </motion.div>
             </AnimatePresence>

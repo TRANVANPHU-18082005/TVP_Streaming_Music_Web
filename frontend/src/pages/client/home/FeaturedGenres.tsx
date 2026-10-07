@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import SectionAmbient from "../../../components/SectionAmbient";
 import { VinylLoader } from "../../../components/ui/MusicLoadingEffects";
 import MusicResult from "../../../components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { APP_CONFIG } from "@/config/constants";
 import { IGenre, useGenresByUserQuery } from "@/features/genre";
@@ -195,7 +196,7 @@ GenreScroll.displayName = "GenreScroll";
 // FEATURED GENRES — section orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 export function FeaturedGenres() {
-  const { data, isLoading, isError, refetch } = useGenresByUserQuery({
+  const { data, isLoading, isError, error, refetch } = useGenresByUserQuery({
     page: 1,
     limit: APP_CONFIG.HOME_PAGE_LIMIT,
     isTrending: true,
@@ -221,7 +222,7 @@ export function FeaturedGenres() {
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-            <MusicResult variant="error" onRetry={refetch} />
+            <QueryErrorResult error={error} onRetry={refetch} />
           </div>
         </>
       );

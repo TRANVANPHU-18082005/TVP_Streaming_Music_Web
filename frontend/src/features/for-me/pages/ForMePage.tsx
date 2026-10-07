@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type TouchEvent, type WheelEvent } from "react";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Sparkles } from "lucide-react";
@@ -54,7 +55,7 @@ export const ForMePage = () => {
   const replaceQueue = useRef(false);
   const tasteKey = `${mix ?? "default"}|${mood ?? ""}|${genreIds.join(",")}`;
   const seenTaste = useRef(tasteKey);
-  const { data, isLoading, isError, refetch, isFetching } = useForMeFeed(SESSION_LIMIT, {
+  const { data, isLoading, isError, error, refetch } = useForMeFeed(SESSION_LIMIT, {
     mix,
     mood: mood ?? undefined,
     genreIds,
@@ -288,16 +289,7 @@ export const ForMePage = () => {
     return (
       <div className="flex h-dvh w-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
         <ForMeHeader />
-        <Sparkles className="h-10 w-10 text-white/30" />
-        <p className="text-base text-white/80">Không tải được đề xuất.</p>
-        <button
-          type="button"
-          onClick={() => { void refetch(); }}
-          disabled={isFetching}
-          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black disabled:opacity-60"
-        >
-          Thử lại
-        </button>
+        <QueryErrorResult error={error} onRetry={() => { void refetch(); }} />
       </div>
     );
   }

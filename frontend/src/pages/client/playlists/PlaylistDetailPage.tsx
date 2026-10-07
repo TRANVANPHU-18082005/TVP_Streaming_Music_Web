@@ -43,6 +43,7 @@ import { buildPalette } from "@/utils/color";
 import { useScrollY } from "@/hooks/useScrollY";
 import { useTitleStyle } from "@/hooks/useTitleStyle";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
 import { useContextSheet } from "@/app/provider/SheetProvider";
 import { PlaylistActionBarProps } from "./components/PlaylistActionBar";
@@ -260,7 +261,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
-  const { data: playlist, isLoading, isError, refetch } = usePlaylistDetail(id);
+  const { data: playlist, isLoading, isError, error, refetch } = usePlaylistDetail(id);
 
   const {
     data: tracksData,
@@ -493,7 +494,7 @@ const PlaylistDetailPage: FC<PlaylistDetailPageProps> = ({
   if (isError || !playlist) {
     return (
       <div className="section-container space-y-6 pt-4 pb-4">
-        <MusicResult variant="error" onRetry={refetch} />
+        <QueryErrorResult error={error} missing={!playlist} onRetry={refetch} />
       </div>
     );
   }

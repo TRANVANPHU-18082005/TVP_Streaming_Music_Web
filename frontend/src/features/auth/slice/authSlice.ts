@@ -8,6 +8,7 @@ import type { AuthState } from "@/features/auth/types";
 import authApi from "@/features/auth/api/authApi";
 import { UserProfile } from "@/features/user";
 import { LoginInput } from "../schemas/auth.schema";
+import { parseApiError } from "@/utils/apiError";
 
 // =================================================================
 // 1. Initial State
@@ -69,8 +70,10 @@ export const loginUser = createAsyncThunk(
       return res.data; // { accessToken, user }
     } catch (error: unknown) {
       const e: any = error;
+      // Lỗi mạng / timeout không có response -> message tiếng Việt thay vì "Network Error"
       const payload = e?.response?.data ?? {
-        message: e?.message ?? "Login failed",
+        message: parseApiError(e).message,
+        errorCode: parseApiError(e).kind.toUpperCase(),
       };
       return rejectWithValue(payload);
     }

@@ -3,6 +3,8 @@ import { Disc, ArrowLeft, RotateCw, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { parseApiError } from "@/utils/apiError";
+import { handleError } from "@/utils/handleError";
 
 // Logic Imports
 import authApi from "@/features/auth/api/authApi";
@@ -230,10 +232,13 @@ const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({ email }) => {
       }
     } catch (error: unknown) {
       const err = error as ApiErrorResponse;
+      const parsed = parseApiError(error);
       const msg = err.response?.data?.message || "Lỗi xác thực";
 
-      // Xử lý các trường hợp lỗi cụ thể
-      if (
+      // Lỗi tạm thời (mạng, timeout, rate limit, máy chủ): giữ nguyên mã OTP để thử lại
+      if (parsed.retryable) {
+        toast.error(parsed.message);
+      } else if (
         msg.toLowerCase().includes("hết hạn") ||
         msg.toLowerCase().includes("expired")
       ) {
@@ -266,10 +271,7 @@ const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({ email }) => {
       toast.success("Đã gửi mã mới vào email!");
       resetTimer(); // Chỉ reset đồng hồ khi gửi thành công
     } catch (error: unknown) {
-      const err = error as ApiErrorResponse;
-      toast.error(
-        err.response?.data?.message || "Gửi lại thất bại. Thử lại sau.",
-      );
+      handleError(error, "Gửi lại thất bại. Thử lại sau.");
     } finally {
       setResendLoading(false);
     }

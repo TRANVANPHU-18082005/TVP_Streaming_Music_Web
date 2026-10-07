@@ -44,12 +44,15 @@ import {
 } from "@/features/verification/routes";
 import { GenreClientRoutes } from "@/features/genre/routes";
 import { trackRoutes } from "@/features/track/routes";
+import RouteErrorPage from "@/pages/error/RouteErrorPage";
 
 export const router = createBrowserRouter([
   {
     // 🔥 QUAN TRỌNG: RootLayout bao trùm toàn bộ ứng dụng
     // Nó không có path (pathless route), nhiệm vụ chỉ là chạy logic Init Auth
     element: <RootLayout />,
+    // Lỗi ở route gốc / nhóm auth: hiện trang lỗi toàn màn hình thay vì trắng trang
+    errorElement: <RouteErrorPage fullScreen />,
     children: [
       // ===================================================
       // 1. NHÓM AUTH (Login/Register)
@@ -67,6 +70,10 @@ export const router = createBrowserRouter([
         path: CLIENT_PATHS.CLIENT,
         element: <ClientLayout />,
         children: [
+          {
+            // Pathless: lỗi của page con hiện trong layout, Header/Player vẫn còn
+            errorElement: <RouteErrorPage />,
+            children: [
           { index: true, element: <HomePage /> },
           { path: CLIENT_PATHS.SEARCH, element: <SearchPage /> },
           { path: CLIENT_PATHS.CHART_TOP, element: <TopChartPage /> },
@@ -109,6 +116,8 @@ export const router = createBrowserRouter([
               ...protectedAuthRoutes,
             ],
           },
+            ],
+          },
         ],
       },
 
@@ -122,6 +131,9 @@ export const router = createBrowserRouter([
           {
             element: <AdminLayout />,
             children: [
+              {
+                errorElement: <RouteErrorPage />,
+                children: [
               { index: true, element: <DashboardPage /> },
               {
                 path: ADMIN_PATHS.USERS,
@@ -166,6 +178,8 @@ export const router = createBrowserRouter([
               ...shortsAdminRoutes,
               ...mashupAdminRoutes,
               ...verifyArtistAdminRoutes,
+                ],
+              },
             ],
           },
         ],

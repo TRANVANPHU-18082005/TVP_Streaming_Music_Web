@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { useMashupFeed } from "../hooks/useMashups";
 import { MashupFeedItem } from "../components/MashupFeedItem";
 import { Loader2, Music2, ChevronUp, ChevronDown, Layers, Repeat } from "lucide-react";
@@ -31,6 +32,7 @@ export const MashupFeedPage = () => {
     data,
     isLoading,
     isError,
+    error,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -132,13 +134,7 @@ export const MashupFeedPage = () => {
     return (
       <div className="w-full h-screen bg-black flex flex-col items-center justify-center gap-4">
         <ForMeHeader />
-        <p className="text-white/70 font-semibold">Không tải được Mashup</p>
-        <button
-          onClick={() => void refetch()}
-          className="px-4 py-2 bg-white/10 rounded-full text-sm hover:bg-white/20 transition-colors"
-        >
-          Thử lại
-        </button>
+        <QueryErrorResult error={error} onRetry={() => void refetch()} />
       </div>
     );
   }

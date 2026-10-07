@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import { useSocket } from "@/hooks/useSocket";
 import {
   Check,
   ListMusic,
@@ -152,6 +153,7 @@ export const RoomShell = ({
   onShareKaraokeRecording,
 }: Props) => {
   const isDesktop = useIsDesktop();
+  const { reconnect: reconnectSocket } = useSocket();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -619,6 +621,13 @@ export const RoomShell = ({
         <div className="relative z-20 flex items-center justify-center gap-2 bg-amber-500/15 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
           <WifiOff className="size-3.5" />
           Mất kết nối. Đang vào lại phòng...
+          <button
+            type="button"
+            onClick={reconnectSocket}
+            className="rounded-full border border-amber-500/40 px-2 py-0.5 font-medium hover:bg-amber-500/10"
+          >
+            Thử kết nối lại
+          </button>
         </div>
       )}
 

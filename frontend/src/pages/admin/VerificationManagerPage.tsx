@@ -35,6 +35,7 @@ import { useVerification } from "@/features/verification/hooks/useVerification";
 import PageHeader from "@/components/ui/PageHeader"; // Giả sử đã có
 import Pagination from "@/utils/pagination"; // Giả sử đã có
 import MusicResult from "@/components/ui/Result"; // Giả sử đã có
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import TableSkeleton from "@/components/ui/TableSkeleton"; // Giả sử đã có
@@ -44,6 +45,9 @@ export const VerificationManager = () => {
   const {
     requests,
     isLoading,
+    isError,
+    error,
+    refetch,
     reviewRequest,
     filterParams,
     setFilterParams,
@@ -150,6 +154,12 @@ export const VerificationManager = () => {
           <TableBody>
             {isLoading ? (
               <TableSkeleton rows={5} cols={5} />
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={5} className="h-64 text-center">
+                  <QueryErrorResult error={error} onRetry={() => void refetch()} size="sm" />
+                </TableCell>
+              </TableRow>
             ) : requests.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="h-64 text-center">

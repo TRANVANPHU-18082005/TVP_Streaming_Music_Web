@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { useSearchPage } from "@/features/search/hooks/useSearchPage";
 import {
   SEARCH_TABS,
@@ -70,6 +71,8 @@ export default function SearchPage() {
     searchResult,
     isLoading,
     isError,
+    searchError,
+    refetchSearch,
     isNoResults,
     loadingId,
     currentTrackId,
@@ -271,26 +274,13 @@ export default function SearchPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={SPRING_MEDIUM}
-              className="flex flex-col items-center justify-center py-28 gap-5 text-center"
+              className="py-16"
             >
-              <div className="size-20 rounded-full dark:bg-destructive/10 bg-red-50 border dark:border-destructive/20 border-red-200 flex items-center justify-center">
-                <X className="size-7 text-destructive" />
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-lg font-black dark:text-white/85 text-gray-800">
-                  Lỗi kết nối
-                </p>
-                <p className="text-sm dark:text-white/35 text-gray-500">
-                  Không thể lấy kết quả tìm kiếm
-                </p>
-              </div>
-              <Button
-                onClick={() => window.location.reload()}
-                variant="outline"
-                className="rounded-full font-bold"
-              >
-                Thử lại
-              </Button>
+              <QueryErrorResult
+                error={searchError}
+                onRetry={() => void refetchSearch()}
+                size="lg"
+              />
             </motion.div>
           )}
 

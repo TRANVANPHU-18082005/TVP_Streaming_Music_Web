@@ -33,6 +33,7 @@ import { useTitleStyle } from "@/hooks/useTitleStyle";
 import type { QueueSourceType } from "@/features/player/slice/playerSlice";
 
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { APP_CONFIG, SP_GENTLE, SP_HERO, SP_SNAPPY } from "@/config/constants";
 import { useContextSheet } from "@/app/provider/SheetProvider";
@@ -252,6 +253,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
     data: genre,
     isLoading,
     isError,
+    error,
     refetch,
   } = useGenreDetailQuery(slug);
 
@@ -404,7 +406,7 @@ export const GenreDetailPage: FC<GenreDetailPageProps> = ({
   if (isError || !genre) {
     return (
       <div className="section-container space-y-6 pt-4 pb-4">
-        <MusicResult variant="error" onRetry={refetch} />
+        <QueryErrorResult error={error} missing={!genre} onRetry={refetch} />
       </div>
     );
   }

@@ -1,4 +1,5 @@
 import React from "react";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { useMyMashups } from "@/features/mashup/hooks/useMashups";
 import { MashupCard } from "@/features/mashup/components/MashupCard";
 import CardSkeleton from "@/components/ui/CardSkeleton";
@@ -8,7 +9,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 
 const UserMashupsTab = () => {
-  const { data: mashupRes, isLoading, isError } = useMyMashups({ limit: 50 });
+  const { data: mashupRes, isLoading, isError, error, refetch } = useMyMashups({ limit: 50 });
   const mashups = mashupRes?.data?.mashups || [];
 
   if (isLoading) {
@@ -22,11 +23,7 @@ const UserMashupsTab = () => {
   }
 
   if (isError) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-muted-foreground mb-4">Không thể tải danh sách Mashup.</p>
-      </div>
-    );
+    return <QueryErrorResult error={error} onRetry={() => void refetch()} size="sm" />;
   }
 
   if (mashups.length === 0) {

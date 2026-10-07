@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { useAppDispatch } from "@/store/hooks";
 import { loginUser } from "../slice/authSlice";
 import { loginSchema, type LoginInput } from "../schemas/auth.schema";
+import { applyServerErrors } from "@/utils/applyServerErrors";
+import { parseApiError } from "@/utils/apiError";
 
 export const useLogin = () => {
   const navigate = useNavigate();
@@ -66,12 +68,13 @@ const handleAuthError = (
   setRequiredProviders: (providers: string[]) => void
 ) => {
   const server = error?.response?.data ?? error;
-  const errorCode = server?.errorCode ?? server?.data?.errorCode;
-  const message = server?.message ?? error?.message ?? "Đăng nhập thất bại";
+  const appError = parseApiError(error);
+  const errorCode = appError.errorCode ?? server?.errorCode ?? server?.data?.errorCode;
+  const message = appError.message || server?.message || "Đăng nhập thất bại";
 
   switch (errorCode) {
     case "LOGIN_METHOD_REQUIRED": {
-      const providers = server?.data?.providers || [];
+      const providers = server?.data?.providers || appError.data && (appError.data as { providers?: string[] }).providers || [];
       if (providers.length > 0) {
         setRequiredProviders(providers);
         toast.info("Yêu cầu phương thức xác thực", {
@@ -94,13 +97,20 @@ const handleAuthError = (
     case "UNVERIFIED_ACCOUNT":
       toast.warning("Tài khoản chưa xác thực");
       navigate("/verify-otp", {
-        state: { email: error.data?.email, isResend: true },
+        state: { email: server?.data?.email ?? error.data?.email, isResend: true },
       });
       break;
-    default:
-      toast.error("Lỗi", { description: message });
-      form.setError("email", { type: "manual" });
-      form.setError("password", { type: "manual" });
+    default: {
+      const { handledFields, rootMessage } = applyServerErrors(error, form.setError, {
+        knownFields: ["email", "password"],
+      });
+      toast.error(rootMessage ?? message);
+      // Chỉ đánh dấu đỏ ô email/mật khẩu khi lỗi thuộc về thông tin đăng nhập.
+      if (!handledFields && !appError.retryable && appError.kind !== "canceled") {
+        form.setError("email", { type: "manual" });
+        form.setError("password", { type: "manual" });
+      }
+    }
   }
 };
 

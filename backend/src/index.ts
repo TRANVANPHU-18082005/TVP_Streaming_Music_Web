@@ -4,7 +4,8 @@ import { createApp } from "./app";
 import { connectRedis } from "./config/redis";
 import { connectWithRetry } from "./utils/db.utils";
 import crypto from "node:crypto";
-import { errorHandler } from "./middlewares/error.middleware";
+import { apiNotFound, errorHandler } from "./middlewares/error.middleware";
+import { serviceStartingGuard } from "./middlewares/serviceStarting";
 import { ROUTES_MOUNTED_KEY } from "./health/readiness";
 import { terminateAfterStartupFailure } from "./health/shutdown";
 // import { fetchLyrics } from "./services/lyrics/lrclib.service";
@@ -15,6 +16,8 @@ if (typeof global.crypto === "undefined") {
 const startServer = () => {
   const PORT = config.port || 8000;
   const app = createApp();
+  // /api/health và /api/ready đã được đăng ký trong app.ts trước guard này.
+  app.use("/api", serviceStartingGuard);
   const server = http.createServer(app);
 
   const exitForRestart = (err: unknown) => {
@@ -46,6 +49,7 @@ const startServer = () => {
       const routesModule = await import("./routes");
       const routes = routesModule.default || routesModule;
       app.use("/api", routes);
+      app.use("/api", apiNotFound);
       app.use(errorHandler);
       app.set(ROUTES_MOUNTED_KEY, true);
       console.log("🔌 API routes mounted");

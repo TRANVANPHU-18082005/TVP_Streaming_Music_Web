@@ -3,6 +3,7 @@ import React, { useMemo, memo, useCallback, lazy, Suspense } from "react";
 import { History } from "lucide-react";
 
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 
 import { APP_CONFIG } from "@/config/constants";
 import { cn } from "@/lib/utils";
@@ -141,7 +142,7 @@ const TrackHistoryPage: React.FC = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={handleRetry} />
+          <QueryErrorResult error={tracksError} onRetry={handleRetry} />
         </div>
       </>
     );

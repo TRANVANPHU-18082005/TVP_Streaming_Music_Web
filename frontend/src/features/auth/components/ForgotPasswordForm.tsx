@@ -7,6 +7,8 @@ import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { handleError } from "@/utils/handleError";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 import authApi from "@/features/auth/api/authApi";
 import {
   forgotPasswordSchema,
@@ -118,6 +120,7 @@ const ForgotPasswordForm = () => {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordInput>({
     resolver: zodResolver(forgotPasswordSchema) as any,
@@ -134,11 +137,13 @@ const ForgotPasswordForm = () => {
       setSentEmail(data.email);
       setIsSent(true);
       toast.success("Gửi yêu cầu đặt lại mật khẩu thành công!");
-    } catch (error: any) {
-      const msg = error.response?.data?.message || "Request failed.";
-
-      // Chỉ hiển thị lỗi hệ thống hoặc Rate limit
-      toast.error(msg);
+    } catch (error: unknown) {
+      const { handledFields, rootMessage } = applyServerErrors(error, setError, {
+        knownFields: ["email"],
+      });
+      if (!handledFields || rootMessage) {
+        handleError(error, "Gửi yêu cầu thất bại. Vui lòng thử lại.");
+      }
     }
   };
   const handleBack = useSmartBack();

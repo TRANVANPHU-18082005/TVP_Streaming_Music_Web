@@ -11,6 +11,7 @@ import { useFeatureAlbums } from "@/features/album/hooks/useAlbumsQuery";
 import { cn } from "@/lib/utils";
 
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 
 import SectionAmbient from "@/components/SectionAmbient";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
@@ -205,7 +206,7 @@ AlbumScroll.displayName = "AlbumScroll";
 // FEATURED ALBUMS — main section orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 export function FeaturedAlbums() {
-  const { data: albums, isLoading, isError, refetch } = useFeatureAlbums();
+  const { data: albums, isLoading, isError, error, refetch } = useFeatureAlbums();
 
   const albumIds = useMemo(() => albums?.map((a) => a._id) ?? [], [albums]);
 
@@ -227,7 +228,7 @@ export function FeaturedAlbums() {
       return (
         <>
           <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-            <MusicResult variant="error" onRetry={refetch} />
+            <QueryErrorResult error={error} onRetry={refetch} />
           </div>
         </>
       );

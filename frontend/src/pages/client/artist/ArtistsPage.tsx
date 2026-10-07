@@ -3,6 +3,7 @@ import { Mic2 } from "lucide-react";
 
 import { PaginationStrip } from "@/utils/pagination";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import PublicArtistCard from "@/features/artist/components/PublicArtistCard";
 import { ArtistFilters } from "@/features/artist/components/ArtistFilters";
@@ -89,7 +90,7 @@ const ArtistPage: React.FC = () => {
     clearFilters,
   } = useArtistParams();
 
-  const { data, isLoading, isError, refetch } =
+  const { data, isLoading, isError, error, refetch } =
     useArtistsByUserQuery(filterParams);
 
   // Granular derived slices — avoids full object diff
@@ -126,7 +127,7 @@ const ArtistPage: React.FC = () => {
   if (isError && !hasResults) {
     return (
       <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-        <MusicResult variant="error" onRetry={refetch} />
+        <QueryErrorResult error={error} onRetry={refetch} />
       </div>
     );
   }

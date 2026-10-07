@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { AlertCircle, Clock, RefreshCcw } from "lucide-react";
+import { Clock, RefreshCcw } from "lucide-react";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import PageHeader from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,24 +22,19 @@ import { cn } from "@/lib/utils";
 
 const DashboardPage = () => {
   const [range, setRange] = useState<DashboardRange>("7d");
-  const { data, isLoading, isError, refetch, isRefetching, isStale } =
+  const { data, isLoading, isError, error, refetch, isRefetching, isStale } =
     useDashboardAnalytics(range);
 
   if (isLoading) return <DashboardSkeleton />;
 
   if (isError || !data) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-4 text-center">
-        <AlertCircle className="size-10 text-destructive" />
-        <div className="space-y-1">
-          <h2 className="text-xl font-bold">Không tải được tổng quan</h2>
-          <p className="text-sm text-muted-foreground">
-            Số liệu dashboard chưa về. Thử tải lại.
-          </p>
-        </div>
-        <Button type="button" onClick={() => refetch()}>
-          Tải lại
-        </Button>
+      <div className="flex h-[60vh] items-center justify-center">
+        <QueryErrorResult
+          error={error}
+          missing={!data}
+          onRetry={() => void refetch()}
+        />
       </div>
     );
   }

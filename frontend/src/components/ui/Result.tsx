@@ -19,6 +19,10 @@ import {
   AlertCircle,
   WifiOff,
   SearchX,
+  FileQuestion,
+  ServerCrash,
+  Hourglass,
+  Timer,
   Lock,
   RefreshCw,
   ArrowLeft,
@@ -63,6 +67,10 @@ type ResultVariant =
   | "empty-genres" // Chưa có radio
   | "error" // Lỗi chung
   | "error-network" // Mất kết nối
+  | "error-server" // Máy chủ gặp sự cố (5xx)
+  | "not-found" // Không tìm thấy nội dung (404)
+  | "rate-limited" // Thao tác quá nhanh (429)
+  | "service-starting" // Hệ thống đang khởi động (503)
   | "no-permission" // Không có quyền
   | "loading" // Đang tải (skeleton)
   | "custom"; // Tùy chỉnh hoàn toàn
@@ -225,6 +233,38 @@ const PRESETS: Record<
     icon: WifiOff,
     title: "Mất kết nối mạng",
     description: "Kiểm tra kết nối internet và thử lại.",
+    wave: "--warning",
+    borderStyle: "solid",
+    role: "alert",
+  },
+  "error-server": {
+    icon: ServerCrash,
+    title: "Máy chủ đang gặp sự cố",
+    description: "Chúng tôi đang xử lý. Vui lòng thử lại sau ít phút.",
+    wave: "--error",
+    borderStyle: "solid",
+    role: "alert",
+  },
+  "not-found": {
+    icon: FileQuestion,
+    title: "Không tìm thấy nội dung",
+    description: "Nội dung này không tồn tại hoặc đã bị xóa.",
+    wave: "--warning",
+    borderStyle: "solid",
+    role: "alert",
+  },
+  "rate-limited": {
+    icon: Timer,
+    title: "Bạn thao tác quá nhanh",
+    description: "Vui lòng đợi một chút rồi thử lại.",
+    wave: "--warning",
+    borderStyle: "solid",
+    role: "alert",
+  },
+  "service-starting": {
+    icon: Hourglass,
+    title: "Hệ thống đang khởi động",
+    description: "Vui lòng thử lại sau ít giây.",
     wave: "--warning",
     borderStyle: "solid",
     role: "alert",
@@ -480,6 +520,10 @@ export const MusicResult = memo(
     const isErrorLike =
       variant === "error" ||
       variant === "error-network" ||
+      variant === "error-server" ||
+      variant === "not-found" ||
+      variant === "rate-limited" ||
+      variant === "service-starting" ||
       variant === "no-permission";
 
     // ── Layout classes ──────────────────────────────────────────────────────
@@ -591,7 +635,13 @@ export const ErrorState = memo(
     props: Omit<MusicResultProps, "variant"> & {
       variant?: Extract<
         ResultVariant,
-        "error" | "error-network" | "no-permission"
+        | "error"
+        | "error-network"
+        | "error-server"
+        | "not-found"
+        | "rate-limited"
+        | "service-starting"
+        | "no-permission"
       >;
     },
   ) => <MusicResult {...props} variant={props.variant ?? "error"} />,

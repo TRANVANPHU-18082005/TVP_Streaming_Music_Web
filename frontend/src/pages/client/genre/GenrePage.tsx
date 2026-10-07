@@ -2,6 +2,7 @@ import React, { memo, useMemo } from "react";
 
 import { GenreCard } from "@/features/genre/components/GenreCard";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { PaginationStrip } from "@/utils/pagination";
 import CardSkeleton from "@/components/ui/CardSkeleton";
 import { GenreFilters } from "@/features/genre/components/GenreFilters";
@@ -76,7 +77,7 @@ const GenrePage: React.FC = () => {
     handlePageChange,
     clearFilters,
   } = useGenreParams();
-  const { data, isLoading, isError, refetch } =
+  const { data, isLoading, isError, error, refetch } =
     useGenresByUserQuery(filterParams);
   // Granular derived slices — avoids full object diff
   const genres = useMemo(() => data?.genres ?? [], [data?.genres]);
@@ -114,7 +115,7 @@ const GenrePage: React.FC = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       </>
     );

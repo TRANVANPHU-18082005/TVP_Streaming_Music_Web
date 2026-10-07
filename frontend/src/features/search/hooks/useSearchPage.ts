@@ -69,7 +69,7 @@ export function useSearchPage() {
   }, [localInput, query, setSearchParams]);
 
   // ── Luồng gọi dữ liệu chính thống ────────────────────────────────────────────
-  const { data, isLoading, isError } = useSearch(query);
+  const { data, isLoading, isError, error, refetch } = useSearch(query);
 
   const trackIds = useMemo(
     () => data?.tracks.map((t) => t._id) ?? [],
@@ -329,6 +329,8 @@ export function useSearchPage() {
     searchResult,
     isLoading,
     isError,
+    searchError: error,
+    refetchSearch: refetch,
     isNoResults,
     loadingId,
     currentTrackId,

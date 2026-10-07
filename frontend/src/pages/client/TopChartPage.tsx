@@ -44,6 +44,8 @@ import SectionAmbient from "@/components/SectionAmbient";
 import TopChartPageSkeleton from "@/features/analytics/components/TopChartPageSkeleton";
 
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useNavigate } from "react-router-dom";
 import { WaveformLoader } from "@/components/ui/MusicLoadingEffects";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
@@ -690,6 +692,7 @@ const HeroSection = memo(
                 Adding 0.2s gap gives the eye time to land before lines draw.
                 ChartLine should accept this prop and pass it to its draw animation.
               */}
+                <ErrorBoundary name="biểu đồ" size="sm">
                 <Suspense
                   fallback={
                     <div className="h-44">
@@ -704,6 +707,7 @@ const HeroSection = memo(
                     isLoading={isLoading}
                   />
                 </Suspense>
+                </ErrorBoundary>
               </div>
             </div>
           </div>
@@ -995,7 +999,7 @@ export const TopChartPage = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       </>
     );

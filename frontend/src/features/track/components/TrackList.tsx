@@ -82,6 +82,7 @@ export interface TrackListProps {
   isLoading?: boolean;
   error?: Error | null;
   isFetchingNextPage?: boolean;
+  isFetchNextPageError?: boolean;
   hasNextPage?: boolean;
   onFetchNextPage?: () => void;
   onRetry?: () => void;
@@ -541,6 +542,7 @@ export const TrackList = memo(
     isLoading = false,
     error = null,
     isFetchingNextPage = false,
+    isFetchNextPageError = false,
     hasNextPage = false,
     onFetchNextPage,
     onRetry,
@@ -993,7 +995,18 @@ export const TrackList = memo(
               <div className="flex items-center justify-center min-h-[44px]">
                 {isFetchingNextPage && <FetchingIndicator />}
 
-                {!hasNextPage && !isFetchingNextPage && tracks.length > 0 && (
+                {isFetchNextPageError && !isFetchingNextPage && (
+                  <button
+                    type="button"
+                    onClick={() => onFetchNextPage?.()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted/80 px-3 py-1.5 text-xs font-medium text-foreground/70 hover:bg-muted"
+                  >
+                    <RotateCcw className="size-3" aria-hidden="true" />
+                    Tải thêm thất bại, thử lại
+                  </button>
+                )}
+
+                {!hasNextPage && !isFetchingNextPage && !isFetchNextPageError && tracks.length > 0 && (
                   <p className="text-[11px] text-muted-foreground/30 tabular-nums font-medium">
                     {tracks.length}
                     {totalItems > 0 && tracks.length < totalItems

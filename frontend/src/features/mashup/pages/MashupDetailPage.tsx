@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { useMashupDetail } from "../hooks/useMashups";
 import {
-  Play, Pause, Music2, Share2, Heart, ArrowLeft, Disc3,
+  Play, Pause, Share2, Heart, ArrowLeft, Disc3,
   Layers, Clock, BarChart2, ChevronRight, SkipBack, SkipForward
 } from "lucide-react";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
@@ -113,7 +114,7 @@ export const MashupDetailPage = () => {
     if (player.isPlaying) dispatch(setIsPlaying(false));
   }, [dispatch, player.isPlaying]);
 
-  const { data, isLoading, isError } = useMashupDetail(id || "");
+  const { data, isLoading, isError, error, refetch } = useMashupDetail(id || "");
   const mashup = data?.data;
   const [shouldPlay, setShouldPlay] = useState(false);
   const [crossfaderPos, setCrossfaderPos] = useState(50);
@@ -189,15 +190,17 @@ export const MashupDetailPage = () => {
 
   if (isError || !mashup) {
     return (
-      <div className="w-full h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <Music2 className="w-16 h-16 text-muted-foreground/30 mb-4" />
-        <p className="text-muted-foreground font-display text-lg">Không tìm thấy Mashup.</p>
-        <button
-          onClick={() => navigate("/mashups/feed")}
-          className="mt-4 px-8 py-3 bg-primary text-primary-foreground font-bold rounded-full hover:scale-105 transition-all shadow-xl shadow-primary/20"
-        >
-          Quay lại Feed
-        </button>
+      <div className="w-full h-screen bg-background flex flex-col items-center justify-center gap-4 px-6">
+        <QueryErrorResult
+          error={error}
+          missing={!mashup}
+          onRetry={() => void refetch()}
+          onBack={() => navigate("/mashups/feed")}
+          notFound={{
+            title: "Không tìm thấy Mashup.",
+            description: "Mashup này không tồn tại hoặc đã bị xóa.",
+          }}
+        />
       </div>
     );
   }

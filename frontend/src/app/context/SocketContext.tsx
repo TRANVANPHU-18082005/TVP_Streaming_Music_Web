@@ -3,9 +3,19 @@ import { Socket } from "socket.io-client";
 import { ClientToServerEvents, ServerToClientEvents } from "@/types/socket";
 
 // Định nghĩa kiểu dữ liệu cho Context
+export type SocketStatus =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "failed";
+
 interface SocketContextType {
   socket: Socket<ServerToClientEvents, ClientToServerEvents> | null;
   isConnected: boolean;
+  /** Trạng thái chi tiết để UI hiển thị banner mất kết nối realtime */
+  status: SocketStatus;
+  /** Thử kết nối lại thủ công (sau khi `status === "failed"`) */
+  reconnect: () => void;
 }
 
 // Tạo Context

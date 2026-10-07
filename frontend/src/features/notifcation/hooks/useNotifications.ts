@@ -12,6 +12,8 @@ export const useNotifications = () => {
     queryFn: () => notifyApi.getNotifications(),
   });
   const markAsReadMutation = useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: notifyApi.markAsRead,
     onSuccess: () => {
       // Cập nhật lại cache cục bộ sau khi đánh dấu đã đọc

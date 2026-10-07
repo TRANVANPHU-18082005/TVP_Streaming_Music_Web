@@ -66,6 +66,7 @@ import FullPlayerSkeleton from "./FullPlayerSkeleton";
 import { useSyncInteractions } from "@/features/interaction/hooks/useSyncInteractions";
 import { useImageColor } from "@/hooks/useImageColor";
 import { WaveformBars } from "@/components/MusicVisualizer";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Lazy-loaded views to keep initial bundle small and improve responsiveness
 const MoodFocusViewLazy = lazy(() =>
@@ -1173,6 +1174,7 @@ const SwipeableViews = memo(
             transition={SP.swipe}
             className="absolute inset-0"
           >
+            <ErrorBoundary name="lời bài hát" size="sm" resetKeys={[track._id]}>
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-foreground">
@@ -1194,6 +1196,7 @@ const SwipeableViews = memo(
                 focusRadius={focusMode ? 1 : 0}
               />
             </Suspense>
+            </ErrorBoundary>
           </motion.div>
         )}
 

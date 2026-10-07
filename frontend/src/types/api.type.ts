@@ -14,7 +14,9 @@ export interface ApiErrorResponse {
       message: string;
       errorCode?: string; // VD: 'UNVERIFIED_ACCOUNT'
       stack?: string; // Chỉ có trong môi trường dev
+      data?: unknown; // Custom data (VD: providers khi LOGIN_METHOD_REQUIRED)
     };
+    status?: number;
   };
 }
 

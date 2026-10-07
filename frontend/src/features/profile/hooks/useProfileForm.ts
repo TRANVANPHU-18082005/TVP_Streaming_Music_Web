@@ -2,6 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAppSelector } from "@/store/hooks"; // Để lấy default values từ Redux Auth
 import { profileSchema } from "../schemas/profile.schema";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 
 export const useProfileForm = (onSubmit: (data: FormData) => Promise<void>) => {
   const { user } = useAppSelector((state) => state.auth);
@@ -26,7 +27,15 @@ export const useProfileForm = (onSubmit: (data: FormData) => Promise<void>) => {
       formData.append("avatar", avatar);
     }
 
-    await onSubmit(formData);
+    try {
+      await onSubmit(formData);
+    } catch (error) {
+      // Mutation đã toast lỗi chung; "name" của form map sang field backend nếu khác tên.
+      applyServerErrors(error, form.setError, {
+        fieldMap: { fullName: "name" },
+        knownFields: ["name", "bio", "avatar"],
+      });
+    }
   });
 
   return { form, handleSubmit };

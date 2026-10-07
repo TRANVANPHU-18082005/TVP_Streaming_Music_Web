@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { Plus, TvMinimalPlay } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useMyShorts } from "@/features/shorts/hooks/useShorts";
@@ -11,7 +12,7 @@ const statusLabel = (status?: string, published?: boolean) => {
 };
 
 const UserShortsTab = () => {
-  const { data, isLoading, isError } = useMyShorts();
+  const { data, isLoading, isError, error, refetch } = useMyShorts();
   const shorts = data?.data?.data ?? [];
 
   if (isLoading) {
@@ -19,7 +20,7 @@ const UserShortsTab = () => {
   }
 
   if (isError) {
-    return <p className="text-sm text-muted-foreground">Không tải được short của bạn.</p>;
+    return <QueryErrorResult error={error} onRetry={() => void refetch()} size="sm" />;
   }
 
   if (shorts.length === 0) {

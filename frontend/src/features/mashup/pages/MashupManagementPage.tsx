@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import TableSkeleton from "@/components/ui/TableSkeleton";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 type ViewMode = "grid" | "table";
@@ -230,7 +231,7 @@ export const MashupManagementPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const { data, isLoading } = useMashupsAdmin({
+  const { data, isLoading, isError, error, refetch } = useMashupsAdmin({
     search: search || undefined,
     status: filterStatus === "all" ? undefined : filterStatus,
     type: filterType === "all" ? undefined : filterType,
@@ -446,6 +447,8 @@ export const MashupManagementPage = () => {
       {/* ── CONTENT ── */}
       {isLoading ? (
         <TableSkeleton cols={6} rows={8} />
+      ) : isError ? (
+        <QueryErrorResult error={error} onRetry={() => void refetch()} />
       ) : rawList.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground bg-muted/50 border border-border/50 rounded-2xl shadow-inner mt-4">
           <div className="w-16 h-16 rounded-2xl bg-muted/50 border border-border/50 flex items-center justify-center shadow-inner mb-4">

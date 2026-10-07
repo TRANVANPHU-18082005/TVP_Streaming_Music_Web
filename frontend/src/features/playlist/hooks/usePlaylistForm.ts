@@ -1,4 +1,5 @@
 import { useMemo, useEffect } from "react";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -86,44 +87,13 @@ export const usePlaylistForm = ({
 
     try {
       await onSubmit(payload);
-    } catch (err: any) {
-      // Map server-side validation errors to form fields where possible.
-      const resp = err?.response?.data || err?.response || null;
+    } catch (err) {
+      // Mutation đã toast lỗi chung; ở đây gán lỗi theo field để người dùng sửa ngay trên form.
+      applyServerErrors(err, form.setError, {
+        knownFields: Object.keys(form.getValues()),
+      });
 
-      let handled = false;
-
-      const maybeFieldMap = resp?.data ?? resp?.errors ?? resp;
-      if (maybeFieldMap && typeof maybeFieldMap === "object") {
-        if (Array.isArray(maybeFieldMap)) {
-          for (const item of maybeFieldMap) {
-            if (!item) continue;
-            if (typeof item === "string") {
-              toast.error(item);
-            } else if (item.field && (item.message || item.msg)) {
-              form.setError(item.field, {
-                type: "server",
-                message: item.message || item.msg,
-              });
-              handled = true;
-            }
-          }
-        } else {
-          Object.entries(maybeFieldMap).forEach(([k, v]) => {
-            if (!k) return;
-            const msg = Array.isArray(v) ? v.join(" ") : String(v || "");
-            if (k === "message" || k === "errorCode") return;
-            form.setError(k as any, { type: "server", message: msg });
-            handled = true;
-          });
-        }
-      }
-
-      if (!handled) {
-        const message = resp?.message || err?.message || "Lỗi lưu playlist";
-        toast.error(message);
-      }
-
-      // Keep modal open for user to fix errors — swallow the error here.
+      // Giữ modal mở để người dùng sửa lỗi — nuốt lỗi tại đây.
       return;
     }
   });

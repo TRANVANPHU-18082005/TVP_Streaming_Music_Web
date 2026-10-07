@@ -5,6 +5,7 @@ import { KaraokePlaybackModal } from "../KaraokePlaybackModal";
 import { useAdminRecordings } from "../../hooks/useKaraokeQueries";
 import { useAdminReviewRecording } from "../../hooks/useKaraokeMutations";
 import { IKaraokeRecording } from "../../types";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ const KaraokeRecordingsTab = () => {
   const [searchInput, setSearchInput] = useState("");
   const [playingRec, setPlayingRec] = useState<IKaraokeRecording | null>(null);
 
-  const { data, isLoading } = useAdminRecordings({
+  const { data, isLoading, isError, error, refetch } = useAdminRecordings({
     page,
     limit: 10,
     status: status !== "all" ? (status as IKaraokeRecording["status"]) : undefined,
@@ -127,6 +128,12 @@ const KaraokeRecordingsTab = () => {
               <TableRow>
                 <TableCell colSpan={6} className="text-center h-32 text-muted-foreground">
                   Đang tải dữ liệu...
+                </TableCell>
+              </TableRow>
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={6} className="p-6">
+                  <QueryErrorResult error={error} onRetry={() => void refetch()} size="sm" />
                 </TableCell>
               </TableRow>
             ) : !data?.data?.data?.length ? (

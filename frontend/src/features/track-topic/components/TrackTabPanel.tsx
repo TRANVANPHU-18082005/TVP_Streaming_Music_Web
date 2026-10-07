@@ -4,6 +4,7 @@ import { ITrack, TrackList } from "@/features/track";
 import { QueueSourceType } from "@/features/player/slice/playerSlice";
 import { APP_CONFIG } from "@/config/constants";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { buildTrackListProps } from "../utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,7 +81,7 @@ export const TrackTabPanel = memo(
     if (error && tracks.length === 0) {
       return (
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       );
     }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { usePlayerPadding } from "@/hooks/usePlayerPadding";
 import { cn } from "@/lib/utils";
+import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 import Sidebar from "@/layouts/admin/components/Sidebar";
 import Header from "@/layouts/admin/components/Header";
 
@@ -48,6 +49,8 @@ const AdminLayout = () => {
           </div>
         </main>
       </div>
+
+      <NetworkStatusBanner />
 
       {/* Mobile Overlay (Nằm ngoài cùng để đè lên tất cả khi mở menu mobile) */}
       {isSidebarOpen && (

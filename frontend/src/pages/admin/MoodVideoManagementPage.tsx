@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import PageHeader from "@/components/ui/PageHeader";
 import ConfirmationModal from "@/components/ui/ConfirmationModal";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import Pagination from "@/utils/pagination";
 import { useMoodVideoMutations } from "@/features/mood-video/hooks/useMoodVideoMutations";
 import { useMoodVideosQuery } from "@/features/mood-video/hooks/useMoodVideoQuery";
@@ -31,7 +32,7 @@ const MoodVideoManagementPage = () => {
     clearFilters,
   } = useMoodVideoParams(APP_CONFIG.PAGINATION_LIMIT || 12);
 
-  const { data, isLoading, refetch, isError } =
+  const { data, isLoading, refetch, isError, error } =
     useMoodVideosQuery(filterParams);
   const {
     createMoodVideo: createVideo,
@@ -110,7 +111,7 @@ const MoodVideoManagementPage = () => {
     return (
       <>
         <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-          <MusicResult variant="error" onRetry={refetch} />
+          <QueryErrorResult error={error} onRetry={refetch} />
         </div>
       </>
     );

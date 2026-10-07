@@ -8,7 +8,7 @@ import { toast } from "sonner";
 // API & Schema
 import authApi from "@/features/auth/api/authApi";
 import { registerSchema, type RegisterInput } from "../schemas/auth.schema";
-import { ApiErrorResponse } from "@/types";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 import { PASSWORD_REQUIREMENTS } from "@/config/constants";
 
 // Constants cho Password Strength
@@ -87,21 +87,17 @@ export const useRegister = () => {
 
       navigate("/verify-otp", { state: { email: data.email } });
     } catch (err: unknown) {
-      const error = err as ApiErrorResponse;
-      const dataError = error.response?.data;
-      const msg = dataError?.message || "Đăng ký thất bại";
-
-      if (dataError?.errors && Array.isArray(dataError.errors)) {
-        // Tự động map tất cả lỗi Zod từ backend trả về vào đúng field tương ứng
-        dataError.errors.forEach((errDetail) => {
-          // errDetail.field thường có dạng "body.email", "body.password"...
-          const fieldParts = errDetail.field.split(".");
-          const fieldName = fieldParts[fieldParts.length - 1] as keyof RegisterInput;
-          setError(fieldName, { type: "manual", message: errDetail.message });
-        });
-      } else {
-        // Lỗi logic khác (Rate limit, lỗi máy chủ) -> Show thông báo
-        toast.error(msg);
+      // Map lỗi Zod/validation từ backend vào đúng field; lỗi khác (rate limit,
+      // mạng, máy chủ) trả về rootMessage để toast.
+      const { handledFields, rootMessage, appError } = applyServerErrors(
+        err,
+        setError,
+        { knownFields: Object.keys(form.getValues()) },
+      );
+      if (!handledFields || rootMessage) {
+        if (appError.kind !== "canceled") {
+          toast.error(rootMessage ?? appError.message);
+        }
       }
     }
   };

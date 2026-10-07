@@ -19,6 +19,7 @@ import { HOME_CHART_QUERY_KEY } from "./useHomeChart";
 import SectionAmbient from "@/components/SectionAmbient";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import MusicResult from "@/components/ui/Result";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 
 const EASE_EXPO = [0.22, 1, 0.36, 1] as const;
 
@@ -431,7 +432,9 @@ function StripContent() {
     if (!isError && !hasResults) return null;
     return (
       <div className="section-container space-y-6 sm:space-y-8 pt-4 pb-4">
-        <MusicResult variant="error" onRetry={() => {
+        <QueryErrorResult
+          error={roomsQuery.error ?? karaokeQuery.error ?? shortsQuery.error ?? chartQuery.error}
+          onRetry={() => {
           roomsQuery.refetch();
           karaokeQuery.refetch();
           shortsQuery.refetch();

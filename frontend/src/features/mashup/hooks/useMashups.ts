@@ -31,6 +31,8 @@ export const useMashupDetail = (id: string) => {
 export const useCreateMashup = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: mashupApi.createMashup,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mashup-feed"] });
@@ -41,6 +43,8 @@ export const useCreateMashup = () => {
 
 export const useSuggestShorts = () => {
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: mashupApi.suggestShorts,
   });
 };
@@ -57,6 +61,8 @@ export const useMashupsAdmin = (params: MashupListParams = {}) => {
 export const useUpdateMashup = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: ({ id, data }: { id: string; data: any }) =>
       mashupApi.adminUpdate(id, data),
     onSuccess: () => {
@@ -69,6 +75,8 @@ export const useUpdateMashup = () => {
 export const useDeleteMashup = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: (id: string) => mashupApi.adminDelete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mashups-admin"] });
@@ -80,6 +88,8 @@ export const useDeleteMashup = () => {
 export const useToggleMashupPublish = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // Call-site tự toast lỗi, bỏ qua toast toàn cục
+    meta: { skipGlobalError: true },
     mutationFn: ({ id, isPublished }: { id: string; isPublished: boolean }) =>
       mashupApi.adminTogglePublish(id, isPublished),
     onSuccess: () => {

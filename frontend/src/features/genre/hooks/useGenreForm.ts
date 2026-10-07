@@ -1,4 +1,5 @@
 import { useMemo, useEffect } from "react";
+import { applyServerErrors } from "@/utils/applyServerErrors";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -149,51 +150,11 @@ export const useGenreForm = <TMode extends "create" | "edit">({
 
     try {
       await onSubmit(payload);
-    } catch (err: any) {
-      const resp = err?.response?.data || err?.response || null;
-      let handledCount = 0;
-      let unhandledErrors: string[] = [];
-
-      const maybeFieldMap = resp?.data ?? resp?.errors ?? resp;
-
-      const processFieldError = (field: string, msg: string) => {
-        // Zod validation errors from backend usually have prefixes like 'body.name'
-        const cleanField = field.replace(/^(body|query|params)\./, "");
-
-        if (Object.keys(defaultValues as any).includes(cleanField) || cleanField === "image") {
-          form.setError(cleanField as any, { type: "server", message: msg });
-          handledCount++;
-        } else {
-          unhandledErrors.push(`${cleanField}: ${msg}`);
-        }
-      };
-
-      if (maybeFieldMap && typeof maybeFieldMap === "object") {
-        if (Array.isArray(maybeFieldMap)) {
-          for (const item of maybeFieldMap) {
-            if (!item) continue;
-            if (typeof item === "string") {
-              unhandledErrors.push(item);
-            } else if (item.field && (item.message || item.msg)) {
-              processFieldError(item.field, item.message || item.msg);
-            }
-          }
-        } else {
-          Object.entries(maybeFieldMap).forEach(([k, v]) => {
-            if (!k || k === "message" || k === "errorCode" || k === "isOperational") return;
-            const msg = Array.isArray(v) ? v.join(" ") : String(v || "");
-            processFieldError(k, msg);
-          });
-        }
-      }
-
-      if (unhandledErrors.length > 0) {
-        unhandledErrors.forEach((msg) => toast.error(msg));
-      } else if (handledCount === 0) {
-        const message = resp?.message || err?.message || "Lỗi khi lưu thể loại";
-        toast.error(message);
-      }
-
+    } catch (err) {
+      // Mutation đã toast lỗi chung; gán lỗi theo field ("image" là field upload ngoài defaultValues).
+      applyServerErrors(err, form.setError, {
+        knownFields: [...Object.keys(defaultValues as any), "image"],
+      });
       return;
     }
   });

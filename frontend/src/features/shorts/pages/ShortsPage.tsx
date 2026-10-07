@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { QueryErrorResult } from "@/components/ui/QueryState";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { shortsApi } from "../api/shortsApi";
@@ -52,6 +53,7 @@ export const ShortsPage = () => {
     data,
     isLoading,
     isError,
+    error,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -190,15 +192,7 @@ export const ShortsPage = () => {
     return (
       <div className="w-full h-screen bg-black flex flex-col items-center justify-center gap-6">
         <ForMeHeader />
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-white/70 font-semibold">Không tải được Shorts</p>
-          <button
-            onClick={() => void refetch()}
-            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-full text-sm text-white/80 font-medium border border-white/10"
-          >
-            Thử lại
-          </button>
-        </div>
+        <QueryErrorResult error={error} onRetry={() => void refetch()} />
       </div>
     );
   }

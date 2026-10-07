@@ -194,7 +194,7 @@ function useHeroNav(length: number) {
 // ── Album ─────────────────────────────────────────────────────────────────────
 function AlbumConnector() {
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useFeatureAlbums();
+  const { data, isLoading, isError, error, refetch } = useFeatureAlbums();
   const rawItems = useMemo(() => data ?? [], [data]);
   const items = useMemo(() => rawItems.map(toAlbumItem), [rawItems]);
 
@@ -217,6 +217,7 @@ function AlbumConnector() {
         items={items}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         refetch={refetch}
         {...nav}
         playback={playback}
@@ -239,7 +240,7 @@ function AlbumConnector() {
 // ── Playlist ──────────────────────────────────────────────────────────────────
 function PlaylistConnector() {
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useFeaturedPlaylists();
+  const { data, isLoading, isError, error, refetch } = useFeaturedPlaylists();
   const rawItems = useMemo(() => data ?? [], [data]);
   const items = useMemo(() => rawItems.map(toPlaylistItem), [rawItems]);
 
@@ -266,6 +267,7 @@ function PlaylistConnector() {
         items={items}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         refetch={refetch}
         {...nav}
         playback={playback}
@@ -288,7 +290,7 @@ function PlaylistConnector() {
 // ── Artist ────────────────────────────────────────────────────────────────────
 function ArtistConnector() {
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useSpotlightArtists();
+  const { data, isLoading, isError, error, refetch } = useSpotlightArtists();
   const rawItems = useMemo(() => data ?? [], [data]);
   const items = useMemo(() => rawItems.map(toArtistItem), [rawItems]);
 
@@ -315,6 +317,7 @@ function ArtistConnector() {
         items={items}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         refetch={refetch}
         {...nav}
         playback={playback}
@@ -332,7 +335,7 @@ function ArtistConnector() {
 // ── Genre ─────────────────────────────────────────────────────────────────────
 function GenreConnector() {
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useTrendingGenres();
+  const { data, isLoading, isError, error, refetch } = useTrendingGenres();
   const rawItems = useMemo(() => data ?? [], [data]);
   const items = useMemo(() => rawItems.map(toGenreItem), [rawItems]);
 
@@ -355,6 +358,7 @@ function GenreConnector() {
         items={items}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         refetch={refetch}
         {...nav}
         playback={playback}
@@ -374,7 +378,7 @@ function TrackConnector() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  const { data, isLoading, isError, refetch } = useFeaturedTracks();
+  const { data, isLoading, isError, error, refetch } = useFeaturedTracks();
   const rawItems = useMemo(() => data ?? [], [data]);
   const items = useMemo(() => rawItems.map(toTrackItem), [rawItems]);
 
@@ -425,6 +429,7 @@ function TrackConnector() {
         items={items}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         refetch={refetch}
         {...nav}
         playback={playback}
