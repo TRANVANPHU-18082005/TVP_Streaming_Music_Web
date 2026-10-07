@@ -15,7 +15,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState<SocketStatus>("connecting");
-  const { token, user } = useAppSelector((state) => state.auth);
+  const { token, user, isAuthChecking } = useAppSelector((state) => state.auth);
   const tokenRef = useRef(token);
   tokenRef.current = token;
   const socketRef = useRef<Socket<
@@ -35,10 +35,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   }
 
   useEffect(() => {
-    // 1. Khởi tạo instance
+    // Chờ refresh-token xong. Kết nối sớm bị hủy giữa chừng và Chrome báo WebSocket failed.
+    if (isAuthChecking) return;
+
+    // Polling trước, rồi nâng lên websocket. Không ép websocket-only.
     const socketInstance = io(SOCKET_URL, {
-      forceNew: true, // Thêm dòng này để KHÔNG dùng lại kết nối cũ
-      transports: ["websocket"],
+      transports: ["polling", "websocket"],
       autoConnect: false,
       reconnection: true,
       reconnectionAttempts: 5,
@@ -46,9 +48,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       auth: (callback) => {
         const currentToken = tokenRef.current;
         callback({ token: currentToken ? `Bearer ${currentToken}` : null });
-      },
-      query: {
-        userId: currentUserId || "",
       },
     });
     socketRef.current = socketInstance;
@@ -91,7 +90,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       socketInstance.disconnect();
       if (socketRef.current === socketInstance) socketRef.current = null;
     };
-  }, [currentUserId]);
+  }, [currentUserId, isAuthChecking]);
 
   // Có mạng lại sau khi đã bỏ cuộc -> tự thử kết nối lại
   const reconnect = useCallback(() => {

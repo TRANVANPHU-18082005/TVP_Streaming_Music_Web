@@ -14,6 +14,7 @@ import { roomPasswordMatches } from "./utils/roomPassword";
 import RoomMessage from "./models/RoomMessage";
 import User from "./models/User";
 import { RoomErrorCode } from "./config/constants";
+import logger from "./utils/logger";
 import {
   applyConnectionIdentity,
   authenticateSocketToken,
@@ -37,6 +38,17 @@ let io: Server;
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+
+function disconnectDetail(description: unknown): string | undefined {
+  if (!description) return undefined;
+  if (typeof description === "string") return description.slice(0, 200);
+  if (description instanceof Error) return description.message.slice(0, 200);
+  if (typeof description === "object" && "description" in description) {
+    const nested = (description as { description?: unknown }).description;
+    return typeof nested === "string" ? nested.slice(0, 200) : undefined;
+  }
+  return undefined;
+}
 
 const getClientIp = (socket: Socket): string => {
   const forwarded = socket.handshake.headers["x-forwarded-for"];
@@ -946,13 +958,18 @@ export const initSocket = (httpServer: HttpServer): Server => {
     /**
      * Dọn dẹp trạng thái Online vĩnh viễn
      */
-    socket.on("disconnect", async () => {
+    socket.on("disconnect", async (reason, description) => {
       try {
         await analyticsService.endSession(socket.id, connectionUserId());
       } catch (err) {
         console.error("[Socket] analytics end session error:", err);
       }
-      console.log(`❌ Socket disconnected: ${socket.id} (User: ${connectionUserId()})`);
+      logger.info("Socket disconnected", {
+        socketId: socket.id,
+        userId: connectionUserId(),
+        reason,
+        description: disconnectDetail(description),
+      });
     });
   });
 
