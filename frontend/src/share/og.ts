@@ -159,7 +159,7 @@ function siteCard(origin: string): ShareCard {
   return {
     title: SITE_NAME,
     description: SITE_DESCRIPTION,
-    image: `${origin}/og/site.png`,
+    image: `${origin}/og/site.jpg`,
     imageAlt: SITE_NAME,
     width: 1200,
     height: 630,
@@ -297,7 +297,7 @@ function pickImage(
   const branded = cover ? brandedCoverUrl(cover, lines) : null;
   if (branded) return { url: branded, width: 1200, height: 630 };
   if (cover) return { url: cover };
-  return { url: `${origin}/og/site.png`, width: 1200, height: 630 };
+  return { url: `${origin}/og/site.jpg`, width: 1200, height: 630 };
 }
 
 async function fetchEntity(
