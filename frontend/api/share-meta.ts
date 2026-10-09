@@ -11,8 +11,12 @@ function apiBase(): string {
 
 export default async function handler(request: Request): Promise<Response> {
   const url = new URL(request.url);
+  const host = request.headers.get("x-forwarded-host") || url.host;
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  const origin = `${proto}://${host}`;
+
   const html = await resolveShareHtml({
-    origin: url.origin,
+    origin,
     pathname: url.searchParams.get("path") || "/",
     apiBase: apiBase(),
   });
