@@ -17,6 +17,7 @@ import {
   Save,
   Camera,
   Paintbrush,
+  Share2,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { useTheme, type Skin, type Theme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
+import { buildShareUrl, shareOrCopy } from "@/utils/share";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS — only the 8 skins registered in index.css [data-theme] selectors
@@ -704,7 +706,7 @@ export default function SettingsPage() {
             {/* Infrastructure panel — .glass from design system */}
             <div
               className={cn(
-                "hidden lg:block mt-6 p-5 rounded-2xl glass",
+                "mt-4 lg:mt-6 p-4 lg:p-5 rounded-2xl glass",
                 "space-y-3 animate-fade-up delay-400",
               )}
             >
@@ -712,6 +714,22 @@ export default function SettingsPage() {
                 Infrastructure
               </p>
               <div className="space-y-1">
+                <button
+                  onClick={() => {
+                    shareOrCopy({
+                      title: "TVP Music - Nghe. Cảm. Lan tỏa.",
+                      text: "Trải nghiệm âm nhạc tuyệt vời trên TVP Music",
+                      url: buildShareUrl("/"),
+                    });
+                  }}
+                  className={cn(
+                    "btn-ghost w-full justify-start gap-3 h-11 rounded-xl text-sm font-medium",
+                  )}
+                >
+                  <Share2 size={15} aria-hidden="true" />
+                  Chia sẻ TVP Music
+                </button>
+
                 <button
                   className={cn(
                     "btn-ghost w-full justify-start gap-3 h-11 rounded-xl text-sm font-medium",

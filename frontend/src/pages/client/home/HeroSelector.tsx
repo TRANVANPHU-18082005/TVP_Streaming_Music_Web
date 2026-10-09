@@ -30,10 +30,8 @@ import {
 import { Disc3, User, List, Hash, Music2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Share2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { buildShareUrl, shareOrCopy } from "@/utils/share";
 
 // ── HeroCore engine ───────────────────────────────────────────────────────────
 
@@ -490,22 +488,7 @@ function TabBar({
   );
 
   return (
-    <div className="flex items-center justify-between lg:justify-end gap-4 px-4 sm:px-6 lg:px-10 mb-3 mt-3 sm:mt-4 sm:mb-4">
-      <button
-        onClick={() => {
-          shareOrCopy({
-            title: "TVP Music - Nghe. Cảm. Lan tỏa.",
-            text: "Trải nghiệm âm nhạc tuyệt vời trên TVP Music",
-            url: buildShareUrl("/"),
-          });
-        }}
-        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors mr-auto"
-        aria-label="Chia sẻ trang web"
-      >
-        <Share2 className="w-4 h-4" />
-        <span className="hidden sm:inline">Chia sẻ</span>
-      </button>
-
+    <div className="flex justify-center lg:justify-end px-4 sm:px-6 lg:px-10 mb-3 mt-3 sm:mt-4 sm:mb-4">
       <nav
         ref={containerRef}
         role="tablist"

@@ -103,31 +103,53 @@ const ContinueHeader = memo(({ viewAllHref }: { viewAllHref: string }) => (
 ContinueHeader.displayName = "ContinueHeader";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SKELETON GRID
+// SKELETON
 // ─────────────────────────────────────────────────────────────────────────────
+const ShelfSkeletonCard = memo(({ delay }: { delay: number }) => (
+  <div
+    className="space-y-2.5 animate-fade-up"
+    style={{ animationDelay: `${delay}ms`, animationFillMode: "both" }}
+  >
+    {/* Cover */}
+    <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-muted/30">
+      <div className="absolute inset-0 skeleton" />
+    </div>
+    {/* Title */}
+    <div className="space-y-1.5 px-0.5">
+      <div className="skeleton h-3.5 w-4/5 rounded-full" />
+      <div className="skeleton h-3 w-3/5 rounded-full opacity-70" />
+    </div>
+  </div>
+));
+ShelfSkeletonCard.displayName = "ShelfSkeletonCard";
+
 const SkeletonGrid = memo(({ count }: { count: number }) => (
   <>
-    <div className="flex gap-4 overflow-hidden lg:hidden">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="w-[168px] sm:w-[200px] shrink-0 space-y-2.5">
-          <div className="skeleton skeleton-cover" style={{ borderRadius: "1rem" }} />
-          <div className="skeleton skeleton-text w-3/4" />
-          <div className="skeleton skeleton-text w-1/2" />
+    {/* Section label skeleton */}
+    <div className="mb-4 flex items-center gap-3">
+      <div className="skeleton h-2.5 w-14 rounded-full" />
+      <div className="skeleton h-px w-12 rounded-full opacity-40" />
+    </div>
+
+    {/* Mobile horizontal strip */}
+    <div className="flex gap-4 overflow-hidden lg:hidden pb-1">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="w-[152px] sm:w-[180px] shrink-0">
+          <ShelfSkeletonCard delay={i * 60} />
         </div>
       ))}
     </div>
+
+    {/* Desktop grid */}
     <div className="hidden lg:grid grid-cols-3 xl:grid-cols-6 gap-5 xl:gap-6">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="space-y-2.5">
-          <div className="skeleton skeleton-cover" style={{ borderRadius: "1rem" }} />
-          <div className="skeleton skeleton-text w-3/4" />
-          <div className="skeleton skeleton-text w-1/2" />
-        </div>
+        <ShelfSkeletonCard key={i} delay={i * 50} />
       ))}
     </div>
   </>
 ));
 SkeletonGrid.displayName = "SkeletonGrid";
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
