@@ -9,17 +9,32 @@ function apiBase(): string {
   return raw.replace(/\/$/, "");
 }
 
-export default async function handler(request: Request): Promise<Response> {
+/**
+ * Lấy canonical origin theo thứ tự ưu tiên:
+ *   1. SITE_URL env var (đặt trong Vercel dashboard) — đáng tin nhất
+ *   2. x-forwarded-host header — Vercel đặt khi dùng custom domain
+ *   3. Fallback về host của request
+ */
+function canonicalOrigin(request: Request): string {
+  const siteUrl = process.env.SITE_URL || process.env.VITE_APP_URL;
+  if (siteUrl) return siteUrl.replace(/\/$/, "");
+
   const url = new URL(request.url);
   const host = request.headers.get("x-forwarded-host") || url.host;
   const proto = request.headers.get("x-forwarded-proto") || "https";
-  const origin = `${proto}://${host}`;
+  return `${proto}://${host}`;
+}
+
+export default async function handler(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const origin = canonicalOrigin(request);
 
   const html = await resolveShareHtml({
     origin,
     pathname: url.searchParams.get("path") || "/",
     apiBase: apiBase(),
   });
+
   return new Response(html, {
     status: 200,
     headers: {

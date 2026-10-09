@@ -344,6 +344,8 @@ function renderHtml(pageUrl: string, card: ShareCard): string {
 <meta property="og:description" content="${description}" />
 <meta property="og:url" content="${url}" />
 <meta property="og:image" content="${image}" />
+<meta property="og:image:secure_url" content="${image}" />
+<meta property="og:image:type" content="image/jpeg" />
 <meta property="og:image:alt" content="${alt}" />
 ${size}
 <meta name="twitter:card" content="summary_large_image" />
